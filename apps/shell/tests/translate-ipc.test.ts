@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, readdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -22,14 +22,51 @@ let root: string
 let settingsPath: string
 let clock: number
 
+let dialogResult: { canceled: boolean; filePaths: string[] }
+let dialogOptions: unknown[]
+
 function handlers() {
-  return createTranslateHandlers({ settingsPath: () => settingsPath, now: () => clock })
+  return createTranslateHandlers({
+    settingsPath: () => settingsPath,
+    now: () => clock,
+    showOpenDialog: async (options) => {
+      dialogOptions.push(options)
+      return dialogResult
+    },
+  })
+}
+
+type Handlers = ReturnType<typeof handlers>
+
+/** Pick a parent folder through the (fake) dialog, then create the project in it. */
+async function createIn(
+  h: Handlers,
+  args: { name: string; sourceLang: string; targetLang: string },
+  parent = root,
+) {
+  dialogResult = { canceled: false, filePaths: [parent] }
+  const picked = await h.pickParentDir()
+  return h.create({ ...args, parentToken: picked!.token })
+}
+
+/** Pick one file through the (fake) dialog and add it to the project. */
+async function addPicked(
+  h: Handlers,
+  dir: string,
+  kind: 'source' | 'reference' | 'glossary',
+  path: string,
+) {
+  dialogResult = { canceled: false, filePaths: [path] }
+  const picked = await h.pickMaterials(kind)
+  return h.addMaterial({ dir, kind, token: picked!.token, index: 0 })
 }
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'translate-ipc-'))
   settingsPath = join(root, 'app-settings.json')
   clock = 1000
+  dialogOptions = []
+  dialogResult = { canceled: true, filePaths: [] }
 })
 
 afterEach(() => {
@@ -39,8 +76,7 @@ afterEach(() => {
 describe('translate IPC handlers', () => {
   it('create registers the folder and list reports it', async () => {
     const h = handlers()
-    const { dir } = await h.create({
-      parentDir: root,
+    const { dir } = await createIn(h, {
       name: 'P1',
       sourceLang: 'en',
       targetLang: 'ko',
@@ -53,8 +89,7 @@ describe('translate IPC handlers', () => {
 
   it('list marks a deleted folder as not-found without throwing', async () => {
     const h = handlers()
-    const { dir } = await h.create({
-      parentDir: root,
+    const { dir } = await createIn(h, {
       name: 'Gone',
       sourceLang: 'en',
       targetLang: 'ko',
@@ -67,8 +102,7 @@ describe('translate IPC handlers', () => {
 
   it('list marks a corrupt project file as invalid', async () => {
     const h = handlers()
-    const { dir } = await h.create({
-      parentDir: root,
+    const { dir } = await createIn(h, {
       name: 'Bad',
       sourceLang: 'en',
       targetLang: 'ko',
@@ -79,8 +113,7 @@ describe('translate IPC handlers', () => {
 
   it('remove with deleteFolder false only drops the list entry', async () => {
     const h = handlers()
-    const { dir } = await h.create({
-      parentDir: root,
+    const { dir } = await createIn(h, {
       name: 'Keep',
       sourceLang: 'en',
       targetLang: 'ko',
@@ -92,8 +125,7 @@ describe('translate IPC handlers', () => {
 
   it('remove with deleteFolder true deletes the folder and the entry', async () => {
     const h = handlers()
-    const { dir } = await h.create({
-      parentDir: root,
+    const { dir } = await createIn(h, {
       name: 'Del',
       sourceLang: 'en',
       targetLang: 'ko',
@@ -127,40 +159,86 @@ describe('translate IPC handlers', () => {
 
   it('add-material for glossary returns project with glossaryFiles updated', async () => {
     const h = handlers()
-    const { dir } = await h.create({
-      parentDir: root,
+    const { dir } = await createIn(h, {
       name: 'G',
       sourceLang: 'en',
       targetLang: 'ko',
     })
     const csv = join(root, 'terms.csv')
     writeFileSync(csv, 'source,target\nhello,안녕\n')
-    const project = await h.addMaterial({ dir, kind: 'glossary', path: csv })
+    const project = await addPicked(h, dir, 'glossary', csv)
     expect(project.glossaryFiles).toContain('terms.csv')
     expect((await h.getProject(dir)).glossaryFiles).toContain('terms.csv')
     const after = await h.removeMaterial({ dir, kind: 'glossary', file: 'terms.csv' })
     expect(after.glossaryFiles).not.toContain('terms.csv')
   })
 
-  it('add-material rejects empty and missing paths', async () => {
+  it('add-material rejects anything that was not picked', async () => {
     const h = handlers()
-    const { dir } = await h.create({
-      parentDir: root,
-      name: 'M',
-      sourceLang: 'en',
-      targetLang: 'ko',
-    })
-    await expect(h.addMaterial({ dir, kind: 'source', path: '' })).rejects.toThrow()
+    const { dir } = await createIn(h, { name: 'M', sourceLang: 'en', targetLang: 'ko' })
+    const stranger = join(root, 'stranger.txt')
+    writeFileSync(stranger, 'x')
+    const bad = (args: object) =>
+      expect(h.addMaterial({ dir, ...args } as never)).rejects.toMatchObject({
+        code: expect.stringMatching(/NOT_REGISTERED|INVALID_ARGUMENT/),
+      })
+    await bad({ kind: 'source', token: '', index: 0 })
+    await bad({ kind: 'source', token: 'made-up', index: 0 })
+    await bad({ kind: 'source', path: stranger })
+    await bad({ kind: 'bogus', token: 'x', index: 0 })
+    expect(readdirSync(join(dir, 'source'))).toEqual([])
+  })
+
+  it('a pick token is bound to its kind, index, one use, and expires', async () => {
+    const h = handlers()
+    const { dir } = await createIn(h, { name: 'T', sourceLang: 'en', targetLang: 'ko' })
+    const a = join(root, 'a.txt')
+    const b = join(root, 'b.txt')
+    writeFileSync(a, 'a')
+    writeFileSync(b, 'b')
+    dialogResult = { canceled: false, filePaths: [a, b] }
+    const picked = (await h.pickMaterials('reference'))!
+    expect(picked.names).toEqual(['a.txt', 'b.txt'])
+    expect(JSON.stringify(picked)).not.toContain(root)
     await expect(
-      h.addMaterial({ dir, kind: 'source', path: join(root, 'nope.docx') }),
-    ).rejects.toThrow()
-    await expect(h.addMaterial({ dir, kind: 'bogus' as never, path: root })).rejects.toThrow()
+      h.addMaterial({ dir, kind: 'source', token: picked.token, index: 0 }),
+    ).rejects.toMatchObject({ code: 'NOT_REGISTERED' })
+    await expect(
+      h.addMaterial({ dir, kind: 'reference', token: picked.token, index: 5 }),
+    ).rejects.toMatchObject({ code: 'NOT_REGISTERED' })
+    const first = await h.addMaterial({ dir, kind: 'reference', token: picked.token, index: 0 })
+    expect(first.references).toEqual(['a.txt'])
+    await expect(
+      h.addMaterial({ dir, kind: 'reference', token: picked.token, index: 0 }),
+    ).rejects.toMatchObject({ code: 'NOT_REGISTERED' })
+    clock += 6 * 60 * 1000
+    await expect(
+      h.addMaterial({ dir, kind: 'reference', token: picked.token, index: 1 }),
+    ).rejects.toMatchObject({ code: 'NOT_REGISTERED' })
+  })
+
+  it('pick dialogs return null when cancelled and filter by kind', async () => {
+    const h = handlers()
+    expect(await h.pickMaterials('glossary')).toBeNull()
+    expect(await h.pickParentDir()).toBeNull()
+    expect(JSON.stringify(dialogOptions[0])).toContain('csv')
+    expect(JSON.stringify(dialogOptions[1])).toContain('openDirectory')
+  })
+
+  it('create only accepts a picked parent folder', async () => {
+    const h = handlers()
+    await expect(
+      h.create({ parentToken: 'nope', name: 'X', sourceLang: 'en', targetLang: 'ko' }),
+    ).rejects.toMatchObject({ code: 'NOT_REGISTERED' })
+    await expect(
+      h.create({ parentDir: root, name: 'X', sourceLang: 'en', targetLang: 'ko' } as never),
+    ).rejects.toMatchObject({ code: expect.stringMatching(/NOT_REGISTERED|INVALID_ARGUMENT/) })
+    expect(existsSync(join(root, 'X'))).toBe(false)
   })
 
   it('rejects every dir that is not a registered project', async () => {
     const h = handlers()
-    const { dir: other } = await handlers().create({
-      parentDir: root,
+    const { dir: other } = await createIn(handlers(), {
       name: 'Other',
       sourceLang: 'en',
       targetLang: 'ko',
@@ -170,9 +248,9 @@ describe('translate IPC handlers', () => {
     await expect(h.saveProject(other, {} as never)).rejects.toThrow(/not a registered/)
     await expect(h.remove({ dir: other, deleteFolder: true })).rejects.toThrow(/not a registered/)
     expect(existsSync(other)).toBe(true)
-    await expect(h.addMaterial({ dir: other, kind: 'source', path: root })).rejects.toThrow(
-      /not a registered/,
-    )
+    await expect(
+      h.addMaterial({ dir: other, kind: 'source', token: 't', index: 0 }),
+    ).rejects.toThrow(/not a registered/)
     await expect(h.removeMaterial({ dir: other, kind: 'source', file: 'a' })).rejects.toThrow(
       /not a registered/,
     )
@@ -181,8 +259,7 @@ describe('translate IPC handlers', () => {
 
   it('save-project persists a valid project and rejects an invalid one', async () => {
     const h = handlers()
-    const { dir } = await h.create({
-      parentDir: root,
+    const { dir } = await createIn(h, {
       name: 'S',
       sourceLang: 'en',
       targetLang: 'ko',
@@ -195,8 +272,7 @@ describe('translate IPC handlers', () => {
 
   it('get-project refreshes lastOpened in the settings entry only', async () => {
     const h = handlers()
-    const { dir } = await h.create({
-      parentDir: root,
+    const { dir } = await createIn(h, {
       name: 'L',
       sourceLang: 'en',
       targetLang: 'ko',
@@ -209,7 +285,7 @@ describe('translate IPC handlers', () => {
 
 describe('remove robustness', () => {
   const mk = (h: ReturnType<typeof handlers>, name: string) =>
-    h.create({ parentDir: root, name, sourceLang: 'en', targetLang: 'ko' })
+    createIn(h, { name, sourceLang: 'en', targetLang: 'ko' })
 
   it('deleteFolder true on a missing folder drops the entry without throwing', async () => {
     const h = handlers()
@@ -233,7 +309,7 @@ describe('remove robustness', () => {
     const { dir } = await mk(h, 'Race')
     const ref = join(root, 'ref.txt')
     writeFileSync(ref, 'x')
-    const add = h.addMaterial({ dir, kind: 'reference', path: ref })
+    const add = addPicked(h, dir, 'reference', ref)
     const del = h.remove({ dir, deleteFolder: true })
     const results = await Promise.allSettled([add, del])
     expect(results[1].status).toBe('fulfilled')
@@ -245,8 +321,7 @@ describe('remove robustness', () => {
 describe('get-project with an unwritable settings file', () => {
   it('still returns the project', async () => {
     const h = handlers()
-    const { dir } = await h.create({
-      parentDir: root,
+    const { dir } = await createIn(h, {
       name: 'RO',
       sourceLang: 'en',
       targetLang: 'ko',
@@ -299,9 +374,9 @@ describe('error codes', () => {
     const h = handlers()
     await expect(h.getProject('/not/registered')).rejects.toMatchObject({ code: 'NOT_REGISTERED' })
     await expect(h.setSystemPrompt(5 as never)).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
-    await h.create({ parentDir: root, name: 'Dup', sourceLang: 'en', targetLang: 'ko' })
+    await createIn(h, { name: 'Dup', sourceLang: 'en', targetLang: 'ko' })
     await expect(
-      h.create({ parentDir: root, name: 'Dup', sourceLang: 'en', targetLang: 'ko' }),
+      createIn(h, { name: 'Dup', sourceLang: 'en', targetLang: 'ko' }),
     ).rejects.toMatchObject({ code: 'PROJECT_EXISTS' })
   })
 })
@@ -312,6 +387,7 @@ describe('registerTranslateIpc', () => {
     registerTranslateIpc({ handle: (c: string) => void seen.push(c) } as never, {
       settingsPath: () => settingsPath,
       now: () => clock,
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
     })
     expect(seen.sort()).toEqual(Object.values(TRANSLATE_CHANNELS).sort())
     expect(new Set(seen).size).toBe(seen.length)

@@ -16,6 +16,8 @@ export const TRANSLATE_CHANNELS = {
   saveProject: 'translate:save-project',
   addMaterial: 'translate:add-material',
   removeMaterial: 'translate:remove-material',
+  pickMaterials: 'translate:pick-materials',
+  pickParentDir: 'translate:pick-parent-dir',
 } as const
 
 export type TranslateMaterialKind = 'source' | 'reference' | 'glossary'
@@ -33,7 +35,8 @@ export interface TranslateProjectListEntry {
 }
 
 export interface TranslateCreateArgs {
-  parentDir: string
+  /** token from `pickParentDir`: main only creates inside a folder the person picked */
+  parentToken: string
   name: string
   sourceLang: string
   targetLang: string
@@ -47,8 +50,22 @@ export interface TranslateRemoveArgs {
 export interface TranslateAddMaterialArgs {
   dir: string
   kind: TranslateMaterialKind
-  /** a file the person picked in a file dialog */
-  path: string
+  /** token from `pickMaterials` of the same kind */
+  token: string
+  /** which of the picked files (position in the returned `names`) */
+  index: number
+}
+
+export interface TranslatePickedMaterials {
+  token: string
+  /** plain file names only; the renderer never sees the paths */
+  names: string[]
+}
+
+export interface TranslatePickedParentDir {
+  token: string
+  /** shown to the person so they know where the project goes */
+  dir: string
 }
 
 export interface TranslateRemoveMaterialArgs {
@@ -68,6 +85,10 @@ export interface TranslateApi {
   saveProject(dir: string, project: ProjectFile): Promise<void>
   addMaterial(args: TranslateAddMaterialArgs): Promise<ProjectFile>
   removeMaterial(args: TranslateRemoveMaterialArgs): Promise<ProjectFile>
+  /** opens the native file dialog; null when cancelled */
+  pickMaterials(kind: TranslateMaterialKind): Promise<TranslatePickedMaterials | null>
+  /** opens the native folder dialog; null when cancelled */
+  pickParentDir(): Promise<TranslatePickedParentDir | null>
 }
 
 // ---- errors ----

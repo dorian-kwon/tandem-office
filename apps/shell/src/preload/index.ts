@@ -710,6 +710,8 @@ const translateApi: TranslateApi = {
   saveProject: (dir, project) => ipcRenderer.invoke(TRANSLATE_CHANNELS.saveProject, dir, project),
   addMaterial: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.addMaterial, args),
   removeMaterial: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.removeMaterial, args),
+  pickMaterials: (kind) => ipcRenderer.invoke(TRANSLATE_CHANNELS.pickMaterials, kind),
+  pickParentDir: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.pickParentDir),
 }
 contextBridge.exposeInMainWorld('translateApi', translateApi)
 

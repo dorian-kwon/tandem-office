@@ -8882,7 +8882,14 @@ registerIntegrationsIpc({
     : join(APPS_ROOT, '..', 'packages', 'cli', 'package.json'),
 })
 registerResultStoreIpc(ipcMain, () => app.getPath('userData'))
-registerTranslateIpc(ipcMain, { settingsPath: APP_SETTINGS_PATH, now: () => Date.now() })
+registerTranslateIpc(ipcMain, {
+  settingsPath: APP_SETTINGS_PATH,
+  now: () => Date.now(),
+  showOpenDialog: (options) => {
+    const owner = BrowserWindow.getFocusedWindow()
+    return owner ? dialog.showOpenDialog(owner, options) : dialog.showOpenDialog(options)
+  },
+})
 registerTabsIpc()
 registerSplitIpc()
 registerDroppedFilesIpc()

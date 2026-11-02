@@ -18,6 +18,7 @@ import {
   withProjectLock,
   type ProjectFile,
 } from '@genoffice/translate-project'
+import { PickAllowlist } from './pick-allowlist'
 import {
   readTranslationProjects,
   readTranslationSystemPrompt,
@@ -31,6 +32,8 @@ import {
   type TranslateAddMaterialArgs,
   type TranslateCreateArgs,
   type TranslateMaterialKind,
+  type TranslatePickedMaterials,
+  type TranslatePickedParentDir,
   type TranslateProjectListEntry,
   type TranslateRemoveArgs,
   type TranslateRemoveMaterialArgs,
@@ -49,6 +52,53 @@ export interface TranslateIpcDeps {
   /** path of userData/app-settings.json (read per call: userData is final only after ready) */
   settingsPath: () => string
   now: () => number
+  /** the native open dialog (injected so tests run without Electron) */
+  showOpenDialog: (
+    options: OpenDialogOptions,
+  ) => Promise<{ canceled: boolean; filePaths: string[] }>
+  /** override for the allowlist token generator (tests) */
+  newToken?: () => string
+}
+
+export interface OpenDialogOptions {
+  title?: string
+  properties: ('openFile' | 'openDirectory' | 'multiSelections' | 'createDirectory')[]
+  filters?: { name: string; extensions: string[] }[]
+}
+
+const FILTERS: Record<TranslateMaterialKind, { name: string; extensions: string[] }[]> = {
+  source: [
+    {
+      name: 'Documents',
+      extensions: [
+        'docx',
+        'xlsx',
+        'pptx',
+        'hwp',
+        'hwpx',
+        'epub',
+        'md',
+        'markdown',
+        'txt',
+        'html',
+        'htm',
+        'odt',
+        'ods',
+        'odp',
+        'pdf',
+        'png',
+        'jpg',
+        'jpeg',
+        'gif',
+        'bmp',
+        'tif',
+        'tiff',
+        'webp',
+      ],
+    },
+  ],
+  reference: [{ name: 'All files', extensions: ['*'] }],
+  glossary: [{ name: 'Glossary', extensions: ['csv', 'tsv', 'txt', 'xlsx'] }],
 }
 
 const KINDS: readonly TranslateMaterialKind[] = ['source', 'reference', 'glossary']
@@ -82,6 +132,8 @@ export function createTranslateHandlers(deps: TranslateIpcDeps) {
     saveProject: guard(raw.saveProject),
     addMaterial: guard(raw.addMaterial),
     removeMaterial: guard(raw.removeMaterial),
+    pickMaterials: guard(raw.pickMaterials),
+    pickParentDir: guard(raw.pickParentDir),
   }
 }
 
@@ -97,6 +149,9 @@ function guard<A extends unknown[], R>(fn: (...a: A) => Promise<R>): (...a: A) =
 }
 
 function createRawHandlers(deps: TranslateIpcDeps) {
+  const materialPicks = new PickAllowlist<TranslateMaterialKind>(deps.now, deps.newToken)
+  const parentPicks = new PickAllowlist<null>(deps.now, deps.newToken)
+
   /** The stored spelling of `dir`, or a rejection when it is not a registered project. */
   function registeredDir(dir: unknown): string {
     if (typeof dir === 'string' && isAbsolute(dir)) {
@@ -151,9 +206,14 @@ function createRawHandlers(deps: TranslateIpcDeps) {
     },
 
     async create(args: TranslateCreateArgs): Promise<{ dir: string }> {
-      const parentDir = requireString(args?.parentDir, 'parentDir')
-      if (!isAbsolute(parentDir))
-        throw new TranslateIpcError('INVALID_ARGUMENT', 'parentDir must be an absolute path')
+      // only a folder the person picked in the dialog is accepted as the parent
+      const parentToken = requireString(args?.parentToken, 'parentToken')
+      const parentDir = parentPicks.path(parentToken, 0)
+      if (!parentDir)
+        throw new TranslateIpcError(
+          'NOT_REGISTERED',
+          'the parent folder was not picked (or the pick expired)',
+        )
       const name = requireString(args.name, 'name')
       const sourceLang = requireString(args.sourceLang, 'sourceLang')
       const targetLang = requireString(args.targetLang, 'targetLang')
@@ -161,6 +221,7 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       const path = deps.settingsPath()
       const rest = readTranslationProjects(path).filter((e) => fold(e.dir) !== fold(dir))
       writeTranslationProjects(path, [...rest, { dir, lastOpened: deps.now() }])
+      parentPicks.consume(parentToken, 0)
       return { dir }
     },
 
@@ -220,15 +281,44 @@ function createRawHandlers(deps: TranslateIpcDeps) {
     async addMaterial(args: TranslateAddMaterialArgs): Promise<ProjectFile> {
       const dir = registeredDir(args?.dir)
       const kind = requireKind(args.kind)
-      const path = requireString(args.path, 'path')
-      if (!isAbsolute(path))
-        throw new TranslateIpcError('INVALID_ARGUMENT', 'path must be an absolute path')
+      const token = requireString(args.token, 'token')
+      // only a file the person picked, for this same kind, is ever copied
+      const path =
+        materialPicks.meta(token) === kind ? materialPicks.path(token, args.index) : undefined
+      if (!path)
+        throw new TranslateIpcError(
+          'NOT_REGISTERED',
+          'the file was not picked (or the pick expired or was already used)',
+        )
       const info = await stat(path).catch(() => null)
       if (!info?.isFile())
         throw new TranslateIpcError('INVALID_ARGUMENT', 'the chosen file does not exist')
-      if (kind === 'source') return addSource(dir, path)
-      if (kind === 'reference') return addReference(dir, path)
-      return addGlossary(dir, path)
+      const next =
+        kind === 'source'
+          ? await addSource(dir, path)
+          : kind === 'reference'
+            ? await addReference(dir, path)
+            : await addGlossary(dir, path)
+      materialPicks.consume(token, args.index)
+      return next
+    },
+
+    async pickMaterials(kindArg: TranslateMaterialKind): Promise<TranslatePickedMaterials | null> {
+      const kind = requireKind(kindArg)
+      const res = await deps.showOpenDialog({
+        properties: ['openFile', 'multiSelections'],
+        filters: FILTERS[kind],
+      })
+      const paths = res.filePaths.filter((p) => isAbsolute(p))
+      if (res.canceled || paths.length === 0) return null
+      return { token: materialPicks.add(kind, paths), names: paths.map((p) => basename(p)) }
+    },
+
+    async pickParentDir(): Promise<TranslatePickedParentDir | null> {
+      const res = await deps.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] })
+      const dir = res.filePaths[0]
+      if (res.canceled || !dir || !isAbsolute(dir)) return null
+      return { token: parentPicks.add(null, [dir]), dir }
     },
 
     async removeMaterial(args: TranslateRemoveMaterialArgs): Promise<ProjectFile> {
@@ -259,4 +349,8 @@ export function registerTranslateIpc(ipc: Pick<IpcMain, 'handle'>, deps: Transla
   ipc.handle(TRANSLATE_CHANNELS.removeMaterial, (_e, args: TranslateRemoveMaterialArgs) =>
     h.removeMaterial(args),
   )
+  ipc.handle(TRANSLATE_CHANNELS.pickMaterials, (_e, kind: TranslateMaterialKind) =>
+    h.pickMaterials(kind),
+  )
+  ipc.handle(TRANSLATE_CHANNELS.pickParentDir, () => h.pickParentDir())
 }
