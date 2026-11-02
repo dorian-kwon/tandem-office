@@ -8989,13 +8989,13 @@ registerTranslateIpc(ipcMain, {
   // PDF sources: scan detection, and the text PDF's translation with the PDF editor's
   // engine (tree and translated PDF in structure-job processes, the same result store)
   nonEditable: {
-    pageTextCounts: async (path) =>
-      (
-        await translateJob<TextCountsJobValue>(
-          { op: 'textCounts', source: { pdfPath: path } },
-          'TRANSLATE_FAILED',
-        )
-      ).counts,
+    pageTextLayer: async (path) => {
+      const value = await translateJob<TextCountsJobValue>(
+        { op: 'textCounts', source: { pdfPath: path } },
+        'TRANSLATE_FAILED',
+      )
+      return { counts: value.counts, objects: value.objects }
+    },
     pdfTree: async (path) => {
       const value = await translateJob<TreeJobValue>(
         { op: 'tree', source: { pdfPath: path } },

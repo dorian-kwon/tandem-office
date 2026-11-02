@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 import type { AiProviderId, AiSettings } from '@genoffice/ai-provider/browser'
-import { AiConnectPrompt, aiProviderDisplayName } from '@genoffice/ui'
+import {
+  AiConnectPrompt,
+  aiProviderDisplayName,
+  aiRunErrorText,
+  type AiRunErrorCause,
+} from '@genoffice/ui'
+import type { Lang } from '@genoffice/i18n'
 import type { DocumentJobEstimate } from '../../../../../../packages/pdf-structure/src/jobs/job'
 import type { TranslationSend } from '../../../../../../packages/pdf-structure/src/translate'
 import { routeLabel } from '../../../../../pdf/src/renderer/doc-jobs/route'
@@ -48,6 +54,11 @@ export interface PdfTranslateDialogProps {
   /** open the written PDF beside the source copy (called once it is written) */
   onOpenResult?: (output: string) => void
   onClose: () => void
+  /**
+   * "Translate again": everything is translated again (blocks a person edited
+   * stay); the confirmation counts every block. The earlier result is kept.
+   */
+  restart?: boolean
   /** the bridge; default window.translateApi (tests pass a fake) */
   api?: TranslateApi
   /** the model call for a confirmed route; default the shared ai:stream call */
@@ -107,6 +118,7 @@ export function PdfTranslateDialog(props: PdfTranslateDialogProps): ReactElement
       dir: props.dir,
       file: props.file,
       bridge: bridgeOf(api),
+      ...(props.restart ? { restart: true } : {}),
       model: () => {
         const r = now()
         return r.state === 'ready'
@@ -217,14 +229,15 @@ export function PdfTranslateDialog(props: PdfTranslateDialogProps): ReactElement
     props.onClose()
   }
 
+  /** write what is done; the token stays held (and is released on close) until it is written */
   const writeDone = () => {
     const token = heldRef.current
     if (!api || !token || step.kind !== 'stopped') return
     const chosen = step.result.bilingual
-    heldRef.current = null
     setStep({ kind: 'writing' })
     api.pdfWrite({ token, bilingual: chosen }).then(
       ({ output }) => {
+        heldRef.current = null
         setStep({ kind: 'done', output })
         propsRef.current.onOpenResult?.(output)
       },
@@ -259,6 +272,7 @@ export function PdfTranslateDialog(props: PdfTranslateDialogProps): ReactElement
         {step.kind === 'confirm' && (
           <PdfConfirm
             estimate={step.estimate}
+            restart={!!props.restart}
             targetLang={targetLang}
             route={route}
             bilingual={bilingual}
@@ -317,13 +331,26 @@ export function PdfTranslateDialog(props: PdfTranslateDialogProps): ReactElement
         {step.kind === 'stopped' && (
           <>
             <p role="status" data-stopped={step.result.summary.stopReason ?? ''}>
-              {step.result.summary.stopReason && step.result.summary.stopReason !== 'cancelled'
-                ? s('trStoppedError', { reason: step.result.summary.stopReason })
-                : s('trStopped', {
-                    done: step.result.summary.progress.done,
-                    total: step.result.summary.progress.total,
-                  })}
+              {stoppedText(step.result, lang)}
             </p>
+            {route.state === 'notice' && <p data-route="notice">{s('trNoticeFirst')}</p>}
+            {route.state === 'connect' && (
+              <AiConnectPrompt
+                choice={route.choice}
+                statuses={props.connection.statuses}
+                lang={lang}
+                disabled={props.connection.busy}
+                onOpenSettings={props.onOpenAiSettings}
+                onInstall={props.connection.install}
+                onUpdate={props.connection.update}
+                onCancelLogin={props.connection.cancelLogin}
+                onLogin={props.connection.login}
+                onRecheck={props.connection.recheck}
+                onAcceptMetered={(provider) => void props.connection.acceptMetered(provider)}
+                onOpenInstallHelp={props.connection.openInstallHelp}
+                onOpenConnectHelp={props.connection.openConnectHelp}
+              />
+            )}
             <div className="modal-buttons">
               {step.result.summary.progress.done > 0 && (
                 <button
@@ -363,6 +390,25 @@ export function PdfTranslateDialog(props: PdfTranslateDialogProps): ReactElement
   )
 }
 
+/**
+ * Why the job stopped, in the screen language: Stop, several failures in a
+ * row, a store write, or the AI's own run error (a usage limit, signed out,
+ * …) worded by the app's shared run-error text.
+ */
+function stoppedText(result: RunPdfTranslationResult, lang: Lang): string {
+  const s = makeText(lang)
+  const { stopReason, resetsAt, progress } = result.summary
+  if (!stopReason || stopReason === 'cancelled' || stopReason === 'interrupted')
+    return s('trStopped', { done: progress.done, total: progress.total })
+  if (stopReason === 'failures') return s('trStoppedFailures')
+  if (stopReason === 'store-write-failed') return s('trStoppedStore')
+  const text = aiRunErrorText(lang, {
+    kind: stopReason as AiRunErrorCause['kind'],
+    ...(resetsAt !== undefined ? { resetsAt } : {}),
+  })
+  return text ?? s('trStopped', { done: progress.done, total: progress.total })
+}
+
 /** a recorded provider id as the screen names it (the id itself when unknown) */
 function providerName(id: string | null): string {
   if (!id) return '?'
@@ -372,6 +418,7 @@ function providerName(id: string | null): string {
 /** the price and transfer confirmation; Start is the only button that sends */
 function PdfConfirm(props: {
   estimate: DocumentJobEstimate
+  restart: boolean
   targetLang: string | null
   route: PdfJobRoute
   bilingual: boolean
@@ -395,6 +442,7 @@ function PdfConfirm(props: {
             {s('trConfirmLanguage', { language: languageName(lang, props.targetLang) })}
           </li>
         )}
+        {props.restart && <li data-restart>{s('trConfirmRestart')}</li>}
         {nothing ? (
           <li data-calls={0}>{s('trConfirmNothing')}</li>
         ) : (
@@ -417,6 +465,7 @@ function PdfConfirm(props: {
               {s('trConfirmProvider', { provider: routeLabel(ready, connection.statuses) })}
             </li>
             <li>{s('trConfirmSends')}</li>
+            <li data-hint="app-ai">{s('trConfirmAppAi')}</li>
             {ready.paid && (
               <li className="translate-ocr-paid" data-paid>
                 {s('trConfirmPaid', { provider: aiProviderDisplayName(ready.provider) })}

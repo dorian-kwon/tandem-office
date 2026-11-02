@@ -117,14 +117,18 @@ describe('openTranslation', () => {
   it.each(['scan', 'image'] as const)('routes a %s source to OCR when OCR is on', async (kind) => {
     const name = kind === 'scan' ? 'a.pdf' : 'a.png'
     const entry = { ...(await addSource(name, 'bytes')), kind }
-    const result = await openTranslation(dir, entry, deps, { kind: 'ai', provider: 'claude' })
+    const result = await openTranslation(dir, entry, deps, {
+      ocr: { kind: 'ai', provider: 'claude' },
+    })
     expect(result).toEqual({ flow: 'ocr', kind, file: name, hashStatus: 'ok', existing: null })
     expect(opened).toEqual([])
   })
 
   it.each(['scan', 'image'] as const)('refuses a %s source with OCR off', async (kind) => {
     const entry: SourceEntry = { file: kind === 'scan' ? 'a.pdf' : 'a.png', sha256: 'x', kind }
-    expect(await codeOf(openTranslation(dir, entry, deps, { kind: 'off' }))).toBe('OCR_DISABLED')
+    expect(await codeOf(openTranslation(dir, entry, deps, { ocr: { kind: 'off' } }))).toBe(
+      'OCR_DISABLED',
+    )
     expect(await codeOf(openTranslation(dir, entry, deps))).toBe('OCR_DISABLED')
     expect(opened).toEqual([])
   })
@@ -132,7 +136,24 @@ describe('openTranslation', () => {
   it('refuses an image type the OCR cannot read', async () => {
     const entry: SourceEntry = { file: 'a.gif', sha256: 'x', kind: 'image' }
     const ocr = { kind: 'ai', provider: 'claude' } as const
-    expect(await codeOf(openTranslation(dir, entry, deps, ocr))).toBe('UNSUPPORTED_SOURCE')
+    expect(await codeOf(openTranslation(dir, entry, deps, { ocr }))).toBe('UNSUPPORTED_SOURCE')
+  })
+
+  it('names an earlier translated PDF only in the current target language', async () => {
+    const entry = await addSource('a.pdf', 'bytes')
+    mkdirSync(join(dir, 'output'), { recursive: true })
+    writeFileSync(join(dir, 'output', 'a.fr.pdf'), 'x')
+    writeFileSync(join(dir, 'output', 'a.final.pdf'), 'x')
+    expect(await openTranslation(dir, entry, deps, { targetLang: 'ko' })).toMatchObject({
+      existing: null,
+    })
+    writeFileSync(join(dir, 'output', 'a.ko.bilingual.pdf'), 'x')
+    expect(await openTranslation(dir, entry, deps, { targetLang: 'ko' })).toMatchObject({
+      existing: 'a.ko.bilingual.pdf',
+    })
+    expect(await openTranslation(dir, entry, deps, { targetLang: 'fr' })).toMatchObject({
+      existing: 'a.fr.pdf',
+    })
   })
 
   it('names the newest earlier OCR result of a scan', async () => {
@@ -140,7 +161,9 @@ describe('openTranslation', () => {
     mkdirSync(join(dir, 'output'), { recursive: true })
     writeFileSync(join(dir, 'output', 'a (OCR).docx'), 'x')
     writeFileSync(join(dir, 'output', 'b (OCR).docx'), 'x')
-    const result = await openTranslation(dir, entry, deps, { kind: 'ai', provider: 'chatgpt' })
+    const result = await openTranslation(dir, entry, deps, {
+      ocr: { kind: 'ai', provider: 'chatgpt' },
+    })
     expect(result).toMatchObject({ existing: 'a (OCR).docx' })
   })
 

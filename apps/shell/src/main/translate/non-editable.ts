@@ -2,8 +2,11 @@ import { mkdir, rm } from 'node:fs/promises'
 import { basename, extname, join, resolve } from 'node:path'
 import type { Lang } from '@genoffice/i18n'
 import {
+  chosenSourceKind,
   loadProject,
   setSourceKind,
+  SourceChangedError,
+  type ProjectFile,
   verifySource,
   type SourceEntry,
 } from '@genoffice/translate-project'
@@ -48,26 +51,43 @@ export const SCAN_MIN_TEXT_CHARS = 20
 /** share of such pages from which the whole PDF is read as a scan */
 export const SCAN_PAGE_SHARE = 0.5
 
+/** what the scan check reads of each page */
+export interface PageTextLayer {
+  /** characters in each page's text layer, in page order */
+  counts: readonly number[]
+  /** page objects on each page (absent: unknown, no page counts as blank) */
+  objects?: readonly number[]
+}
+
 /**
- * "Most pages have no text layer": at least SCAN_PAGE_SHARE (half) of the
- * pages hold fewer than SCAN_MIN_TEXT_CHARS characters. Half, not more than
- * half, because the text engine leaves a scanned page untranslated: a PDF
- * that is half scans is better read by OCR. No pages: not a scan.
+ * "Most pages have no text layer": strictly more than SCAN_PAGE_SHARE (half)
+ * of the pages hold fewer than SCAN_MIN_TEXT_CHARS characters. A blank page
+ * (no character and no page object at all, such as a deliberately empty
+ * back page) counts neither way. Exactly half is not a scan. No page that
+ * counts: not a scan.
  */
-export function isMostlyScanned(counts: readonly number[]): boolean {
-  if (counts.length === 0) return false
-  const pictures = counts.filter((n) => n < SCAN_MIN_TEXT_CHARS).length
-  return pictures / counts.length >= SCAN_PAGE_SHARE
+export function isMostlyScanned(layer: PageTextLayer | readonly number[]): boolean {
+  const { counts, objects } = Array.isArray(layer)
+    ? { counts: layer as readonly number[], objects: undefined }
+    : (layer as PageTextLayer)
+  let pages = 0
+  let pictures = 0
+  counts.forEach((chars, i) => {
+    if (chars === 0 && objects?.[i] === 0) return
+    pages++
+    if (chars < SCAN_MIN_TEXT_CHARS) pictures++
+  })
+  return pages > 0 && pictures / pages > SCAN_PAGE_SHARE
 }
 
 export interface ScanDetectDeps {
-  /** characters in each page's text layer (a structure job in the app) */
-  pageTextCounts(pdfPath: string): Promise<number[]>
+  /** characters and page objects of each page (a structure job in the app) */
+  pageTextLayer(pdfPath: string): Promise<PageTextLayer>
 }
 
 /** true when most pages of the PDF have no text layer (isMostlyScanned) */
 export async function detectScan(pdfPath: string, deps: ScanDetectDeps): Promise<boolean> {
-  return isMostlyScanned(await deps.pageTextCounts(pdfPath))
+  return isMostlyScanned(await deps.pageTextLayer(pdfPath))
 }
 
 // ---- routing and the text-PDF translation job (main side) ----
@@ -177,15 +197,19 @@ export function createNonEditableService(
     return found
   }
 
+  const keyOf = (dir: string, entry: SourceEntry) => `${fold(dir)}\0${entry.file}\0${entry.sha256}`
+
   /**
    * The kind to open a source as. A PDF is checked for a text layer the
    * first time it is opened; a scan is recorded in project.json ('pdf' →
-   * 'scan'). A 'scan' entry is never turned back into 'pdf' here. A
+   * 'scan'). A 'scan' entry is never turned back into 'pdf' here, and a kind
+   * the person chose for this copy (setKind) is never checked again. A
    * detection that fails (a password, a damaged file) changes nothing.
    */
   async function resolveKind(dir: string, entry: SourceEntry): Promise<SourceEntry> {
     if (entry.kind !== 'pdf' || !plainFileName(entry.file)) return entry
-    const key = `${fold(dir)}\0${entry.file}\0${entry.sha256}`
+    if ((await chosenSourceKind(dir, entry.file, entry.sha256)) !== null) return entry
+    const key = keyOf(dir, entry)
     let scan = detected.get(key)
     if (scan === undefined) {
       try {
@@ -196,12 +220,44 @@ export function createNonEditableService(
       detected.set(key, scan)
     }
     if (!scan) return entry
-    await setSourceKind(dir, entry.file, 'scan')
+    try {
+      // only the copy that was checked: a source replaced meanwhile is left alone
+      await setSourceKind(dir, entry.file, 'scan', { expectedSha256: entry.sha256 })
+    } catch (err) {
+      if (err instanceof SourceChangedError) return entry
+      throw err
+    }
     return { ...entry, kind: 'scan' }
+  }
+
+  /** a store write failed or the PDF could not be written: the project is free again */
+  function end(l: PdfLease): void {
+    leases.delete(l.token)
   }
 
   return {
     resolveKind,
+
+    /**
+     * The person's correction of a PDF source: a text PDF ('pdf') or a scan
+     * ('scan'). Only PDF sources, only these two kinds. It is remembered for
+     * this copy, so the automatic check never changes it back.
+     */
+    async setKind(dir: string, file: unknown, kind: unknown): Promise<ProjectFile> {
+      if (!plainFileName(file)) throw invalid('the file name is not valid')
+      if (kind !== 'pdf' && kind !== 'scan') throw invalid('a PDF is a text PDF or a scan')
+      const project = await loadProject(dir)
+      const entry = project.sources.find((s) => s.file === file)
+      if (!entry) throw new TranslateIpcError('NOT_LISTED', 'this document is not in the project')
+      if ((entry.kind !== 'pdf' && entry.kind !== 'scan') || extname(file).toLowerCase() !== '.pdf')
+        throw invalid('only a PDF source can be a text PDF or a scan')
+      const next = await setSourceKind(dir, file, kind, {
+        expectedSha256: entry.sha256,
+        chosenByPerson: true,
+      })
+      detected.delete(keyOf(dir, entry))
+      return next
+    },
 
     /** read the tree of a registered project's text PDF under a new token */
     async pdfPrepare(dir: string, file: unknown, owner?: number): Promise<TranslatePdfPrepared> {
@@ -258,78 +314,43 @@ export function createNonEditableService(
       const write = () => {
         l.running = true
       }
-      switch (request.op) {
-        case 'read': {
-          const t = await store.readTranslation(l.docHash, l.lang)
-          return {
-            translation: t && {
-              lang: t.lang,
-              provider: t.provider,
-              model: t.model,
-              blocks: [...t.blocks.values()],
-            },
-          }
-        }
-        case 'meta': {
-          const { provider, model } = request
-          if (typeof provider !== 'string' || provider.length > MAX_TEXT) break
-          if (typeof model !== 'string' || model.length > MAX_TEXT) break
-          write()
-          await store.writeTranslationMeta(l.docHash, l.lang, { provider, model })
-          return {}
-        }
-        case 'blocks': {
-          const blocks = request.blocks
-          if (!Array.isArray(blocks) || blocks.length > MAX_BLOCKS_PER_CALL) break
-          const checked = blocks.map(blockInputOf)
-          if (checked.some((b) => b === null)) break
-          write()
-          await store.writeTranslationBlocks(l.docHash, l.lang, checked as TranslationBlockInput[])
-          return {}
-        }
-        case 'delete':
-          write()
-          await store.deleteTranslation(l.docHash, l.lang)
-          return {}
-        case 'delete-except-edited':
-          write()
-          return { removed: await store.deleteTranslationExceptEdited(l.docHash, l.lang) }
-        case 'job': {
-          const job = request.job
-          // the record of this document's translation into this language, nothing else
-          if (!isRecord(job) || job.kind !== 'translate' || job.lang !== l.lang) break
-          write()
-          await store.writeJob(l.docHash, job as unknown as JobRecordInput)
-          return {}
-        }
+      try {
+        return await storeCall(l, store, request, write)
+      } catch (err) {
+        // the job stops on a failed store write; it must not keep the project busy
+        // (a refused request is the caller's mistake and leaves the job alone)
+        if (l.running && !(err instanceof TranslateIpcError)) end(l)
+        throw err
       }
-      throw invalid('the store request is not valid')
     },
 
     /**
      * Write the translated PDF (`<stem>.<lang>.pdf`, or `.bilingual.pdf`)
      * from what is stored into output/ under a new name, and end the token.
+     * A failed write ends the token too, so the project is free again.
      */
     async pdfWrite(token: unknown, bilingual: unknown): Promise<TranslatePdfWritten> {
       const l = lease(token)
       if (typeof bilingual !== 'boolean') throw invalid('bilingual must be true or false')
-      const outputDir = join(l.dir, 'output')
-      await mkdir(outputDir, { recursive: true })
-      const tmp = temporaryPath(outputDir, '.pdf')
       try {
-        await deps.writeTranslatedPdf(l.path, tmp, {
-          lang: l.lang,
-          ...(bilingual ? { bilingual: true as const } : {}),
-        })
-      } catch (err) {
-        await rm(tmp, { force: true }).catch(() => undefined)
-        if (err instanceof TranslateIpcError) throw err
-        throw new TranslateIpcError('TRANSLATE_FAILED', 'the translated PDF could not be written')
+        const outputDir = join(l.dir, 'output')
+        await mkdir(outputDir, { recursive: true })
+        const tmp = temporaryPath(outputDir, '.pdf')
+        try {
+          await deps.writeTranslatedPdf(l.path, tmp, {
+            lang: l.lang,
+            ...(bilingual ? { bilingual: true as const } : {}),
+          })
+        } catch (err) {
+          await rm(tmp, { force: true }).catch(() => undefined)
+          if (err instanceof TranslateIpcError) throw err
+          throw new TranslateIpcError('TRANSLATE_FAILED', 'the translated PDF could not be written')
+        }
+        const stem = `${l.stem}.${l.lang}${bilingual ? '.bilingual' : ''}`
+        return { output: await placeNewFile(outputDir, stem, '.pdf', tmp) }
+      } finally {
+        end(l)
       }
-      const stem = `${l.stem}.${l.lang}${bilingual ? '.bilingual' : ''}`
-      const output = await placeNewFile(outputDir, stem, '.pdf', tmp)
-      leases.delete(l.token)
-      return { output }
     },
 
     async pdfRelease(token: unknown): Promise<void> {
@@ -340,6 +361,61 @@ export function createNonEditableService(
     forgetOwner(owner: number): void {
       for (const [token, l] of leases) if (l.owner === owner) leases.delete(token)
     },
+  }
+
+  /** one checked store call for lease `l` (`write` marks the job as running) */
+  async function storeCall(
+    l: PdfLease,
+    store: ReturnType<NonEditableDeps['store']>,
+    request: Record<string, unknown>,
+    write: () => void,
+  ): Promise<TranslatePdfStoreAnswer> {
+    switch (request.op) {
+      case 'read': {
+        const t = await store.readTranslation(l.docHash, l.lang)
+        return {
+          translation: t && {
+            lang: t.lang,
+            provider: t.provider,
+            model: t.model,
+            blocks: [...t.blocks.values()],
+          },
+        }
+      }
+      case 'meta': {
+        const { provider, model } = request
+        if (typeof provider !== 'string' || provider.length > MAX_TEXT) break
+        if (typeof model !== 'string' || model.length > MAX_TEXT) break
+        write()
+        await store.writeTranslationMeta(l.docHash, l.lang, { provider, model })
+        return {}
+      }
+      case 'blocks': {
+        const blocks = request.blocks
+        if (!Array.isArray(blocks) || blocks.length > MAX_BLOCKS_PER_CALL) break
+        const checked = blocks.map(blockInputOf)
+        if (checked.some((b) => b === null)) break
+        write()
+        await store.writeTranslationBlocks(l.docHash, l.lang, checked as TranslationBlockInput[])
+        return {}
+      }
+      case 'delete':
+        write()
+        await store.deleteTranslation(l.docHash, l.lang)
+        return {}
+      case 'delete-except-edited':
+        write()
+        return { removed: await store.deleteTranslationExceptEdited(l.docHash, l.lang) }
+      case 'job': {
+        const job = request.job
+        // the record of this document's translation into this language, nothing else
+        if (!isRecord(job) || job.kind !== 'translate' || job.lang !== l.lang) break
+        write()
+        await store.writeJob(l.docHash, job as unknown as JobRecordInput)
+        return {}
+      }
+    }
+    throw invalid('the store request is not valid')
   }
 }
 

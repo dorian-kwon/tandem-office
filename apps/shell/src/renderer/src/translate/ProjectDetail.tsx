@@ -16,6 +16,8 @@ export interface ProjectDetailProps {
   onStartTranslation: (sourceFile: string) => void
   /** what opening the translation view reported (an error, or the changed-source warning) */
   startNotice?: { text: string; isError: boolean } | null
+  /** bumped when the source list may have changed elsewhere (a PDF found to be a scan) */
+  listsVersion?: number
 }
 
 type OcrChoice = 'claude' | 'chatgpt' | 'off'
@@ -34,6 +36,12 @@ const SECTIONS: { kind: TranslateMaterialKind; title: TranslateStringKey }[] = [
   { kind: 'glossary', title: 'glossaryTitle' },
 ]
 
+/** 'pdf' or 'scan' for a PDF source, else null (only those two can be switched) */
+function pdfKindOf(project: ProjectFile, file: string): 'pdf' | 'scan' | null {
+  const kind = project.sources.find((e) => e.file === file)?.kind
+  return kind === 'pdf' || kind === 'scan' ? kind : null
+}
+
 function filesOf(project: ProjectFile, kind: TranslateMaterialKind): string[] {
   if (kind === 'source') return project.sources.map((e) => e.file)
   return kind === 'reference' ? project.references : project.glossaryFiles
@@ -45,6 +53,7 @@ export function ProjectDetail({
   onBack,
   onStartTranslation,
   startNotice,
+  listsVersion = 0,
 }: ProjectDetailProps) {
   const { lang } = useI18n()
   const s = makeText(lang)
@@ -73,6 +82,23 @@ export function ProjectDetail({
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per project
   }, [dir])
+
+  // a source's kind may have changed in main (scan detection): read the lists again
+  useEffect(() => {
+    if (!api || listsVersion === 0) return
+    let alive = true
+    api.getProject(dir).then(
+      (loaded) => {
+        const base = latest.current
+        if (alive && base) adopt({ ...base, sources: loaded.sources })
+      },
+      () => undefined,
+    )
+    return () => {
+      alive = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload on each bump
+  }, [listsVersion])
 
   if (!api) return <main className="content projects-panel" />
 
@@ -127,6 +153,19 @@ export function ProjectDetail({
         const detail = added.length > 0 ? ` ${s('uploadPartial', { files: added.join(', ') })}` : ''
         setError(translateErrorText(lang, err) + detail)
       }
+    } catch (err) {
+      setError(translateErrorText(lang, err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** the person's correction: a PDF is a text PDF or a scan */
+  const setPdfKind = async (file: string, kind: 'pdf' | 'scan') => {
+    setBusy(true)
+    setError(null)
+    try {
+      adoptLists(await api.setSourceKind({ dir, file, kind }))
     } catch (err) {
       setError(translateErrorText(lang, err))
     } finally {
@@ -219,7 +258,33 @@ export function ProjectDetail({
                         <li key={file} className="projects-row">
                           <div className="translate-row-main">
                             <span className="projects-row-name">{file}</span>
+                            {kind === 'source' && pdfKindOf(project, file) && (
+                              <span
+                                className="translate-kind"
+                                data-source-kind={pdfKindOf(project, file)}
+                              >
+                                {pdfKindOf(project, file) === 'scan' ? s('kindScan') : s('kindPdf')}
+                              </span>
+                            )}
                           </div>
+                          {kind === 'source' && pdfKindOf(project, file) && (
+                            <button
+                              type="button"
+                              className="projects-small"
+                              data-action="toggle-pdf-kind"
+                              disabled={busy}
+                              onClick={() =>
+                                void setPdfKind(
+                                  file,
+                                  pdfKindOf(project, file) === 'scan' ? 'pdf' : 'scan',
+                                )
+                              }
+                            >
+                              {pdfKindOf(project, file) === 'scan'
+                                ? s('treatAsText')
+                                : s('treatAsScan')}
+                            </button>
+                          )}
                           {kind === 'source' && (
                             <button
                               type="button"

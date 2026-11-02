@@ -59,6 +59,7 @@ import {
   type TranslatePdfPrepareArgs,
   type TranslatePdfStoreArgs,
   type TranslatePdfWriteArgs,
+  type TranslateSetSourceKindArgs,
   type TranslatePickedMaterials,
   type TranslatePickedParentDir,
   type TranslateProjectListEntry,
@@ -194,6 +195,7 @@ export function createTranslateHandlers(deps: TranslateIpcDeps) {
     pdfWrite: guard(raw.pdfWrite),
     pdfRelease: guard(raw.pdfRelease),
     openResult: guard(raw.openResult),
+    setSourceKind: guard(raw.setSourceKind),
   }
 }
 
@@ -486,15 +488,23 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       const { project, entry } = await sourceEntry(dir, file)
       // a project made before listing existed (or whose listing failed) is listed now, once
       await listOnce(dir)
-      return openTranslation(dir, entry, view, project.ocr)
+      return openTranslation(dir, entry, view, {
+        ocr: project.ocr,
+        targetLang: project.targetLang,
+      })
     },
 
     async openResult(args: TranslateOpenResultArgs): Promise<TranslateOpenResultAnswer> {
       const dir = registeredDir(args?.dir)
       const file = requireString(args.file, 'file')
       const view = viewDeps()
-      const { entry } = await sourceEntry(dir, file)
-      return openTranslationResult(dir, entry, args.output, view)
+      const { project, entry } = await sourceEntry(dir, file)
+      return openTranslationResult(dir, entry, args.output, view, project.targetLang)
+    },
+
+    async setSourceKind(args: TranslateSetSourceKindArgs): Promise<ProjectFile> {
+      const dir = registeredDir(args?.dir)
+      return nonEditable().setKind(dir, args.file, args.kind)
     },
 
     async instructionsFor(args: TranslateInstructionsForArgs): Promise<TranslateInstructions> {
@@ -645,5 +655,8 @@ export function registerTranslateIpc(ipc: Pick<IpcMain, 'handle'>, deps: Transla
   ipc.handle(TRANSLATE_CHANNELS.pdfRelease, (_e, token: string) => h.pdfRelease(token))
   ipc.handle(TRANSLATE_CHANNELS.openResult, (_e, args: TranslateOpenResultArgs) =>
     h.openResult(args),
+  )
+  ipc.handle(TRANSLATE_CHANNELS.setSourceKind, (_e, args: TranslateSetSourceKindArgs) =>
+    h.setSourceKind(args),
   )
 }

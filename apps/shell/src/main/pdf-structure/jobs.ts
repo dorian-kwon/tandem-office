@@ -519,16 +519,18 @@ export async function runStructureJob(
     }
     case 'textCounts': {
       const m = await deps.pdfium()
-      const counts = withPdfDocument(
+      const { counts, objects } = withPdfDocument(
         m,
         bytes,
         (doc) => {
           const total = m._FPDF_GetPageCount(doc)
-          const out: number[] = []
+          const out = { counts: [] as number[], objects: [] as number[] }
           for (let i = 0; i < total; i++) {
             const page = m._FPDF_LoadPage(doc, i)
             let chars = 0
+            let items = 0
             if (page) {
+              items = Math.max(0, m._FPDFPage_CountObjects(page))
               const text = m._FPDFText_LoadPage(page)
               if (text) {
                 chars = Math.max(0, m._FPDFText_CountChars(text))
@@ -536,14 +538,15 @@ export async function runStructureJob(
               }
               m._FPDF_ClosePage(page)
             }
-            out.push(chars)
+            out.counts.push(chars)
+            out.objects.push(items)
             onProgress(i + 1, total)
           }
           return out
         },
         job.source.password,
       )
-      return { docHash, counts } satisfies TextCountsJobValue
+      return { docHash, counts, objects } satisfies TextCountsJobValue
     }
     case 'pageImage': {
       const m = await deps.pdfium()

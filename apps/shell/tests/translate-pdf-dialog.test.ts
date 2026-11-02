@@ -9,7 +9,13 @@ import type { Root } from 'react-dom/client'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AiSettings } from '@genoffice/ai-provider/browser'
 import type { ProjectFile } from '@genoffice/translate-project'
-import { buildPdf, loadPdfium } from '../../../packages/pdf-structure/tests/helpers/fixtures'
+import {
+  buildPdf,
+  loadPdfium,
+  para,
+  wordLines,
+} from '../../../packages/pdf-structure/tests/helpers/fixtures'
+import { ProjectDetail } from '../src/renderer/src/translate/ProjectDetail'
 import type { TranslationSend } from '../../../packages/pdf-structure/src/translate'
 import type { DocumentTree } from '../../../packages/pdf-structure/src/tree/types'
 import { extractDocumentTree } from '../../../packages/pdf-structure/src/tree'
@@ -33,6 +39,7 @@ const actEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONM
 actEnvironment.IS_REACT_ACT_ENVIRONMENT = true
 
 let tree: DocumentTree
+let bigTree: DocumentTree
 let host: HTMLDivElement
 let root: Root
 let api: Record<string, ReturnType<typeof vi.fn>>
@@ -94,6 +101,10 @@ beforeAll(async () => {
     [{ kind: 'text', text: 'The quick brown fox jumps over the lazy dog.', x: 72, y: 700 }],
   ])
   tree = (await extractDocumentTree(bytes, { pdfium: await loadPdfium() } as never)).tree
+  const big = await buildPdf(
+    Array.from({ length: 10 }, (_, i) => para(wordLines(i * 50, 45), 72, 760)),
+  )
+  bigTree = (await extractDocumentTree(big, { pdfium: await loadPdfium() } as never)).tree
 })
 
 beforeEach(() => {
@@ -254,6 +265,146 @@ describe('PdfTranslateDialog', () => {
   })
 })
 
+describe('PdfTranslateDialog after the review', () => {
+  /** the first call answers, every later one hits the usage limit */
+  function limitAfterFirst() {
+    let calls = 0
+    const answer = send.getMockImplementation()!
+    send.mockImplementation(async (request, signal) => {
+      if (calls++ === 0) return answer(request, signal)
+      throw Object.assign(new Error('limit'), { kind: 'rate-limit' })
+    })
+  }
+
+  it('a stop names its reason in words and offers to write what is done', async () => {
+    api.pdfPrepare.mockResolvedValue({ token: 'tok', lang: 'de', docHash: 'h', tree: bigTree })
+    limitAfterFirst()
+    await render()
+    await click(button('Start'))
+    expect(dialog()?.getAttribute('data-step')).toBe('stopped')
+    const text = host.querySelector('[data-stopped]')!.textContent ?? ''
+    expect(host.querySelector('[data-stopped]')?.getAttribute('data-stopped')).toBe('rate-limit')
+    // the shared run-error wording, never the raw reason code
+    expect(text).not.toContain('rate-limit')
+    expect(text.length).toBeGreaterThan(10)
+    expect(host.querySelector('[data-action="write-partial"]')).not.toBeNull()
+  })
+
+  it('a failed "write what is done" keeps the token until the window releases it', async () => {
+    api.pdfPrepare.mockResolvedValue({ token: 'tok', lang: 'de', docHash: 'h', tree: bigTree })
+    api.pdfWrite.mockRejectedValue(new Error('[TRANSLATE_FAILED] disk full'))
+    limitAfterFirst()
+    await render()
+    await click(button('Start'))
+    await click(host.querySelector('[data-action="write-partial"]')!)
+    expect(api.pdfWrite).toHaveBeenCalledWith({ token: 'tok', bilingual: false })
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('could not be completed')
+    expect(api.pdfRelease).not.toHaveBeenCalled()
+    act(() => root.unmount())
+    expect(api.pdfRelease).toHaveBeenCalledWith('tok')
+    root = createRoot(host)
+  })
+
+  it('leaving the screen while it runs stops the job and frees the token', async () => {
+    let seen: AbortSignal | null = null
+    send.mockImplementation(
+      (_request, signal) =>
+        new Promise<string>((_resolve, reject) => {
+          seen = signal
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+        }),
+    )
+    await render()
+    await click(button('Start'))
+    expect(dialog()?.getAttribute('data-step')).toBe('running')
+    expect(seen).not.toBeNull()
+    act(() => root.unmount())
+    await settle()
+    expect(seen!.aborted).toBe(true)
+    expect(api.pdfRelease).toHaveBeenCalledWith('tok')
+    root = createRoot(host)
+  })
+
+  it('"Translate again" confirms a full new translation before sending', async () => {
+    // everything is stored already (until the restart removes it)
+    let cleared = false
+    api.pdfStore.mockImplementation(async ({ request }: { request: TranslatePdfStoreRequest }) => {
+      if (request.op === 'read' && cleared) return { translation: null }
+      if (request.op === 'read') {
+        const { translationUnits } = await import('../../../packages/pdf-structure/src/translate')
+        const { translationBlockKeys } =
+          await import('../../../packages/pdf-structure/src/store/keys')
+        const keys = translationBlockKeys(translationUnits(tree))
+        return {
+          translation: {
+            lang: 'de',
+            provider: 'claude-code',
+            model: '',
+            blocks: keys.map((key) => ({ key, status: 'translated', text: 'old', savedAt: 1 })),
+          },
+        }
+      }
+      stored.push(request as unknown as Record<string, unknown>)
+      if (request.op === 'delete-except-edited') cleared = true
+      return request.op === 'delete-except-edited' ? { removed: 1 } : {}
+    })
+    await render({ restart: true })
+    expect(host.querySelector('[data-restart]')).not.toBeNull()
+    expect(host.querySelector('[data-calls]')?.getAttribute('data-calls')).toBe('1')
+    expect(send).not.toHaveBeenCalled()
+    expect(stored).toEqual([])
+    await click(button('Start'))
+    expect(stored[0]).toEqual({ op: 'delete-except-edited' })
+    expect(send).toHaveBeenCalled()
+  })
+
+  it('says which AI is used and what goes with the text', async () => {
+    await render()
+    expect(host.querySelector('[data-hint="app-ai"]')?.textContent).toContain('AI to use')
+    expect(host.textContent).toContain('names of the reference files (not their contents)')
+  })
+})
+
+describe('ProjectDetail PDF kind', () => {
+  it('a PDF source can be switched between text PDF and scan', async () => {
+    const setSourceKind = vi.fn(async ({ kind }: { kind: 'pdf' | 'scan' }) =>
+      project({
+        sources: [
+          { file: 'report.pdf', sha256: 'x', kind },
+          { file: 'scan.pdf', sha256: 'y', kind: 'scan' },
+        ],
+      }),
+    )
+    ;(window as unknown as { translateApi: unknown }).translateApi = {
+      ...api,
+      getProject: vi.fn(async () => project()),
+      setSourceKind,
+    }
+    await act(async () => {
+      root.render(
+        createElement(
+          LocaleProvider,
+          { initial: 'en' },
+          createElement(ProjectDetail, {
+            dir: '/p/a',
+            onBack: () => undefined,
+            onStartTranslation: () => undefined,
+          }),
+        ),
+      )
+    })
+    await settle()
+    const kinds = [...host.querySelectorAll('[data-source-kind]')].map((el) =>
+      el.getAttribute('data-source-kind'),
+    )
+    expect(kinds).toEqual(['pdf', 'scan'])
+    await click(button('Treat as scanned PDF'))
+    expect(setSourceKind).toHaveBeenCalledWith({ dir: '/p/a', file: 'report.pdf', kind: 'scan' })
+    expect(host.querySelectorAll('[data-source-kind="scan"]')).toHaveLength(2)
+    expect(host.querySelectorAll('[data-action="toggle-pdf-kind"]')).toHaveLength(2)
+  })
+})
+
 describe('TranslationPanel mounting', () => {
   async function renderPanel(props: Record<string, unknown> = {}) {
     ;(window as unknown as { translateApi: unknown }).translateApi = {
@@ -364,6 +515,20 @@ describe('TranslationPanel mounting', () => {
       output: 'scan (OCR).docx',
     })
     expect(dialog()).toBeNull()
+  })
+
+  it('"Translate again" opens the window for a full new translation', async () => {
+    openTranslationMock = vi.fn(async () => ({
+      flow: 'translate-pdf',
+      file: 'report.pdf',
+      hashStatus: 'ok',
+      existing: 'report.de.pdf',
+    }))
+    await renderPanel()
+    await openRow('report.pdf')
+    await click(button('Translate again'))
+    expect(dialog()?.classList.contains('translate-pdf')).toBe(true)
+    expect(host.querySelector('[data-restart]')).not.toBeNull()
   })
 
   it('OCR switched off shows the localized reason and mounts nothing', async () => {

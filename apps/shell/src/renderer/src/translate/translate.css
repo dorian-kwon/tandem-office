@@ -223,3 +223,9 @@
   width: min(480px, 90vw);
   overflow-wrap: anywhere;
 }
+
+.translate-kind {
+  margin-left: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}

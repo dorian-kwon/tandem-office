@@ -45,7 +45,7 @@ import type { DocumentTree } from '../../../../packages/pdf-structure/src/tree/t
  *   (`startTranslationJob`): finished batches are kept in the result store
  *   under the PDF's content hash, so running again sends only what is
  *   missing; a stopped job can still write what is done (the rest stays in
- *   the source language);
+ *   the source language); `restart` translates everything again;
  * - the translated PDF is written by main into output/ under a new name.
  */
 
@@ -258,6 +258,13 @@ export interface RunPdfTranslationOptions {
   ) => Promise<PdfTranslateGo | null>
   /** the provider and model the estimate is made for (the route shown) */
   model: () => JobModelChoice
+  /**
+   * translate everything again ("Translate again"): the stored translation is
+   * replaced, except blocks a person edited (the engine's restart with
+   * keepEdited, as the PDF editor's restart offers); the estimate counts
+   * every block, so the confirmation shows what will be sent
+   */
+  restart?: boolean
   signal?: AbortSignal
   onProgress?: (event: JobProgressEvent<unknown>) => void
   /** called once the job ran, before the PDF is written (the screen shows "writing") */
@@ -285,6 +292,7 @@ export async function runPdfTranslation(
       lang,
       send: () => Promise.reject(new PdfTranslateCancelledError()),
     })
+    const restart = o.restart ? { restart: true, keepEdited: true } : {}
     const estimate = await estimateTranslationJob({
       docHash,
       lang,
@@ -292,6 +300,7 @@ export async function runPdfTranslation(
       batch: planParts.batch,
       model: o.model(),
       store,
+      ...restart,
     })
     const go = await o.confirm(estimate, prepared)
     if (!go || o.signal?.aborted) throw new PdfTranslateCancelledError()
@@ -303,6 +312,7 @@ export async function runPdfTranslation(
       ...parts,
       model: go.model,
       store,
+      ...restart,
       ...(o.signal ? { signal: o.signal } : {}),
       ...(o.onProgress
         ? { onProgress: (e) => o.onProgress?.(e as JobProgressEvent<unknown>) }

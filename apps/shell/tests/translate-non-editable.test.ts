@@ -21,7 +21,14 @@ import {
   saveProject,
   setSourceKind,
 } from '@genoffice/translate-project'
-import { buildPdf, loadPdfium } from '../../../packages/pdf-structure/tests/helpers/fixtures'
+import {
+  buildPdf,
+  loadPdfium,
+  para,
+  wordLines,
+} from '../../../packages/pdf-structure/tests/helpers/fixtures'
+import type { AiSettings, AiStreamChunk, AiStreamRequest } from '@genoffice/ai-provider'
+import { createRouteAsk } from '../src/renderer/src/translate/ocr-ask'
 import { withPdfDocument, type PdfiumModule } from '../../../packages/pdf2docx/src/extract/pdfium'
 import { ResultStore } from '../../../packages/pdf-structure/src/store'
 import type { TranslationSend } from '../../../packages/pdf-structure/src/translate'
@@ -83,14 +90,12 @@ const jobDeps = (): JobDeps => ({
 /** the app's wiring of the main service, with the structure jobs run in this process */
 function nonEditableDeps(): NonEditableDeps {
   return {
-    pageTextCounts: async (pdfPath) =>
-      (
-        (await runStructureJob(
-          { op: 'textCounts', source: { pdfPath } },
-          jobDeps(),
-          noProgress,
-        )) as TextCountsJobValue
-      ).counts,
+    pageTextLayer: async (pdfPath) =>
+      (await runStructureJob(
+        { op: 'textCounts', source: { pdfPath } },
+        jobDeps(),
+        noProgress,
+      )) as TextCountsJobValue,
     pdfTree: async (pdfPath) => {
       const v = (await runStructureJob(
         { op: 'tree', source: { pdfPath } },
@@ -134,13 +139,13 @@ function view() {
   }
 }
 
-function handlers(v = view()) {
+function handlers(v = view(), overrides: Partial<NonEditableDeps> = {}) {
   return createTranslateHandlers({
     settingsPath: () => settingsPath,
     now: () => 1000,
     showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
     view: v,
-    nonEditable: nonEditableDeps(),
+    nonEditable: { ...nonEditableDeps(), ...overrides },
   })
 }
 
@@ -170,7 +175,11 @@ const model = { provider: 'claude-code', model: '' }
 
 async function translate(
   h: ReturnType<typeof handlers>,
-  options: { bilingual?: boolean; requests?: Array<{ system: string; prompt: string }> } = {},
+  options: {
+    bilingual?: boolean
+    restart?: boolean
+    requests?: Array<{ system: string; prompt: string }>
+  } = {},
 ) {
   const requests = options.requests ?? []
   return runPdfTranslation({
@@ -178,6 +187,7 @@ async function translate(
     file: 'report.pdf',
     bridge: bridgeOf(h),
     model: () => model,
+    ...(options.restart ? { restart: true } : {}),
     confirm: async () => ({
       send: fakeSend(requests),
       model,
@@ -640,5 +650,217 @@ describe('translationTargetOf', () => {
     expect(translationTargetOf('zh-CN')).toBe('zh')
     expect(translationTargetOf('tlh')).toBeNull()
     expect(translationTargetOf('')).toBeNull()
+  })
+})
+
+describe('review fixes', () => {
+  it('the person can switch a PDF between text PDF and scan, and it sticks', async () => {
+    await addOriginal('scan.pdf', scanPdf)
+    const h = handlers()
+    expect(await h.openTranslation({ dir, file: 'scan.pdf' })).toMatchObject({ flow: 'ocr' })
+    const next = await h.setSourceKind({ dir, file: 'scan.pdf', kind: 'pdf' })
+    expect(next.sources[0]?.kind).toBe('pdf')
+    // the automatic check does not turn it back, in this run or a later one
+    expect(await h.openTranslation({ dir, file: 'scan.pdf' })).toMatchObject({
+      flow: 'translate-pdf',
+    })
+    expect(await handlers().openTranslation({ dir, file: 'scan.pdf' })).toMatchObject({
+      flow: 'translate-pdf',
+    })
+    await h.setSourceKind({ dir, file: 'scan.pdf', kind: 'scan' })
+    expect(await h.openTranslation({ dir, file: 'scan.pdf' })).toMatchObject({ flow: 'ocr' })
+  })
+
+  it('set-source-kind only switches a PDF source between text PDF and scan', async () => {
+    await addOriginal('report.pdf', textPdf)
+    await addOriginal('page.png', '\x89PNG\r\n\x1a\nfake')
+    await addOriginal('notes.md', '# hi')
+    const h = handlers()
+    for (const kind of ['image', 'editable', 'other']) {
+      expect(await codeOf(h.setSourceKind({ dir, file: 'report.pdf', kind: kind as never }))).toBe(
+        'INVALID_ARGUMENT',
+      )
+    }
+    expect(await codeOf(h.setSourceKind({ dir, file: 'page.png', kind: 'pdf' }))).toBe(
+      'INVALID_ARGUMENT',
+    )
+    expect(await codeOf(h.setSourceKind({ dir, file: 'notes.md', kind: 'scan' }))).toBe(
+      'INVALID_ARGUMENT',
+    )
+    expect(await codeOf(h.setSourceKind({ dir, file: 'x.pdf', kind: 'scan' }))).toBe('NOT_LISTED')
+    expect(await codeOf(h.setSourceKind({ dir: root, file: 'report.pdf', kind: 'scan' }))).toBe(
+      'NOT_REGISTERED',
+    )
+    expect((await loadProject(dir)).sources.map((x) => x.kind)).toEqual([
+      'pdf',
+      'image',
+      'editable',
+    ])
+  })
+
+  it('a failed write frees the project at once', async () => {
+    await addOriginal('report.pdf', textPdf)
+    const h = handlers(view(), {
+      writeTranslatedPdf: async () => {
+        throw new Error('disk full')
+      },
+    })
+    await expect(translate(h)).rejects.toMatchObject({ code: 'TRANSLATE_FAILED' })
+    expect(await codeOf(h.pdfPrepare({ dir, file: 'report.pdf' }))).toBe('resolved')
+    expect(outputFiles()).toEqual([])
+    // main itself ends the token, without the screen's release ("Write what is done" failing)
+    const { token } = await h.pdfPrepare({ dir, file: 'report.pdf' })
+    await h.pdfStore({ token, request: { op: 'meta', provider: 'claude-code', model: '' } })
+    expect(await codeOf(h.pdfWrite({ token, bilingual: false }))).toBe('TRANSLATE_FAILED')
+    expect(await codeOf(h.pdfPrepare({ dir, file: 'report.pdf' }))).toBe('resolved')
+  })
+
+  it('a failed store write frees the project too', async () => {
+    await addOriginal('report.pdf', textPdf)
+    const real = nonEditableDeps().store()
+    const h = handlers(view(), {
+      store: () => ({
+        ...real,
+        readTranslation: real.readTranslation.bind(real),
+        writeJob: real.writeJob.bind(real),
+        writeTranslationMeta: real.writeTranslationMeta.bind(real),
+        deleteTranslation: real.deleteTranslation.bind(real),
+        deleteTranslationExceptEdited: real.deleteTranslationExceptEdited.bind(real),
+        writeTranslationBlocks: async () => {
+          throw new Error('store down')
+        },
+      }),
+    })
+    const result = await translate(h)
+    expect(result.summary.state).toBe('stopped')
+    expect(result.summary.stopReason).toBe('store-write-failed')
+    expect(await codeOf(h.pdfPrepare({ dir, file: 'report.pdf' }))).toBe('resolved')
+  })
+
+  it('restart sends every block again with the current prompts; without it nothing is sent', async () => {
+    await addOriginal('report.pdf', textPdf)
+    const h = handlers()
+    const first: Array<{ system: string; prompt: string }> = []
+    await translate(h, { requests: first })
+    await saveProject(dir, { ...(await loadProject(dir)), projectPrompt: 'Use British spelling.' })
+    const glossary = join(root, 'originals', 'g.csv')
+    writeFileSync(glossary, 'fox,Fuchs\n')
+    await addGlossary(dir, glossary)
+    const resumed: Array<{ system: string; prompt: string }> = []
+    await translate(h, { requests: resumed })
+    expect(resumed).toEqual([])
+    const again: Array<{ system: string; prompt: string }> = []
+    let calls = -1
+    const result = await runPdfTranslation({
+      dir,
+      file: 'report.pdf',
+      bridge: bridgeOf(h),
+      model: () => model,
+      restart: true,
+      confirm: async (estimate) => {
+        calls = estimate.calls
+        return { send: fakeSend(again), model, bilingual: false }
+      },
+    })
+    expect(calls).toBe(first.length)
+    expect(again.map((r) => r.prompt)).toEqual(first.map((r) => r.prompt))
+    for (const { system } of again) {
+      expect(system).toContain('Use British spelling.')
+      expect(system).toContain('Fuchs')
+    }
+    // the earlier results stay; the new one gets a new name
+    expect(result.output).toBe('report.de (3).pdf')
+    expect(outputFiles().sort()).toEqual([
+      'report.de (2).pdf',
+      'report.de (3).pdf',
+      'report.de.pdf',
+    ])
+  })
+
+  it('a damaged PDF is neither a scan nor a crash: preparing it fails with a typed error', async () => {
+    await addOriginal('report.pdf', 'this is not a PDF')
+    const h = handlers()
+    expect(await h.openTranslation({ dir, file: 'report.pdf' })).toMatchObject({
+      flow: 'translate-pdf',
+    })
+    expect((await loadProject(dir)).sources[0]?.kind).toBe('pdf')
+    expect(await codeOf(h.pdfPrepare({ dir, file: 'report.pdf' }))).toBe('TRANSLATE_FAILED')
+    // and the project is not left busy
+    expect(await codeOf(h.pdfPrepare({ dir, file: 'report.pdf' }))).toBe('TRANSLATE_FAILED')
+  })
+
+  it('instructions-for refuses a request text over 400,000 characters', async () => {
+    const h = handlers()
+    expect(await codeOf(h.instructionsFor({ dir, text: 'x'.repeat(400_001) }))).toBe(
+      'INVALID_ARGUMENT',
+    )
+    expect(await codeOf(h.instructionsFor({ dir, text: 'x'.repeat(400_000) }))).toBe('resolved')
+  })
+
+  it('a route that stops holding mid-job stops the job; nothing goes to another AI', async () => {
+    const pages = Array.from({ length: 10 }, (_, i) => para(wordLines(i * 50, 45), 72, 760))
+    const bytes = await buildPdf(pages)
+    await addOriginal('report.pdf', bytes)
+    const sent: AiStreamRequest[] = []
+    let listener: ((chunk: AiStreamChunk) => void) | null = null
+    const bridge = {
+      aiStream: async (req: AiStreamRequest) => {
+        sent.push(req)
+        const prompt = (req.messages.at(-1) as { text?: string; content?: string }).text ?? ''
+        const json = String(prompt)
+          .split('<document_blocks>\n')[1]
+          ?.split('\n</document_blocks>')[0]
+        const data = json
+          ? (JSON.parse(json) as { blocks: Array<{ id: string; text: string }> })
+          : { blocks: [] }
+        const answer = JSON.stringify({
+          translations: data.blocks.map((b) => ({ id: b.id, text: `DE ${b.text}` })),
+        })
+        queueMicrotask(() => {
+          listener?.({ requestId: req.requestId, type: 'delta', text: answer } as AiStreamChunk)
+          listener?.({ requestId: req.requestId, type: 'done' } as AiStreamChunk)
+        })
+      },
+      aiStreamCancel: async () => undefined,
+      onAiStream: (handler: (chunk: AiStreamChunk) => void) => {
+        listener = handler
+        return () => {
+          listener = null
+        }
+      },
+    }
+    let asked = 0
+    const settings = { provider: 'claude-code', providers: {} } as unknown as AiSettings
+    const ask = createRouteAsk({
+      settings: () => settings,
+      // the confirmed AI signs out after the first call
+      refusal: () => (asked++ === 0 ? null : 'not-connected'),
+      lang: () => 'en',
+      unknownError: 'errTranslateFailed',
+      bridge,
+    })
+    const h = handlers()
+    const result = await runPdfTranslation({
+      dir,
+      file: 'report.pdf',
+      bridge: bridgeOf(h),
+      model: () => model,
+      confirm: async (estimate) => {
+        expect(estimate.calls).toBeGreaterThan(1)
+        return {
+          send: (req, signal) => ask(req.system, [{ role: 'user', text: req.prompt }], signal),
+          model,
+          bilingual: false,
+        }
+      },
+    })
+    expect(result.summary.state).toBe('stopped')
+    expect(result.summary.stopReason).toBe('not-connected')
+    expect(result.output).toBeNull()
+    expect(sent).toHaveLength(1)
+    expect(
+      sent.every((r) => (r.settings as { provider?: string }).provider === 'claude-code'),
+    ).toBe(true)
+    await h.pdfRelease(result.token!)
   })
 })

@@ -3,6 +3,7 @@ import { copyFile, mkdir, readdir, stat } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { verifySource, type OcrMode, type SourceEntry } from '@genoffice/translate-project'
 import { appForPath } from '../app-routing'
+import { pdfTranslationTargetOf } from '../../shared/translate-pdf'
 import {
   TranslateIpcError,
   type TranslateOpenResultAnswer,
@@ -32,6 +33,14 @@ function plainFileName(file: string): boolean {
   )
 }
 
+/** what of the project the routing reads: its OCR choice and target language */
+export interface ProjectContext {
+  /** absent: off (a scan or image is refused) */
+  ocr?: OcrMode
+  /** the project's target language code; earlier PDF results are looked for in it */
+  targetLang?: string
+}
+
 /** the image types the OCR reads (main/translate/ocr.ts) */
 const OCR_IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg']
 
@@ -40,24 +49,37 @@ function stemOf(file: string): string {
   return file.slice(0, file.length - ext.length) || file
 }
 
-/** is `output` a result of `source` (by name): the OCR's Word document, or a translated PDF */
-function isResultOf(source: SourceEntry, output: string): boolean {
-  const stem = stemOf(source.file).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/**
+ * Is `output` a result of `source` (by name): the OCR's Word document, or
+ * the translated PDF (plain or bilingual) into the project's current target
+ * language `targetLang` (a project language code).
+ */
+function isResultOf(source: SourceEntry, output: string, targetLang: string): boolean {
+  const stem = escape(stemOf(source.file))
   // the names non-editable.ts and ocr.ts give, with the " (2)" of a taken name
-  if (source.kind === 'pdf')
-    return new RegExp(`^${stem}\\.[^.]+(\\.bilingual)?( \\(\\d+\\))?\\.pdf$`).test(output)
+  if (source.kind === 'pdf') {
+    const lang = pdfTranslationTargetOf(targetLang)
+    if (!lang) return false
+    return new RegExp(`^${stem}\\.${escape(lang)}(\\.bilingual)?( \\(\\d+\\))?\\.pdf$`).test(output)
+  }
   if (source.kind === 'scan' || source.kind === 'image')
     return new RegExp(`^${stem} \\(OCR\\)( \\(\\d+\\))?\\.docx$`).test(output)
   return false
 }
 
-/** the newest earlier result of `source` in output/, or null */
-async function latestResult(dir: string, source: SourceEntry): Promise<string | null> {
+/** the newest earlier result of `source` in output/ (for the current target language), or null */
+async function latestResult(
+  dir: string,
+  source: SourceEntry,
+  targetLang: string,
+): Promise<string | null> {
   const outputDir = join(dir, 'output')
   const names = await readdir(outputDir).catch(() => [] as string[])
   let best: { name: string; at: number } | null = null
   for (const name of names) {
-    if (name.startsWith('.') || !isResultOf(source, name)) continue
+    if (name.startsWith('.') || !isResultOf(source, name, targetLang)) continue
     const info = await stat(join(outputDir, name)).catch(() => null)
     if (!info?.isFile()) continue
     if (!best || info.mtimeMs > best.at) best = { name, at: info.mtimeMs }
@@ -89,8 +111,10 @@ export async function openTranslation(
   dir: string,
   source: SourceEntry,
   deps: TranslationViewDeps,
-  ocr: OcrMode = { kind: 'off' },
+  project: ProjectContext = {},
 ): Promise<TranslateOpenTranslationResult> {
+  const ocr = project.ocr ?? { kind: 'off' }
+  const targetLang = project.targetLang ?? ''
   if (!plainFileName(source.file))
     throw new TranslateIpcError('INVALID_ARGUMENT', 'the source file name is not valid')
   if (source.kind === 'scan' || source.kind === 'image') {
@@ -118,7 +142,7 @@ export async function openTranslation(
       flow: 'translate-pdf',
       file: source.file,
       hashStatus,
-      existing: await latestResult(dir, source),
+      existing: await latestResult(dir, source, targetLang),
     }
   if (source.kind === 'scan' || source.kind === 'image')
     return {
@@ -126,7 +150,7 @@ export async function openTranslation(
       kind: source.kind,
       file: source.file,
       hashStatus,
-      existing: await latestResult(dir, source),
+      existing: await latestResult(dir, source, targetLang),
     }
 
   const outputDir = join(dir, 'output')
@@ -180,10 +204,15 @@ export async function openTranslationResult(
   source: SourceEntry,
   output: unknown,
   deps: TranslationViewDeps,
+  targetLang = '',
 ): Promise<TranslateOpenResultAnswer> {
   if (!plainFileName(source.file))
     throw new TranslateIpcError('INVALID_ARGUMENT', 'the source file name is not valid')
-  if (typeof output !== 'string' || !plainFileName(output) || !isResultOf(source, output))
+  if (
+    typeof output !== 'string' ||
+    !plainFileName(output) ||
+    !isResultOf(source, output, targetLang)
+  )
     throw new TranslateIpcError('INVALID_ARGUMENT', 'this is not a result of that source')
   const outputPath = join(dir, 'output', output)
   const info = await stat(outputPath).catch(() => null)

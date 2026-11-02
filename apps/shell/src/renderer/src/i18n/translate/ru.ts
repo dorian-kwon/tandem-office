@@ -131,7 +131,7 @@ export const ru = {
     'Everything is already translated. Nothing is sent; the PDF is written from the stored translation.',
   trConfirmProvider: 'AI used: {provider}',
   trConfirmSends:
-    "The document's text, with the project's prompts and matching glossary entries, is sent to this AI.",
+    "The document's text is sent to this AI, with your translation prompts, the glossary (whole when it is small, otherwise the entries whose terms appear in the text) and the names of the reference files (not their contents).",
   trConfirmPaid: '{provider} will charge for this',
   trProviderChange: 'The earlier part was translated with {before}; the rest uses {after}.',
   trBilingual: 'Bilingual: the translation beside each original page',
@@ -149,4 +149,18 @@ export const ru = {
   trWritePartial: 'Write what is done',
   trLater: 'Continue later',
   trClose: 'Close',
+  // TODO(task-12): translate the PDF kind and restart strings below (English placeholders).
+  errSourceChanged: 'This source changed since it was checked. Open the project again.',
+  kindPdf: 'Text PDF',
+  kindScan: 'Scanned PDF',
+  treatAsText: 'Treat as text PDF',
+  treatAsScan: 'Treat as scanned PDF',
+  trConfirmRestart:
+    'Everything is translated again from the start; the earlier result in the output folder stays as it is.',
+  trConfirmAppAi:
+    "This uses the app's “AI to use” from Settings. (OCR uses the AI chosen in the project.)",
+  trStoppedFailures:
+    'The translation stopped after several failed requests in a row. What is done is kept.',
+  trStoppedStore:
+    'The translation stopped because its results could not be saved. What is done is kept.',
 } satisfies Record<keyof typeof zh, string>

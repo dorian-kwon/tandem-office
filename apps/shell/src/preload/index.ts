@@ -727,6 +727,7 @@ const translateApi: TranslateApi = {
   pdfWrite: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.pdfWrite, args),
   pdfRelease: (token) => ipcRenderer.invoke(TRANSLATE_CHANNELS.pdfRelease, token),
   openResult: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.openResult, args),
+  setSourceKind: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.setSourceKind, args),
 }
 contextBridge.exposeInMainWorld('translateApi', translateApi)
 

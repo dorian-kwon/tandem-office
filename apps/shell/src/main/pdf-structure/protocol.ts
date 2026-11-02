@@ -161,6 +161,8 @@ export interface TextCountsJobValue {
   docHash: string
   /** characters in each page's text layer, in page order */
   counts: number[]
+  /** page objects (text, pictures, paths, forms) on each page, in page order */
+  objects: number[]
 }
 
 export interface PageImageJobValue {

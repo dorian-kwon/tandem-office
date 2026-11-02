@@ -38,6 +38,7 @@ export const TRANSLATE_CHANNELS = {
   pdfWrite: 'translate:pdf-write',
   pdfRelease: 'translate:pdf-release',
   openResult: 'translate:open-result',
+  setSourceKind: 'translate:set-source-kind',
 } as const
 
 export type TranslateMaterialKind = 'source' | 'reference' | 'glossary'
@@ -185,6 +186,14 @@ export interface TranslateOpenResultArgs {
   output: string
 }
 
+export interface TranslateSetSourceKindArgs {
+  dir: string
+  /** the plain file name of one of the project's PDF sources */
+  file: string
+  /** a text PDF (translated by the PDF engine) or a scan (read by OCR first) */
+  kind: 'pdf' | 'scan'
+}
+
 export interface TranslateOpenResultAnswer {
   /** null when no editor shows the source (an image) */
   sourceTabId: string | null
@@ -262,6 +271,8 @@ export interface TranslateApi {
   pdfRelease(token: string): Promise<void>
   /** the source copy read-only on the left (when an editor shows it) and a result on the right */
   openResult(args: TranslateOpenResultArgs): Promise<TranslateOpenResultAnswer>
+  /** the person's correction of a PDF source's kind; remembered for that copy */
+  setSourceKind(args: TranslateSetSourceKindArgs): Promise<ProjectFile>
 }
 
 // ---- errors ----
@@ -291,6 +302,7 @@ export type TranslateErrorCode =
   | 'TRANSLATE_BUSY'
   | 'TRANSLATE_EXPIRED'
   | 'TRANSLATE_FAILED'
+  | 'SOURCE_CHANGED'
   | 'UNKNOWN'
 
 const TRANSLATE_ERROR_CODES: readonly TranslateErrorCode[] = [
@@ -315,6 +327,7 @@ const TRANSLATE_ERROR_CODES: readonly TranslateErrorCode[] = [
   'TRANSLATE_BUSY',
   'TRANSLATE_EXPIRED',
   'TRANSLATE_FAILED',
+  'SOURCE_CHANGED',
   'UNKNOWN',
 ]
 
@@ -343,6 +356,7 @@ const CODE_BY_ERROR_NAME: Record<string, TranslateErrorCode> = {
   OcrFailedError: 'OCR_FAILED',
   InvalidSourceKindError: 'INVALID_ARGUMENT',
   UnsupportedTargetLanguageError: 'UNSUPPORTED_LANGUAGE',
+  SourceChangedError: 'SOURCE_CHANGED',
 }
 
 /** Map a translate-project error (or anything else) to a TranslateIpcError. */

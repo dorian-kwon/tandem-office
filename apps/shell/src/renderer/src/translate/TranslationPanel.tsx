@@ -41,7 +41,7 @@ export interface TranslationPanelProps {
 
 type Flow =
   | { kind: 'choose'; dir: string; file: string; existing: string; again: 'pdf' | 'ocr' }
-  | { kind: 'pdf'; dir: string; file: string }
+  | { kind: 'pdf'; dir: string; file: string; restart: boolean }
   | { kind: 'ocr'; dir: string; source: SourceEntry }
 
 export function TranslationPanel(props: TranslationPanelProps = {}) {
@@ -50,6 +50,8 @@ export function TranslationPanel(props: TranslationPanelProps = {}) {
   const [openDir, setOpenDir] = useState<string | null>(null)
   const [notice, setNotice] = useState<{ text: string; isError: boolean } | null>(null)
   const [flow, setFlow] = useState<Flow | null>(null)
+  // a PDF's kind may change when it is opened (scan detection): the detail screen reloads
+  const [listsVersion, setListsVersion] = useState(0)
   // the project the newest open request belongs to: a late answer for another
   // project (the person went back and opened a different one) is dropped
   const current = useRef<string | null>(null)
@@ -100,6 +102,7 @@ export function TranslationPanel(props: TranslationPanelProps = {}) {
         return
       }
       if (current.current !== dir) return
+      setListsVersion((n) => n + 1)
       if (result.hashStatus === 'changed')
         setNotice({ text: s('warnSourceChanged'), isError: false })
       const again = result.flow === 'translate-pdf' ? 'pdf' : 'ocr'
@@ -107,7 +110,7 @@ export function TranslationPanel(props: TranslationPanelProps = {}) {
         setFlow({ kind: 'choose', dir, file, existing: result.existing, again })
         return
       }
-      if (again === 'pdf') setFlow({ kind: 'pdf', dir, file })
+      if (again === 'pdf') setFlow({ kind: 'pdf', dir, file, restart: false })
       else await startOcr(dir, file)
     } catch (err) {
       fail(dir, err)
@@ -127,6 +130,7 @@ export function TranslationPanel(props: TranslationPanelProps = {}) {
         onBack={() => setOpenDir(null)}
         onStartTranslation={(file) => void startTranslation(openDir, file)}
         startNotice={notice}
+        listsVersion={listsVersion}
       />
       {flow?.kind === 'choose' && (
         <div className="modal-overlay">
@@ -148,7 +152,8 @@ export function TranslationPanel(props: TranslationPanelProps = {}) {
                 data-action="again"
                 onClick={() => {
                   const { dir, file, again } = flow
-                  if (again === 'pdf') setFlow({ kind: 'pdf', dir, file })
+                  // a real new translation: everything is sent again after the confirmation
+                  if (again === 'pdf') setFlow({ kind: 'pdf', dir, file, restart: true })
                   else {
                     setFlow(null)
                     void startOcr(dir, file)
@@ -177,6 +182,7 @@ export function TranslationPanel(props: TranslationPanelProps = {}) {
         <PdfTranslateDialog
           dir={flow.dir}
           file={flow.file}
+          restart={flow.restart}
           aiSettings={aiSettings}
           connection={connection}
           {...(props.onNoticeNeeded ? { onNoticeNeeded: props.onNoticeNeeded } : {})}

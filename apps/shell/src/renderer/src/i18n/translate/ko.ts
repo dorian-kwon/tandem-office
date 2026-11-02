@@ -122,7 +122,8 @@ export const ko = {
   trConfirmDone: '이전에 번역한 블록 {done}개는 다시 보내지 않습니다.',
   trConfirmNothing: '이미 모두 번역되었습니다. 아무것도 보내지 않고 보관된 번역으로 PDF를 씁니다.',
   trConfirmProvider: '쓰일 AI: {provider}',
-  trConfirmSends: '문서의 글과 프로젝트 프롬프트, 맞는 단어집 항목이 이 AI로 보내집니다.',
+  trConfirmSends:
+    '문서의 글이 이 AI로 보내집니다. 번역 프롬프트, 단어집(작으면 전부, 크면 글에 나오는 용어의 항목만), 참고자료의 파일 이름(내용은 아님)이 함께 갑니다.',
   trConfirmPaid: '{provider} 요금이 부과됩니다',
   trProviderChange: '앞부분은 {before}(으)로 번역했고, 나머지는 {after}(으)로 번역합니다.',
   trBilingual: '대역: 원문 쪽 옆에 번역',
@@ -140,4 +141,13 @@ export const ko = {
   trWritePartial: '끝난 부분으로 쓰기',
   trLater: '나중에 이어 하기',
   trClose: '닫기',
+  errSourceChanged: '확인한 뒤로 이 원본이 바뀌었습니다. 프로젝트를 다시 여세요.',
+  kindPdf: '글자 PDF',
+  kindScan: '스캔 PDF',
+  treatAsText: '글자 PDF로 다루기',
+  treatAsScan: '스캔 PDF로 다루기',
+  trConfirmRestart: '처음부터 모두 다시 번역합니다. 출력 폴더의 이전 결과는 그대로 둡니다.',
+  trConfirmAppAi: '설정의 “사용할 AI”를 씁니다. (OCR은 프로젝트에서 고른 AI를 씁니다.)',
+  trStoppedFailures: '요청이 여러 번 잇달아 실패해 번역을 멈췄습니다. 끝난 부분은 보관했습니다.',
+  trStoppedStore: '결과를 저장하지 못해 번역을 멈췄습니다. 끝난 부분은 보관했습니다.',
 } satisfies Record<keyof typeof zh, string>
