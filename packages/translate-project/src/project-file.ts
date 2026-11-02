@@ -53,12 +53,20 @@ function str(o: Record<string, unknown>, key: string, where = ''): string {
   return v
 }
 
+/** A plain file name: not empty, no path separator, not `.` or `..`. */
+function plainFileName(name: string, where: string): string {
+  if (name === '' || name === '.' || name === '..' || /[\\/]/.test(name)) {
+    throw new ProjectFileError(`${where} must be a plain file name`)
+  }
+  return name
+}
+
 function strList(o: Record<string, unknown>, key: string): string[] {
   const v = o[key]
   if (!Array.isArray(v) || v.some((x) => typeof x !== 'string')) {
     throw new ProjectFileError(`${key} must be an array of strings`)
   }
-  return [...(v as string[])]
+  return (v as string[]).map((x) => plainFileName(x, `${key} entry`))
 }
 
 function parseOcr(v: unknown): OcrMode {
@@ -75,7 +83,7 @@ function parseSource(v: unknown): SourceEntry {
   const kind = str(v, 'kind', 'source ')
   if (!SOURCE_KINDS.includes(kind)) throw new ProjectFileError(`unknown source kind: ${kind}`)
   return {
-    file: str(v, 'file', 'source '),
+    file: plainFileName(str(v, 'file', 'source '), 'source file'),
     sha256: str(v, 'sha256', 'source '),
     kind: kind as SourceKind,
   }

@@ -69,3 +69,71 @@ export interface TranslateApi {
   addMaterial(args: TranslateAddMaterialArgs): Promise<ProjectFile>
   removeMaterial(args: TranslateRemoveMaterialArgs): Promise<ProjectFile>
 }
+
+// ---- errors ----
+// Electron flattens an error thrown in a handler to an English string with no
+// code, so every handler throws a TranslateIpcError whose message starts with
+// a stable bracketed code, e.g. `[PROJECT_EXISTS] project folder already exists: ...`.
+
+export type TranslateErrorCode =
+  | 'PROJECT_EXISTS'
+  | 'INVALID_PROJECT_NAME'
+  | 'NOT_LISTED'
+  | 'NOT_A_PROJECT'
+  | 'UNSUPPORTED_SOURCE'
+  | 'NOT_REGISTERED'
+  | 'INVALID_ARGUMENT'
+  | 'PROJECT_FILE_INVALID'
+  | 'UNKNOWN'
+
+const TRANSLATE_ERROR_CODES: readonly TranslateErrorCode[] = [
+  'PROJECT_EXISTS',
+  'INVALID_PROJECT_NAME',
+  'NOT_LISTED',
+  'NOT_A_PROJECT',
+  'UNSUPPORTED_SOURCE',
+  'NOT_REGISTERED',
+  'INVALID_ARGUMENT',
+  'PROJECT_FILE_INVALID',
+  'UNKNOWN',
+]
+
+export class TranslateIpcError extends Error {
+  readonly code: TranslateErrorCode
+  constructor(code: TranslateErrorCode, text: string) {
+    super(`[${code}] ${text}`)
+    this.name = 'TranslateIpcError'
+    this.code = code
+  }
+}
+
+// keyed by error name so this file stays free of Node-only imports (the
+// renderer imports it too)
+const CODE_BY_ERROR_NAME: Record<string, TranslateErrorCode> = {
+  ProjectExistsError: 'PROJECT_EXISTS',
+  InvalidProjectNameError: 'INVALID_PROJECT_NAME',
+  NotListedError: 'NOT_LISTED',
+  NotAProjectError: 'NOT_A_PROJECT',
+  UnsupportedSourceError: 'UNSUPPORTED_SOURCE',
+  ProjectFileError: 'PROJECT_FILE_INVALID',
+}
+
+/** Map a translate-project error (or anything else) to a TranslateIpcError. */
+export function toTranslateIpcError(err: unknown): TranslateIpcError {
+  if (err instanceof TranslateIpcError) return err
+  const text = err instanceof Error ? err.message : String(err)
+  const code = err instanceof Error ? CODE_BY_ERROR_NAME[err.name] : undefined
+  return new TranslateIpcError(code ?? 'UNKNOWN', text)
+}
+
+/**
+ * Read the code and clean message from a TranslateIpcError or from Electron's
+ * wrapped message (`Error invoking remote method '...': Error: [CODE] text`).
+ */
+export function parseTranslateError(err: unknown): { code: TranslateErrorCode; message: string } {
+  const raw = err instanceof Error ? err.message : String(err)
+  const match = /\[([A-Z_]+)\] ([\s\S]*)$/.exec(raw)
+  const code = TRANSLATE_ERROR_CODES.find((c) => c === match?.[1])
+  if (match && code) return { code, message: match[2] ?? '' }
+  return { code: 'UNKNOWN', message: raw }
+}

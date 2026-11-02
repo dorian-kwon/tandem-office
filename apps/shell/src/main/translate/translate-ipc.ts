@@ -7,6 +7,7 @@ import {
   addSource,
   createProject,
   loadProject,
+  NotAProjectError,
   parseProjectFile,
   projectStatus,
   removeGlossary,
@@ -25,6 +26,8 @@ import {
 } from '../app-settings'
 import {
   TRANSLATE_CHANNELS,
+  toTranslateIpcError,
+  TranslateIpcError,
   type TranslateAddMaterialArgs,
   type TranslateCreateArgs,
   type TranslateMaterialKind,
@@ -57,17 +60,43 @@ function fold(path: string): string {
 
 function requireString(value: unknown, what: string): string {
   if (typeof value !== 'string' || value === '')
-    throw new Error(`${what} must be a non-empty string`)
+    throw new TranslateIpcError('INVALID_ARGUMENT', `${what} must be a non-empty string`)
   return value
 }
 
 function requireKind(value: unknown): TranslateMaterialKind {
   const kind = KINDS.find((k) => k === value)
-  if (!kind) throw new Error('unknown material kind')
+  if (!kind) throw new TranslateIpcError('INVALID_ARGUMENT', 'unknown material kind')
   return kind
 }
 
 export function createTranslateHandlers(deps: TranslateIpcDeps) {
+  const raw = createRawHandlers(deps)
+  return {
+    list: guard(raw.list),
+    create: guard(raw.create),
+    remove: guard(raw.remove),
+    getSystemPrompt: guard(raw.getSystemPrompt),
+    setSystemPrompt: guard(raw.setSystemPrompt),
+    getProject: guard(raw.getProject),
+    saveProject: guard(raw.saveProject),
+    addMaterial: guard(raw.addMaterial),
+    removeMaterial: guard(raw.removeMaterial),
+  }
+}
+
+/** Run a handler so any failure leaves as a TranslateIpcError with a stable code. */
+function guard<A extends unknown[], R>(fn: (...a: A) => Promise<R>): (...a: A) => Promise<R> {
+  return async (...a) => {
+    try {
+      return await fn(...a)
+    } catch (err) {
+      throw toTranslateIpcError(err)
+    }
+  }
+}
+
+function createRawHandlers(deps: TranslateIpcDeps) {
   /** The stored spelling of `dir`, or a rejection when it is not a registered project. */
   function registeredDir(dir: unknown): string {
     if (typeof dir === 'string' && isAbsolute(dir)) {
@@ -76,7 +105,10 @@ export function createTranslateHandlers(deps: TranslateIpcDeps) {
       )
       if (entry) return entry.dir
     }
-    throw new Error('this folder is not a registered translation project')
+    throw new TranslateIpcError(
+      'NOT_REGISTERED',
+      'this folder is not a registered translation project',
+    )
   }
 
   function touch(dir: string): void {
@@ -120,7 +152,8 @@ export function createTranslateHandlers(deps: TranslateIpcDeps) {
 
     async create(args: TranslateCreateArgs): Promise<{ dir: string }> {
       const parentDir = requireString(args?.parentDir, 'parentDir')
-      if (!isAbsolute(parentDir)) throw new Error('parentDir must be an absolute path')
+      if (!isAbsolute(parentDir))
+        throw new TranslateIpcError('INVALID_ARGUMENT', 'parentDir must be an absolute path')
       const name = requireString(args.name, 'name')
       const sourceLang = requireString(args.sourceLang, 'sourceLang')
       const targetLang = requireString(args.targetLang, 'targetLang')
@@ -133,13 +166,27 @@ export function createTranslateHandlers(deps: TranslateIpcDeps) {
 
     async remove(args: TranslateRemoveArgs): Promise<void> {
       const dir = registeredDir(args?.dir)
-      // removeProject has its own check that the folder holds a valid project
-      if (args.deleteFolder === true) await removeProject(dir, { deleteFolder: true })
-      const path = deps.settingsPath()
-      writeTranslationProjects(
-        path,
-        readTranslationProjects(path).filter((e) => fold(e.dir) !== fold(dir)),
-      )
+      const dropEntry = () => {
+        const path = deps.settingsPath()
+        writeTranslationProjects(
+          path,
+          readTranslationProjects(path).filter((e) => fold(e.dir) !== fold(dir)),
+        )
+      }
+      if (args.deleteFolder !== true) return dropEntry()
+      // removeProject refuses a folder without a valid project file; that and
+      // a vanished folder still drop the entry so it never gets stuck
+      await withProjectLock(dir, async () => {
+        try {
+          await removeProject(dir, { deleteFolder: true })
+        } catch (err) {
+          if (!(err instanceof NotAProjectError)) {
+            dropEntry()
+            throw err
+          }
+        }
+        dropEntry()
+      })
     },
 
     async getSystemPrompt(): Promise<string> {
@@ -147,14 +194,19 @@ export function createTranslateHandlers(deps: TranslateIpcDeps) {
     },
 
     async setSystemPrompt(text: string): Promise<void> {
-      if (typeof text !== 'string') throw new Error('the system prompt must be a string')
+      if (typeof text !== 'string')
+        throw new TranslateIpcError('INVALID_ARGUMENT', 'the system prompt must be a string')
       writeTranslationSystemPrompt(deps.settingsPath(), text)
     },
 
     async getProject(dir: string): Promise<ProjectFile> {
       const registered = registeredDir(dir)
       const project = await loadProject(registered)
-      touch(registered)
+      try {
+        touch(registered)
+      } catch {
+        // an unwritable settings file must not fail a read that succeeded
+      }
       return project
     },
 
@@ -169,9 +221,11 @@ export function createTranslateHandlers(deps: TranslateIpcDeps) {
       const dir = registeredDir(args?.dir)
       const kind = requireKind(args.kind)
       const path = requireString(args.path, 'path')
-      if (!isAbsolute(path)) throw new Error('path must be an absolute path')
+      if (!isAbsolute(path))
+        throw new TranslateIpcError('INVALID_ARGUMENT', 'path must be an absolute path')
       const info = await stat(path).catch(() => null)
-      if (!info?.isFile()) throw new Error('the chosen file does not exist')
+      if (!info?.isFile())
+        throw new TranslateIpcError('INVALID_ARGUMENT', 'the chosen file does not exist')
       if (kind === 'source') return addSource(dir, path)
       if (kind === 'reference') return addReference(dir, path)
       return addGlossary(dir, path)

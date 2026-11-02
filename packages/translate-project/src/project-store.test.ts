@@ -109,7 +109,7 @@ describe('createProject names and failures', () => {
 describe('saveProject / loadProject', () => {
   it('loads what was saved', async () => {
     const { dir, project } = await createProject(root, 'P', 'ko', 'en')
-    const next = { ...project, projectPrompt: 'formal tone', references: ['references/a.txt'] }
+    const next = { ...project, projectPrompt: 'formal tone', references: ['a.txt'] }
     await saveProject(dir, next)
     expect(await loadProject(dir)).toEqual(next)
   })

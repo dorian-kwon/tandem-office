@@ -44,4 +44,21 @@ describe('project file', () => {
     const withExtra = JSON.stringify({ ...p, systemPrompt: 'leak' })
     expect(parseProjectFile(withExtra)).not.toHaveProperty('systemPrompt')
   })
+
+  it('rejects file names that are empty, dotted or contain a separator', () => {
+    const base = defaultProjectFile('x', 'ko', 'en')
+    const bad = ['', '.', '..', 'a/b', 'a\\b', '../x']
+    for (const name of bad) {
+      const entry = { file: name, sha256: 'h', kind: 'pdf' }
+      for (const p of [
+        { ...base, sources: [entry] },
+        { ...base, references: [name] },
+        { ...base, glossaryFiles: [name] },
+      ]) {
+        expect(() => parseProjectFile(JSON.stringify(p))).toThrow(ProjectFileError)
+      }
+    }
+    const ok = { ...base, references: ['a.txt'], glossaryFiles: ['g.csv'] }
+    expect(parseProjectFile(JSON.stringify(ok)).references).toEqual(['a.txt'])
+  })
 })

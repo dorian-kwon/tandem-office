@@ -1,10 +1,22 @@
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { readAppSettings, writeAppSettings } from '../src/main/app-settings'
 import { createTranslateHandlers, registerTranslateIpc } from '../src/main/translate/translate-ipc'
-import { TRANSLATE_CHANNELS } from '../src/shared/translate-api'
+import {
+  InvalidProjectNameError,
+  NotAProjectError,
+  NotListedError,
+  ProjectExistsError,
+  ProjectFileError,
+  UnsupportedSourceError,
+} from '@genoffice/translate-project'
+import {
+  TRANSLATE_CHANNELS,
+  parseTranslateError,
+  toTranslateIpcError,
+} from '../src/shared/translate-api'
 
 let root: string
 let settingsPath: string
@@ -192,6 +204,105 @@ describe('translate IPC handlers', () => {
     clock = 5000
     await h.getProject(dir)
     expect((await h.list())[0]?.lastOpened).toBe(5000)
+  })
+})
+
+describe('remove robustness', () => {
+  const mk = (h: ReturnType<typeof handlers>, name: string) =>
+    h.create({ parentDir: root, name, sourceLang: 'en', targetLang: 'ko' })
+
+  it('deleteFolder true on a missing folder drops the entry without throwing', async () => {
+    const h = handlers()
+    const { dir } = await mk(h, 'Miss')
+    rmSync(dir, { recursive: true, force: true })
+    await expect(h.remove({ dir, deleteFolder: true })).resolves.toBeUndefined()
+    expect(await h.list()).toEqual([])
+  })
+
+  it('deleteFolder true on a corrupt project drops the entry and keeps the folder', async () => {
+    const h = handlers()
+    const { dir } = await mk(h, 'Corrupt')
+    writeFileSync(join(dir, '.tandem', 'project.json'), '{bad')
+    await expect(h.remove({ dir, deleteFolder: true })).resolves.toBeUndefined()
+    expect(existsSync(dir)).toBe(true)
+    expect(await h.list()).toEqual([])
+  })
+
+  it('delete is serialized with a concurrent addReference', async () => {
+    const h = handlers()
+    const { dir } = await mk(h, 'Race')
+    const ref = join(root, 'ref.txt')
+    writeFileSync(ref, 'x')
+    const add = h.addMaterial({ dir, kind: 'reference', path: ref })
+    const del = h.remove({ dir, deleteFolder: true })
+    const results = await Promise.allSettled([add, del])
+    expect(results[1].status).toBe('fulfilled')
+    expect(existsSync(dir)).toBe(false)
+    expect(await h.list()).toEqual([])
+  })
+})
+
+describe('get-project with an unwritable settings file', () => {
+  it('still returns the project', async () => {
+    const h = handlers()
+    const { dir } = await h.create({
+      parentDir: root,
+      name: 'RO',
+      sourceLang: 'en',
+      targetLang: 'ko',
+    })
+    // a directory squatting on the temp-file parent makes the atomic write fail
+    chmodSync(root, 0o500)
+    try {
+      expect((await h.getProject(dir)).name).toBe('RO')
+    } finally {
+      chmodSync(root, 0o700)
+    }
+  })
+})
+
+describe('error codes', () => {
+  it('maps each translate-project error class to its code', () => {
+    const cases: [unknown, string][] = [
+      [new ProjectExistsError('/x'), 'PROJECT_EXISTS'],
+      [new InvalidProjectNameError('?'), 'INVALID_PROJECT_NAME'],
+      [new NotListedError('a'), 'NOT_LISTED'],
+      [new NotAProjectError('/x'), 'NOT_A_PROJECT'],
+      [new UnsupportedSourceError('a.zip'), 'UNSUPPORTED_SOURCE'],
+      [new ProjectFileError('bad'), 'PROJECT_FILE_INVALID'],
+      [new Error('boom'), 'UNKNOWN'],
+      ['text', 'UNKNOWN'],
+    ]
+    for (const [err, code] of cases) {
+      const mapped = toTranslateIpcError(err)
+      expect(mapped.code).toBe(code)
+      expect(mapped.message.startsWith(`[${code}] `)).toBe(true)
+    }
+  })
+
+  it('parses an Electron-wrapped message', () => {
+    const wrapped = new Error(
+      "Error invoking remote method 'translate:create': Error: [PROJECT_EXISTS] project folder already exists: /a",
+    )
+    expect(parseTranslateError(wrapped)).toEqual({
+      code: 'PROJECT_EXISTS',
+      message: 'project folder already exists: /a',
+    })
+    expect(parseTranslateError(toTranslateIpcError(new NotListedError('f'))).code).toBe(
+      'NOT_LISTED',
+    )
+    expect(parseTranslateError(new Error('plain')).code).toBe('UNKNOWN')
+    expect(parseTranslateError(new Error('[NOPE] x')).code).toBe('UNKNOWN')
+  })
+
+  it('handlers throw coded errors', async () => {
+    const h = handlers()
+    await expect(h.getProject('/not/registered')).rejects.toMatchObject({ code: 'NOT_REGISTERED' })
+    await expect(h.setSystemPrompt(5 as never)).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+    await h.create({ parentDir: root, name: 'Dup', sourceLang: 'en', targetLang: 'ko' })
+    await expect(
+      h.create({ parentDir: root, name: 'Dup', sourceLang: 'en', targetLang: 'ko' }),
+    ).rejects.toMatchObject({ code: 'PROJECT_EXISTS' })
   })
 })
 
