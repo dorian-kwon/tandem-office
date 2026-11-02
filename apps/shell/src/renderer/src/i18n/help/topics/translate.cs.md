@@ -18,7 +18,7 @@ Překladatelský projekt drží dokumenty, které chcete přeložit, vaše refer
 ## Glosář
 
 - Přidejte soubor `.csv`, `.xlsx` nebo `.txt` (v `.txt` jsou sloupce odděleny tabulátory). Každý řádek je jeden termín.
-- Sloupce jsou zdrojový termín, překlad a volitelně poznámka. První řádek s názvy sloupců se přeskočí; je volitelný.
+- Sloupce jsou zdrojový termín, překlad a volitelně poznámka. První řádek se přeskočí jen tehdy, když pojmenovává první dva sloupce (například source a target nebo term a translation); jakýkoli jiný první řádek se čte jako položka glosáře.
 - Soubory se čtou jako UTF-8, a pokud nejsou platné UTF-8, jako CP949, takže korejské soubory ze starších programů se zobrazí správně.
 - Až 200 položek se posílá celých. Nad 200 se posílají jen položky, jejichž zdrojový termín se vyskytuje v překládaném textu.
 
@@ -39,7 +39,7 @@ Překladatelský projekt drží dokumenty, které chcete přeložit, vaše refer
 
 - Textové PDF se přeloží do nového PDF ve výstupní složce. Můžete zvolit i dvojjazyčné PDF s překladem vedle každé původní stránky.
 - Kontrolní obrazovka před odesláním ukazuje počet volání AI a použitou AI. Překlad textových PDF používá celoaplikační **AI k použití** z Nastavení, zatímco OCR používá AI vybranou v projektu.
-- Pokud se zastaví, **Zapsat hotové** uloží, co je přeloženo, a **Pokračovat** později pošle jen zbývající bloky.
+- Pokud se zastaví, **Zapsat hotové** uloží, co je přeloženo. Když dokument znovu otevřete, stiskněte **Pokračovat** a pošlou se jen zbývající bloky.
 
 ## Omezení
 

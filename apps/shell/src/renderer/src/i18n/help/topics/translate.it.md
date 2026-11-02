@@ -18,7 +18,7 @@ Un progetto di traduzione raccoglie in un’unica cartella i documenti da tradur
 ## Glossario
 
 - Aggiungi un file `.csv`, `.xlsx` o `.txt` (in `.txt` le colonne sono separate da tabulazioni). Ogni riga è un termine.
-- Le colonne sono il termine di origine, la traduzione e, facoltativamente, una nota. Una prima riga con i nomi delle colonne viene saltata; è facoltativa.
+- Le colonne sono il termine di origine, la traduzione e, facoltativamente, una nota. La prima riga viene saltata solo se dà il nome alle prime due colonne (per esempio source e target, oppure term e translation); qualsiasi altra prima riga viene letta come una voce del glossario.
 - I file vengono letti come UTF-8, e come CP949 quando non sono UTF-8 valido, così i file coreani di programmi più vecchi si vedono correttamente.
 - Fino a 200 voci vengono inviate per intero. Oltre 200 vengono inviate solo le voci il cui termine di origine compare nel testo da tradurre.
 
@@ -39,7 +39,7 @@ Un progetto di traduzione raccoglie in un’unica cartella i documenti da tradur
 
 - Un PDF di testo viene tradotto in un nuovo PDF nella cartella di output. Puoi anche scegliere un PDF bilingue, con la traduzione accanto a ogni pagina originale.
 - La schermata di controllo mostra il numero di chiamate all’IA e quale IA viene usata prima di inviare qualsiasi cosa. La traduzione dei PDF di testo usa l’**IA da usare** dell’intera app nelle Impostazioni, mentre l’OCR usa l’IA scelta nel progetto.
-- Se si interrompe, **Crea con quanto fatto** salva quanto tradotto, e **Continua** invierà più tardi solo i blocchi rimasti.
+- Se si interrompe, **Crea con quanto fatto** salva quanto tradotto. Quando riapri il documento, premi **Continua** per inviare solo i blocchi rimasti.
 
 ## Limiti
 

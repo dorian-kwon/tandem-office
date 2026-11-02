@@ -18,7 +18,7 @@ Projek terjemahan menyimpan dokumen yang anda mahu terjemah, bahan rujukan dan g
 ## Glosari
 
 - Tambah fail `.csv`, `.xlsx` atau `.txt` (dalam `.txt` lajur dipisahkan dengan tab). Setiap baris ialah satu istilah.
-- Lajurnya ialah istilah sumber, terjemahan dan, jika ada, nota. Baris pertama yang berisi nama lajur akan dilangkau; baris ini pilihan.
+- Lajurnya ialah istilah sumber, terjemahan dan, jika ada, nota. Baris pertama hanya dilangkau jika ia menamakan dua lajur pertama (contohnya source dan target, atau term dan translation); baris pertama yang lain dibaca sebagai entri glosari.
 - Fail dibaca sebagai UTF-8, dan sebagai CP949 jika bukan UTF-8 yang sah, supaya fail Korea daripada program lama dipaparkan dengan betul.
 - Sehingga 200 entri dihantar penuh. Melebihi 200, hanya entri yang istilah sumbernya muncul dalam teks yang diterjemah dihantar.
 
@@ -39,7 +39,7 @@ Projek terjemahan menyimpan dokumen yang anda mahu terjemah, bahan rujukan dan g
 
 - PDF teks diterjemah menjadi PDF baharu dalam folder output. Anda juga boleh memilih PDF dwibahasa, dengan terjemahan di sebelah setiap halaman asal.
 - Skrin semakan menunjukkan bilangan panggilan AI dan AI yang digunakan sebelum apa-apa dihantar. Terjemahan PDF teks menggunakan **AI yang digunakan** seluruh aplikasi daripada Tetapan, manakala OCR menggunakan AI yang dipilih dalam projek.
-- Jika berhenti, **Tulis yang telah siap** menyimpan yang telah diterjemah, dan **Sambung** kemudian hanya menghantar blok yang tinggal.
+- Jika berhenti, **Tulis yang telah siap** menyimpan yang telah diterjemah. Apabila anda membuka dokumen itu semula, tekan **Sambung** untuk menghantar hanya blok yang tinggal.
 
 ## Had
 

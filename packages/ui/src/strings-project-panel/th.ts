@@ -92,7 +92,7 @@ export const th = {
   newDocumentSaveFailed: 'บันทึกลงในโฟลเดอร์โปรเจกต์ไม่ได้ จึงยังไม่มีชื่อ: {error}',
   translationContext: 'ส่งบริบทการแปลไปด้วยแล้ว: {items}',
   translationSystem: 'พรอมต์ระบบ',
-  translationProject: 'พรอมต์โครงการ',
+  translationProject: 'พรอมต์โปรเจกต์',
   translationGlossary: 'อภิธานศัพท์ ({count})',
   translationGlossaryPart: 'อภิธานศัพท์ ({count} จาก {total})',
   translationGlossaryMatching: 'อภิธานศัพท์ (ตรงกัน {count} จาก {total})',

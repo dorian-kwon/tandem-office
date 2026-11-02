@@ -18,7 +18,7 @@ Một dự án dịch thuật gom các tài liệu bạn muốn dịch, tài li�
 ## Bảng thuật ngữ
 
 - Thêm một tệp `.csv`, `.xlsx` hoặc `.txt` (với `.txt`, các cột được ngăn cách bằng tab). Mỗi hàng là một thuật ngữ.
-- Các cột là thuật ngữ nguồn, bản dịch và, tùy chọn, ghi chú. Hàng đầu tiên chứa tên cột sẽ được bỏ qua; hàng này không bắt buộc.
+- Các cột là thuật ngữ nguồn, bản dịch và, tùy chọn, ghi chú. Hàng đầu tiên chỉ bị bỏ qua khi nó đặt tên cho hai cột đầu (ví dụ source và target, hoặc term và translation); mọi hàng đầu tiên khác được đọc như một mục thuật ngữ.
 - Tệp được đọc dưới dạng UTF-8, và dưới dạng CP949 khi không phải UTF-8 hợp lệ, nên các tệp tiếng Hàn từ chương trình cũ hiển thị đúng.
 - Tối đa 200 mục được gửi nguyên vẹn. Trên 200 mục, chỉ những mục có thuật ngữ nguồn xuất hiện trong văn bản đang dịch mới được gửi.
 
@@ -39,7 +39,7 @@ Một dự án dịch thuật gom các tài liệu bạn muốn dịch, tài li�
 
 - PDF văn bản được dịch thành một PDF mới trong thư mục kết quả. Bạn cũng có thể chọn PDF song ngữ, với bản dịch nằm cạnh mỗi trang gốc.
 - Màn hình kiểm tra cho biết số lần gọi AI và AI được dùng trước khi gửi bất cứ thứ gì. Việc dịch PDF văn bản dùng **AI được dùng** của toàn ứng dụng trong Cài đặt, còn OCR dùng AI được chọn trong dự án.
-- Nếu dừng giữa chừng, **Ghi phần đã xong** lưu phần đã dịch, và **Tiếp tục** sau đó chỉ gửi các khối còn lại.
+- Nếu dừng giữa chừng, **Ghi phần đã xong** lưu phần đã dịch. Khi mở lại tài liệu, nhấn **Tiếp tục** để chỉ gửi các khối còn lại.
 
 ## Giới hạn
 

@@ -18,7 +18,7 @@ Projekt tłumaczeniowy gromadzi w jednym folderze dokumenty, które chcesz przet
 ## Glosariusz
 
 - Dodaj plik `.csv`, `.xlsx` lub `.txt` (w `.txt` kolumny rozdzielone są tabulatorami). Każdy wiersz to jeden termin.
-- Kolumny to termin źródłowy, tłumaczenie i opcjonalnie uwaga. Pierwszy wiersz z nazwami kolumn jest pomijany; jest opcjonalny.
+- Kolumny to termin źródłowy, tłumaczenie i opcjonalnie uwaga. Pierwszy wiersz jest pomijany tylko wtedy, gdy nazywa pierwsze dwie kolumny (na przykład source i target albo term i translation); każdy inny pierwszy wiersz jest czytany jako wpis glosariusza.
 - Pliki są czytane jako UTF-8, a jeśli nie są poprawnym UTF-8, jako CP949, dzięki czemu koreańskie pliki ze starszych programów wyświetlają się poprawnie.
 - Do 200 wpisów wysyłanych jest w całości. Powyżej 200 wysyłane są tylko wpisy, których termin źródłowy występuje w tłumaczonym tekście.
 
@@ -39,7 +39,7 @@ Projekt tłumaczeniowy gromadzi w jednym folderze dokumenty, które chcesz przet
 
 - Tekstowy PDF jest tłumaczony na nowy PDF w folderze wyjściowym. Możesz też wybrać dwujęzyczny PDF, z tłumaczeniem obok każdej oryginalnej strony.
 - Ekran kontrolny pokazuje liczbę wywołań AI i używane AI, zanim cokolwiek zostanie wysłane. Tłumaczenie tekstowych PDF-ów używa ogólnoaplikacyjnego **AI do użycia** z Ustawień, a OCR używa AI wybranego w projekcie.
-- Jeśli się zatrzyma, **Zapisz to, co gotowe** zapisuje to, co przetłumaczono, a **Kontynuuj** wyśle później tylko pozostałe bloki.
+- Jeśli się zatrzyma, **Zapisz to, co gotowe** zapisuje to, co przetłumaczono. Gdy ponownie otworzysz dokument, naciśnij **Kontynuuj**, aby wysłać tylko pozostałe bloki.
 
 ## Ograniczenia
 

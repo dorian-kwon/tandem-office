@@ -18,7 +18,7 @@ Een vertaalproject houdt de documenten die je wilt vertalen, je referentiemateri
 ## Woordenlijst
 
 - Voeg een `.csv`-, `.xlsx`- of `.txt`-bestand toe (bij `.txt` worden de kolommen door tabs gescheiden). Elke rij is één term.
-- De kolommen zijn de bronterm, de vertaling en eventueel een opmerking. Een eerste rij met kolomnamen wordt overgeslagen; die is optioneel.
+- De kolommen zijn de bronterm, de vertaling en eventueel een opmerking. Een eerste rij wordt alleen overgeslagen als die de eerste twee kolommen benoemt (bijvoorbeeld source en target, of term en translation); elke andere eerste rij wordt als glossariumitem gelezen.
 - Bestanden worden als UTF-8 gelezen, en als CP949 wanneer ze geen geldige UTF-8 zijn, zodat Koreaanse bestanden van oudere programma’s goed te zien zijn.
 - Tot 200 items worden volledig verstuurd. Bij meer dan 200 worden alleen de items verstuurd waarvan de bronterm in de te vertalen tekst voorkomt.
 
@@ -39,7 +39,7 @@ Een vertaalproject houdt de documenten die je wilt vertalen, je referentiemateri
 
 - Een tekst-pdf wordt vertaald naar een nieuwe pdf in de uitvoermap. Je kunt ook een tweetalige pdf kiezen, met de vertaling naast elke originele pagina.
 - Het controlescherm toont het aantal AI-aanroepen en welke AI wordt gebruikt voordat er iets wordt verstuurd. Tekst-pdf-vertaling gebruikt de app-brede **te gebruiken AI** uit de Instellingen, terwijl OCR de AI gebruikt die in het project is gekozen.
-- Als het stopt, slaat **Voltooide deel schrijven** op wat vertaald is, en **Verdergaan** stuurt later alleen de resterende blokken.
+- Als het stopt, slaat **Voltooide deel schrijven** op wat vertaald is. Open het document opnieuw en druk op **Verdergaan** om alleen de resterende blokken te versturen.
 
 ## Beperkingen
 

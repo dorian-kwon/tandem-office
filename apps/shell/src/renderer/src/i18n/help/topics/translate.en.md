@@ -18,7 +18,7 @@ A translation project keeps the documents you want to translate, your reference 
 ## Glossary
 
 - Add a `.csv`, `.xlsx` or `.txt` file (`.txt` columns are separated by tabs). Each row is one term.
-- The columns are the source term, the translation and, optionally, a note. A first row with column names is skipped; it is optional.
+- The columns are the source term, the translation and, optionally, a note. A first row is skipped only when it names the first two columns (for example source and translation, or term and translation); any other first row is read as a glossary entry.
 - Files are read as UTF-8, and as CP949 when they are not valid UTF-8, so Korean files from older programs show correctly.
 - Up to 200 entries are sent whole. Above 200, only the entries whose source term appears in the text being translated are sent.
 
@@ -39,7 +39,7 @@ A translation project keeps the documents you want to translate, your reference 
 
 - A text PDF is translated into a new PDF in the output folder. You can also choose a bilingual PDF, with the translation beside each original page.
 - The check screen shows the number of AI calls and which AI is used before anything is sent. Text PDF translation uses the app-wide **AI to use** from Settings, while OCR uses the AI chosen in the project.
-- If it stops, **Write what is done** saves what was translated, and **Continue** later sends only the blocks that are left.
+- If it stops, **Write what is done** saves what was translated. When you open the document again, press **Continue** to send only the blocks that are left.
 
 ## Limits
 

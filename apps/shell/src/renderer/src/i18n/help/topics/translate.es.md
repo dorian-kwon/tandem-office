@@ -18,7 +18,7 @@ Un proyecto de traducción reúne en una sola carpeta los documentos que quieres
 ## Glosario
 
 - Añade un archivo `.csv`, `.xlsx` o `.txt` (en `.txt` las columnas se separan con tabuladores). Cada fila es un término.
-- Las columnas son el término de origen, la traducción y, de forma opcional, una nota. Una primera fila con los nombres de las columnas se omite; es opcional.
+- Las columnas son el término de origen, la traducción y, de forma opcional, una nota. La primera fila solo se omite si nombra las dos primeras columnas (por ejemplo source y target, o term y translation); cualquier otra primera fila se lee como una entrada del glosario.
 - Los archivos se leen como UTF-8, y como CP949 cuando no son UTF-8 válido, de modo que los archivos coreanos de programas antiguos se ven bien.
 - Hasta 200 entradas se envían completas. Con más de 200, solo se envían las entradas cuyo término de origen aparece en el texto que se traduce.
 
@@ -39,7 +39,7 @@ Un proyecto de traducción reúne en una sola carpeta los documentos que quieres
 
 - Un PDF de texto se traduce a un PDF nuevo en la carpeta de salida. También puedes elegir un PDF bilingüe, con la traducción junto a cada página original.
 - La pantalla de comprobación muestra el número de llamadas a la IA y qué IA se usa antes de enviar nada. La traducción de PDF de texto usa la **IA que se va a usar** de toda la aplicación, en Ajustes, mientras que el OCR usa la IA elegida en el proyecto.
-- Si se detiene, **Generar lo ya hecho** guarda lo traducido, y **Continuar** enviará más tarde solo los bloques que faltan.
+- Si se detiene, **Generar lo ya hecho** guarda lo traducido. Cuando abras el documento de nuevo, pulsa **Continuar** para enviar solo los bloques que faltan.
 
 ## Límites
 

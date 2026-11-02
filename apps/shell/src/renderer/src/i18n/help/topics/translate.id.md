@@ -18,7 +18,7 @@ Proyek terjemahan menyimpan dokumen yang ingin Anda terjemahkan, materi acuan, d
 ## Glosarium
 
 - Tambahkan file `.csv`, `.xlsx`, atau `.txt` (pada `.txt` kolom dipisahkan dengan tab). Setiap baris adalah satu istilah.
-- Kolomnya adalah istilah sumber, terjemahan, dan, jika ada, catatan. Baris pertama berisi nama kolom akan dilewati; baris ini opsional.
+- Kolomnya adalah istilah sumber, terjemahan, dan, jika ada, catatan. Baris pertama hanya dilewati jika menamai dua kolom pertama (misalnya source dan target, atau term dan translation); baris pertama lainnya dibaca sebagai entri glosarium.
 - File dibaca sebagai UTF-8, dan sebagai CP949 jika bukan UTF-8 yang valid, sehingga file Korea dari program lama tampil dengan benar.
 - Hingga 200 entri dikirim utuh. Di atas 200, hanya entri yang istilah sumbernya muncul dalam teks yang diterjemahkan yang dikirim.
 
@@ -39,7 +39,7 @@ Proyek terjemahan menyimpan dokumen yang ingin Anda terjemahkan, materi acuan, d
 
 - PDF teks diterjemahkan menjadi PDF baru di folder keluaran. Anda juga dapat memilih PDF dwibahasa, dengan terjemahan di samping setiap halaman asli.
 - Layar pemeriksaan menampilkan jumlah panggilan AI dan AI yang digunakan sebelum apa pun dikirim. Terjemahan PDF teks memakai **AI yang digunakan** di seluruh aplikasi dari Pengaturan, sedangkan OCR memakai AI yang dipilih di proyek.
-- Jika berhenti, **Tulis yang sudah selesai** menyimpan yang telah diterjemahkan, dan **Lanjutkan** kemudian hanya mengirim blok yang tersisa.
+- Jika berhenti, **Tulis yang sudah selesai** menyimpan yang telah diterjemahkan. Saat Anda membuka dokumen lagi, tekan **Lanjutkan** untuk mengirim hanya blok yang tersisa.
 
 ## Batasan
 
