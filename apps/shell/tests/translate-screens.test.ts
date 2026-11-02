@@ -61,7 +61,7 @@ beforeEach(() => {
     getSystemPrompt: vi.fn().mockResolvedValue('global'),
     setSystemPrompt: vi.fn().mockResolvedValue(undefined),
     getProject: vi.fn().mockResolvedValue(project()),
-    saveProject: vi.fn().mockResolvedValue(undefined),
+    updateSettings: vi.fn(async ({ patch }: { patch: object }) => ({ ...project(), ...patch })),
     addMaterial: vi.fn(),
     removeMaterial: vi.fn(),
     pickMaterials: vi.fn().mockResolvedValue(null),
@@ -280,41 +280,130 @@ describe('ProjectDetail', () => {
       setValue(select, 'off')
       select.dispatchEvent(new Event('change', { bubbles: true }))
     })
-    expect(api.saveProject).toHaveBeenCalledWith(
-      '/p/a',
-      expect.objectContaining({ ocr: { kind: 'off' } }),
-    )
+    expect(api.updateSettings).toHaveBeenCalledWith({
+      dir: '/p/a',
+      patch: { ocr: { kind: 'off' } },
+    })
     await act(async () => {
       setValue(select, 'chatgpt')
       select.dispatchEvent(new Event('change', { bubbles: true }))
     })
-    expect(api.saveProject).toHaveBeenLastCalledWith(
-      '/p/a',
-      expect.objectContaining({ ocr: { kind: 'ai', provider: 'chatgpt' } }),
-    )
+    expect(api.updateSettings).toHaveBeenLastCalledWith({
+      dir: '/p/a',
+      patch: { ocr: { kind: 'ai', provider: 'chatgpt' } },
+    })
   })
 
-  it('project prompt saves on blur', async () => {
+  it('project prompt saves on blur through update-settings only', async () => {
     await render(ProjectDetail, props())
     const area = host.querySelector('textarea') as HTMLTextAreaElement
     await typeInto(area, 'formal tone')
-    expect(api.saveProject).not.toHaveBeenCalled()
+    expect(api.updateSettings).not.toHaveBeenCalled()
     await blur(area)
-    expect(api.saveProject).toHaveBeenCalledWith(
-      '/p/a',
-      expect.objectContaining({ projectPrompt: 'formal tone' }),
-    )
+    expect(api.updateSettings).toHaveBeenCalledWith({
+      dir: '/p/a',
+      patch: { projectPrompt: 'formal tone' },
+    })
   })
 
-  it('start translation is disabled while no source is added', async () => {
+  it('a blur-save during a pending upload does not drop the new entry', async () => {
+    let finishAdd!: (p: ProjectFile) => void
+    let finishSave!: (p: ProjectFile) => void
+    api.pickMaterials.mockResolvedValue({ token: 't', names: ['new.txt'] })
+    api.addMaterial.mockReturnValue(new Promise<ProjectFile>((r) => (finishAdd = r)))
+    api.updateSettings.mockReturnValue(new Promise<ProjectFile>((r) => (finishSave = r)))
+    await render(ProjectDetail, props())
+    const section = host.querySelector('[data-material-kind="reference"]') as HTMLElement
+    await click(within(section, 'Add files'))
+    const area = host.querySelector('textarea') as HTMLTextAreaElement
+    await typeInto(area, 'p')
+    await blur(area)
+    // the settings answer (old lists) lands first, then the upload answer
+    await act(async () => finishSave(project({ projectPrompt: 'p' })))
+    expect(section.textContent).not.toContain('new.txt')
+    await act(async () => finishAdd(project({ references: ['new.txt'] })))
+    expect(section.textContent).toContain('new.txt')
+    expect(area.value).toBe('p')
+  })
+
+  it('a settings answer that lands after an upload answer keeps the new entry', async () => {
+    let finishSave!: (p: ProjectFile) => void
+    api.pickMaterials.mockResolvedValue({ token: 't', names: ['new.txt'] })
+    api.addMaterial.mockResolvedValue(project({ references: ['new.txt'] }))
+    api.updateSettings.mockReturnValue(new Promise<ProjectFile>((r) => (finishSave = r)))
+    await render(ProjectDetail, props())
+    const area = host.querySelector('textarea') as HTMLTextAreaElement
+    await typeInto(area, 'p')
+    await blur(area)
+    const section = host.querySelector('[data-material-kind="reference"]') as HTMLElement
+    await click(within(section, 'Add files'))
+    expect(section.textContent).toContain('new.txt')
+    await act(async () => finishSave(project({ projectPrompt: 'p' })))
+    expect(section.textContent).toContain('new.txt')
+  })
+
+  it('a failed prompt save keeps the text and shows an unsaved state', async () => {
+    api.updateSettings.mockRejectedValueOnce(new Error('[PROJECT_FILE_INVALID] x'))
+    await render(ProjectDetail, props())
+    const area = host.querySelector('textarea') as HTMLTextAreaElement
+    await typeInto(area, 'keep me')
+    await blur(area)
+    expect(area.value).toBe('keep me')
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('damaged')
+    expect(host.querySelector('[role="status"]')?.textContent).toContain('Not saved')
+    await blur(area)
+    expect(api.updateSettings).toHaveBeenCalledTimes(2)
+    expect(host.querySelector('[role="status"]')).toBeNull()
+  })
+
+  it('a multi-file upload that fails midway names the files already added', async () => {
+    api.pickMaterials.mockResolvedValue({ token: 't', names: ['a.txt', 'b.txt'] })
+    api.addMaterial
+      .mockResolvedValueOnce(project({ references: ['a.txt'] }))
+      .mockRejectedValueOnce(new Error('[UNSUPPORTED_SOURCE] nope'))
+    await render(ProjectDetail, props())
+    const section = host.querySelector('[data-material-kind="reference"]') as HTMLElement
+    await click(within(section, 'Add files'))
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+      'Added before the error: a.txt',
+    )
+    expect(section.textContent).toContain('a.txt')
+  })
+
+  const twoSources = () =>
+    project({
+      sources: [
+        { file: 'a.docx', sha256: 'x', kind: 'editable' },
+        { file: 'b.docx', sha256: 'y', kind: 'editable' },
+      ],
+    })
+
+  it('every source row has its own button that opens that file', async () => {
+    api.getProject.mockResolvedValue(twoSources())
+    const p = props()
+    await render(ProjectDetail, p)
+    const sources = host.querySelector('[data-material-kind="source"]') as HTMLElement
+    const rows = sources.querySelectorAll('li')
+    await click(within(rows[1] as HTMLElement, 'Open translation'))
+    expect(p.onStartTranslation).toHaveBeenCalledWith('b.docx')
+    expect(host.querySelector('[data-material-kind="reference"] li')).toBeNull()
+  })
+
+  it('global start is disabled for zero and for several sources', async () => {
     const p = props()
     await render(ProjectDetail, p)
     expect(buttonByText('Start translation').disabled).toBe(true)
+    act(() => root.unmount())
+    root = createRoot(host)
+    api.getProject.mockResolvedValue(twoSources())
+    await render(ProjectDetail, p)
+    expect(buttonByText('Start translation').disabled).toBe(true)
+    expect(host.textContent).toContain('Several documents added')
     await click(buttonByText('Start translation'))
     expect(p.onStartTranslation).not.toHaveBeenCalled()
   })
 
-  it('start translation passes the source file once one exists', async () => {
+  it('global start passes the file when exactly one source exists', async () => {
     api.getProject.mockResolvedValue(
       project({ sources: [{ file: 'a.docx', sha256: 'x', kind: 'editable' }] }),
     )

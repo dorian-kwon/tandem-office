@@ -52,4 +52,8 @@ export const ko = {
   errInvalidArgument: '요청이 올바르지 않습니다. 값을 확인하고 다시 시도하세요.',
   errProjectFileInvalid: '프로젝트 파일이 손상되었거나 읽을 수 없습니다.',
   errUnknown: '문제가 생겼습니다. 다시 시도하세요.',
+  openTranslation: '번역 열기',
+  startPickHint: '문서가 여럿입니다. 번역할 문서의 "번역 열기"를 누르세요.',
+  promptNotSaved: '아직 저장되지 않았습니다. 입력란을 다시 벗어나면 다시 저장합니다.',
+  uploadPartial: '오류 전에 올라간 파일: {files}',
 } satisfies Record<keyof typeof zh, string>

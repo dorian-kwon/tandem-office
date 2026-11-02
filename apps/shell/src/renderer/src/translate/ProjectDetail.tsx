@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { LANGS } from '@genoffice/i18n'
 import type { OcrMode, ProjectFile } from '@genoffice/translate-project'
-import type { TranslateMaterialKind } from '../../../shared/translate-api'
+import type { TranslateMaterialKind, TranslateSettingsPatch } from '../../../shared/translate-api'
 import { useI18n } from '../locale'
 import type { TranslateStringKey } from '../i18n/strings-translate'
 import { languageName, makeText, translateErrorText } from './shared'
@@ -12,7 +12,7 @@ import './translate-global'
 export interface ProjectDetailProps {
   dir: string
   onBack: () => void
-  /** called with the first source file's name when the person starts a translation */
+  /** called with the source file's name when the person opens a translation */
   onStartTranslation: (sourceFile: string) => void
 }
 
@@ -46,6 +46,7 @@ export function ProjectDetail({ dir, onBack, onStartTranslation }: ProjectDetail
   const [prompt, setPrompt] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [promptFailed, setPromptFailed] = useState(false)
   // the newest project object, so a blur-save never writes a stale list over an upload
   const latest = useRef<ProjectFile | null>(null)
 
@@ -68,15 +69,38 @@ export function ProjectDetail({ dir, onBack, onStartTranslation }: ProjectDetail
 
   if (!api) return <main className="content projects-panel" />
 
-  const save = async (patch: Partial<ProjectFile>) => {
+  // Settings responses own only the four settings fields and material responses own
+  // only the lists, so neither can roll back the other while both are in flight.
+  const adoptSettings = (next: ProjectFile) => {
     const base = latest.current
     if (!base) return
-    const next = { ...base, ...patch }
+    adopt({
+      ...base,
+      projectPrompt: next.projectPrompt,
+      ocr: next.ocr,
+      sourceLang: next.sourceLang,
+      targetLang: next.targetLang,
+    })
+  }
+
+  const adoptLists = (next: ProjectFile) => {
+    const base = latest.current
+    if (!base) return
+    adopt({
+      ...base,
+      sources: next.sources,
+      references: next.references,
+      glossaryFiles: next.glossaryFiles,
+    })
+  }
+
+  const save = async (patch: TranslateSettingsPatch): Promise<boolean> => {
     try {
-      await api.saveProject(dir, next)
-      adopt(next)
+      adoptSettings(await api.updateSettings({ dir, patch }))
+      return true
     } catch (err) {
       setError(translateErrorText(lang, err))
+      return false
     }
   }
 
@@ -86,8 +110,15 @@ export function ProjectDetail({ dir, onBack, onStartTranslation }: ProjectDetail
     try {
       const picked = await api.pickMaterials(kind)
       if (!picked) return
-      for (let index = 0; index < picked.names.length; index += 1) {
-        adopt(await api.addMaterial({ dir, kind, token: picked.token, index }))
+      const added: string[] = []
+      try {
+        for (let index = 0; index < picked.names.length; index += 1) {
+          adoptLists(await api.addMaterial({ dir, kind, token: picked.token, index }))
+          added.push(picked.names[index] ?? '')
+        }
+      } catch (err) {
+        const detail = added.length > 0 ? ` ${s('uploadPartial', { files: added.join(', ') })}` : ''
+        setError(translateErrorText(lang, err) + detail)
       }
     } catch (err) {
       setError(translateErrorText(lang, err))
@@ -100,7 +131,7 @@ export function ProjectDetail({ dir, onBack, onStartTranslation }: ProjectDetail
     setBusy(true)
     setError(null)
     try {
-      adopt(await api.removeMaterial({ dir, kind, file }))
+      adoptLists(await api.removeMaterial({ dir, kind, file }))
     } catch (err) {
       setError(translateErrorText(lang, err))
     } finally {
@@ -126,7 +157,9 @@ export function ProjectDetail({ dir, onBack, onStartTranslation }: ProjectDetail
     </label>
   )
 
-  const firstSource = project?.sources[0]?.file
+  // the global button needs exactly one source; with several each row opens its own
+  const onlySource = project?.sources.length === 1 ? project.sources[0]?.file : undefined
+  const hasManySources = (project?.sources.length ?? 0) > 1
 
   return (
     <main className="content projects-panel">
@@ -172,6 +205,16 @@ export function ProjectDetail({ dir, onBack, onStartTranslation }: ProjectDetail
                           <div className="translate-row-main">
                             <span className="projects-row-name">{file}</span>
                           </div>
+                          {kind === 'source' && (
+                            <button
+                              type="button"
+                              className="projects-small"
+                              aria-label={`${s('openTranslation')}: ${file}`}
+                              onClick={() => onStartTranslation(file)}
+                            >
+                              {s('openTranslation')}
+                            </button>
+                          )}
                           <button
                             type="button"
                             className="projects-small"
@@ -205,10 +248,16 @@ export function ProjectDetail({ dir, onBack, onStartTranslation }: ProjectDetail
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 onBlur={() => {
-                  if (prompt !== latest.current?.projectPrompt) void save({ projectPrompt: prompt })
+                  if (prompt === latest.current?.projectPrompt) return
+                  void save({ projectPrompt: prompt }).then((ok) => setPromptFailed(!ok))
                 }}
               />
               <span className="projects-hint">{s('promptHint')}</span>
+              {promptFailed && (
+                <span className="projects-hint" role="status">
+                  {s('promptNotSaved')}
+                </span>
+              )}
             </label>
 
             <label className="projects-field translate-section">
@@ -229,12 +278,16 @@ export function ProjectDetail({ dir, onBack, onStartTranslation }: ProjectDetail
               <button
                 type="button"
                 className="projects-primary"
-                disabled={!firstSource}
-                title={firstSource ? undefined : s('startDisabledHint')}
-                onClick={() => firstSource && onStartTranslation(firstSource)}
+                disabled={!onlySource}
+                onClick={() => onlySource && onStartTranslation(onlySource)}
               >
                 {s('startTranslation')}
               </button>
+              {!onlySource && (
+                <span className="projects-hint">
+                  {hasManySources ? s('startPickHint') : s('startDisabledHint')}
+                </span>
+              )}
             </div>
           </>
         )}

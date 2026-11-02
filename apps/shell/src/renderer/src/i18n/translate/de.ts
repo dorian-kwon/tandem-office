@@ -54,4 +54,8 @@ export const de = {
   errInvalidArgument: 'The request was not valid. Check the values and try again.',
   errProjectFileInvalid: 'The project file is damaged or unreadable.',
   errUnknown: 'Something went wrong. Try again.',
+  openTranslation: 'Open translation',
+  startPickHint: 'Several documents added: use "Open translation" on the one to translate.',
+  promptNotSaved: 'Not saved yet. Leave the field again to retry.',
+  uploadPartial: 'Added before the error: {files}',
 } satisfies Record<keyof typeof zh, string>
