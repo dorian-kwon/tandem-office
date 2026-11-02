@@ -88,7 +88,6 @@ export const zhTW = {
   contextUnknown: '此專案已不在清單中，本次請求未包含專案內容。',
   contextFailed: '無法讀取專案內容，本次請求未包含這些內容。',
   newDocumentSaveFailed: '無法儲存到專案資料夾，文件仍未命名：{error}',
-  // TODO(task-12): review the translation-context keys (machine-drafted)
   translationContext: '已隨請求傳送翻譯脈絡：{items}',
   translationSystem: '系統提示詞',
   translationProject: '專案提示詞',

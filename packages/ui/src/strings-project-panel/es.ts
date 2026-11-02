@@ -97,13 +97,12 @@ export const es = {
     'No se pudo leer el contexto del proyecto, así que esta solicitud se envió sin él.',
   newDocumentSaveFailed:
     'No se pudo guardar en la carpeta del proyecto, así que sigue sin título: {error}',
-  // TODO(task-12): English placeholder until Task 12 translates the translation-context keys
-  translationContext: 'Translation context sent: {items}',
-  translationSystem: 'system prompt',
-  translationProject: 'project prompt',
-  translationGlossary: 'glossary ({count})',
-  translationGlossaryPart: 'glossary ({count} of {total})',
-  translationGlossaryMatching: 'glossary ({count} matching of {total})',
-  translationReferences: 'references ({count})',
-  translationCut: '(the prompts are long, so the end was left out)',
+  translationContext: 'Contexto de traducción enviado: {items}',
+  translationSystem: 'prompt del sistema',
+  translationProject: 'prompt del proyecto',
+  translationGlossary: 'glosario ({count})',
+  translationGlossaryPart: 'glosario ({count} de {total})',
+  translationGlossaryMatching: 'glosario ({count} coincidentes de {total})',
+  translationReferences: 'referencias ({count})',
+  translationCut: '(los prompts son largos, así que se omitió el final)',
 } satisfies Record<keyof typeof zh, string>

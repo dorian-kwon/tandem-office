@@ -93,13 +93,12 @@ export const pl = {
   contextFailed: 'Nie udało się odczytać kontekstu projektu, więc to żądanie wysłano bez niego.',
   newDocumentSaveFailed:
     'Nie udało się zapisać w folderze projektu, więc pozostaje bez tytułu: {error}',
-  // TODO(task-12): English placeholder until Task 12 translates the translation-context keys
-  translationContext: 'Translation context sent: {items}',
-  translationSystem: 'system prompt',
-  translationProject: 'project prompt',
-  translationGlossary: 'glossary ({count})',
-  translationGlossaryPart: 'glossary ({count} of {total})',
-  translationGlossaryMatching: 'glossary ({count} matching of {total})',
-  translationReferences: 'references ({count})',
-  translationCut: '(the prompts are long, so the end was left out)',
+  translationContext: 'Wysłano kontekst tłumaczenia: {items}',
+  translationSystem: 'prompt systemowy',
+  translationProject: 'prompt projektu',
+  translationGlossary: 'glosariusz ({count})',
+  translationGlossaryPart: 'glosariusz ({count} z {total})',
+  translationGlossaryMatching: 'glosariusz ({count} pasujących z {total})',
+  translationReferences: 'materiały referencyjne ({count})',
+  translationCut: '(prompty są długie, więc pominięto ich koniec)',
 } satisfies Record<keyof typeof zh, string>

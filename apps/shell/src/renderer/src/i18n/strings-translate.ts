@@ -23,8 +23,8 @@ import { vi } from './translate/vi'
 
 /**
  * The translation tool screens (project list and project detail). Sharded per
- * language; `zh` defines the key set. ko and en are real text; the other 19
- * languages hold English placeholders until Task 12 translates them.
+ * language; `zh` defines the key set. All 21 languages are real text; the 19 beyond ko and en are
+ * machine-drafted and listed in docs/superpowers/notes/i18n-review.md.
  */
 export const translateUiStrings = defineStrings({
   zh,

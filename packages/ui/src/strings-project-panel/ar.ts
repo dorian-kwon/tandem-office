@@ -90,7 +90,6 @@ export const ar = {
   contextUnknown: 'لم يعد المشروع في القائمة، لذا أُرسل هذا الطلب دون سياق المشروع.',
   contextFailed: 'تعذّرت قراءة سياق المشروع، لذا أُرسل هذا الطلب دونه.',
   newDocumentSaveFailed: 'تعذّر حفظه في مجلد المشروع، لذا بقي بلا عنوان: {error}',
-  // TODO(task-12): review the translation-context keys (machine-drafted)
   translationContext: 'أُرسل سياق الترجمة: {items}',
   translationSystem: 'موجّه النظام',
   translationProject: 'موجّه المشروع',

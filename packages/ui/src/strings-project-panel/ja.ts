@@ -93,7 +93,6 @@ export const ja = {
     'プロジェクトが一覧にないため、今回のリクエストにはプロジェクトの内容を含めませんでした。',
   contextFailed: 'プロジェクトの内容を読み込めなかったため、今回のリクエストには含めませんでした。',
   newDocumentSaveFailed: 'プロジェクトフォルダーに保存できなかったため、無題のままです: {error}',
-  // TODO(task-12): review the translation-context keys (machine-drafted)
   translationContext: '翻訳コンテキストを一緒に送信しました: {items}',
   translationSystem: 'システムプロンプト',
   translationProject: 'プロジェクトプロンプト',

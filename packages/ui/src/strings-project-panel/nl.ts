@@ -95,13 +95,12 @@ export const nl = {
   contextFailed: 'De projectcontext kon niet worden gelezen, dus dit verzoek ging zonder.',
   newDocumentSaveFailed:
     'Kon niet in de projectmap worden opgeslagen en blijft daarom zonder titel: {error}',
-  // TODO(task-12): English placeholder until Task 12 translates the translation-context keys
-  translationContext: 'Translation context sent: {items}',
-  translationSystem: 'system prompt',
-  translationProject: 'project prompt',
-  translationGlossary: 'glossary ({count})',
-  translationGlossaryPart: 'glossary ({count} of {total})',
-  translationGlossaryMatching: 'glossary ({count} matching of {total})',
-  translationReferences: 'references ({count})',
-  translationCut: '(the prompts are long, so the end was left out)',
+  translationContext: 'Vertaalcontext meegestuurd: {items}',
+  translationSystem: 'systeemprompt',
+  translationProject: 'projectprompt',
+  translationGlossary: 'woordenlijst ({count})',
+  translationGlossaryPart: 'woordenlijst ({count} van {total})',
+  translationGlossaryMatching: 'woordenlijst ({count} passende van {total})',
+  translationReferences: 'referenties ({count})',
+  translationCut: '(de prompts zijn lang, dus het einde is weggelaten)',
 } satisfies Record<keyof typeof zh, string>

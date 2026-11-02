@@ -94,7 +94,6 @@ export const hi = {
   contextFailed: 'प्रोजेक्ट का संदर्भ पढ़ा नहीं जा सका, इसलिए यह अनुरोध उसके बिना भेजा गया।',
   newDocumentSaveFailed:
     'प्रोजेक्ट फ़ोल्डर में सहेजा नहीं जा सका, इसलिए यह बिना शीर्षक के है: {error}',
-  // TODO(task-12): review the translation-context keys (machine-drafted)
   translationContext: 'अनुवाद संदर्भ साथ भेजा गया: {items}',
   translationSystem: 'सिस्टम प्रॉम्प्ट',
   translationProject: 'प्रोजेक्ट प्रॉम्प्ट',

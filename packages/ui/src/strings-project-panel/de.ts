@@ -102,13 +102,12 @@ export const de = {
     'Der Projektkontext konnte nicht gelesen werden, daher ging diese Anfrage ohne ihn hinaus.',
   newDocumentSaveFailed:
     'Konnte nicht im Projektordner gespeichert werden und bleibt daher ohne Titel: {error}',
-  // TODO(task-12): English placeholder until Task 12 translates the translation-context keys
-  translationContext: 'Translation context sent: {items}',
-  translationSystem: 'system prompt',
-  translationProject: 'project prompt',
-  translationGlossary: 'glossary ({count})',
-  translationGlossaryPart: 'glossary ({count} of {total})',
-  translationGlossaryMatching: 'glossary ({count} matching of {total})',
-  translationReferences: 'references ({count})',
-  translationCut: '(the prompts are long, so the end was left out)',
+  translationContext: 'Übersetzungskontext mitgesendet: {items}',
+  translationSystem: 'System-Prompt',
+  translationProject: 'Projekt-Prompt',
+  translationGlossary: 'Glossar ({count})',
+  translationGlossaryPart: 'Glossar ({count} von {total})',
+  translationGlossaryMatching: 'Glossar ({count} passende von {total})',
+  translationReferences: 'Referenzen ({count})',
+  translationCut: '(die Prompts sind lang, daher wurde das Ende weggelassen)',
 } satisfies Record<keyof typeof zh, string>

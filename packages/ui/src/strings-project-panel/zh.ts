@@ -86,7 +86,6 @@ export const zh = {
   contextUnknown: '该项目已不在列表中，本次请求未包含项目内容。',
   contextFailed: '无法读取项目内容，本次请求未包含这些内容。',
   newDocumentSaveFailed: '未能保存到项目文件夹，文档仍未命名：{error}',
-  // TODO(task-12): review the translation-context keys (machine-drafted)
   translationContext: '已随请求发送翻译上下文：{items}',
   translationSystem: '系统提示词',
   translationProject: '项目提示词',

@@ -89,7 +89,6 @@ export const he = {
   contextUnknown: 'הפרויקט כבר לא ברשימה, ולכן הבקשה הזו נשלחה בלי ההקשר של הפרויקט.',
   contextFailed: 'לא ניתן היה לקרוא את ההקשר של הפרויקט, ולכן הבקשה הזו נשלחה בלעדיו.',
   newDocumentSaveFailed: 'לא ניתן היה לשמור בתיקיית הפרויקט, ולכן המסמך נשאר ללא שם: {error}',
-  // TODO(task-12): review the translation-context keys (machine-drafted)
   translationContext: 'הקשר התרגום נשלח: {items}',
   translationSystem: 'הנחיית מערכת',
   translationProject: 'הנחיית פרויקט',
