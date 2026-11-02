@@ -1,8 +1,9 @@
 import { randomBytes } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { parseGlossary, type GlossaryEntry } from './glossary'
 import type { ProjectFile } from './project-file'
+import { withProjectLock } from './project-lock'
 import { loadProject, saveProject } from './project-store'
 import { copyIntoWithSuffix, importSource } from './source-guard'
 
@@ -28,51 +29,59 @@ async function removeQuietly(path: string): Promise<void> {
   await rm(path, { force: true }).catch(() => undefined)
 }
 
-export async function addSource(dir: string, originalPath: string): Promise<ProjectFile> {
-  const project = await loadProject(dir)
-  const entry = await importSource(dir, originalPath)
-  const next = { ...project, sources: [...project.sources, entry] }
-  try {
-    await saveProject(dir, next)
-  } catch (e) {
-    await removeQuietly(join(dir, 'source', entry.file))
-    throw e
-  }
-  return next
+export function addSource(dir: string, originalPath: string): Promise<ProjectFile> {
+  return withProjectLock(dir, async () => {
+    const project = await loadProject(dir)
+    const entry = await importSource(dir, originalPath)
+    const next = { ...project, sources: [...project.sources, entry] }
+    try {
+      await saveProject(dir, next)
+    } catch (e) {
+      await removeQuietly(join(dir, 'source', entry.file))
+      throw e
+    }
+    return next
+  })
 }
 
 /** Deletes only the copy in source/. Anything in output/ is left alone. */
-export async function removeSource(dir: string, file: string): Promise<ProjectFile> {
-  assertPlainName(file)
-  const project = await loadProject(dir)
-  if (!project.sources.some((s) => s.file === file)) throw new NotListedError(file)
-  const next = { ...project, sources: project.sources.filter((s) => s.file !== file) }
-  await saveProject(dir, next)
-  await rm(join(dir, 'source', file), { force: true })
-  return next
-}
-
-export async function addReference(dir: string, originalPath: string): Promise<ProjectFile> {
-  const project = await loadProject(dir)
-  const name = await copyIntoWithSuffix(join(dir, 'references'), originalPath)
-  const next = { ...project, references: [...project.references, name] }
-  try {
+export function removeSource(dir: string, file: string): Promise<ProjectFile> {
+  return withProjectLock(dir, async () => {
+    assertPlainName(file)
+    const project = await loadProject(dir)
+    if (!project.sources.some((s) => s.file === file)) throw new NotListedError(file)
+    const next = { ...project, sources: project.sources.filter((s) => s.file !== file) }
     await saveProject(dir, next)
-  } catch (e) {
-    await removeQuietly(join(dir, 'references', name))
-    throw e
-  }
-  return next
+    await rm(join(dir, 'source', file), { force: true })
+    return next
+  })
 }
 
-export async function removeReference(dir: string, file: string): Promise<ProjectFile> {
-  assertPlainName(file)
-  const project = await loadProject(dir)
-  if (!project.references.includes(file)) throw new NotListedError(file)
-  const next = { ...project, references: project.references.filter((r) => r !== file) }
-  await saveProject(dir, next)
-  await rm(join(dir, 'references', file), { force: true })
-  return next
+export function addReference(dir: string, originalPath: string): Promise<ProjectFile> {
+  return withProjectLock(dir, async () => {
+    const project = await loadProject(dir)
+    const name = await copyIntoWithSuffix(join(dir, 'references'), originalPath)
+    const next = { ...project, references: [...project.references, name] }
+    try {
+      await saveProject(dir, next)
+    } catch (e) {
+      await removeQuietly(join(dir, 'references', name))
+      throw e
+    }
+    return next
+  })
+}
+
+export function removeReference(dir: string, file: string): Promise<ProjectFile> {
+  return withProjectLock(dir, async () => {
+    assertPlainName(file)
+    const project = await loadProject(dir)
+    if (!project.references.includes(file)) throw new NotListedError(file)
+    const next = { ...project, references: project.references.filter((r) => r !== file) }
+    await saveProject(dir, next)
+    await rm(join(dir, 'references', file), { force: true })
+    return next
+  })
 }
 
 /** Merge entries in order, dropping exact duplicate source+target pairs. */
@@ -114,40 +123,41 @@ async function rebuildGlossary(dir: string, files: string[]): Promise<void> {
 }
 
 /** Parse first so an unreadable glossary never leaves a copy behind. */
-export async function addGlossary(dir: string, originalPath: string): Promise<ProjectFile> {
-  const project = await loadProject(dir)
-  const fileName = originalPath.slice(
-    Math.max(originalPath.lastIndexOf('/'), originalPath.lastIndexOf('\\')) + 1,
-  )
-  parseGlossary(await readFile(originalPath), fileName)
-  const name = await copyIntoWithSuffix(join(dir, 'glossary'), originalPath)
-  const next = { ...project, glossaryFiles: [...project.glossaryFiles, name] }
-  try {
-    await rebuildGlossary(dir, next.glossaryFiles)
-    await saveProject(dir, next)
-  } catch (e) {
-    await removeQuietly(join(dir, 'glossary', name))
-    // Put the merged file back in line with the unchanged project; failure must not mask `e`.
-    await rebuildGlossary(dir, project.glossaryFiles).catch(() => undefined)
-    throw e
-  }
-  return next
+export function addGlossary(dir: string, originalPath: string): Promise<ProjectFile> {
+  return withProjectLock(dir, async () => {
+    const project = await loadProject(dir)
+    parseGlossary(await readFile(originalPath), basename(originalPath))
+    const name = await copyIntoWithSuffix(join(dir, 'glossary'), originalPath)
+    const next = { ...project, glossaryFiles: [...project.glossaryFiles, name] }
+    try {
+      await rebuildGlossary(dir, next.glossaryFiles)
+      await saveProject(dir, next)
+    } catch (e) {
+      await removeQuietly(join(dir, 'glossary', name))
+      // Put the merged file back in line with the unchanged project; failure must not mask `e`.
+      await rebuildGlossary(dir, project.glossaryFiles).catch(() => undefined)
+      throw e
+    }
+    return next
+  })
 }
 
-export async function removeGlossary(dir: string, file: string): Promise<ProjectFile> {
-  assertPlainName(file)
-  const project = await loadProject(dir)
-  if (!project.glossaryFiles.includes(file)) throw new NotListedError(file)
-  const next = { ...project, glossaryFiles: project.glossaryFiles.filter((g) => g !== file) }
-  await rebuildGlossary(dir, next.glossaryFiles)
-  try {
-    await saveProject(dir, next)
-  } catch (e) {
-    await rebuildGlossary(dir, project.glossaryFiles).catch(() => undefined)
-    throw e
-  }
-  await rm(join(dir, 'glossary', file), { force: true })
-  return next
+export function removeGlossary(dir: string, file: string): Promise<ProjectFile> {
+  return withProjectLock(dir, async () => {
+    assertPlainName(file)
+    const project = await loadProject(dir)
+    if (!project.glossaryFiles.includes(file)) throw new NotListedError(file)
+    const next = { ...project, glossaryFiles: project.glossaryFiles.filter((g) => g !== file) }
+    await rebuildGlossary(dir, next.glossaryFiles)
+    try {
+      await saveProject(dir, next)
+    } catch (e) {
+      await rebuildGlossary(dir, project.glossaryFiles).catch(() => undefined)
+      throw e
+    }
+    await rm(join(dir, 'glossary', file), { force: true })
+    return next
+  })
 }
 
 /** Read the merged glossary; a missing file means no glossary yet. */

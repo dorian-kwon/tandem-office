@@ -122,6 +122,61 @@ describe('glossary', () => {
   })
 })
 
+describe('concurrency', () => {
+  it('five parallel addReference calls keep every entry and file', async () => {
+    const origs = await Promise.all([1, 2, 3, 4, 5].map((n) => make(`r${n}.txt`, String(n))))
+    await Promise.all(origs.map((o) => addReference(dir, o)))
+    const p = await loadProject(dir)
+    expect([...p.references].sort()).toEqual(['r1.txt', 'r2.txt', 'r3.txt', 'r4.txt', 'r5.txt'])
+    expect(await readdir(join(dir, 'references'))).toHaveLength(5)
+  })
+
+  it('mixed parallel add and remove calls keep all changes', async () => {
+    await addReference(dir, await make('old.txt', 'x'))
+    const src = await make('s.txt', 's')
+    const gl = await make('g.txt', '사과\tapple\n')
+    await Promise.all([addSource(dir, src), addGlossary(dir, gl), removeReference(dir, 'old.txt')])
+    const p = await loadProject(dir)
+    expect(p.sources.map((s) => s.file)).toEqual(['s.txt'])
+    expect(p.glossaryFiles).toEqual(['g.txt'])
+    expect(p.references).toEqual([])
+    expect(await readdir(join(dir, 'references'))).toEqual([])
+    expect(await loadGlossary(dir)).toEqual([{ source: '사과', target: 'apple' }])
+  })
+})
+
+describe('rollback', () => {
+  it('addSource removes the copy and keeps project.json when saveProject fails', async () => {
+    const before = await readFile(join(dir, '.tandem', 'project.json'), 'utf8')
+    vi.mocked(store.saveProject).mockRejectedValueOnce(new Error('disk full'))
+    await expect(addSource(dir, await make('a.txt', 'x'))).rejects.toThrow('disk full')
+    expect(await readdir(join(dir, 'source'))).toEqual([])
+    expect(await readFile(join(dir, '.tandem', 'project.json'), 'utf8')).toBe(before)
+  })
+
+  it('addGlossary removes the copy and restores glossary.json when saveProject fails', async () => {
+    await addGlossary(dir, await make('a.txt', '사과\tapple\n'))
+    const before = await readFile(join(dir, '.tandem', 'project.json'), 'utf8')
+    vi.mocked(store.saveProject).mockRejectedValueOnce(new Error('disk full'))
+    await expect(addGlossary(dir, await make('b.txt', '배\tpear\n'))).rejects.toThrow('disk full')
+    expect(await readdir(join(dir, 'glossary'))).toEqual(['a.txt'])
+    expect(await readFile(join(dir, '.tandem', 'project.json'), 'utf8')).toBe(before)
+    expect(await loadGlossary(dir)).toEqual([{ source: '사과', target: 'apple' }])
+  })
+
+  it('removeGlossary throws and changes nothing when another listed file is unreadable', async () => {
+    await addGlossary(dir, await make('a.txt', '사과\tapple\n'))
+    await addGlossary(dir, await make('b.txt', '배\tpear\n'))
+    await rm(join(dir, 'glossary', 'b.txt'))
+    const before = await readFile(join(dir, '.tandem', 'project.json'), 'utf8')
+    const json = await readFile(join(dir, '.tandem', 'glossary.json'), 'utf8')
+    await expect(removeGlossary(dir, 'a.txt')).rejects.toThrow()
+    expect(await readFile(join(dir, '.tandem', 'project.json'), 'utf8')).toBe(before)
+    expect(await readFile(join(dir, '.tandem', 'glossary.json'), 'utf8')).toBe(json)
+    expect(await exists(join(dir, 'glossary', 'a.txt'))).toBe(true)
+  })
+})
+
 describe('not listed', () => {
   it('removing a file that is not listed throws NotListedError and deletes nothing', async () => {
     await writeFile(join(dir, 'source', 'stray.txt'), 'x')
@@ -139,6 +194,10 @@ describe('not listed', () => {
     await writeFile(join(dir, 'victim.txt'), 'x')
     for (const bad of ['../victim.txt', '..', 'a/b', 'a\\b', '']) {
       await expect(removeReference(dir, bad)).rejects.toBeInstanceOf(NotListedError)
+    }
+    for (const bad of ['../victim.txt', 'a/b']) {
+      await expect(removeSource(dir, bad)).rejects.toBeInstanceOf(NotListedError)
+      await expect(removeGlossary(dir, bad)).rejects.toBeInstanceOf(NotListedError)
     }
     expect(await exists(join(dir, 'victim.txt'))).toBe(true)
   })

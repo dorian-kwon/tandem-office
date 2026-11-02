@@ -34,3 +34,4 @@ export {
   removeReference,
   removeSource,
 } from './materials'
+export { withProjectLock } from './project-lock'
