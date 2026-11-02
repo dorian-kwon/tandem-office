@@ -12,6 +12,7 @@ import {
   removeReference,
   removeSource,
 } from './materials'
+import { GlossaryFormatError } from './glossary'
 import { createProject, loadProject } from './project-store'
 import * as store from './project-store'
 
@@ -60,6 +61,26 @@ describe('sources', () => {
   })
 })
 
+describe('re-adding a removed source', () => {
+  it('gets a new name, so it never inherits the old translation in output/', async () => {
+    await addSource(dir, await make('a.txt', 'hello'))
+    await writeFile(join(dir, 'output', 'a.txt'), 'translated')
+    await removeSource(dir, 'a.txt')
+    const p = await addSource(dir, await make('a.txt', 'hello again'))
+    expect(p.sources.map((s) => s.file)).toEqual(['a (2).txt'])
+    expect(await readFile(join(dir, 'output', 'a.txt'), 'utf8')).toBe('translated')
+  })
+
+  it('references and glossaries do not look at output/', async () => {
+    await writeFile(join(dir, 'output', 'r.txt'), 'x')
+    await writeFile(join(dir, 'output', 'g.csv'), 'x')
+    const p1 = await addReference(dir, await make('r.txt', 'ref'))
+    expect(p1.references).toEqual(['r.txt'])
+    const p2 = await addGlossary(dir, await make('g.csv', 'a,b'))
+    expect(p2.glossaryFiles).toEqual(['g.csv'])
+  })
+})
+
 describe('references', () => {
   it('adding a same-named reference twice keeps both', async () => {
     const orig = await make('ref.txt', 'x')
@@ -91,7 +112,9 @@ describe('glossary', () => {
   })
 
   it('addGlossary with unreadable file leaves no copy in glossary/', async () => {
-    await expect(addGlossary(dir, await make('g.docx', 'nope'))).rejects.toThrow()
+    await expect(addGlossary(dir, await make('g.docx', 'nope'))).rejects.toBeInstanceOf(
+      GlossaryFormatError,
+    )
     expect(await readdir(join(dir, 'glossary'))).toEqual([])
     expect((await loadProject(dir)).glossaryFiles).toEqual([])
   })

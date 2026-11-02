@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { deflateRawSync } from 'node:zlib'
 import { describe, expect, it } from 'vitest'
-import { parseGlossary, selectGlossary, type GlossaryEntry } from './glossary'
+import { GlossaryFormatError, parseGlossary, selectGlossary, type GlossaryEntry } from './glossary'
 
 const fixture = (name: string): Uint8Array =>
   new Uint8Array(readFileSync(new URL(`./__fixtures__/${name}`, import.meta.url)))
@@ -61,8 +61,8 @@ describe('parseGlossary', () => {
     expect(entries).toEqual([{ source: 'a,1', target: 'say "hi"' }])
   })
 
-  it('rejects unsupported extensions', () => {
-    expect(() => parseGlossary(enc('a,b'), 'g.docx')).toThrow()
+  it('rejects unsupported extensions with a GlossaryFormatError', () => {
+    expect(() => parseGlossary(enc('a,b'), 'g.docx')).toThrow(GlossaryFormatError)
   })
 })
 
@@ -199,5 +199,74 @@ describe('xlsx edge cases', () => {
   it('throws on an out-of-range shared string index', () => {
     const rows = '<row r="1"><c r="A1" t="s"><v>99</v></c></row>'
     expect(() => parseGlossary(xlsx(rows, shared), 'g.xlsx')).toThrow(/out of range/)
+    expect(() => parseGlossary(xlsx(rows, shared), 'g.xlsx')).toThrow(GlossaryFormatError)
+  })
+})
+
+/** UTF-16 bytes of `text`, little or big endian, with or without a byte-order mark */
+function utf16(text: string, endian: 'le' | 'be', bom: boolean): Uint8Array {
+  const out: number[] = bom ? (endian === 'le' ? [0xff, 0xfe] : [0xfe, 0xff]) : []
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i)
+    const lo = code & 0xff
+    const hi = code >> 8
+    if (endian === 'le') out.push(lo, hi)
+    else out.push(hi, lo)
+  }
+  return new Uint8Array(out)
+}
+
+describe('UTF-16 glossaries (Excel "Unicode Text")', () => {
+  const tsv = '원어\t번역어\r\n계약\tcontract\t법률 용어\r\n당사자\tparty\r\n'
+  const csv = '계약,contract\n"당사자, 갑",party\n'
+  const expected = [
+    { source: '계약', target: 'contract', note: '법률 용어' },
+    { source: '당사자', target: 'party' },
+  ]
+
+  it('reads UTF-16LE with a byte-order mark (tab-separated txt)', () => {
+    expect(parseGlossary(utf16(tsv, 'le', true), 'g.txt')).toEqual(expected)
+  })
+
+  it('reads UTF-16BE with a byte-order mark (tab-separated txt)', () => {
+    expect(parseGlossary(utf16(tsv, 'be', true), 'g.txt')).toEqual(expected)
+  })
+
+  it('reads UTF-16LE and BE csv with a byte-order mark', () => {
+    const want = [
+      { source: '계약', target: 'contract' },
+      { source: '당사자, 갑', target: 'party' },
+    ]
+    expect(parseGlossary(utf16(csv, 'le', true), 'g.csv')).toEqual(want)
+    expect(parseGlossary(utf16(csv, 'be', true), 'g.csv')).toEqual(want)
+  })
+
+  it('reads BOM-less UTF-16 by its zero bytes (tabs and line breaks are ASCII)', () => {
+    expect(parseGlossary(utf16(tsv, 'le', false), 'g.txt')).toEqual(expected)
+    expect(parseGlossary(utf16(tsv, 'be', false), 'g.txt')).toEqual(expected)
+  })
+
+  it('reads BOM-less UTF-16 with characters whose low byte is zero (U+AC00)', () => {
+    const text = '가격\tprice\r\n가게\tshop\r\n'
+    const want = [
+      { source: '가격', target: 'price' },
+      { source: '가게', target: 'shop' },
+    ]
+    expect(parseGlossary(utf16(text, 'le', false), 'g.txt')).toEqual(want)
+    expect(parseGlossary(utf16(text, 'be', false), 'g.txt')).toEqual(want)
+  })
+
+  it('still reads UTF-8 with a BOM and CP949', () => {
+    const bom = new Uint8Array([0xef, 0xbb, 0xbf, ...enc('계약,contract')])
+    expect(parseGlossary(bom, 'g.csv')).toEqual([{ source: '계약', target: 'contract' }])
+    const cp949 = new Uint8Array([0xb0, 0xe8, 0xbe, 0xe0, 0x2c, ...enc('contract')])
+    expect(parseGlossary(cp949, 'g.csv')).toEqual([{ source: '계약', target: 'contract' }])
+  })
+})
+
+describe('GlossaryFormatError', () => {
+  it('is thrown for a file that is not a zip, and for an inflate failure', () => {
+    expect(() => parseGlossary(enc('not a zip at all'), 'g.xlsx')).toThrow(GlossaryFormatError)
+    expect(() => parseGlossary(enc('not a zip at all'), 'g.xlsx')).toThrow(/xlsx/)
   })
 })

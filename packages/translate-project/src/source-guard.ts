@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import { constants } from 'node:fs'
-import { copyFile, mkdir } from 'node:fs/promises'
+import { copyFile, lstat, mkdir } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import type { SourceEntry, SourceKind } from './project-file'
 
@@ -12,23 +12,35 @@ export class UnsupportedSourceError extends Error {
   }
 }
 
-const EDITABLE = [
+/**
+ * The document types a source may be: exactly the extensions the app opens in
+ * an editor tab (apps/shell/src/main/app-routing.ts), PDF aside. This package
+ * cannot import the shell, so the list is kept here and the shell's test
+ * `translate-source-types.test.ts` fails when the two differ.
+ */
+export const EDITABLE_SOURCE_EXTENSIONS: readonly string[] = [
   'docx',
+  'odt',
   'xlsx',
+  'xlsm',
+  'xls',
+  'csv',
+  'tsv',
   'pptx',
-  'hwp',
-  'hwpx',
-  'epub',
   'md',
   'markdown',
   'txt',
+  'json',
   'html',
   'htm',
-  'odt',
-  'ods',
-  'odp',
+  'xmind',
+  'hwp',
+  'hwpx',
+  'epub',
 ]
-const IMAGES = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tif', 'tiff', 'webp']
+
+/** The image types OCR reads (the AI receives PNG or JPEG only). */
+export const IMAGE_SOURCE_EXTENSIONS: readonly string[] = ['png', 'jpg', 'jpeg']
 
 /**
  * Classify a source by extension (case-insensitive). Never returns 'scan';
@@ -37,23 +49,43 @@ const IMAGES = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tif', 'tiff', 'webp']
 export function classifySource(fileName: string): SourceKind {
   const ext = extname(fileName).slice(1).toLowerCase()
   if (ext === 'pdf') return 'pdf'
-  if (IMAGES.includes(ext)) return 'image'
-  if (EDITABLE.includes(ext)) return 'editable'
+  if (IMAGE_SOURCE_EXTENSIONS.includes(ext)) return 'image'
+  if (EDITABLE_SOURCE_EXTENSIONS.includes(ext)) return 'editable'
   throw new UnsupportedSourceError(fileName)
+}
+
+/** Whether anything (a file, folder or link) has this path. */
+async function taken(path: string): Promise<boolean> {
+  try {
+    await lstat(path)
+    return true
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return false
+    throw e
+  }
 }
 
 /**
  * Copy a file into destDir (created if needed) without overwriting anything.
  * On a name clash the file becomes `name (2).ext`, `name (3).ext`, ...
+ * A name that exists in any of `alsoAvoid` (directories that are only looked
+ * at, never written; a missing one counts as empty) is skipped too.
  * Returns the final file name. The original is only read.
  */
-export async function copyIntoWithSuffix(destDir: string, originalPath: string): Promise<string> {
+export async function copyIntoWithSuffix(
+  destDir: string,
+  originalPath: string,
+  alsoAvoid: readonly string[] = [],
+): Promise<string> {
   await mkdir(destDir, { recursive: true })
   const base = basename(originalPath)
   const ext = extname(base)
   const stem = ext ? base.slice(0, -ext.length) : base
   for (let n = 1; ; n++) {
     const name = n === 1 ? base : `${stem} (${n})${ext}`
+    let skip = false
+    for (const other of alsoAvoid) if (await taken(join(other, name))) skip = true
+    if (skip) continue
     try {
       // COPYFILE_EXCL makes the clash check atomic.
       await copyFile(originalPath, join(destDir, name), constants.COPYFILE_EXCL)
@@ -74,11 +106,16 @@ function hashFile(path: string): Promise<string> {
   })
 }
 
-/** Copy an original into `<projectDir>/source/` and record its SHA-256. */
+/**
+ * Copy an original into `<projectDir>/source/` and record its SHA-256. The
+ * name is also kept free in `output/`: removing a source keeps its
+ * translation there, and a document added again under the same name must
+ * start a fresh output copy instead of inheriting that one.
+ */
 export async function importSource(projectDir: string, originalPath: string): Promise<SourceEntry> {
   const kind = classifySource(basename(originalPath))
   const dir = join(projectDir, 'source')
-  const file = await copyIntoWithSuffix(dir, originalPath)
+  const file = await copyIntoWithSuffix(dir, originalPath, [join(projectDir, 'output')])
   return { file, sha256: await hashFile(join(dir, file)), kind }
 }
 

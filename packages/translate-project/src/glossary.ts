@@ -2,6 +2,14 @@ import { inflateRawSync } from 'node:zlib'
 
 export type GlossaryEntry = { source: string; target: string; note?: string }
 
+/** A glossary file that cannot be read: an unsupported type, or a damaged xlsx. */
+export class GlossaryFormatError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'GlossaryFormatError'
+  }
+}
+
 /** Glossaries above this many entries are filtered per paragraph before they go to the model. */
 export const DEFAULT_GLOSSARY_LIMIT = 200
 
@@ -11,12 +19,21 @@ const HEADER_TARGET_ALIASES = ['번역어', '번역', '역어', '도착어', 'ta
 /** Upper bound for any single inflated zip part, a guard against zip bombs. */
 const MAX_PART_BYTES = 64 * 1024 * 1024
 
+/** Every failure to read the file leaves as a GlossaryFormatError. */
 export function parseGlossary(bytes: Uint8Array, fileName: string): GlossaryEntry[] {
   const ext = fileName.slice(fileName.lastIndexOf('.') + 1).toLowerCase()
-  if (ext === 'xlsx') return rowsToEntries(readFirstSheet(bytes))
+  if (ext === 'xlsx') {
+    try {
+      return rowsToEntries(readFirstSheet(bytes))
+    } catch (e) {
+      if (e instanceof GlossaryFormatError) throw e
+      // zlib and DataView failures on a damaged file
+      throw new GlossaryFormatError(`Corrupt xlsx: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
   if (ext === 'csv') return rowsToEntries(parseDelimited(decodeText(bytes), ','))
   if (ext === 'txt') return rowsToEntries(parseDelimited(decodeText(bytes), '\t'))
-  throw new Error(`Unsupported glossary file type: ${fileName}`)
+  throw new GlossaryFormatError(`Unsupported glossary file type: ${fileName}`)
 }
 
 export function selectGlossary(
@@ -49,15 +66,48 @@ function rowsToEntries(rows: string[][]): GlossaryEntry[] {
   return entries
 }
 
-/** Strict UTF-8 first; anything that is not valid UTF-8 is read as CP949 (euc-kr). */
+/**
+ * UTF-16 by its byte-order mark (FF FE little endian, FE FF big endian: Excel's
+ * "Unicode Text" export), or without one by its zero bytes; then strict UTF-8;
+ * anything that is not valid UTF-8 is read as CP949 (euc-kr).
+ */
 function decodeText(bytes: Uint8Array): string {
   let text: string
-  try {
-    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
-  } catch {
-    text = new TextDecoder('euc-kr').decode(bytes)
+  const utf16 = utf16Endian(bytes)
+  if (utf16) {
+    text = new TextDecoder(utf16).decode(bytes)
+  } else {
+    try {
+      text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+    } catch {
+      text = new TextDecoder('euc-kr').decode(bytes)
+    }
   }
   return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text
+}
+
+/**
+ * The UTF-16 byte order of `bytes`, or null. Without a byte-order mark only a
+ * cheap, safe guess: UTF-8 and CP949 text never holds a zero byte, while
+ * UTF-16 text with any ASCII character (a tab, comma or line break, which every
+ * glossary row has) does, mostly on one side of each pair. A file whose zero
+ * bytes are not clearly on one side is not taken for UTF-16.
+ */
+function utf16Endian(bytes: Uint8Array): 'utf-16le' | 'utf-16be' | null {
+  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) return 'utf-16le'
+  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) return 'utf-16be'
+  if (bytes.length < 2 || bytes.length % 2 !== 0) return null
+  let evenZeros = 0
+  let oddZeros = 0
+  for (let i = 0; i < bytes.length; i++) {
+    if (bytes[i] !== 0) continue
+    if (i % 2 === 0) evenZeros++
+    else oddZeros++
+  }
+  // a character such as U+AC00 has a zero low byte, so the other side may hold a few
+  if (oddZeros > 0 && evenZeros * 4 < oddZeros) return 'utf-16le'
+  if (evenZeros > 0 && oddZeros * 4 < evenZeros) return 'utf-16be'
+  return null
 }
 
 function parseDelimited(text: string, delimiter: string): string[][] {
@@ -105,7 +155,8 @@ function readFirstSheet(bytes: Uint8Array): string[][] {
     return part === undefined ? undefined : new TextDecoder('utf-8').decode(part())
   }
   const workbook = text('xl/workbook.xml')
-  if (workbook === undefined) throw new Error('Not a valid xlsx file: missing workbook')
+  if (workbook === undefined)
+    throw new GlossaryFormatError('Not a valid xlsx file: missing workbook')
 
   let sheetPath = 'xl/worksheets/sheet1.xml'
   const firstSheet = /<(?:\w+:)?sheet\b[^>]*>/.exec(workbook)
@@ -121,7 +172,8 @@ function readFirstSheet(bytes: Uint8Array): string[][] {
     }
   }
   const sheet = text(sheetPath)
-  if (sheet === undefined) throw new Error('Not a valid xlsx file: missing first sheet')
+  if (sheet === undefined)
+    throw new GlossaryFormatError('Not a valid xlsx file: missing first sheet')
 
   const shared = parseSharedStrings(text('xl/sharedStrings.xml') ?? '')
   return parseSheet(sheet, shared)
@@ -198,7 +250,7 @@ function parseSheet(xml: string, shared: string[]): string[][] {
       if (type === 's') {
         const text = shared[Number(raw)]
         if (text === undefined)
-          throw new Error(`Corrupt xlsx: shared string ${raw} is out of range`)
+          throw new GlossaryFormatError(`Corrupt xlsx: shared string ${raw} is out of range`)
         value = text
       } else if (type === 'inlineStr') value = runText(body)
       else if (raw !== undefined) value = decodeXml(raw)
@@ -219,13 +271,13 @@ function readZip(bytes: Uint8Array): Map<string, () => Uint8Array> {
       break
     }
   }
-  if (eocd < 0) throw new Error('Not a valid xlsx file: zip directory not found')
+  if (eocd < 0) throw new GlossaryFormatError('Not a valid xlsx file: zip directory not found')
   const count = view.getUint16(eocd + 10, true)
   let pos = view.getUint32(eocd + 16, true)
   const parts = new Map<string, () => Uint8Array>()
   for (let n = 0; n < count; n++) {
     if (pos + 46 > bytes.length || view.getUint32(pos, true) !== 0x02014b50) {
-      throw new Error('Not a valid xlsx file: corrupt zip directory')
+      throw new GlossaryFormatError('Not a valid xlsx file: corrupt zip directory')
     }
     const method = view.getUint16(pos + 10, true)
     const compressedSize = view.getUint32(pos + 20, true)
@@ -237,7 +289,7 @@ function readZip(bytes: Uint8Array): Map<string, () => Uint8Array> {
     const name = new TextDecoder('utf-8').decode(bytes.subarray(pos + 46, pos + 46 + nameLength))
     pos += 46 + nameLength + extraLength + commentLength
     parts.set(name, () => {
-      if (size > MAX_PART_BYTES) throw new Error('xlsx part is too large')
+      if (size > MAX_PART_BYTES) throw new GlossaryFormatError('xlsx part is too large')
       const dataStart =
         localOffset +
         30 +
@@ -249,7 +301,7 @@ function readZip(bytes: Uint8Array): Map<string, () => Uint8Array> {
         // maxOutputLength is the zip-bomb guard: inflate aborts past the cap
         return inflateRawSync(data, { maxOutputLength: MAX_PART_BYTES })
       }
-      throw new Error(`Unsupported zip compression method ${method}`)
+      throw new GlossaryFormatError(`Unsupported zip compression method ${method}`)
     })
   }
   return parts

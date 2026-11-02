@@ -5,6 +5,8 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   UnsupportedSourceError,
+  EDITABLE_SOURCE_EXTENSIONS,
+  IMAGE_SOURCE_EXTENSIONS,
   classifySource,
   copyIntoWithSuffix,
   importSource,
@@ -49,6 +51,27 @@ describe('importSource', () => {
     const second = await importSource(projectDir, p)
     expect(second.file).toBe('doc (2).docx')
     expect(await readdir(join(projectDir, 'source'))).toEqual(['doc (2).docx', 'doc.docx'])
+  })
+
+  it('a name still taken in output/ (a removed source) gets a suffix and a fresh output', async () => {
+    const p = await makeOriginal('doc.docx', 'abc')
+    await mkdir(join(projectDir, 'output'), { recursive: true })
+    await writeFile(join(projectDir, 'output', 'doc.docx'), 'translation of the old one')
+    const entry = await importSource(projectDir, p)
+    expect(entry.file).toBe('doc (2).docx')
+    expect(await readdir(join(projectDir, 'source'))).toEqual(['doc (2).docx'])
+  })
+
+  it('parallel imports of one name never share a file (exclusive copy)', async () => {
+    const p = await makeOriginal('doc.docx', 'abc')
+    await mkdir(join(projectDir, 'output'), { recursive: true })
+    await writeFile(join(projectDir, 'output', 'doc.docx'), 'old')
+    const names = (await Promise.all([1, 2, 3, 4].map(() => importSource(projectDir, p)))).map(
+      (e) => e.file,
+    )
+    expect(new Set(names).size).toBe(4)
+    expect(names).not.toContain('doc.docx')
+    expect((await readdir(join(projectDir, 'source'))).sort()).toEqual([...names].sort())
   })
 
   it('import never modifies the original file', async () => {
@@ -102,11 +125,28 @@ describe('classifySource', () => {
       'a.HTML',
       'a.txt',
       'a.odt',
+      'a.xls',
+      'a.xlsm',
+      'a.csv',
+      'a.tsv',
+      'a.xmind',
+      'a.json',
     ])
       expect(classifySource(n)).toBe('editable')
     expect(classifySource('a.PDF')).toBe('pdf')
-    for (const n of ['a.png', 'a.JPG', 'a.jpeg', 'a.gif', 'a.bmp', 'a.tif', 'a.tiff', 'a.webp'])
-      expect(classifySource(n)).toBe('image')
+    for (const n of ['a.png', 'a.JPG', 'a.jpeg']) expect(classifySource(n)).toBe('image')
+  })
+
+  it('refuses types no editor or OCR handles (ods, odp, other images)', () => {
+    for (const n of ['a.ods', 'a.odp', 'a.gif', 'a.bmp', 'a.tif', 'a.tiff', 'a.webp'])
+      expect(() => classifySource(n)).toThrow(UnsupportedSourceError)
+  })
+
+  it('exports the accepted extension lists without a dot, lower case', () => {
+    expect(IMAGE_SOURCE_EXTENSIONS).toEqual(['png', 'jpg', 'jpeg'])
+    expect(EDITABLE_SOURCE_EXTENSIONS).not.toContain('pdf')
+    for (const ext of [...EDITABLE_SOURCE_EXTENSIONS, ...IMAGE_SOURCE_EXTENSIONS])
+      expect(ext).toMatch(/^[a-z0-9]+$/)
   })
 
   it('throws UnsupportedSourceError for unknown or missing extensions', () => {
@@ -123,6 +163,23 @@ describe('copyIntoWithSuffix', () => {
     expect(await copyIntoWithSuffix(dest, p)).toBe('ref (2).txt')
     expect(await copyIntoWithSuffix(dest, p)).toBe('ref (3).txt')
     expect(await readFile(join(dest, 'ref.txt'), 'utf8')).toBe('one')
+  })
+
+  it('also skips names taken in the extra directories, never writing there', async () => {
+    const p = await makeOriginal('doc.docx', 'new')
+    const dest = join(root, 'source')
+    const output = join(root, 'output')
+    await mkdir(output, { recursive: true })
+    await writeFile(join(output, 'doc.docx'), 'old translation')
+    await writeFile(join(output, 'doc (2).docx'), 'older translation')
+    expect(await copyIntoWithSuffix(dest, p, [output])).toBe('doc (3).docx')
+    expect(await readdir(dest)).toEqual(['doc (3).docx'])
+    expect(await readFile(join(output, 'doc.docx'), 'utf8')).toBe('old translation')
+  })
+
+  it('a missing extra directory counts as empty', async () => {
+    const p = await makeOriginal('doc.docx', 'new')
+    expect(await copyIntoWithSuffix(join(root, 'd'), p, [join(root, 'nope')])).toBe('doc.docx')
   })
 
   it('handles names without extension', async () => {
