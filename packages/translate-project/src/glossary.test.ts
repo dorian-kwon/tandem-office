@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { deflateRawSync } from 'node:zlib'
 import { describe, expect, it } from 'vitest'
 import { parseGlossary, selectGlossary, type GlossaryEntry } from './glossary'
 
@@ -87,5 +88,116 @@ describe('selectGlossary', () => {
     expect(selectGlossary(entries, 'the CONTRACT is void')).toEqual([
       { source: 'Contract', target: '계약' },
     ])
+  })
+})
+
+describe('header detection', () => {
+  it('skips Source,Target,Note', () => {
+    expect(parseGlossary(enc('Source,Target,Note\na,b\n'), 'g.csv')).toEqual([
+      { source: 'a', target: 'b' },
+    ])
+  })
+
+  it('skips 용어,번역', () => {
+    expect(parseGlossary(enc('용어,번역\n계약,contract\n'), 'g.csv')).toEqual([
+      { source: '계약', target: 'contract' },
+    ])
+  })
+
+  it('keeps a real first entry', () => {
+    expect(parseGlossary(enc('contract,계약\n'), 'g.csv')).toEqual([
+      { source: 'contract', target: '계약' },
+    ])
+  })
+})
+
+// Minimal zip writer for test fixtures: one local header + central entry per part.
+function zip(parts: { name: string; text: string; stored?: boolean }[]): Uint8Array {
+  const chunks: Buffer[] = []
+  const central: Buffer[] = []
+  let offset = 0
+  for (const part of parts) {
+    const raw = Buffer.from(part.text, 'utf-8')
+    const data = part.stored ? raw : deflateRawSync(raw)
+    const name = Buffer.from(part.name)
+    const local = Buffer.alloc(30)
+    local.writeUInt32LE(0x04034b50, 0)
+    local.writeUInt16LE(part.stored ? 0 : 8, 8)
+    local.writeUInt32LE(data.length, 18)
+    local.writeUInt32LE(raw.length, 22)
+    local.writeUInt16LE(name.length, 26)
+    const entry = Buffer.alloc(46)
+    entry.writeUInt32LE(0x02014b50, 0)
+    entry.writeUInt16LE(part.stored ? 0 : 8, 10)
+    entry.writeUInt32LE(data.length, 20)
+    entry.writeUInt32LE(raw.length, 24)
+    entry.writeUInt16LE(name.length, 28)
+    entry.writeUInt32LE(offset, 42)
+    chunks.push(local, name, data)
+    central.push(entry, name)
+    offset += 30 + name.length + data.length
+  }
+  const dir = Buffer.concat(central)
+  const end = Buffer.alloc(22)
+  end.writeUInt32LE(0x06054b50, 0)
+  end.writeUInt16LE(parts.length, 10)
+  end.writeUInt32LE(dir.length, 12)
+  end.writeUInt32LE(offset, 16)
+  return new Uint8Array(Buffer.concat([...chunks, dir, end]))
+}
+
+function xlsx(sheetData: string, shared: string, stored = false): Uint8Array {
+  return zip([
+    {
+      name: 'xl/workbook.xml',
+      text: '<workbook xmlns:r="r"><sheets><sheet name="A" r:id="rId9"/></sheets></workbook>',
+      stored,
+    },
+    {
+      name: 'xl/_rels/workbook.xml.rels',
+      text: '<Relationships><Relationship Id="rId9" Target="worksheets/data.xml"/></Relationships>',
+      stored,
+    },
+    { name: 'xl/sharedStrings.xml', text: `<sst>${shared}</sst>`, stored },
+    {
+      name: 'xl/worksheets/data.xml',
+      text: `<worksheet><sheetData>${sheetData}</sheetData></worksheet>`,
+      stored,
+    },
+  ])
+}
+
+describe('xlsx edge cases', () => {
+  const shared =
+    '<si><t>계약</t></si><si><r><t>con</t></r><r><t xml:space="preserve">tract </t></r></si><si><t>비고</t></si>'
+
+  it('reads shared strings, rich-text runs and column gaps', () => {
+    const rows =
+      '<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1"/><c r="C1" t="s"><v>2</v></c></row>' +
+      '<row r="2"><c r="A2" t="s"><v>0</v></c><c r="B2" t="s"><v>1</v></c></row>'
+    expect(parseGlossary(xlsx(rows, shared), 'g.xlsx')).toEqual([
+      { source: '계약', target: '', note: '비고' },
+      { source: '계약', target: 'contract' },
+    ])
+  })
+
+  it('reads inlineStr and numeric cells, with a gap before column C', () => {
+    const rows =
+      '<row r="1"><c r="A1" t="inlineStr"><is><t>a &amp; b</t></is></c><c r="C1"><v>42</v></c></row>'
+    expect(parseGlossary(xlsx(rows, ''), 'g.xlsx')).toEqual([
+      { source: 'a & b', target: '', note: '42' },
+    ])
+  })
+
+  it('reads stored (uncompressed) and deflated entries', () => {
+    const rows = '<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>2</v></c></row>'
+    const expected = [{ source: '계약', target: '비고' }]
+    expect(parseGlossary(xlsx(rows, shared, true), 'g.xlsx')).toEqual(expected)
+    expect(parseGlossary(xlsx(rows, shared, false), 'g.xlsx')).toEqual(expected)
+  })
+
+  it('throws on an out-of-range shared string index', () => {
+    const rows = '<row r="1"><c r="A1" t="s"><v>99</v></c></row>'
+    expect(() => parseGlossary(xlsx(rows, shared), 'g.xlsx')).toThrow(/out of range/)
   })
 })

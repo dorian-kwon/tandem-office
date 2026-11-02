@@ -1,10 +1,12 @@
+import { inflateRawSync } from 'node:zlib'
+
 export type GlossaryEntry = { source: string; target: string; note?: string }
 
 /** Glossaries above this many entries are filtered per paragraph before they go to the model. */
 export const DEFAULT_GLOSSARY_LIMIT = 200
 
-const HEADER_SOURCE = '원어'
-const HEADER_TARGET = '번역어'
+const HEADER_SOURCE_ALIASES = ['원어', '용어', '원문', '출발어', 'source', 'term', 'src']
+const HEADER_TARGET_ALIASES = ['번역어', '번역', '역어', '도착어', 'target', 'translation', 'tgt']
 
 /** Upper bound for any single inflated zip part, a guard against zip bombs. */
 const MAX_PART_BYTES = 64 * 1024 * 1024
@@ -27,13 +29,20 @@ export function selectGlossary(
   return entries.filter((entry) => haystack.includes(entry.source.toLowerCase()))
 }
 
+function isHeader(source: string, target: string): boolean {
+  return (
+    HEADER_SOURCE_ALIASES.includes(source.toLowerCase()) &&
+    HEADER_TARGET_ALIASES.includes(target.toLowerCase())
+  )
+}
+
 function rowsToEntries(rows: string[][]): GlossaryEntry[] {
   const entries: GlossaryEntry[] = []
   rows.forEach((row, index) => {
     const source = (row[0] ?? '').trim()
     const target = (row[1] ?? '').trim()
     const note = (row[2] ?? '').trim()
-    if (index === 0 && source === HEADER_SOURCE && target === HEADER_TARGET) return
+    if (index === 0 && isHeader(source, target)) return
     if (source === '') return
     entries.push(note === '' ? { source, target } : { source, target, note })
   })
@@ -177,7 +186,8 @@ function parseSheet(xml: string, shared: string[]): string[][] {
       const body = cell[2] ?? ''
       const ref = attr(attrs, 'r')
       const col = ref === undefined ? next : columnIndex(ref)
-      if (col < 0 || col > 15) {
+      // Only columns A to C (source, target, note) are read; anything further right is ignored.
+      if (col < 0 || col > 2) {
         next += 1
         continue
       }
@@ -185,8 +195,12 @@ function parseSheet(xml: string, shared: string[]): string[][] {
       const type = attr(attrs, 't')
       const raw = /<v\b[^>]*>([\s\S]*?)<\/v>/.exec(body)?.[1]
       let value = ''
-      if (type === 's') value = shared[Number(raw)] ?? ''
-      else if (type === 'inlineStr') value = runText(body)
+      if (type === 's') {
+        const text = shared[Number(raw)]
+        if (text === undefined)
+          throw new Error(`Corrupt xlsx: shared string ${raw} is out of range`)
+        value = text
+      } else if (type === 'inlineStr') value = runText(body)
       else if (raw !== undefined) value = decodeXml(raw)
       while (cells.length < col) cells.push('')
       cells[col] = value
@@ -231,153 +245,12 @@ function readZip(bytes: Uint8Array): Map<string, () => Uint8Array> {
         view.getUint16(localOffset + 28, true)
       const data = bytes.subarray(dataStart, dataStart + compressedSize)
       if (method === 0) return data
-      if (method === 8) return inflateRaw(data, size)
+      if (method === 8) {
+        // maxOutputLength is the zip-bomb guard: inflate aborts past the cap
+        return inflateRawSync(data, { maxOutputLength: MAX_PART_BYTES })
+      }
       throw new Error(`Unsupported zip compression method ${method}`)
     })
   }
   return parts
-}
-
-const LENGTH_BASE = [
-  3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131,
-  163, 195, 227, 258,
-]
-const LENGTH_EXTRA = [
-  0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0,
-]
-const DIST_BASE = [
-  1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049,
-  3073, 4097, 6145, 8193, 12289, 16385, 24577,
-]
-const DIST_EXTRA = [
-  0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13,
-]
-const CODE_LENGTH_ORDER = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15]
-
-type Huffman = { counts: Uint16Array; symbols: Uint16Array }
-
-function buildHuffman(lengths: ArrayLike<number>, n: number): Huffman {
-  const counts = new Uint16Array(16)
-  for (let i = 0; i < n; i++) counts[lengths[i]]++
-  const offsets = new Uint16Array(16)
-  for (let i = 1; i < 15; i++) offsets[i + 1] = offsets[i] + counts[i]
-  const symbols = new Uint16Array(n)
-  for (let i = 0; i < n; i++) if (lengths[i] !== 0) symbols[offsets[lengths[i]]++] = i
-  return { counts, symbols }
-}
-
-/** Raw DEFLATE (RFC 1951) decoder. `expected` is the size the zip directory declares. */
-function inflateRaw(input: Uint8Array, expected: number): Uint8Array {
-  let out = new Uint8Array(Math.max(expected, 16))
-  let outLen = 0
-  let inPos = 0
-  let bitBuf = 0
-  let bitCount = 0
-
-  const bits = (need: number): number => {
-    while (bitCount < need) {
-      if (inPos >= input.length) throw new Error('Corrupt xlsx: unexpected end of data')
-      bitBuf |= input[inPos++] << bitCount
-      bitCount += 8
-    }
-    const value = bitBuf & ((1 << need) - 1)
-    bitBuf >>>= need
-    bitCount -= need
-    return value
-  }
-  const decode = (h: Huffman): number => {
-    let code = 0
-    let first = 0
-    let index = 0
-    for (let len = 1; len <= 15; len++) {
-      code |= bits(1)
-      const count = h.counts[len]
-      if (code - count < first) return h.symbols[index + (code - first)]
-      index += count
-      first += count
-      first <<= 1
-      code <<= 1
-    }
-    throw new Error('Corrupt xlsx: bad huffman code')
-  }
-  const push = (byte: number): void => {
-    if (outLen >= MAX_PART_BYTES) throw new Error('xlsx part is too large')
-    if (outLen === out.length) {
-      const grown = new Uint8Array(Math.min(out.length * 2, MAX_PART_BYTES))
-      grown.set(out)
-      out = grown
-    }
-    out[outLen++] = byte
-  }
-
-  const fixedLengths = new Uint8Array(288)
-  fixedLengths.fill(8, 0, 144)
-  fixedLengths.fill(9, 144, 256)
-  fixedLengths.fill(7, 256, 280)
-  fixedLengths.fill(8, 280, 288)
-  const fixedLit = buildHuffman(fixedLengths, 288)
-  const fixedDist = buildHuffman(new Uint8Array(30).fill(5), 30)
-
-  let last = false
-  while (!last) {
-    last = bits(1) === 1
-    const type = bits(2)
-    if (type === 0) {
-      bitBuf = 0
-      bitCount = 0
-      if (inPos + 4 > input.length) throw new Error('Corrupt xlsx: unexpected end of data')
-      const len = input[inPos] | (input[inPos + 1] << 8)
-      inPos += 4
-      if (inPos + len > input.length) throw new Error('Corrupt xlsx: unexpected end of data')
-      for (let i = 0; i < len; i++) push(input[inPos++])
-      continue
-    }
-    if (type === 3) throw new Error('Corrupt xlsx: bad block type')
-    let lit = fixedLit
-    let dist = fixedDist
-    if (type === 2) {
-      const hlit = bits(5) + 257
-      const hdist = bits(5) + 1
-      const hclen = bits(4) + 4
-      const clLengths = new Uint8Array(19)
-      for (let i = 0; i < hclen; i++) clLengths[CODE_LENGTH_ORDER[i]] = bits(3)
-      const clHuffman = buildHuffman(clLengths, 19)
-      const lengths = new Uint8Array(hlit + hdist)
-      let i = 0
-      while (i < hlit + hdist) {
-        const sym = decode(clHuffman)
-        if (sym < 16) lengths[i++] = sym
-        else {
-          let repeat: number
-          let value = 0
-          if (sym === 16) {
-            if (i === 0) throw new Error('Corrupt xlsx: bad code lengths')
-            value = lengths[i - 1]
-            repeat = 3 + bits(2)
-          } else if (sym === 17) repeat = 3 + bits(3)
-          else repeat = 11 + bits(7)
-          if (i + repeat > hlit + hdist) throw new Error('Corrupt xlsx: bad code lengths')
-          while (repeat-- > 0) lengths[i++] = value
-        }
-      }
-      lit = buildHuffman(lengths.subarray(0, hlit), hlit)
-      dist = buildHuffman(lengths.subarray(hlit), hdist)
-    }
-    for (;;) {
-      const sym = decode(lit)
-      if (sym < 256) push(sym)
-      else if (sym === 256) break
-      else {
-        const li = sym - 257
-        if (li >= 29) throw new Error('Corrupt xlsx: bad length symbol')
-        const length = LENGTH_BASE[li] + bits(LENGTH_EXTRA[li])
-        const di = decode(dist)
-        if (di >= 30) throw new Error('Corrupt xlsx: bad distance symbol')
-        const distance = DIST_BASE[di] + bits(DIST_EXTRA[di])
-        if (distance > outLen) throw new Error('Corrupt xlsx: bad distance')
-        for (let k = 0; k < length; k++) push(out[outLen - distance])
-      }
-    }
-  }
-  return out.subarray(0, outLen)
 }
