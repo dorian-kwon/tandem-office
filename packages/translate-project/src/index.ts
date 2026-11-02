@@ -14,3 +14,13 @@ export {
   importSource,
   verifySource,
 } from './source-guard'
+export {
+  InvalidProjectNameError,
+  NotAProjectError,
+  ProjectExistsError,
+  createProject,
+  loadProject,
+  projectStatus,
+  removeProject,
+  saveProject,
+} from './project-store'
