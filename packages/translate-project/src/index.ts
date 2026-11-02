@@ -34,6 +34,7 @@ export {
   removeReference,
   removeSource,
 } from './materials'
+export { InvalidSourceKindError, setSourceKind } from './source-kind'
 export { withProjectLock } from './project-lock'
 export { composeContext } from './compose'
 export type { ComposedContext, ComposedItemKind } from './compose'
