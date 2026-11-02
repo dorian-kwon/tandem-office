@@ -90,7 +90,8 @@ describe('createProject names and failures', () => {
     vi.mocked(projectFile.serializeProjectFile).mockImplementationOnce(() => {
       throw new Error('boom')
     })
-    vi.mocked(rm).mockRejectedValueOnce(new Error('EPERM cleanup'))
+    vi.mocked(rm).mockRejectedValue(new Error('EPERM cleanup'))
+    // Every rm fails, including the temp-file cleanup inside saveProject.
     await expect(createProject(root, 'Stuck', 'ko', 'en')).rejects.toThrow('boom')
   })
 

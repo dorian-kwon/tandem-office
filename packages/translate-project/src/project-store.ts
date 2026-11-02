@@ -91,7 +91,7 @@ export async function saveProject(dir: string, p: ProjectFile): Promise<void> {
     await writeFile(tmp, serializeProjectFile(p), 'utf8')
     await rename(tmp, target)
   } catch (e) {
-    await rm(tmp, { force: true })
+    await rm(tmp, { force: true }).catch(() => undefined)
     throw e
   }
 }
