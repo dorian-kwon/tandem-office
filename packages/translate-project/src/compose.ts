@@ -33,12 +33,16 @@ export function composeContext(input: {
     input.paragraph,
     input.glossaryLimit ?? DEFAULT_GLOSSARY_LIMIT,
   )
-  const glossaryText = selected
-    .map((e) => `${e.source} → ${e.target}${e.note ? ` (${e.note})` : ''}`)
-    .join('\n')
+  const glossaryLines = selected.map((e) => {
+    const note = e.note ? oneLine(e.note) : ''
+    return `${oneLine(e.source)} → ${oneLine(e.target)}${note ? ` (${note})` : ''}`
+  })
+  const glossaryText = glossaryLines.length === 0 ? '' : `단어집:\n${glossaryLines.join('\n')}`
   const references = project.references
   const referenceText =
-    references.length === 0 ? '' : `참고자료:\n${references.map((name) => `- ${name}`).join('\n')}`
+    references.length === 0
+      ? ''
+      : `참고자료:\n${references.map((name) => `- ${oneLine(name)}`).join('\n')}`
 
   const sections = [system, projectText, glossaryText, referenceText]
   const text = sections
@@ -66,4 +70,9 @@ export function composeContext(input: {
       },
     ],
   }
+}
+
+/** Collapses any whitespace run containing a line break so a value stays on one prompt line. */
+function oneLine(value: string): string {
+  return value.replace(/\s*[\r\n]+\s*/g, ' ').trim()
 }
