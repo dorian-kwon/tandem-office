@@ -218,9 +218,12 @@ export interface ProjectChatController {
   settled(): Promise<void>
   /**
    * Right before a send: feed the other window's finished exchanges into the
-   * loop, then read the project context and open the run scope.
+   * loop, then read the project context and open the run scope. `query`: the
+   * request text, for a panel that records its message only after this call;
+   * without it, the user message handed to `persist` since the last send is
+   * used (once), or none.
    */
-  prepareSend(): Promise<ProjectRunPrepared>
+  prepareSend(query?: string): Promise<ProjectRunPrepared>
   /** after the run (done, stopped or failed): close the run scope, feed what arrived meanwhile */
   finishSend(): Promise<void>
   /** the document was saved (first save, save as): chat and choice stay (spec 5.3.6) */
@@ -305,6 +308,14 @@ const INITIAL_STATE: ProjectChatState = {
 }
 
 /** The chat logic without React (the hook wraps it; tests drive it directly) */
+/** Which chat `chat` is (kind and ids), so a flag change of the same chat is no switch */
+function chatKey(chat: ProjectActiveChat | null): string {
+  if (!chat) return ''
+  return chat.kind === 'project'
+    ? `project:${chat.projectId}:${chat.chatId}`
+    : `legacy:${chat.legacy.projectId}:${chat.legacy.chatId}`
+}
+
 /** A user message as the request text: its words, then the selection it is about */
 function requestText(record: ProjectChatRecord): string {
   return [record.text, record.scope?.text ?? '']
@@ -320,7 +331,15 @@ export function createProjectChatController(initial: ProjectChatOptions): Projec
   const legacyApi = options.legacyApi !== undefined ? options.legacyApi : windowLegacyChatApi()
   let state: ProjectChatState = { ...INITIAL_STATE, available: !!bridge }
   const listeners = new Set<() => void>()
+  /** the last user message's text, read by the next `prepareSend` once (never stored) */
+  let pendingQuery: string | null = null
   const setState = (patch: Partial<ProjectChatState>) => {
+    // another chat (new, switched, deleted, another project): a message recorded for
+    // the old one is not this chat's request text. The first chat a panel opens is no
+    // switch: a message sent while the selection was still being read stays its text.
+    if (state.chat && 'chat' in patch && chatKey(patch.chat ?? null) !== chatKey(state.chat)) {
+      pendingQuery = null
+    }
     state = { ...state, ...patch }
     for (const listener of listeners) listener()
   }
@@ -342,8 +361,6 @@ export function createProjectChatController(initial: ProjectChatOptions): Projec
   let startToken = 0
   /** an "open this chat" that came before the selection was known */
   let deferredOpen: ProjectChatRef | null = null
-  /** the last user message's text, read by the next `prepareSend` once (never stored) */
-  let pendingQuery: string | null = null
 
   const markUnwritable = () => {
     if (!state.unwritable) setState({ unwritable: true })
@@ -690,8 +707,9 @@ export function createProjectChatController(initial: ProjectChatOptions): Projec
       return result
     },
     persist(record) {
-      // the request text for the next context read (a translation glossary picks terms by it)
-      if (record.role === 'user') pendingQuery = requestText(record)
+      // the request text for the next context read (a translation glossary picks terms by it);
+      // an answer (or an error reply) ends that exchange
+      pendingQuery = record.role === 'user' ? requestText(record) : null
       if (!state.ready) return false
       const chat = state.chat
       if (!chat) return false
@@ -730,14 +748,16 @@ export function createProjectChatController(initial: ProjectChatOptions): Projec
       return true
     },
     settled: () => writes,
-    async prepareSend() {
+    async prepareSend(given) {
       flush()
-      const query = pendingQuery
+      const query = given !== undefined ? requestText({ role: 'user', text: given }) : pendingQuery
       pendingQuery = null
       if (!run) return { status: 'none' }
       return query ? run.prepare(query) : run.prepare()
     },
     async finishSend() {
+      // a send that stopped before its context read leaves no text for a later one
+      pendingQuery = null
       await run?.finish()
       flush()
     },

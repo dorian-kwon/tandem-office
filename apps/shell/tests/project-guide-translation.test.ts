@@ -3,7 +3,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ProjectTrustAnswer } from '@genoffice/project-store'
+import { createProject } from '@genoffice/translate-project'
+import { writeTranslationProjects, writeTranslationSystemPrompt } from '../src/main/app-settings'
 import { ProjectGuide, type ProjectGuideDeps } from '../src/main/projects/project-guide'
+import { translationContextForFolder } from '../src/main/translate/context-injection'
 
 /** The project guide's translation hook: only registered translation folders under trust `use` change */
 
@@ -147,5 +150,40 @@ describe('ProjectGuide.readContext with a translation hook', () => {
     const context = await contextOf(guide, root)
     expect(context.translation).toBeUndefined()
     expect(context.notices.some((n) => n.kind === 'translation-context')).toBe(false)
+  })
+})
+
+describe('the real translation hook on an ordinary project folder', () => {
+  it('gives the same readContext output as a guide without the hook, with or without a query', async () => {
+    // a registered translation project exists elsewhere, with a prompt and a glossary file
+    const other = (await createProject(folder('translations'), 'Manual', 'en', 'ko')).dir
+    writeTranslationProjects(settingsPath, [{ dir: other, lastOpened: 1 }])
+    writeTranslationSystemPrompt(settingsPath, 'GLOBAL RULES')
+
+    const root = folder('plain')
+    mkdirSync(join(root, '.ieumoffice'), { recursive: true })
+    writeFileSync(join(root, '.ieumoffice', 'instructions.md'), 'Be brief.')
+    writeFileSync(join(root, 'notes.md'), '# notes')
+    const plain = await makeGuide().addFolder(root, answer('use'))
+    if (plain.status !== 'added') throw new Error('not added')
+    const id = plain.project.id
+
+    const unwired = makeGuide()
+    const wired = makeGuide({
+      translationContext: (folderRoot, query) =>
+        translationContextForFolder(folderRoot, { settingsPath }, query),
+    })
+    // settle the first-read hash records so both guides read the same state
+    await unwired.readContext(id)
+    for (const options of [{}, { query: 'translate the engine part' }]) {
+      const expected = JSON.stringify(await unwired.readContext(id, options))
+      expect(JSON.stringify(await wired.readContext(id, options))).toBe(expected)
+    }
+    // the same wiring does add the translation part for the translation folder itself
+    const listed = await wired.addFolder(other, answer('use'))
+    if (listed.status !== 'added') throw new Error('not added')
+    const translated = await wired.readContext(listed.project.id)
+    if (translated.status !== 'ok') throw new Error('no context')
+    expect(translated.context.translation?.prompts).toContain('GLOBAL RULES')
   })
 })

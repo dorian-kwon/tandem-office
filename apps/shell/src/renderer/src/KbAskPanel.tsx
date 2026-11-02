@@ -707,8 +707,9 @@ export function KbAskPanel({
       else stopWith(t('askScopeGone'))
       return
     }
-    // the project's context for this request, read now and fixed for the run
-    const prepared = await projectChatRef.current.prepareSend()
+    // the project's context for this request, read now and fixed for the run; the
+    // question is recorded only once it runs, so its text is handed over here
+    const prepared = await projectChatRef.current.prepareSend(instruction)
     if (askSeqRef.current !== seq) {
       endRunScope()
       void projectChatRef.current.finishSend()

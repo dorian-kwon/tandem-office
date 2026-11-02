@@ -472,7 +472,6 @@ describe('the request text for the project context (translation glossary)', () =
       text: 'Translate this',
       scope: { label: 'Selection', text: 'The engine starts.' },
     })
-    controller.persist({ role: 'assistant', text: 'not a request' })
     await controller.prepareSend()
     expect(fake.bridge.readContext).toHaveBeenLastCalledWith({
       projectId: 'p1',
@@ -487,6 +486,52 @@ describe('the request text for the project context (translation glossary)', () =
   it('sends no query when there is no user message yet', async () => {
     const { controller, fake } = setup({ selection: P1 })
     await controller.start()
+    await controller.prepareSend()
+    expect(fake.bridge.readContext).toHaveBeenLastCalledWith({ projectId: 'p1' })
+  })
+
+  it('uses a text handed to prepareSend over a recorded one', async () => {
+    const { controller, fake } = setup({ selection: P1 })
+    await controller.start()
+    controller.persist({ role: 'user', text: 'older' })
+    await controller.prepareSend('  the question asked now  ')
+    expect(fake.bridge.readContext).toHaveBeenLastCalledWith({
+      projectId: 'p1',
+      query: 'the question asked now',
+    })
+    await controller.finishSend()
+    await controller.prepareSend()
+    expect(fake.bridge.readContext).toHaveBeenLastCalledWith({ projectId: 'p1' })
+  })
+
+  it('drops the recorded text when the chat changes', async () => {
+    const { controller, fake } = setup({ selection: P1 })
+    await controller.start()
+    controller.persist({ role: 'user', text: 'for the old chat' })
+    expect(await controller.newChat()).toBe(true)
+    await controller.prepareSend()
+    expect(fake.bridge.readContext).toHaveBeenLastCalledWith({ projectId: 'p1' })
+
+    controller.persist({ role: 'user', text: 'for p1' })
+    await controller.selectProject(null)
+    await controller.selectProject('p1')
+    await controller.prepareSend()
+    expect(fake.bridge.readContext).toHaveBeenLastCalledWith({ projectId: 'p1' })
+  })
+
+  it('does not leak an aborted send’s text into the next send', async () => {
+    const { controller, fake } = setup({ selection: P1 })
+    await controller.start()
+    // recorded, then the send stopped before its context read
+    controller.persist({ role: 'user', text: 'aborted question' })
+    await controller.finishSend()
+    // a retry that does not record again (sheets' already-recorded retry, a slides page)
+    await controller.prepareSend()
+    expect(fake.bridge.readContext).toHaveBeenLastCalledWith({ projectId: 'p1' })
+
+    // an error reply recorded after the question also ends it
+    controller.persist({ role: 'user', text: 'failed question' })
+    controller.persist({ role: 'assistant', text: 'Not sent' })
     await controller.prepareSend()
     expect(fake.bridge.readContext).toHaveBeenLastCalledWith({ projectId: 'p1' })
   })

@@ -440,6 +440,21 @@ describe('the home ask with a project', () => {
     expect(kbOpenScope).toHaveBeenCalledWith({ group: 'Unit A', projectId: 'p1' })
   })
 
+  it('reads the context with each question’s own text (translation glossary terms)', async () => {
+    await renderPanel()
+    await ask('Translate the engine section')
+    expect(bridge.readContext).toHaveBeenLastCalledWith({
+      projectId: 'p1',
+      query: 'Translate the engine section',
+    })
+    await answer([{ type: 'delta', text: 'Done.' }, { type: 'done' }])
+    await ask('Now the brake section')
+    expect(bridge.readContext).toHaveBeenLastCalledWith({
+      projectId: 'p1',
+      query: 'Now the brake section',
+    })
+  })
+
   it('asks even when nothing is starred: the folder is there to read', async () => {
     starred = []
     await renderPanel()
