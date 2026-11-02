@@ -3,6 +3,7 @@ import { useI18n } from '../locale'
 import { ProjectDetail } from './ProjectDetail'
 import { ProjectList } from './ProjectList'
 import { makeText, translateErrorText } from './shared'
+import { markSourceChanged } from './source-change-notice'
 import './translate-global'
 
 /**
@@ -30,6 +31,8 @@ export function TranslationPanel() {
     setNotice(null)
     try {
       const result = await api.openTranslation({ dir, file })
+      // the tab strip shows it over the split; the detail screen keeps it too
+      if (result.hashStatus === 'changed') markSourceChanged(result.sourceTabId)
       if (current.current !== dir) return
       setNotice(
         result.hashStatus === 'changed' ? { text: s('warnSourceChanged'), isError: false } : null,

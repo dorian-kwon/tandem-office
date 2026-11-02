@@ -68,4 +68,6 @@ export const zh = {
   showSource: 'Show source',
   hideOutput: 'Hide translation',
   showOutput: 'Show translation',
+  sourceChangedShort: 'Source copy changed',
+  dismissNotice: 'Dismiss',
 }

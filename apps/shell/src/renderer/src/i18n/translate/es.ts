@@ -70,4 +70,6 @@ export const es = {
   showSource: 'Show source',
   hideOutput: 'Hide translation',
   showOutput: 'Show translation',
+  sourceChangedShort: 'Source copy changed',
+  dismissNotice: 'Dismiss',
 } satisfies Record<keyof typeof zh, string>

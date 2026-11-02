@@ -65,4 +65,6 @@ export const ko = {
   showSource: '원문 보이기',
   hideOutput: '번역본 숨기기',
   showOutput: '번역본 보이기',
+  sourceChangedShort: '원문 사본이 바뀌었습니다',
+  dismissNotice: '닫기',
 } satisfies Record<keyof typeof zh, string>

@@ -128,3 +128,33 @@
   color: var(--tabstrip-text-active);
   border-style: dashed;
 }
+
+/* "Source copy changed" notice next to the hide/show control. */
+.translate-source-notice {
+  -webkit-app-region: no-drag;
+  display: flex;
+  flex-shrink: 0;
+  align-self: center;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 4px 0 8px;
+  border: 1px solid var(--tab-separator);
+  border-radius: 6px;
+  color: var(--tabstrip-text-active);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.translate-source-notice-close {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--tabstrip-text);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}

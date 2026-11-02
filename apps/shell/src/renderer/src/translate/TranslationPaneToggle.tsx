@@ -2,6 +2,7 @@ import type { SplitViewState } from '../../../shared/split-view-api'
 import type { TabSummary } from '../../../shared/tabs-api'
 import { useI18n } from '../locale'
 import { makeText } from './shared'
+import { dismissSourceChanged, useChangedSources } from './source-change-notice'
 import './translate.css'
 import './translate-global'
 
@@ -16,10 +17,13 @@ export interface TranslationPaneToggleProps {
  * chrome that stays visible. Shown only while the split holds a read-only
  * (source) pane. Hiding keeps the pane's document alive; only one pane can be
  * hidden, so hiding one shows the other (main: TabManager.setPaneHidden).
+ * When the source copy had changed since it was added, a dismissible notice
+ * sits next to the buttons.
  */
 export function TranslationPaneToggle({ split, tabs }: TranslationPaneToggleProps) {
   const { lang } = useI18n()
   const s = makeText(lang)
+  const changedSources = useChangedSources()
   const api = window.translateApi
   if (!split || !api) return null
   const readOnlyOf = (id: string) => tabs.find((t) => t.id === id)?.readOnly === true
@@ -49,10 +53,27 @@ export function TranslationPaneToggle({ split, tabs }: TranslationPaneToggleProp
     )
   }
 
+  const sourceTabId = readOnlyOf(split.aTabId) ? split.aTabId : split.bTabId
   return (
-    <div className="translate-pane-toggle" role="group" aria-label={s('paneToggleGroup')}>
-      {button('a')}
-      {button('b')}
-    </div>
+    <>
+      {changedSources.has(sourceTabId) && (
+        <div className="translate-source-notice" role="status" title={s('warnSourceChanged')}>
+          <span>{s('sourceChangedShort')}</span>
+          <button
+            type="button"
+            className="translate-source-notice-close"
+            aria-label={s('dismissNotice')}
+            title={s('dismissNotice')}
+            onClick={() => dismissSourceChanged(sourceTabId)}
+          >
+            ×
+          </button>
+        </div>
+      )}
+      <div className="translate-pane-toggle" role="group" aria-label={s('paneToggleGroup')}>
+        {button('a')}
+        {button('b')}
+      </div>
+    </>
   )
 }

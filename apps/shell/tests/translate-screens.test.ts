@@ -11,6 +11,10 @@ import { ProjectList } from '../src/renderer/src/translate/ProjectList'
 import { ProjectDetail } from '../src/renderer/src/translate/ProjectDetail'
 import { TranslationPanel } from '../src/renderer/src/translate/TranslationPanel'
 import { TranslationPaneToggle } from '../src/renderer/src/translate/TranslationPaneToggle'
+import {
+  dismissSourceChanged,
+  markSourceChanged,
+} from '../src/renderer/src/translate/source-change-notice'
 import { LocaleProvider } from '../src/renderer/src/locale'
 
 /**
@@ -505,5 +509,67 @@ describe('TranslationPaneToggle', () => {
     expect(api.setPaneHidden).toHaveBeenLastCalledWith({ side: 'left', hidden: false })
     await click(buttonByText('Hide translation'))
     expect(api.setPaneHidden).toHaveBeenLastCalledWith({ side: 'right', hidden: true })
+  })
+})
+
+describe('changed-source notice in the tab strip', () => {
+  const tabs = [
+    {
+      id: 't1',
+      kind: 'docs' as const,
+      title: 'a.docx',
+      closable: true,
+      active: false,
+      readOnly: true as const,
+    },
+    { id: 't2', kind: 'docs' as const, title: 'a.docx', closable: true, active: true },
+  ]
+  const split = {
+    aTabId: 't1',
+    bTabId: 't2',
+    orientation: 'side' as const,
+    ratio: 0.5,
+    focus: 'b' as const,
+    collapsed: null,
+  }
+
+  // the store is module state: an earlier test may have marked t1
+  beforeEach(() => dismissSourceChanged('t1'))
+  afterEach(() => dismissSourceChanged('t1'))
+
+  it('is absent while the source copy matched its hash', async () => {
+    await render(TranslationPaneToggle, { split, tabs })
+    expect(host.querySelector('.translate-source-notice')).toBeNull()
+  })
+
+  it('shows over the split after opening a changed source, and can be dismissed', async () => {
+    api.openTranslation.mockResolvedValue({
+      sourceTabId: 't1',
+      outputTabId: 't2',
+      hashStatus: 'changed',
+    })
+    api.list.mockResolvedValue([entry({ dir: '/p/a', name: 'A' })])
+    api.getProject.mockResolvedValue(
+      project({ sources: [{ file: 'a.docx', sha256: 'x', kind: 'editable' }] }),
+    )
+    await render(TranslationPanel, {})
+    await click(host.querySelector('.translate-open')!)
+    await click(buttonByText('Open translation'))
+    // the tab strip is another part of the same renderer
+    act(() => root.unmount())
+    root = createRoot(host)
+    await render(TranslationPaneToggle, { split, tabs })
+    const notice = host.querySelector('.translate-source-notice')
+    expect(notice?.textContent).toContain('Source copy changed')
+    expect(notice?.getAttribute('title')).toContain('The source copy has changed')
+    await click(host.querySelector('[aria-label="Dismiss"]')!)
+    expect(host.querySelector('.translate-source-notice')).toBeNull()
+  })
+
+  it('belongs to that source tab only', async () => {
+    markSourceChanged('other')
+    await render(TranslationPaneToggle, { split, tabs })
+    expect(host.querySelector('.translate-source-notice')).toBeNull()
+    dismissSourceChanged('other')
   })
 })
