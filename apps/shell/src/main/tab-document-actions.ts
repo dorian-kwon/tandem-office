@@ -37,6 +37,8 @@ export function runTabDocumentAction(
     contents.isDestroyed()
   )
     return
+  // the translation view's source pane is never saved (Save As included)
+  if (tab.readOnly && action !== 'print') return
   deps.tabs.activateTab(id)
   const command = action === 'saveAs' ? 'save-as' : action
   switch (tab.kind) {

@@ -88,6 +88,7 @@ import type { GenerateHandoff } from '../shared/generate-api'
 import { dropGenerateHandoff, queueGenerateHandoffFor } from './generate/handoff'
 import type { ConvertedDocument } from './generate/convert'
 import { queueConvertedContent } from './generate/converted-tab'
+import { installReadOnlyGuard } from './read-only-guard'
 import { releaseClosedRenderer } from './renderer-disposal'
 import type { SessionStripState } from './session-record'
 
@@ -191,6 +192,9 @@ interface TabRecord {
   opener?: UnloadedTabOpener
   /** set once an unloaded tab was loaded: when its document is ready */
   lazy?: LazyLoadState
+  /** opened read-only (the translation view's source pane): the shell refuses
+   *  its saves, keeps it in the strip and never asks to save it on close */
+  readOnly?: boolean
 }
 
 const HOME_ID = 'home'
@@ -471,7 +475,34 @@ export class TabManager {
       closable: t.id !== HOME_ID,
       active: t.id === this.activeId,
       ...(t.filePath ? { filePath: t.filePath } : {}),
+      ...(t.readOnly ? { readOnly: true as const } : {}),
     }))
+  }
+
+  /**
+   * Make a document tab read-only for good (the translation view's source
+   * pane): its keyboard edits and save channels are refused at the shell's
+   * boundary (read-only-guard.ts). An unloaded tab is loaded first. False for
+   * Home, help, Present or an unknown tab.
+   */
+  setTabReadOnly(id: string): boolean {
+    const tab = this.tabById(id)
+    if (!tab || tab.kind === 'home' || tab.kind === 'help' || tab.present) return false
+    if (tab.readOnly) return true
+    if (!this.loadTab(tab) || !tab.view) return false
+    installReadOnlyGuard(tab.view.webContents)
+    tab.readOnly = true
+    this.onChanged()
+    return true
+  }
+
+  isReadOnlyTab(id: string): boolean {
+    return this.tabById(id)?.readOnly === true
+  }
+
+  /** whether this view is a read-only tab's (the autosave-default broadcast skips it) */
+  isReadOnlyWebContents(webContentsId: number): boolean {
+    return this.tabs.some((t) => t.readOnly && t.view?.webContents.id === webContentsId)
   }
 
   /**
@@ -487,7 +518,8 @@ export class TabManager {
     // an unloaded tab is listed like any other (clean: it has no edits yet);
     // a caller that targets it loads it through ensureTabLoaded
     const tabs = this.tabs.filter(
-      (tab) => tab.kind !== 'home' && !tab.present && (tab.view || tab.opener),
+      // a read-only tab is not offered to agents: their tools could save it
+      (tab) => tab.kind !== 'home' && !tab.present && !tab.readOnly && (tab.view || tab.opener),
     )
     return Promise.all(
       tabs.map(async (tab) => ({
@@ -1120,8 +1152,9 @@ export class TabManager {
    */
   sessionTabs(): SessionStripState {
     return {
+      // a read-only tab would come back as an ordinary, editable one
       tabs: this.tabs
-        .filter((t) => t.kind !== 'home' && t.kind !== 'help' && !t.present)
+        .filter((t) => t.kind !== 'home' && t.kind !== 'help' && !t.present && !t.readOnly)
         .map((t) => ({
           id: t.id,
           kind: t.kind as DocumentTabKind,
@@ -1129,7 +1162,11 @@ export class TabManager {
           ...(t.filePath ? { filePath: t.filePath } : {}),
         })),
       activeId: this.activeId,
-      split: this.splitState(),
+      split:
+        this.split &&
+        (this.isReadOnlyTab(this.split.aTabId) || this.isReadOnlyTab(this.split.bTabId))
+          ? null
+          : this.splitState(),
     }
   }
 
@@ -1547,7 +1584,11 @@ export class TabManager {
   dirtySheetsTabs(): Array<{ id: string; webContents: WebContents }> {
     return this.tabs
       .filter(
-        (t) => t.kind === 'sheets' && t.view && sheetsPendingEditCount(t.view.webContents.id) > 0,
+        (t) =>
+          t.kind === 'sheets' &&
+          t.view &&
+          !t.readOnly &&
+          sheetsPendingEditCount(t.view.webContents.id) > 0,
       )
       .map((t) => ({ id: t.id, webContents: t.view!.webContents }))
   }
@@ -1555,35 +1596,43 @@ export class TabManager {
   /** pdf tabs whose renderer reports unsaved markups/form edits (shell-close guard) */
   dirtyPdfTabs(): Array<{ id: string; webContents: WebContents }> {
     return this.tabs
-      .filter((t) => t.kind === 'pdf' && t.view && pdfIsDirty(t.view.webContents.id))
+      .filter((t) => t.kind === 'pdf' && t.view && !t.readOnly && pdfIsDirty(t.view.webContents.id))
       .map((t) => ({ id: t.id, webContents: t.view!.webContents }))
   }
 
   /** markdown tabs whose renderer reports unsaved edits (shell-close guard) */
   dirtyMarkdownTabs(): Array<{ id: string; webContents: WebContents }> {
     return this.tabs
-      .filter((t) => t.kind === 'markdown' && t.view && markdownIsDirty(t.view.webContents.id))
+      .filter(
+        (t) =>
+          t.kind === 'markdown' && t.view && !t.readOnly && markdownIsDirty(t.view.webContents.id),
+      )
       .map((t) => ({ id: t.id, webContents: t.view!.webContents }))
   }
 
   /** html tabs whose renderer reports unsaved edits (shell-close guard) */
   dirtyHtmlTabs(): Array<{ id: string; webContents: WebContents }> {
     return this.tabs
-      .filter((t) => t.kind === 'html' && t.view && htmlIsDirty(t.view.webContents.id))
+      .filter(
+        (t) => t.kind === 'html' && t.view && !t.readOnly && htmlIsDirty(t.view.webContents.id),
+      )
       .map((t) => ({ id: t.id, webContents: t.view!.webContents }))
   }
 
   /** mind map tabs whose renderer reports unsaved edits (shell-close guard) */
   dirtyMindmapTabs(): Array<{ id: string; webContents: WebContents }> {
     return this.tabs
-      .filter((t) => t.kind === 'mindmap' && t.view && mindmapIsDirty(t.view.webContents.id))
+      .filter(
+        (t) =>
+          t.kind === 'mindmap' && t.view && !t.readOnly && mindmapIsDirty(t.view.webContents.id),
+      )
       .map((t) => ({ id: t.id, webContents: t.view!.webContents }))
   }
 
   /** hwp tabs whose renderer reports unsaved edits (shell-close guard) */
   dirtyHwpTabs(): Array<{ id: string; webContents: WebContents }> {
     return this.tabs
-      .filter((t) => t.kind === 'hwp' && t.view && hwpIsDirty(t.view.webContents.id))
+      .filter((t) => t.kind === 'hwp' && t.view && !t.readOnly && hwpIsDirty(t.view.webContents.id))
       .map((t) => ({ id: t.id, webContents: t.view!.webContents }))
   }
 
@@ -1597,6 +1646,7 @@ export class TabManager {
         (t) =>
           t.kind === 'hwp' &&
           t.view &&
+          !t.readOnly &&
           (hwpIsDirty(t.view.webContents.id) || hwpMemoModalOpen(t.view.webContents.id)),
       )
       .map((t) => ({ id: t.id, webContents: t.view!.webContents }))
@@ -1605,21 +1655,25 @@ export class TabManager {
   /** book tabs with unsaved edits, in the main process or still in the renderer (shell-close guard) */
   dirtyEpubTabs(): Array<{ id: string; webContents: WebContents }> {
     return this.tabs
-      .filter((t) => t.kind === 'epub' && t.view && epubIsDirty(t.view.webContents.id))
+      .filter(
+        (t) => t.kind === 'epub' && t.view && !t.readOnly && epubIsDirty(t.view.webContents.id),
+      )
       .map((t) => ({ id: t.id, webContents: t.view!.webContents }))
   }
 
   /** slides tabs whose main-process session has unsaved edits (shell-close guard) */
   dirtySlidesTabs(): Array<{ id: string; webContents: WebContents }> {
     return this.tabs
-      .filter((t) => t.kind === 'slides' && t.view && slidesIsDirty(t.view.webContents.id))
+      .filter(
+        (t) => t.kind === 'slides' && t.view && !t.readOnly && slidesIsDirty(t.view.webContents.id),
+      )
       .map((t) => ({ id: t.id, webContents: t.view!.webContents }))
   }
 
   /** all live docs tabs — dirtiness lives renderer-side, caller queries async (shell-close guard) */
   docsTabs(): Array<{ id: string; webContents: WebContents }> {
     return this.tabs
-      .filter((t) => t.kind === 'docs' && t.view)
+      .filter((t) => t.kind === 'docs' && t.view && !t.readOnly)
       .map((t) => ({ id: t.id, webContents: t.view!.webContents }))
   }
 
@@ -1646,6 +1700,11 @@ export class TabManager {
     if (id === HOME_ID) return
     const tab = this.tabs.find((t) => t.id === id)
     if (!tab || this.closingIds.has(id)) return
+    // a read-only tab's edits can never be saved, so there is nothing to ask
+    if (tab.readOnly) {
+      this.removeTab(id)
+      return
+    }
     let closeGuard =
       tab.view &&
       (tab.kind === 'sheets' && sheetsPendingEditCount(tab.view.webContents.id) > 0
@@ -1782,7 +1841,7 @@ export class TabManager {
     if (id === HOME_ID) return null
     const idx = this.tabs.findIndex((t) => t.id === id)
     const tab = idx >= 0 ? this.tabs[idx] : undefined
-    if (!tab || tab.present || this.closingIds.has(id)) return null
+    if (!tab || tab.present || tab.readOnly || this.closingIds.has(id)) return null
     // an unloaded tab leaves with a live document: it loads first
     if (!this.loadTab(tab) || !tab.view) return null
     this.tabs.splice(idx, 1)
@@ -1817,7 +1876,14 @@ export class TabManager {
    *  New Window): every document tab except a chrome-free Present tab. */
   canDetachTab(id: string): boolean {
     const tab = this.tabs.find((t) => t.id === id)
-    return !!tab && (!!tab.view || !!tab.opener) && !tab.present && !this.closingIds.has(id)
+    // a read-only tab stays in the strip: a detached window would not know it is read-only
+    return (
+      !!tab &&
+      (!!tab.view || !!tab.opener) &&
+      !tab.present &&
+      !tab.readOnly &&
+      !this.closingIds.has(id)
+    )
   }
 
   /**

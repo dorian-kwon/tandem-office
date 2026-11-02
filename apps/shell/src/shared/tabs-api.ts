@@ -25,6 +25,8 @@ export interface TabSummary {
   active: boolean
   /** absolute path behind the tab; absent while the document is untitled */
   filePath?: string
+  /** opened read-only (the translation view's source pane); absent otherwise */
+  readOnly?: true
 }
 
 /**

@@ -6399,7 +6399,11 @@ function registerHomeIpc(): void {
       autoSaveDefault: next.on,
       autoSaveDefaultUpdatedAt: next.updatedAt,
     })
-    for (const wc of webContents.getAllWebContents()) wc.send('app:auto-save-default-changed', next)
+    for (const wc of webContents.getAllWebContents()) {
+      // a read-only view (translation source) keeps autosave off (read-only-guard.ts)
+      if (tabManager?.isReadOnlyWebContents(wc.id)) continue
+      wc.send('app:auto-save-default-changed', next)
+    }
   })
 
   ipcMain.handle(HOME_CHANNELS.getMcpStatus, () => mcpStatus())
@@ -7080,6 +7084,11 @@ function persistSplitMemory(manager: TabManager, state: SplitViewState | null): 
         ratio: state.ratio,
         focus: state.focus,
         collapsed: state.collapsed,
+        readOnly: manager.isReadOnlyTab(state.aTabId)
+          ? 'a'
+          : manager.isReadOnlyTab(state.bTabId)
+            ? 'b'
+            : null,
       },
       { settingsPath: APP_SETTINGS_PATH },
     )
@@ -7135,6 +7144,9 @@ function restoreSplitMemoryOrHome(): void {
     return
   }
   if (aTabId !== undefined && bTabId !== undefined) {
+    // the translation view's source pane comes back read-only
+    if (memory?.readOnly === 'a') manager.setTabReadOnly(aTabId)
+    if (memory?.readOnly === 'b') manager.setTabReadOnly(bTabId)
     manager.beginSplit(aTabId, bTabId, orientation, ratio, focus, memory?.collapsed ?? null)
   }
 }

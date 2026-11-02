@@ -112,3 +112,24 @@ describe('document actions from a background tab context menu', () => {
     expect(deps.tabs.activateTab).not.toHaveBeenCalled()
   })
 })
+
+describe('a read-only tab (translation source pane)', () => {
+  it.each(['docs', 'markdown', 'html', 'pdf'] as const)(
+    'refuses Save and Save As for %s',
+    (kind) => {
+      const { deps, contents } = fixture(kind)
+      const clicked = deps.tabs.list()[1]!
+      clicked.readOnly = true
+      runTabDocumentAction(deps, 'clicked', 'save')
+      runTabDocumentAction(deps, 'clicked', 'saveAs')
+      expect(contents.send).not.toHaveBeenCalled()
+      expect(deps.savePdf).not.toHaveBeenCalled()
+      expect(deps.savePdfAs).not.toHaveBeenCalled()
+      expect(deps.saveMarkdown).not.toHaveBeenCalled()
+      expect(deps.saveHtml).not.toHaveBeenCalled()
+      // printing reads only
+      runTabDocumentAction(deps, 'clicked', 'print')
+      expect(deps.tabs.activateTab).toHaveBeenCalledTimes(1)
+    },
+  )
+})

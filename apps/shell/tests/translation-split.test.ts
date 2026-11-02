@@ -244,10 +244,6 @@ let onChanged: ReturnType<typeof vi.fn>
 let applyMenuFor: ReturnType<typeof vi.fn>
 let manager: TabManager
 
-function lastCreatedView(factory: ReturnType<typeof vi.fn>): FakeView {
-  return factory.mock.results.at(-1)!.value as FakeView
-}
-
 beforeEach(() => {
   vi.clearAllMocks()
   nextWebContentsId = 1
@@ -360,5 +356,71 @@ describe('hiding a pane (setPaneHidden)', () => {
     translationSplit()
     manager.setPaneHidden('right', true)
     expect(onSplit).toHaveBeenLastCalledWith(expect.objectContaining({ collapsed: 'b' }))
+  })
+})
+
+describe('read-only tabs (setTabReadOnly)', () => {
+  it('marks the tab in the list and guards its view at the shell boundary', () => {
+    const id = manager.openDocsTab('/p/source/a.docx')
+    const view = viewOf(id)
+    expect(manager.setTabReadOnly(id)).toBe(true)
+    expect(manager.list().find((t) => t.id === id)).toMatchObject({ readOnly: true })
+    expect(manager.isReadOnlyTab(id)).toBe(true)
+    expect(manager.isReadOnlyWebContents(view.webContents.id)).toBe(true)
+    expect(view.webContents.listeners.has('before-input-event')).toBe(true)
+    expect(view.webContents.ipc.handle).toHaveBeenCalledWith('docs:save', expect.any(Function))
+    // a second call installs nothing twice
+    manager.setTabReadOnly(id)
+    expect(view.webContents.ipc.handle.mock.calls.filter(([c]) => c === 'docs:save')).toHaveLength(
+      1,
+    )
+  })
+
+  it('refuses Home', () => {
+    expect(manager.setTabReadOnly('home')).toBe(false)
+  })
+
+  it('source pane rejects edit commands: typed keys are cancelled, arrows pass', () => {
+    const id = manager.openDocsTab('/p/source/a.docx')
+    manager.setTabReadOnly(id)
+    const onInput = viewOf(id).webContents.listeners.get('before-input-event') as unknown as (
+      e: { preventDefault: () => void },
+      input: object,
+    ) => void
+    const prevent = vi.fn()
+    const input = { type: 'keyDown', control: false, meta: false, alt: false, shift: false }
+    onInput({ preventDefault: prevent }, { ...input, key: 'x' })
+    onInput({ preventDefault: prevent }, { ...input, key: 'ArrowDown' })
+    expect(prevent).toHaveBeenCalledTimes(1)
+  })
+
+  it('stays in the strip: it cannot be detached', () => {
+    const id = manager.openDocsTab('/p/source/a.docx')
+    manager.setTabReadOnly(id)
+    expect(manager.canDetachTab(id)).toBe(false)
+    expect(manager.detachTab(id)).toBeNull()
+  })
+
+  it('closes without a save prompt even when its editor reports edits', async () => {
+    const id = manager.openDocsTab('/p/source/a.docx')
+    manager.setTabReadOnly(id)
+    docsQueryDirty.mockImplementation(() => Promise.resolve(true))
+    await manager.closeTab(id)
+    expect(requestDocsClose).not.toHaveBeenCalled()
+    expect(manager.list().some((t) => t.id === id)).toBe(false)
+  })
+
+  it('is left out of the window-close prompts, the agents list and the session record', async () => {
+    const source = manager.openMarkdownTab('/p/source/a.md')
+    const output = manager.openMarkdownTab('/p/output/a.md')
+    manager.setTabReadOnly(source)
+    markdownIsDirty.mockImplementation(() => true)
+    expect(manager.dirtyMarkdownTabs().map((t) => t.id)).toEqual([output])
+    expect((await manager.openDocuments()).map((t) => t.id)).toEqual([output])
+    manager.beginSplit(source, output, 'side', 0.5, 'b')
+    const session = manager.sessionTabs()
+    expect(session.tabs.map((t) => t.id)).toEqual([output])
+    expect(session.split).toBeNull()
+    markdownIsDirty.mockImplementation(() => false)
   })
 })
