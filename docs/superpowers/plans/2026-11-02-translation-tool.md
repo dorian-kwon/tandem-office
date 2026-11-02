@@ -20,6 +20,7 @@
 - 프로젝트 폴더 구조: `source/`, `references/`, `glossary/`, `output/`, `.tandem/project.json`, `.tandem/glossary.json`, `.ieumoffice/`.
 - 시스템 프롬프트는 앱 설정에 저장하는 전체 공통 값이고, 프로젝트 프롬프트는 `.tandem/project.json`에 저장한다. 조립 순서는 시스템 → 프로젝트.
 - OCR 선택지는 "AI 읽기(Claude 또는 ChatGPT 중 선택)"와 "끔" 두 가지뿐이다. 로컬 OCR은 만들지 않는다.
+- OCR은 선택해서 실행한다: 시작 전에 페이지(PDF)나 파일(이미지)을 사용자가 고르고 "전체 선택" 단추가 있다. 고른 것만 AI로 보내며, 아무것도 고르지 않으면 시작할 수 없다. (사용자 결정, 2026-11-02, 계획 작성 후 추가)
 - 단어집: csv, xlsx, txt를 읽는다. UTF-8과 CP949를 자동 판별하고, 열은 `원어, 번역어, 비고` 순이며, 첫 줄이 제목이면 건너뛰고, xlsx는 첫 시트만 읽는다. 항목이 200개 이하면 전체를 싣고 넘으면 해당 문단에 나온 용어만 싣는다. 200은 설정으로 바꿀 수 있다.
 - 원본은 `source/`에 복사하고 해시를 기록한다. 열 때마다 해시를 비교해 달라졌으면 알린다. 번역은 `output/`의 사본에서 한다.
 - 번역할 문서를 지워도 `output/`의 번역본은 지우지 않는다. 번역본은 따로 확인을 받고 지운다.
@@ -484,7 +485,8 @@ git commit -m "feat(shell): split translation view with read-only source and hid
 - Consumes: `composeContext` (Task 6), `loadGlossary` (Task 5), `loadProject`, `OcrMode` (Task 1)
 - Produces:
   - `function buildTranslationInstructions(dir: string, paragraph: string): Promise<ComposedContext>` 앱 설정의 시스템 프롬프트를 읽어 `composeContext`에 넘긴다.
-  - `function runOcr(args: { dir: string; source: SourceEntry; confirm: () => Promise<boolean> }): Promise<{ docxPath: string }>` `ocr.kind === 'off'`면 AI를 부르지 않고 `OcrDisabledError`를 던진다. `ai`면 `confirm()`이 true일 때만 이미지를 제공자로 보낸다. 결과는 OCR로 읽은 글을 담은 Word 문서(`output/`)다.
+  - `type OcrSelection = { kind: 'all' } | { kind: 'pages'; pages: number[] }` (이미지 여러 장은 파일 순번을 `pages`로 쓴다. 번호는 1부터)
+  - `function runOcr(args: { dir: string; source: SourceEntry; selection: OcrSelection; confirm: (count: number) => Promise<boolean> }): Promise<{ docxPath: string }>` `selection`이 `pages`이고 비어 있으면 `EmptyOcrSelectionError`를 던지고 AI를 부르지 않는다. 고른 페이지만 보내며 `confirm`에는 보낼 개수를 넘긴다. `ocr.kind === 'off'`면 AI를 부르지 않고 `OcrDisabledError`를 던진다. `ai`면 `confirm()`이 true일 때만 이미지를 제공자로 보낸다. 결과는 OCR로 읽은 글을 담은 Word 문서(`output/`)다.
   - AI 창에는 실린 항목(`items`)이 보인다.
 
 - [ ] **Step 1: Write the failing test**
@@ -493,6 +495,10 @@ git commit -m "feat(shell): split translation view with read-only source and hid
 - `no instructions are injected for a non-translation project folder` (일반 프로젝트 폴더의 동작을 바꾸지 않는다)
 - `runOcr with off throws OcrDisabledError and never calls the provider`
 - `runOcr never sends images when confirm resolves false`
+- `runOcr sends only the selected pages and passes their count to confirm`
+- `runOcr with selection all sends every page`
+- `runOcr with an empty pages selection throws EmptyOcrSelectionError and never calls the provider`
+- 선택 화면(`apps/shell/src/renderer/src/translate/OcrSelectDialog.tsx`)을 이 작업에 더한다. 페이지 체크박스, "전체 선택", "선택 해제", 선택 개수, 0개면 시작 단추 비활성. 테스트: `select all checks every page`, `start is disabled with zero selected`
 - `runOcr uses the provider chosen in the project's OCR setting`
 - `runOcr writes a docx into output/ and returns its path`
 
@@ -529,7 +535,7 @@ git commit -m "feat(shell): inject translation context and AI OCR"
 **Interfaces:**
 - Consumes: `runOcr` (Task 10), PDF 번역 작업 엔진 진입점(Task 0 노트), `SourceEntry`
 - Produces:
-  - `function translateNonEditable(args: { dir: string; source: SourceEntry; bilingual: boolean }): Promise<{ outputPath: string }>` `kind: 'pdf'`는 글자 층이 있으면 기존 번역 엔진으로 번역 PDF(`bilingual`이면 대역본)를 `output/`에 쓴다. 글자 층이 없는 PDF(`scan`)와 `image`는 `runOcr`로 만든 Word 문서를 `output/`에 두고 Task 9의 편집 화면으로 연다.
+  - `function translateNonEditable(args: { dir: string; source: SourceEntry; bilingual: boolean; ocrSelection?: OcrSelection }): Promise<{ outputPath: string }>` `kind: 'pdf'`는 글자 층이 있으면 기존 번역 엔진으로 번역 PDF(`bilingual`이면 대역본)를 `output/`에 쓴다. 글자 층이 없는 PDF(`scan`)와 `image`는 `runOcr`로 만든 Word 문서를 `output/`에 두고 Task 9의 편집 화면으로 연다.
   - `function detectScan(pdfPath: string): Promise<boolean>` 페이지 대부분에 글자 층이 없으면 true.
 
 - [ ] **Step 1: Write the failing test**
