@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -7,6 +7,7 @@ import { createProject, loadProject } from './project-store'
 import {
   InvalidSourceKindError,
   SourceChangedError,
+  SourceKindChosenError,
   chosenSourceKind,
   setSourceKind,
 } from './source-kind'
@@ -146,5 +147,47 @@ describe('the person’s own choice of kind', () => {
     expect(await chosenSourceKind(dir, 'a.pdf', sha256)).toBeNull()
     await setSourceKind(dir, 'a.pdf', 'pdf', { chosenByPerson: true })
     expect(await chosenSourceKind(dir, 'a.pdf', sha256)).toBe('pdf')
+  })
+})
+
+describe('the choice is protected', () => {
+  it('an automatic change is refused once the person chose for that copy', async () => {
+    await addPdf('a.pdf')
+    const { sha256 } = (await loadProject(dir)).sources[0]!
+    await setSourceKind(dir, 'a.pdf', 'pdf', { chosenByPerson: true })
+    await expect(
+      setSourceKind(dir, 'a.pdf', 'scan', { expectedSha256: sha256 }),
+    ).rejects.toBeInstanceOf(SourceKindChosenError)
+    expect((await loadProject(dir)).sources[0]?.kind).toBe('pdf')
+    // the person can still change it
+    await setSourceKind(dir, 'a.pdf', 'scan', { chosenByPerson: true })
+    expect((await loadProject(dir)).sources[0]?.kind).toBe('scan')
+  })
+
+  it('project.json is written before the choices file', async () => {
+    await addPdf('a.pdf')
+    // the choices file cannot be written: a folder stands where its temp file goes
+    await mkdir(join(dir, '.tandem'), { recursive: true })
+    await mkdir(join(dir, '.tandem', 'source-kinds.json'), { recursive: true })
+    await expect(setSourceKind(dir, 'a.pdf', 'scan', { chosenByPerson: true })).rejects.toThrow()
+    expect((await loadProject(dir)).sources[0]?.kind).toBe('scan')
+  })
+
+  it('a __proto__ key in the choices file is ignored', async () => {
+    await addPdf('a.pdf')
+    const { sha256 } = (await loadProject(dir)).sources[0]!
+    await mkdir(join(dir, '.tandem'), { recursive: true })
+    await writeFile(
+      join(dir, '.tandem', 'source-kinds.json'),
+      `{"version":1,"chosen":{"__proto__":{"sha256":"${sha256}","kind":"scan"},"a.pdf":{"sha256":"${sha256}","kind":"pdf"}}}`,
+      'utf8',
+    )
+    expect(await chosenSourceKind(dir, '__proto__', sha256)).toBeNull()
+    expect(await chosenSourceKind(dir, 'a.pdf', sha256)).toBe('pdf')
+    expect(({} as Record<string, unknown>).sha256).toBeUndefined()
+    // writing keeps it out
+    await setSourceKind(dir, 'a.pdf', 'scan', { chosenByPerson: true })
+    const raw = await readFile(join(dir, '.tandem', 'source-kinds.json'), 'utf8')
+    expect(raw).not.toContain('__proto__')
   })
 })

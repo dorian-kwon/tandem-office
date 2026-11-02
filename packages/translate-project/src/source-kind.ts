@@ -19,6 +19,14 @@ export class InvalidSourceKindError extends Error {
   }
 }
 
+/** an automatic change was asked for a copy whose kind the person chose by hand */
+export class SourceKindChosenError extends Error {
+  constructor(file: string) {
+    super(`the person chose the kind of this source by hand: ${JSON.stringify(file)}`)
+    this.name = 'SourceKindChosenError'
+  }
+}
+
 /** the listed entry is not the copy the kind was decided for any more */
 export class SourceChangedError extends Error {
   constructor(file: string) {
@@ -37,28 +45,44 @@ export interface SetSourceKindOptions {
   chosenByPerson?: boolean
 }
 
-type Choices = Record<string, { sha256: string; kind: SourceKind }>
+/** file name → the copy (hash) and the kind the person chose; a Map, so no key reaches a prototype */
+type Choices = Map<string, { sha256: string; kind: SourceKind }>
+
+/** a key a source can have: a plain file name (never `__proto__` and the like) */
+function choiceKey(file: string): boolean {
+  return (
+    file !== '' &&
+    file !== '.' &&
+    file !== '..' &&
+    file !== '__proto__' &&
+    !/[\\/]/.test(file) &&
+    !file.includes('\0')
+  )
+}
 
 async function readChoices(dir: string): Promise<Choices> {
+  const out: Choices = new Map()
   try {
     const raw: unknown = JSON.parse(await readFile(join(dir, STATE_DIR, CHOICES_JSON), 'utf8'))
     const chosen = (raw as { chosen?: unknown } | null)?.chosen
-    if (typeof chosen !== 'object' || chosen === null || Array.isArray(chosen)) return {}
-    const out: Choices = {}
+    if (typeof chosen !== 'object' || chosen === null || Array.isArray(chosen)) return out
     for (const [file, v] of Object.entries(chosen as Record<string, unknown>)) {
+      if (!choiceKey(file)) continue
       const entry = v as { sha256?: unknown; kind?: unknown } | null
       if (typeof entry?.sha256 !== 'string') continue
       const kind = SOURCE_KINDS.find((k) => k === entry.kind)
-      if (kind) out[file] = { sha256: entry.sha256, kind }
+      if (kind) out.set(file, { sha256: entry.sha256, kind })
     }
     return out
   } catch {
     // missing or damaged: no choice recorded
-    return {}
+    return out
   }
 }
 
-async function writeChoices(dir: string, chosen: Choices): Promise<void> {
+async function writeChoices(dir: string, choices: Choices): Promise<void> {
+  const chosen: Record<string, { sha256: string; kind: SourceKind }> = Object.create(null)
+  for (const [file, v] of choices) chosen[file] = v
   await mkdir(join(dir, STATE_DIR), { recursive: true })
   const target = join(dir, STATE_DIR, CHOICES_JSON)
   const tmp = join(dir, STATE_DIR, `${CHOICES_JSON}.${randomBytes(6).toString('hex')}.tmp`)
@@ -77,7 +101,7 @@ export async function chosenSourceKind(
   file: string,
   sha256: string,
 ): Promise<SourceKind | null> {
-  const choice = (await readChoices(dir))[file]
+  const choice = (await readChoices(dir)).get(file)
   return choice && choice.sha256 === sha256 ? choice.kind : null
 }
 
@@ -86,7 +110,10 @@ export async function chosenSourceKind(
  * scan when it is first opened, or the person's own correction). Only the
  * `kind` of that entry changes; its file name and hash stay. Runs under the
  * project lock, so a concurrent material change is not lost. An unchanged
- * kind writes nothing to project.json.
+ * kind writes nothing to project.json. An automatic change (no
+ * `chosenByPerson`) is refused with SourceKindChosenError when the person
+ * chose the kind of this copy by hand, so a check still in flight cannot
+ * overwrite that choice.
  */
 export function setSourceKind(
   dir: string,
@@ -103,17 +130,25 @@ export function setSourceKind(
     if (!entry) throw new NotListedError(file)
     if (options.expectedSha256 !== undefined && entry.sha256 !== options.expectedSha256)
       throw new SourceChangedError(file)
+    const chosen = await readChoices(dir)
+    const earlier = chosen.get(file)
+    // an automatic check never overrides the person's choice for this copy
+    if (!options.chosenByPerson && earlier && earlier.sha256 === entry.sha256)
+      throw new SourceKindChosenError(file)
+    // project.json first: if the choices file then cannot be written, the kind is
+    // still what the person asked for this time (only its protection is missing)
+    const next: ProjectFile =
+      entry.kind === kind
+        ? project
+        : {
+            ...project,
+            sources: project.sources.map((s) => (s.file === file ? { ...s, kind } : s)),
+          }
+    if (next !== project) await saveProject(dir, next)
     if (options.chosenByPerson) {
-      const chosen = await readChoices(dir)
-      chosen[file] = { sha256: entry.sha256, kind }
+      chosen.set(file, { sha256: entry.sha256, kind })
       await writeChoices(dir, chosen)
     }
-    if (entry.kind === kind) return project
-    const next: ProjectFile = {
-      ...project,
-      sources: project.sources.map((s) => (s.file === file ? { ...s, kind } : s)),
-    }
-    await saveProject(dir, next)
     return next
   })
 }

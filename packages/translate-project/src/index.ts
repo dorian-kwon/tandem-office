@@ -37,6 +37,7 @@ export {
 export {
   InvalidSourceKindError,
   SourceChangedError,
+  SourceKindChosenError,
   chosenSourceKind,
   setSourceKind,
 } from './source-kind'
