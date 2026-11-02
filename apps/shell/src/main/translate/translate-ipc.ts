@@ -185,6 +185,31 @@ function createRawHandlers(deps: TranslateIpcDeps) {
     return deps.view
   }
 
+  /**
+   * List a registered translation folder as a project folder once. An entry marked
+   * `listed` is never listed again: the person may have removed it from the project
+   * list since. A folder that could not be listed (refused, foreign content) stays
+   * unmarked. Failures never fail the caller: the translation project works either way.
+   */
+  async function listOnce(dir: string): Promise<void> {
+    const link = deps.projects
+    if (!link) return
+    try {
+      const path = deps.settingsPath()
+      const entry = readTranslationProjects(path).find((e) => fold(e.dir) === fold(dir))
+      if (!entry || entry.listed) return
+      if ((await link.ensureListed(dir)) === null) return
+      writeTranslationProjects(
+        path,
+        readTranslationProjects(path).map((e) =>
+          fold(e.dir) === fold(dir) ? { ...e, listed: true as const } : e,
+        ),
+      )
+    } catch {
+      // the folder stays unlisted; the AI panels then carry no translation context
+    }
+  }
+
   function touch(dir: string): void {
     const path = deps.settingsPath()
     const projects = readTranslationProjects(path).map((e) =>
@@ -241,13 +266,9 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       const rest = readTranslationProjects(path).filter((e) => fold(e.dir) !== fold(dir))
       writeTranslationProjects(path, [...rest, { dir, lastOpened: deps.now() }])
       parentPicks.consume(parentToken, 0)
-      try {
-        // the app just made this folder at the person's request: list it as a project
-        // folder so the AI panels carry its context (opening the view tries again)
-        await deps.projects?.ensureListed(dir)
-      } catch {
-        // the translation project exists either way
-      }
+      // the app just made this folder at the person's request: list it as a project
+      // folder so the AI panels carry its context
+      await listOnce(dir)
       return { dir }
     },
 
@@ -259,6 +280,14 @@ function createRawHandlers(deps: TranslateIpcDeps) {
           path,
           readTranslationProjects(path).filter((e) => fold(e.dir) !== fold(dir)),
         )
+      }
+      // the folder leaves the project list too, before it may be deleted (while its path
+      // still resolves); its trust record stays, as with "Remove from list". A failure
+      // there does not keep the translation entry.
+      try {
+        await deps.projects?.unlist(dir)
+      } catch {
+        // the project list keeps the folder; the person can remove it there
       }
       if (args.deleteFolder !== true) return dropEntry()
       // removeProject refuses a folder without a valid project file; that and
@@ -382,7 +411,9 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       const project = await loadProject(dir)
       const entry = project.sources.find((s) => s.file === file)
       if (!entry) throw new TranslateIpcError('NOT_LISTED', 'this document is not in the project')
-      return openTranslation(dir, entry, view, deps.projects)
+      // a project made before listing existed (or whose listing failed) is listed now, once
+      await listOnce(dir)
+      return openTranslation(dir, entry, view)
     },
 
     async setPaneHidden(args: TranslateSetPaneHiddenArgs): Promise<void> {

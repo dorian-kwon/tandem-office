@@ -362,6 +362,11 @@ export interface TranslationProjectEntry {
   dir: string
   /** epoch milliseconds */
   lastOpened: number
+  /**
+   * The app listed the folder as a project folder (decision 0088) once. Set, it is never
+   * listed again by the translation tool, so a later "Remove from list" by the person holds.
+   */
+  listed?: true
 }
 
 /** The `translationSystemPrompt` value read back; anything but a string is the empty prompt */
@@ -371,7 +376,8 @@ export function normalizeTranslationSystemPrompt(raw: unknown): string {
 
 /**
  * The `translationProjects` value read back; entries without an absolute
- * folder are dropped, a bad `lastOpened` reads as 0, repeated folders count once.
+ * folder are dropped, a bad `lastOpened` reads as 0, `listed` is kept only when `true`,
+ * repeated folders count once.
  */
 export function normalizeTranslationProjects(raw: unknown): TranslationProjectEntry[] {
   const out: TranslationProjectEntry[] = []
@@ -386,6 +392,8 @@ export function normalizeTranslationProjects(raw: unknown): TranslationProjectEn
     out.push({
       dir: entry.dir,
       lastOpened: typeof opened === 'number' && Number.isFinite(opened) && opened >= 0 ? opened : 0,
+      // only `true` counts; anything else reads as "not listed yet"
+      ...(entry.listed === true ? { listed: true as const } : {}),
     })
   }
   return out

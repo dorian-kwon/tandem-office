@@ -1,10 +1,12 @@
 import type { ProjectId } from '@genoffice/project-store'
 import type { ProjectGuide } from '../projects/project-guide'
+import { canonicalPath, samePath } from '../projects/paths'
 
 /**
  * A translation project folder is also a project folder (decision 0088), so
  * the editors' AI panels send its context (see `context-injection.ts`) with no
- * picking by the person.
+ * picking by the person: a document inside a listed folder starts with that
+ * project unless the person chose "no project" for it (`selection.ts`).
  */
 export interface TranslationProjectLink {
   /**
@@ -13,8 +15,8 @@ export interface TranslationProjectLink {
    * elsewhere, which only the person can confirm through "Add folder").
    */
   ensureListed(dir: string): Promise<ProjectId | null>
-  /** Make each document's AI panel start with `projectId` (undoes an earlier "no project") */
-  selectFor(projectId: ProjectId, paths: string[]): Promise<void>
+  /** Take `dir` off the project list, if it is on it (its trust record stays, as "Remove from list" keeps it) */
+  unlist(dir: string): Promise<void>
 }
 
 /**
@@ -25,22 +27,28 @@ export interface TranslationProjectLink {
  * is left unlisted instead of being trusted without the person. A trust
  * decision already on record (also "without") is kept.
  *
- * `onListed` runs when a folder was newly listed (the shell refreshes its
- * project file walks).
+ * `onChanged` runs when the list changed (the shell refreshes its project
+ * file walks).
  */
 export function translationProjectLink(
-  guide: Pick<ProjectGuide, 'addFolder' | 'setSelection'>,
-  onListed?: () => void,
+  guide: Pick<ProjectGuide, 'addFolder' | 'listProjects' | 'removeFromList'>,
+  onChanged?: () => void,
+  platform: NodeJS.Platform = process.platform,
 ): TranslationProjectLink {
   return {
     async ensureListed(dir) {
       const result = await guide.addFolder(dir, async () => null)
       if (result.status !== 'added') return null
-      if (result.identity !== 'existing') onListed?.()
+      if (result.identity !== 'existing') onChanged?.()
       return result.project.id
     },
-    async selectFor(projectId, paths) {
-      for (const path of paths) await guide.setSelection({ kind: 'document', path }, projectId)
+    async unlist(dir) {
+      const key = canonicalPath(dir)
+      const listed = (await guide.listProjects()).filter((item) =>
+        samePath(item.path, key, platform),
+      )
+      for (const item of listed) await guide.removeFromList(item.id)
+      if (listed.length > 0) onChanged?.()
     },
   }
 }

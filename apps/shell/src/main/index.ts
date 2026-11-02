@@ -5700,8 +5700,8 @@ function projectFolderServices(): ProjectFolderRuntime {
       list: projectFileLister,
     }),
     // a translation project folder also carries the translation tool's context
-    translationContext: (root) =>
-      translationContextForFolder(root, { settingsPath: APP_SETTINGS_PATH() }),
+    translationContext: (root, query) =>
+      translationContextForFolder(root, { settingsPath: APP_SETTINGS_PATH() }, query),
   })
   const chats = new ProjectChatStore({ guide, trash: (path) => shell.trashItem(path) })
   const scopes = new KbRunScopes()
@@ -8918,7 +8918,7 @@ registerResultStoreIpc(ipcMain, () => app.getPath('userData'))
 /** Translation project folders as project folders (built on first use: the guide needs userData) */
 function translationProjects(): TranslationProjectLink {
   return translationProjectLink(projectFolderServices().guide, () => {
-    // as the project IPC's projectsChanged: the walks follow the new folder
+    // as the project IPC's projectsChanged: the walks follow the list
     projectFileLister.invalidate()
     fileIndexer?.refresh()
   })
@@ -8934,7 +8934,7 @@ registerTranslateIpc(ipcMain, {
   view: translationViewDeps(),
   projects: {
     ensureListed: (dir) => translationProjects().ensureListed(dir),
-    selectFor: (projectId, paths) => translationProjects().selectFor(projectId, paths),
+    unlist: (dir) => translationProjects().unlist(dir),
   },
 })
 registerTabsIpc()
