@@ -1,0 +1,77 @@
+import type { SplitOrientation } from '../shared/split-view-api'
+import { SPLIT_EVEN_RATIO } from './split-layout'
+import type { SplitMemory } from './split-memory'
+
+/** What reopening a remembered split needs from the shell (index.ts wires it). */
+export interface SplitRestoreDeps {
+  /** the path when it is a file on disk, else undefined */
+  fileOnDisk(path: string | undefined): string | undefined
+  /** same file after resolving links (canonicalPath) */
+  samePath(a: string, b: string): boolean
+  /** route the file into its editor tab; the landed tab's id */
+  openTab(path: string, options: { recordRecent: boolean }): string | undefined
+  openHome(): void
+  openDuplicatePaneTab(tabId: string): string | null
+  setTabReadOnly(tabId: string): boolean
+  beginSplit(
+    aTabId: string,
+    bTabId: string,
+    orientation: SplitOrientation,
+    ratio: number,
+    focus: 'a' | 'b',
+    collapsed: 'a' | 'b' | null,
+  ): void
+}
+
+/**
+ * A launch with no file argument: reopen the remembered arrangement when its
+ * documents are still on disk, else the home screen. A remembered path that
+ * is gone is skipped: one remaining document opens alone, both gone falls back
+ * to home.
+ *
+ * The translation view's source pane (`memory.readOnly`) comes back read-only
+ * even when it is the only document left, it is made read-only before the
+ * other document opens, and it never enters Recent. A pane stays hidden only
+ * while the source is read-only.
+ */
+export function restoreRememberedSplit(memory: SplitMemory | null, deps: SplitRestoreDeps): void {
+  const aPath = deps.fileOnDisk(memory?.a)
+  const bPath = deps.fileOnDisk(memory?.b)
+  if (aPath === undefined && bPath === undefined) {
+    deps.openHome()
+    return
+  }
+  const orientation = memory?.orientation ?? 'side'
+  const ratio = memory?.ratio ?? SPLIT_EVEN_RATIO
+  const focus = memory?.focus ?? 'b'
+  const readOnly = memory?.readOnly
+  // both panes held the same file: one tab, duplicated for the second pane
+  if (aPath !== undefined && bPath !== undefined && deps.samePath(aPath, bPath)) {
+    const aTabId = deps.openTab(aPath, { recordRecent: readOnly === undefined })
+    if (aTabId === undefined) {
+      deps.openHome()
+      return
+    }
+    const bTabId = deps.openDuplicatePaneTab(aTabId)
+    if (bTabId === null) return
+    deps.beginSplit(aTabId, bTabId, orientation, ratio, focus, null)
+    return
+  }
+  let readOnlyApplied = false
+  const open = (path: string | undefined, pane: 'a' | 'b'): string | undefined => {
+    if (path === undefined) return undefined
+    const id = deps.openTab(path, { recordRecent: readOnly !== pane })
+    if (id !== undefined && readOnly === pane) readOnlyApplied = deps.setTabReadOnly(id)
+    return id
+  }
+  const aTabId = open(aPath, 'a')
+  const bTabId = open(bPath, 'b')
+  if (aTabId === undefined && bTabId === undefined) {
+    deps.openHome()
+    return
+  }
+  if (aTabId !== undefined && bTabId !== undefined) {
+    const collapsed = readOnlyApplied ? (memory?.collapsed ?? null) : null
+    deps.beginSplit(aTabId, bTabId, orientation, ratio, focus, collapsed)
+  }
+}

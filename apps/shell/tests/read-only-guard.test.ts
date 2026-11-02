@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   installReadOnlyGuard,
   READ_ONLY_IPC_ANSWERS,
+  READ_ONLY_IPC_THROWS,
   readOnlyBlocksInput,
 } from '../src/main/read-only-guard'
 import { MARKDOWN_CHANNELS } from '../../markdown/src/shared/ipc'
@@ -10,6 +11,7 @@ import { HTML_CHANNELS } from '../../html/src/shared/ipc'
 import { EPUB_CHANNELS } from '../../epub/src/shared/ipc'
 import { MINDMAP_CHANNELS } from '../../mindmap/src/shared/ipc'
 import { HWP_CHANNELS } from '../../hwp/src/shared/ipc'
+import { IPC_CHANNELS as SHEETS_CHANNELS } from '../../sheets/src/shared/ipc-channels'
 
 const key = (
   k: string,
@@ -121,5 +123,31 @@ describe('installReadOnlyGuard', () => {
     remove()
     expect(contents.listeners.has('before-input-event')).toBe(false)
     expect(contents.ipc.removeHandler).toHaveBeenCalledWith('docs:save')
+  })
+})
+
+describe('channels added after review', () => {
+  it('refuses Sheets saves by throwing, as the Sheets save path expects', async () => {
+    expect(READ_ONLY_IPC_THROWS).toEqual(
+      expect.arrayContaining([SHEETS_CHANNELS.saveWorkbook, SHEETS_CHANNELS.saveEditsBegin]),
+    )
+    const contents = {
+      on: vi.fn(),
+      removeListener: vi.fn(),
+      ipc: { handle: vi.fn(), removeHandler: vi.fn() },
+    }
+    const remove = installReadOnlyGuard(contents as never)
+    for (const channel of ['workbook:save', 'workbook:save-edits-begin']) {
+      const call = contents.ipc.handle.mock.calls.find(([c]) => c === channel)!
+      expect(() => (call[1] as () => unknown)()).toThrow(/read-only/)
+    }
+    remove()
+    expect(contents.ipc.removeHandler).toHaveBeenCalledWith('workbook:save')
+    expect(contents.ipc.removeHandler).toHaveBeenCalledWith('workbook:save-edits-begin')
+  })
+
+  it('answers Slides Save As like Slides Save', () => {
+    expect(READ_ONLY_IPC_ANSWERS['slides:save-as']).toEqual(READ_ONLY_IPC_ANSWERS['slides:save'])
+    expect(READ_ONLY_IPC_ANSWERS['slides:save-as']).toMatchObject({ ok: false })
   })
 })

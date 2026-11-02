@@ -133,6 +133,7 @@ import { registerIntegrationsIpc } from './integrations-ipc'
 import { registerResultStoreIpc } from './result-store-ipc'
 import { registerTranslateIpc } from './translate/translate-ipc'
 import type { TranslationViewDeps } from './translate/open-translation'
+import { restoreRememberedSplit } from './split-restore'
 import { FEEDBACK_SURVEY_URL, feedbackDetails, feedbackText, platformLabel } from './feedback'
 import { registerDriveIpc, type DriveService } from './drive/drive-ipc'
 import { startMcpHub } from './mcp-client/hub-app'
@@ -7123,40 +7124,16 @@ function notifySplitRoles(manager: TabManager): void {
  */
 function restoreSplitMemoryOrHome(): void {
   const manager = ensureTabManager()
-  const memory = readRememberedSplit()
-  const aPath = fileOnDisk(memory?.a)
-  const bPath = fileOnDisk(memory?.b)
-  if (aPath === undefined && bPath === undefined) {
-    manager.openHomeTab()
-    return
-  }
-  const orientation = memory?.orientation ?? 'side'
-  const ratio = memory?.ratio ?? SPLIT_EVEN_RATIO
-  const focus = memory?.focus ?? 'b'
-  // both panes held the same file: one tab, duplicated for the second pane
-  if (aPath !== undefined && bPath !== undefined && canonicalPath(aPath) === canonicalPath(bPath)) {
-    const aTabId = openRememberedTab(aPath)
-    if (aTabId === undefined) {
-      manager.openHomeTab()
-      return
-    }
-    const bTabId = manager.openDuplicatePaneTab(aTabId)
-    if (bTabId === null) return
-    manager.beginSplit(aTabId, bTabId, orientation, ratio, focus)
-    return
-  }
-  const aTabId = openRememberedTab(aPath)
-  const bTabId = openRememberedTab(bPath)
-  if (aTabId === undefined && bTabId === undefined) {
-    manager.openHomeTab()
-    return
-  }
-  if (aTabId !== undefined && bTabId !== undefined) {
-    // the translation view's source pane comes back read-only
-    if (memory?.readOnly === 'a') manager.setTabReadOnly(aTabId)
-    if (memory?.readOnly === 'b') manager.setTabReadOnly(bTabId)
-    manager.beginSplit(aTabId, bTabId, orientation, ratio, focus, memory?.collapsed ?? null)
-  }
+  restoreRememberedSplit(readRememberedSplit(), {
+    fileOnDisk,
+    samePath: (a, b) => canonicalPath(a) === canonicalPath(b),
+    openTab: openRememberedTab,
+    openHome: () => manager.openHomeTab(),
+    openDuplicatePaneTab: (tabId) => manager.openDuplicatePaneTab(tabId),
+    setTabReadOnly: (tabId) => manager.setTabReadOnly(tabId),
+    beginSplit: (a, b, orientation, ratio, focus, collapsed) =>
+      manager.beginSplit(a, b, orientation, ratio, focus, collapsed),
+  })
 }
 
 /** the remembered arrangement, or null when there is none to trust */
@@ -7169,9 +7146,8 @@ function readRememberedSplit(): SplitMemory | null {
 }
 
 /** route one remembered path into its editor tab; the landed tab's id */
-function openRememberedTab(path: string | undefined): string | undefined {
-  if (path === undefined) return undefined
-  routeDocumentPath(path)
+function openRememberedTab(path: string, options: { recordRecent: boolean }): string | undefined {
+  routeDocumentPath(path, options)
   return tabManager?.findTabByPath(path)?.id
 }
 
@@ -7291,8 +7267,13 @@ function translationViewDeps(): TranslationViewDeps {
   return {
     openTab: (path) => {
       const manager = ensureTabManager()
+      const existing = manager.findTabByPath(path)?.id
       if (!routeDocumentPath(path, { recordRecent: false })) return undefined
-      return manager.findTabByPath(path)?.id
+      const tabId = manager.findTabByPath(path)?.id
+      return tabId === undefined ? undefined : { tabId, created: tabId !== existing }
+    },
+    closeTab: (tabId) => {
+      tabManager?.closeTabWithoutPrompt(tabId)
     },
     setTabReadOnly: (tabId) => tabManager?.setTabReadOnly(tabId) ?? false,
     showSplit: (sourceTabId, outputTabId) =>

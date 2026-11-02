@@ -1,5 +1,5 @@
 import { constants } from 'node:fs'
-import { copyFile, mkdir } from 'node:fs/promises'
+import { copyFile, mkdir, stat } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { verifySource, type SourceEntry } from '@genoffice/translate-project'
 import { appForPath } from '../app-routing'
@@ -8,8 +8,11 @@ import { TranslateIpcError, type TranslateOpenTranslationResult } from '../../sh
 /** What the translation view needs from the shell's tab manager (index.ts wires it). */
 export interface TranslationViewDeps {
   /** open (or focus) the file's editor tab without touching Recent; the tab's
-   *  id, or undefined when it did not land in the main window's strip */
-  openTab(path: string): string | undefined
+   *  id and whether this call made the tab, or undefined when it did not land
+   *  in the main window's strip */
+  openTab(path: string): { tabId: string; created: boolean } | undefined
+  /** close a tab this view opened, with no save prompt */
+  closeTab(tabId: string): void
   /** make the tab read-only (TabManager.setTabReadOnly) */
   setTabReadOnly(tabId: string): boolean
   /** show the two tabs side by side, source on the left, output focused */
@@ -65,13 +68,21 @@ export async function openTranslation(
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
   }
+  // something else under that name (a folder) is not the person's output copy
+  if (!(await stat(outputPath)).isFile())
+    throw new TranslateIpcError('OPEN_FAILED', 'the output path is not a file')
 
-  const sourceTabId = deps.openTab(sourcePath)
-  if (sourceTabId === undefined || !deps.setTabReadOnly(sourceTabId))
+  const sourceTab = deps.openTab(sourcePath)
+  if (sourceTab === undefined || !deps.setTabReadOnly(sourceTab.tabId))
     throw new TranslateIpcError('OPEN_FAILED', 'the source document could not be opened')
-  const outputTabId = deps.openTab(outputPath)
-  if (outputTabId === undefined)
+  const sourceTabId = sourceTab.tabId
+  const outputTab = deps.openTab(outputPath)
+  if (outputTab === undefined) {
+    // leave no read-only source tab behind that this call itself opened
+    if (sourceTab.created) deps.closeTab(sourceTabId)
     throw new TranslateIpcError('OPEN_FAILED', 'the output document could not be opened')
+  }
+  const outputTabId = outputTab.tabId
   deps.showSplit(sourceTabId, outputTabId)
   return { sourceTabId, outputTabId, hashStatus }
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   normalizeCollapsed,
+  settleCollapsed,
   paneOfSide,
   paneRects,
   visiblePaneRects,
@@ -74,5 +75,21 @@ describe('visiblePaneRects', () => {
     expect(visiblePaneRects(content, { orientation: 'stack', ratio: 0.4, collapsed: 'b' })).toEqual(
       { a: content, b: null },
     )
+  })
+})
+
+describe('settleCollapsed (a hidden pane needs a translation split)', () => {
+  const split = { aTabId: 's', bTabId: 'o', focus: 'b' as const, collapsed: 'a' as const }
+
+  it('keeps the hidden pane while one pane is read-only', () => {
+    expect(settleCollapsed(split, (id) => id === 's').collapsed).toBe('a')
+  })
+
+  it('shows every pane once no pane is read-only (e.g. the source pane was replaced)', () => {
+    expect(settleCollapsed({ ...split, aTabId: 'x' }, (id) => id === 's').collapsed).toBeNull()
+  })
+
+  it('still shows a pane that takes focus', () => {
+    expect(settleCollapsed({ ...split, focus: 'a' }, () => true).collapsed).toBeNull()
   })
 })

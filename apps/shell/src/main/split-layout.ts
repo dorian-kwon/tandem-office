@@ -233,3 +233,18 @@ export function visiblePaneRects(
   if (split.collapsed === 'b') return { a: content, b: null }
   return paneRects(content, split.orientation, split.ratio)
 }
+
+/**
+ * normalizeCollapsed, plus: only a translation split (one read-only pane)
+ * may keep a pane hidden. Once neither pane is read-only, for example after
+ * the source pane's document was replaced, both panes show again.
+ */
+export function settleCollapsed<
+  T extends Pick<SplitViewState, 'aTabId' | 'bTabId' | 'focus' | 'collapsed'>,
+>(split: T, isReadOnly: (tabId: string) => boolean): T {
+  const normalized = normalizeCollapsed(split)
+  if (normalized.collapsed === null) return normalized
+  return isReadOnly(split.aTabId) || isReadOnly(split.bTabId)
+    ? normalized
+    : { ...normalized, collapsed: null }
+}

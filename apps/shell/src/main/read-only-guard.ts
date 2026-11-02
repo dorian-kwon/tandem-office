@@ -94,6 +94,7 @@ export const READ_ONLY_IPC_ANSWERS: Readonly<Record<string, unknown>> = {
   'docs:save-as': refused,
   // apps/slides/src/preload/index.ts
   'slides:save': refused,
+  'slides:save-as': refused,
   // MARKDOWN_CHANNELS.save, HTML_CHANNELS.save, EPUB_CHANNELS.save,
   // MINDMAP_CHANNELS.save (Save and Save As share the channel)
   'markdown:save': refused,
@@ -106,6 +107,18 @@ export const READ_ONLY_IPC_ANSWERS: Readonly<Record<string, unknown>> = {
   'app:get-auto-save-default': { on: false, updatedAt: 0 },
 }
 
+/**
+ * Channels whose callers only know a thrown error as failure. The Sheets
+ * editor's save strips Electron's "Error invoking remote method" wrapper and
+ * shows the rest (apps/sheets/src/renderer/save-actions.ts), so these reject.
+ */
+export const READ_ONLY_IPC_THROWS: readonly string[] = [
+  // IPC_CHANNELS.saveWorkbook and saveEditsBegin (apps/sheets/src/shared/ipc-channels.ts):
+  // the direct save and the chunked transfer a large save starts with
+  'workbook:save',
+  'workbook:save-edits-begin',
+]
+
 type GuardedContents = Pick<WebContents, 'on' | 'removeListener'> & {
   ipc?: Pick<WebContents['ipc'], 'handle' | 'removeHandler'>
 }
@@ -116,10 +129,17 @@ export function installReadOnlyGuard(contents: GuardedContents): () => void {
     if (readOnlyBlocksInput(input)) event.preventDefault()
   }
   contents.on('before-input-event', onInput)
-  const channels = Object.keys(READ_ONLY_IPC_ANSWERS)
-  for (const channel of channels) {
+  // a handler on the view's own ipc is found before ipcMain's (Electron's
+  // WebContents.ipc docs), so the editor's real handler never runs for it
+  const channels = [...Object.keys(READ_ONLY_IPC_ANSWERS), ...READ_ONLY_IPC_THROWS]
+  for (const channel of Object.keys(READ_ONLY_IPC_ANSWERS)) {
     const answer = READ_ONLY_IPC_ANSWERS[channel]
     contents.ipc?.handle(channel, () => answer)
+  }
+  for (const channel of READ_ONLY_IPC_THROWS) {
+    contents.ipc?.handle(channel, () => {
+      throw new Error(READ_ONLY_ERROR)
+    })
   }
   return () => {
     contents.removeListener('before-input-event', onInput)

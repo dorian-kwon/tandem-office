@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -10,8 +10,10 @@ let root: string
 let dir: string
 let opened: string[]
 let deps: TranslationViewDeps & {
+  openTab: ReturnType<typeof vi.fn>
   setTabReadOnly: ReturnType<typeof vi.fn>
   showSplit: ReturnType<typeof vi.fn>
+  closeTab: ReturnType<typeof vi.fn>
 }
 
 beforeEach(async () => {
@@ -21,8 +23,9 @@ beforeEach(async () => {
   deps = {
     openTab: vi.fn((path: string) => {
       opened.push(path)
-      return `t-${opened.length}`
+      return { tabId: `t-${opened.length}`, created: true }
     }),
+    closeTab: vi.fn(),
     setTabReadOnly: vi.fn(() => true),
     showSplit: vi.fn(),
     setPaneHidden: vi.fn(() => true),
@@ -127,5 +130,33 @@ describe('openTranslation', () => {
     deps.setTabReadOnly.mockImplementation(() => false)
     expect(await codeOf(openTranslation(dir, entry, deps))).toBe('OPEN_FAILED')
     expect(deps.showSplit).not.toHaveBeenCalled()
+  })
+})
+
+describe('openTranslation (review fixes)', () => {
+  it('refuses an output path that is a folder', async () => {
+    const entry = await addSource('a.md', '# hello')
+    mkdirSync(join(dir, 'output', 'a.md'), { recursive: true })
+    expect(await codeOf(openTranslation(dir, entry, deps))).toBe('OPEN_FAILED')
+    expect(opened).toEqual([])
+  })
+
+  it('closes the source tab it opened when the output copy cannot open', async () => {
+    const entry = await addSource('a.md', '# hello')
+    deps.openTab.mockImplementation((path: string) =>
+      path.includes('output') ? undefined : { tabId: 'src', created: true },
+    )
+    expect(await codeOf(openTranslation(dir, entry, deps))).toBe('OPEN_FAILED')
+    expect(deps.closeTab).toHaveBeenCalledWith('src')
+    expect(deps.showSplit).not.toHaveBeenCalled()
+  })
+
+  it('leaves a source tab that was already open before this call', async () => {
+    const entry = await addSource('a.md', '# hello')
+    deps.openTab.mockImplementation((path: string) =>
+      path.includes('output') ? undefined : { tabId: 'src', created: false },
+    )
+    expect(await codeOf(openTranslation(dir, entry, deps))).toBe('OPEN_FAILED')
+    expect(deps.closeTab).not.toHaveBeenCalled()
   })
 })

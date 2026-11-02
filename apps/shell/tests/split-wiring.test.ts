@@ -228,12 +228,17 @@ describe('the split memory wiring', () => {
   })
 
   it('opens the remembered documents and rebuilds the arrangement', () => {
-    expect(source).toMatch(/routeDocumentPath\(path\)/)
+    // the decisions live in split-restore.ts (tests/split-restore.test.ts);
+    // index.ts only hands it the router, the disk check and the tab manager
+    expect(source).toMatch(/restoreRememberedSplit\(readRememberedSplit\(\), \{/)
+    expect(source).toMatch(/routeDocumentPath\(path, options\)/)
     expect(source).toMatch(/tabManager\?\.findTabByPath\(path\)\?\.id/)
     expect(source).toMatch(/existsSync\(path\) \? path : undefined/)
-    expect(source).toMatch(/canonicalPath\(aPath\) === canonicalPath\(bPath\)/)
-    expect(source).toMatch(/const bTabId = manager\.openDuplicatePaneTab\(aTabId\)/)
-    expect(source).toMatch(/manager\.beginSplit\(aTabId, bTabId, orientation, ratio, focus\)/)
+    expect(source).toMatch(/samePath: \(a, b\) => canonicalPath\(a\) === canonicalPath\(b\)/)
+    expect(source).toMatch(
+      /openDuplicatePaneTab: \(tabId\) => manager\.openDuplicatePaneTab\(tabId\)/,
+    )
+    expect(source).toMatch(/manager\.beginSplit\(a, b, orientation, ratio, focus, collapsed\)/)
   })
 })
 

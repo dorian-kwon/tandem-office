@@ -279,6 +279,7 @@ function viewOf(tabId: string): FakeView {
 function translationSplit(): { left: string; right: string } {
   const left = manager.openDocsTab('/p/source/a.docx')
   const right = manager.openDocsTab('/p/output/a.docx')
+  manager.setTabReadOnly(left)
   manager.beginSplit(left, right, 'side', 0.5, 'b')
   return { left, right }
 }
@@ -287,6 +288,26 @@ describe('hiding a pane (setPaneHidden)', () => {
   it('is refused without a split', () => {
     manager.openDocsTab('/a.docx')
     expect(manager.setPaneHidden('left', true)).toBe(false)
+  })
+
+  it('is refused for an ordinary split (no read-only pane)', () => {
+    const a = manager.openDocsTab('/a.docx')
+    const b = manager.openDocsTab('/b.docx')
+    manager.beginSplit(a, b, 'side', 0.5, 'b')
+    expect(manager.setPaneHidden('left', true)).toBe(false)
+    expect(manager.splitState()?.collapsed).toBeNull()
+  })
+
+  it('shows both panes again once the read-only pane is replaced', () => {
+    const { left } = translationSplit()
+    manager.setPaneHidden('right', true)
+    expect(manager.splitState()).toMatchObject({ collapsed: 'b', focus: 'a' })
+    // another document tab takes over the focused (source) pane
+    const other = manager.openDocsTab('/other.docx')
+    const state = manager.splitState()
+    expect(state?.aTabId).toBe(other)
+    expect(state?.aTabId).not.toBe(left)
+    expect(state?.collapsed).toBeNull()
   })
 
   it('hides the left pane: its view turns invisible, the right pane fills the content', () => {

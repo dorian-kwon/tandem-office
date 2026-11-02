@@ -459,8 +459,9 @@ describe('translation view handlers', () => {
       opened,
       openTab: (path: string) => {
         opened.push(path)
-        return `t${opened.length}`
+        return { tabId: `t${opened.length}`, created: true }
       },
+      closeTab: () => {},
       setTabReadOnly: () => true,
       showSplit: () => {},
       setPaneHidden: (_side: 'left' | 'right', _hidden: boolean) => true,
