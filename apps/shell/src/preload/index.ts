@@ -721,6 +721,12 @@ const translateApi: TranslateApi = {
   ocrPageImage: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrPageImage, args),
   ocrWrite: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrWrite, args),
   ocrRelease: (token) => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrRelease, token),
+  instructionsFor: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.instructionsFor, args),
+  pdfPrepare: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.pdfPrepare, args),
+  pdfStore: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.pdfStore, args),
+  pdfWrite: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.pdfWrite, args),
+  pdfRelease: (token) => ipcRenderer.invoke(TRANSLATE_CHANNELS.pdfRelease, token),
+  openResult: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.openResult, args),
 }
 contextBridge.exposeInMainWorld('translateApi', translateApi)
 

@@ -1,6 +1,7 @@
 import {
   createIpcTransport,
   type AgentStreamHandle,
+  type AgentStreamRequest,
   type IpcStreamError,
 } from '@genoffice/agent-core'
 import type { AiSettings } from '@genoffice/ai-provider/browser'
@@ -72,13 +73,49 @@ export function ocrRouteRefusal(
 }
 
 export function createOcrAsk(o: OcrAskOptions): OcrAsk {
-  const bridge: OcrStreamBridge = o.bridge ?? window.aiOffice
-  const runId = crypto.randomUUID()
+  const ask = createRouteAsk({
+    settings: () => o.confirmed.settings,
+    refusal: () => ocrRouteRefusal(o.confirmed, o.current()),
+    lang: o.lang,
+    unknownError: 'errOcrFailed',
+    ...(o.bridge ? { bridge: o.bridge } : {}),
+  })
   return async (provider, request, signal) => {
     if (signal.aborted) throw abortError(signal)
     if (provider !== o.ocr)
       throw new OcrCallError('another provider was asked for', { kind: 'not-connected' })
-    const refused = ocrRouteRefusal(o.confirmed, o.current())
+    return ask(request.system, request.messages, signal)
+  }
+}
+
+export interface RouteAskOptions {
+  /** the settings the person confirmed (the selection pinned to one provider) */
+  settings: () => AiSettings
+  /** asked before each call: the run error kind to stop with when the route changed, else null */
+  refusal: () => string | null
+  lang: () => Lang
+  /** the screen's text for a failure that names no reason */
+  unknownError: 'errOcrFailed' | 'errTranslateFailed'
+  bridge?: OcrStreamBridge
+}
+
+/**
+ * One model call of a document job over `ai:stream`: a system prompt and
+ * user turns, no tools, all calls of one job under one run id. Used by the
+ * OCR and by the PDF translation of the translation tool.
+ */
+export function createRouteAsk(
+  o: RouteAskOptions,
+): (
+  system: string,
+  messages: AgentStreamRequest['messages'],
+  signal: AbortSignal,
+) => Promise<string> {
+  const bridge: OcrStreamBridge = o.bridge ?? window.aiOffice
+  const runId = crypto.randomUUID()
+  return async (system, messages, signal) => {
+    if (signal.aborted) throw abortError(signal)
+    const refused = o.refusal()
     if (refused)
       throw new OcrCallError(`the confirmed AI connection changed (${refused})`, { kind: refused })
     return new Promise<string>((resolve, reject) => {
@@ -96,21 +133,21 @@ export function createOcrAsk(o: OcrAskOptions): OcrAsk {
         handle?.cancel()
         finish(() => reject(abortError(signal)))
       }
-      const settings = o.confirmed.settings
+      const settings = o.settings()
       const transport = createIpcTransport<AiSettings>({
         onStream: (listener) => bridge.onAiStream(listener as (chunk: AiStreamChunk) => void),
         start: (req) => bridge.aiStream(req as unknown as AiStreamRequest),
         // Stop ends this call only, not media calls the home window may be making
         cancel: (requestId) => void bridge.aiStreamCancel(requestId, 'request'),
         getSettings: () => settings,
-        unknownErrorText: () => translateText(o.lang(), 'errOcrFailed'),
+        unknownErrorText: () => translateText(o.lang(), o.unknownError),
         errorText: (c) => aiRunErrorText(o.lang(), c),
         onStreamError: (error) => {
           cause = error
         },
       })
       handle = transport.stream(
-        { system: request.system, messages: request.messages, tools: [], runId },
+        { system, messages, tools: [], runId },
         {
           onDelta: (text) => {
             if (settled) return

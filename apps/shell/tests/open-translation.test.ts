@@ -59,7 +59,12 @@ describe('openTranslation', () => {
     expect(deps.setTabReadOnly).toHaveBeenCalledWith('t-1')
     expect(deps.setTabReadOnly).not.toHaveBeenCalledWith('t-2')
     expect(deps.showSplit).toHaveBeenCalledWith('t-1', 't-2')
-    expect(result).toEqual({ sourceTabId: 't-1', outputTabId: 't-2', hashStatus: 'ok' })
+    expect(result).toEqual({
+      flow: 'edit',
+      sourceTabId: 't-1',
+      outputTabId: 't-2',
+      hashStatus: 'ok',
+    })
   })
 
   it('creates output copy once and reuses it on reopen', async () => {
@@ -98,10 +103,45 @@ describe('openTranslation', () => {
     expect(existsSync(join(dir, 'output', 'a.md'))).toBe(false)
   })
 
-  it.each(['pdf', 'scan', 'image'] as const)('leaves %s sources to a later step', async (kind) => {
-    const entry: SourceEntry = { file: 'a.pdf', sha256: 'x', kind }
-    expect(await codeOf(openTranslation(dir, entry, deps))).toBe('SOURCE_NOT_EDITABLE')
+  it('routes a text PDF to the translation job and opens nothing', async () => {
+    const entry = await addSource('a.pdf', '%PDF-1.4')
+    expect(await openTranslation(dir, entry, deps)).toEqual({
+      flow: 'translate-pdf',
+      file: 'a.pdf',
+      hashStatus: 'ok',
+      existing: null,
+    })
     expect(opened).toEqual([])
+  })
+
+  it.each(['scan', 'image'] as const)('routes a %s source to OCR when OCR is on', async (kind) => {
+    const name = kind === 'scan' ? 'a.pdf' : 'a.png'
+    const entry = { ...(await addSource(name, 'bytes')), kind }
+    const result = await openTranslation(dir, entry, deps, { kind: 'ai', provider: 'claude' })
+    expect(result).toEqual({ flow: 'ocr', kind, file: name, hashStatus: 'ok', existing: null })
+    expect(opened).toEqual([])
+  })
+
+  it.each(['scan', 'image'] as const)('refuses a %s source with OCR off', async (kind) => {
+    const entry: SourceEntry = { file: kind === 'scan' ? 'a.pdf' : 'a.png', sha256: 'x', kind }
+    expect(await codeOf(openTranslation(dir, entry, deps, { kind: 'off' }))).toBe('OCR_DISABLED')
+    expect(await codeOf(openTranslation(dir, entry, deps))).toBe('OCR_DISABLED')
+    expect(opened).toEqual([])
+  })
+
+  it('refuses an image type the OCR cannot read', async () => {
+    const entry: SourceEntry = { file: 'a.gif', sha256: 'x', kind: 'image' }
+    const ocr = { kind: 'ai', provider: 'claude' } as const
+    expect(await codeOf(openTranslation(dir, entry, deps, ocr))).toBe('UNSUPPORTED_SOURCE')
+  })
+
+  it('names the newest earlier OCR result of a scan', async () => {
+    const entry = { ...(await addSource('a.pdf', 'bytes')), kind: 'scan' as const }
+    mkdirSync(join(dir, 'output'), { recursive: true })
+    writeFileSync(join(dir, 'output', 'a (OCR).docx'), 'x')
+    writeFileSync(join(dir, 'output', 'b (OCR).docx'), 'x')
+    const result = await openTranslation(dir, entry, deps, { kind: 'ai', provider: 'chatgpt' })
+    expect(result).toMatchObject({ existing: 'a (OCR).docx' })
   })
 
   it('rejects a file name that leaves the source folder', async () => {

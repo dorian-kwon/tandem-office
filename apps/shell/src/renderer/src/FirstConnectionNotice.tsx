@@ -90,3 +90,35 @@ export function FirstConnectionDialog({ onAcknowledge }: { onAcknowledge: () => 
     </div>
   )
 }
+
+/** where the home screen is when it decides whether to show the notice */
+export interface HomeNoticePlace {
+  /** a subscription can be used and the notice was not acknowledged */
+  noticeDue: boolean
+  /** Settings was opened (a connection is made there) */
+  settingsVisited: boolean
+  /** the ask panel is shown (it sends from the home screen) */
+  askMode: boolean
+  projectsMode: boolean
+  /** the project screen asked for it ("[tidy up]" waits behind it) */
+  projectsNoticeAsked: boolean
+  translateMode: boolean
+  /** the translation screen's OCR or PDF translation window asked for it before sending */
+  translateNoticeAsked: boolean
+}
+
+/**
+ * The home screen shows the first-connection notice where a connection is
+ * made or first used from it: in Settings, on the ask panel, and on the
+ * project and translation screens once one of their windows is about to send.
+ * An editor's AI panel shows it for itself.
+ */
+export function homeFirstConnectionShown(p: HomeNoticePlace): boolean {
+  return (
+    p.noticeDue &&
+    (p.settingsVisited ||
+      p.askMode ||
+      (p.projectsMode && p.projectsNoticeAsked) ||
+      (p.translateMode && p.translateNoticeAsked))
+  )
+}

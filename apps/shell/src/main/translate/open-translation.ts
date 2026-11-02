@@ -1,9 +1,13 @@
 import { constants } from 'node:fs'
-import { copyFile, mkdir, stat } from 'node:fs/promises'
-import { basename, join } from 'node:path'
-import { verifySource, type SourceEntry } from '@genoffice/translate-project'
+import { copyFile, mkdir, readdir, stat } from 'node:fs/promises'
+import { basename, extname, join } from 'node:path'
+import { verifySource, type OcrMode, type SourceEntry } from '@genoffice/translate-project'
 import { appForPath } from '../app-routing'
-import { TranslateIpcError, type TranslateOpenTranslationResult } from '../../shared/translate-api'
+import {
+  TranslateIpcError,
+  type TranslateOpenResultAnswer,
+  type TranslateOpenTranslationResult,
+} from '../../shared/translate-api'
 
 /** What the translation view needs from the shell's tab manager (index.ts wires it). */
 export interface TranslationViewDeps {
@@ -28,36 +32,102 @@ function plainFileName(file: string): boolean {
   )
 }
 
+/** the image types the OCR reads (main/translate/ocr.ts) */
+const OCR_IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg']
+
+function stemOf(file: string): string {
+  const ext = extname(file)
+  return file.slice(0, file.length - ext.length) || file
+}
+
+/** is `output` a result of `source` (by name): the OCR's Word document, or a translated PDF */
+function isResultOf(source: SourceEntry, output: string): boolean {
+  const stem = stemOf(source.file).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  // the names non-editable.ts and ocr.ts give, with the " (2)" of a taken name
+  if (source.kind === 'pdf')
+    return new RegExp(`^${stem}\\.[^.]+(\\.bilingual)?( \\(\\d+\\))?\\.pdf$`).test(output)
+  if (source.kind === 'scan' || source.kind === 'image')
+    return new RegExp(`^${stem} \\(OCR\\)( \\(\\d+\\))?\\.docx$`).test(output)
+  return false
+}
+
+/** the newest earlier result of `source` in output/, or null */
+async function latestResult(dir: string, source: SourceEntry): Promise<string | null> {
+  const outputDir = join(dir, 'output')
+  const names = await readdir(outputDir).catch(() => [] as string[])
+  let best: { name: string; at: number } | null = null
+  for (const name of names) {
+    if (name.startsWith('.') || !isResultOf(source, name)) continue
+    const info = await stat(join(outputDir, name)).catch(() => null)
+    if (!info?.isFile()) continue
+    if (!best || info.mtimeMs > best.at) best = { name, at: info.mtimeMs }
+  }
+  return best?.name ?? null
+}
+
 /**
- * Open the translation view for one editable source: the copy in `source/`
- * read-only on the left and `output/<same name>` editable on the right. The
- * output copy is made from the source copy the first time only; an existing
- * output file is the person's work and is always reused, never overwritten.
+ * Open the translation view for one source. An editable document opens at
+ * once: the copy in `source/` read-only on the left and `output/<same name>`
+ * editable on the right. The output copy is made from the source copy the
+ * first time only; an existing output file is the person's work and is
+ * always reused, never overwritten.
  *
- * The person's original file is never opened here: `source/` holds a copy made
- * when the source was added. Its hash is checked first: a missing copy is
- * refused, a changed one still opens and reports 'changed' so the screen can
- * warn. PDF, scan and image sources are refused (a later step opens them).
+ * The other kinds open nothing here; the answer tells the screen which flow
+ * to run first (main/translate/non-editable.ts):
+ * - 'pdf' (a text layer): the translation job, then `openTranslationResult`;
+ * - 'scan' and 'image': the OCR window, then `openTranslationResult` with
+ *   its Word document. With the project's OCR switched off they are refused
+ *   (OCR_DISABLED) instead of producing an empty document.
+ * `source.kind` must already be the resolved one (a PDF checked for a scan).
+ *
+ * The person's original file is never opened here: `source/` holds a copy
+ * made when the source was added. Its hash is checked first: a missing copy
+ * is refused, a changed one still opens and reports 'changed' so the screen
+ * can warn.
  */
 export async function openTranslation(
   dir: string,
   source: SourceEntry,
   deps: TranslationViewDeps,
+  ocr: OcrMode = { kind: 'off' },
 ): Promise<TranslateOpenTranslationResult> {
-  if (source.kind !== 'editable')
-    throw new TranslateIpcError(
-      'SOURCE_NOT_EDITABLE',
-      'PDF, scanned and image sources do not open in the translation view yet',
-    )
   if (!plainFileName(source.file))
     throw new TranslateIpcError('INVALID_ARGUMENT', 'the source file name is not valid')
-  if (!appForPath(source.file))
+  if (source.kind === 'scan' || source.kind === 'image') {
+    if (ocr.kind !== 'ai')
+      throw new TranslateIpcError(
+        'OCR_DISABLED',
+        'this source is read by OCR first, and OCR is switched off for this project',
+      )
+    if (
+      source.kind === 'image' &&
+      !OCR_IMAGE_EXTENSIONS.includes(extname(source.file).toLowerCase())
+    )
+      throw new TranslateIpcError('UNSUPPORTED_SOURCE', 'only PNG and JPEG images can be read')
+  }
+  if (source.kind === 'editable' && !appForPath(source.file))
     throw new TranslateIpcError('UNSUPPORTED_SOURCE', `no editor opens ${source.file}`)
 
   const sourcePath = join(dir, 'source', source.file)
   const hashStatus = await verifySource(dir, source)
   if (hashStatus === 'missing')
     throw new TranslateIpcError('SOURCE_MISSING', 'the copy in the source folder is missing')
+
+  if (source.kind === 'pdf')
+    return {
+      flow: 'translate-pdf',
+      file: source.file,
+      hashStatus,
+      existing: await latestResult(dir, source),
+    }
+  if (source.kind === 'scan' || source.kind === 'image')
+    return {
+      flow: 'ocr',
+      kind: source.kind,
+      file: source.file,
+      hashStatus,
+      existing: await latestResult(dir, source),
+    }
 
   const outputDir = join(dir, 'output')
   const outputPath = join(outputDir, source.file)
@@ -72,6 +142,16 @@ export async function openTranslation(
   if (!(await stat(outputPath)).isFile())
     throw new TranslateIpcError('OPEN_FAILED', 'the output path is not a file')
 
+  const { sourceTabId, outputTabId } = await openPair(sourcePath, outputPath, deps)
+  return { flow: 'edit', sourceTabId, outputTabId, hashStatus }
+}
+
+/** the source copy read-only on the left, `outputPath` on the right, output focused */
+async function openPair(
+  sourcePath: string,
+  outputPath: string,
+  deps: TranslationViewDeps,
+): Promise<{ sourceTabId: string; outputTabId: string }> {
   const sourceTab = deps.openTab(sourcePath)
   if (sourceTab === undefined || !deps.setTabReadOnly(sourceTab.tabId))
     throw new TranslateIpcError('OPEN_FAILED', 'the source document could not be opened')
@@ -84,5 +164,39 @@ export async function openTranslation(
   }
   const outputTabId = outputTab.tabId
   deps.showSplit(sourceTabId, outputTabId)
-  return { sourceTabId, outputTabId, hashStatus }
+  return { sourceTabId, outputTabId }
+}
+
+/**
+ * Open a result of a PDF, scan or image source (the translated PDF, or the
+ * OCR's Word document) beside the source copy: the source read-only on the
+ * left, the result editable on the right. An image has no editor to show it,
+ * so its Word document opens alone. `output` must be a plain name in
+ * output/ that is a result of this source by name (`<stem>.<lang>….pdf` for
+ * a PDF, `<stem> (OCR)….docx` for a scan or an image), and an existing file.
+ */
+export async function openTranslationResult(
+  dir: string,
+  source: SourceEntry,
+  output: unknown,
+  deps: TranslationViewDeps,
+): Promise<TranslateOpenResultAnswer> {
+  if (!plainFileName(source.file))
+    throw new TranslateIpcError('INVALID_ARGUMENT', 'the source file name is not valid')
+  if (typeof output !== 'string' || !plainFileName(output) || !isResultOf(source, output))
+    throw new TranslateIpcError('INVALID_ARGUMENT', 'this is not a result of that source')
+  const outputPath = join(dir, 'output', output)
+  const info = await stat(outputPath).catch(() => null)
+  if (!info?.isFile())
+    throw new TranslateIpcError('OPEN_FAILED', 'the result is not in the output folder')
+  if (source.kind === 'image') {
+    const tab = deps.openTab(outputPath)
+    if (tab === undefined)
+      throw new TranslateIpcError('OPEN_FAILED', 'the output document could not be opened')
+    return { sourceTabId: null, outputTabId: tab.tabId }
+  }
+  const sourcePath = join(dir, 'source', source.file)
+  if ((await verifySource(dir, source)) === 'missing')
+    throw new TranslateIpcError('SOURCE_MISSING', 'the copy in the source folder is missing')
+  return openPair(sourcePath, outputPath, deps)
 }

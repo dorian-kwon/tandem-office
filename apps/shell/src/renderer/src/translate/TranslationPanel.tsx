@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
+import type { AiSettings } from '@genoffice/ai-provider/browser'
+import type { SourceEntry } from '@genoffice/translate-project'
 import { useI18n } from '../locale'
+import type { SubscriptionConnection } from '../subscription-client'
+import { OcrSelectDialog } from './OcrSelectDialog'
+import { PdfTranslateDialog } from './PdfTranslateDialog'
 import { ProjectDetail } from './ProjectDetail'
 import { ProjectList } from './ProjectList'
 import { makeText, translateErrorText } from './shared'
@@ -8,15 +13,43 @@ import './translate-global'
 
 /**
  * The translation tool's home screen: the project list, or one project's
- * detail screen once opened. "Open translation" on a source shows the
- * translation view (main: translate/open-translation.ts); a failure or a
- * changed source copy is reported on the detail screen.
+ * detail screen once opened. "Open translation" on a source asks main which
+ * flow it needs (main: translate/open-translation.ts):
+ *
+ * - an editable document: the translation view is open already;
+ * - a text PDF: the PDF translation window (confirmation, job, translated
+ *   PDF in output/), then the PDF opens beside the read-only source copy;
+ * - a scanned PDF or an image: the OCR window (Task 10b), then its Word
+ *   document opens beside the source copy and is translated with the AI panel.
+ *
+ * When an earlier result is in output/, the person first chooses between
+ * opening it and running again, so a finished OCR or translation is not paid
+ * for twice by accident. Failures and a changed source copy are reported on
+ * the detail screen.
  */
-export function TranslationPanel() {
+
+export interface TranslationPanelProps {
+  /** the AI settings as last read; null until they are (Home owns them) */
+  aiSettings?: AiSettings | null
+  /** the live subscription connection (AppFrame owns the one instance) */
+  connection?: SubscriptionConnection
+  /** a window needs the first-connection notice: the home screen shows it */
+  onNoticeNeeded?: () => void
+  /** open Settings at the AI section */
+  onOpenAiSettings?: () => void
+}
+
+type Flow =
+  | { kind: 'choose'; dir: string; file: string; existing: string; again: 'pdf' | 'ocr' }
+  | { kind: 'pdf'; dir: string; file: string }
+  | { kind: 'ocr'; dir: string; source: SourceEntry }
+
+export function TranslationPanel(props: TranslationPanelProps = {}) {
   const { lang } = useI18n()
   const s = makeText(lang)
   const [openDir, setOpenDir] = useState<string | null>(null)
   const [notice, setNotice] = useState<{ text: string; isError: boolean } | null>(null)
+  const [flow, setFlow] = useState<Flow | null>(null)
   // the project the newest open request belongs to: a late answer for another
   // project (the person went back and opened a different one) is dropped
   const current = useRef<string | null>(null)
@@ -25,31 +58,153 @@ export function TranslationPanel() {
     setNotice(null)
   }, [openDir])
 
+  const fail = (dir: string, err: unknown) => {
+    if (current.current !== dir) return
+    setNotice({ text: translateErrorText(lang, err), isError: true })
+  }
+
+  /** the result beside the read-only source copy */
+  const openResult = async (dir: string, file: string, output: string): Promise<void> => {
+    try {
+      await window.translateApi?.openResult({ dir, file, output })
+    } catch (err) {
+      fail(dir, err)
+    }
+  }
+
+  /** the source entry as project.json has it now (the OCR window lists by it) */
+  const startOcr = async (dir: string, file: string): Promise<void> => {
+    try {
+      const project = await window.translateApi?.getProject(dir)
+      const source = project?.sources.find((src) => src.file === file)
+      if (!source || current.current !== dir) return
+      setFlow({ kind: 'ocr', dir, source })
+    } catch (err) {
+      fail(dir, err)
+    }
+  }
+
   const startTranslation = async (dir: string, file: string): Promise<void> => {
     const api = window.translateApi
     if (!api) return
     setNotice(null)
     try {
       const result = await api.openTranslation({ dir, file })
-      // the tab strip shows it over the split; the detail screen keeps it too
-      if (result.hashStatus === 'changed') markSourceChanged(result.sourceTabId)
+      if (result.flow === 'edit') {
+        // the tab strip shows it over the split; the detail screen keeps it too
+        if (result.hashStatus === 'changed') markSourceChanged(result.sourceTabId)
+        if (current.current !== dir) return
+        setNotice(
+          result.hashStatus === 'changed' ? { text: s('warnSourceChanged'), isError: false } : null,
+        )
+        return
+      }
       if (current.current !== dir) return
-      setNotice(
-        result.hashStatus === 'changed' ? { text: s('warnSourceChanged'), isError: false } : null,
-      )
+      if (result.hashStatus === 'changed')
+        setNotice({ text: s('warnSourceChanged'), isError: false })
+      const again = result.flow === 'translate-pdf' ? 'pdf' : 'ocr'
+      if (result.existing) {
+        setFlow({ kind: 'choose', dir, file, existing: result.existing, again })
+        return
+      }
+      if (again === 'pdf') setFlow({ kind: 'pdf', dir, file })
+      else await startOcr(dir, file)
     } catch (err) {
-      if (current.current !== dir) return
-      setNotice({ text: translateErrorText(lang, err), isError: true })
+      fail(dir, err)
     }
   }
 
+  const close = () => setFlow(null)
+  const connection = props.connection
+  const aiSettings = props.aiSettings ?? null
+  const openAiSettings = props.onOpenAiSettings ?? (() => undefined)
+
   if (openDir === null) return <ProjectList onOpen={setOpenDir} />
   return (
-    <ProjectDetail
-      dir={openDir}
-      onBack={() => setOpenDir(null)}
-      onStartTranslation={(file) => void startTranslation(openDir, file)}
-      startNotice={notice}
-    />
+    <>
+      <ProjectDetail
+        dir={openDir}
+        onBack={() => setOpenDir(null)}
+        onStartTranslation={(file) => void startTranslation(openDir, file)}
+        startNotice={notice}
+      />
+      {flow?.kind === 'choose' && (
+        <div className="modal-overlay">
+          <div
+            className="modal translate-existing"
+            role="dialog"
+            aria-modal="true"
+            aria-label={s('existingTitle')}
+          >
+            <h3>{s('existingTitle')}</h3>
+            <p data-existing={flow.existing}>{s('existingText', { file: flow.existing })}</p>
+            <div className="modal-buttons">
+              <button type="button" className="btn btn-secondary" onClick={close}>
+                {s('cancel')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                data-action="again"
+                onClick={() => {
+                  const { dir, file, again } = flow
+                  if (again === 'pdf') setFlow({ kind: 'pdf', dir, file })
+                  else {
+                    setFlow(null)
+                    void startOcr(dir, file)
+                  }
+                }}
+              >
+                {flow.again === 'pdf' ? s('existingAgainPdf') : s('existingAgainOcr')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                data-action="open-existing"
+                onClick={() => {
+                  const { dir, file, existing } = flow
+                  setFlow(null)
+                  void openResult(dir, file, existing)
+                }}
+              >
+                {s('existingOpen')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {flow?.kind === 'pdf' && connection && (
+        <PdfTranslateDialog
+          dir={flow.dir}
+          file={flow.file}
+          aiSettings={aiSettings}
+          connection={connection}
+          {...(props.onNoticeNeeded ? { onNoticeNeeded: props.onNoticeNeeded } : {})}
+          onOpenAiSettings={openAiSettings}
+          onOpenResult={(output) => void openResult(flow.dir, flow.file, output)}
+          onClose={close}
+        />
+      )}
+      {flow?.kind === 'ocr' && connection && (
+        <OcrSelectDialog
+          dir={flow.dir}
+          sources={[flow.source]}
+          aiSettings={aiSettings}
+          connection={connection}
+          {...(props.onNoticeNeeded ? { onNoticeNeeded: props.onNoticeNeeded } : {})}
+          onOpenAiSettings={openAiSettings}
+          // the Word document opens beside the source as soon as it is written
+          onFinished={(result) =>
+            void openResult(flow.dir, flow.source.file, baseName(result.docxPath))
+          }
+          onOpenResult={(docxPath) =>
+            void openResult(flow.dir, flow.source.file, baseName(docxPath))
+          }
+          onClose={close}
+        />
+      )}
+    </>
   )
 }
+
+const baseName = (path: string): string => path.split(/[\\/]/).pop() ?? path

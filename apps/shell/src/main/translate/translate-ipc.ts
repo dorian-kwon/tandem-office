@@ -21,7 +21,17 @@ import {
 } from '@genoffice/translate-project'
 import { PickAllowlist } from './pick-allowlist'
 import { createOcrService, type OcrService, type OcrServiceDeps } from './ocr'
-import { openTranslation, type TranslationViewDeps } from './open-translation'
+import { buildTranslationInstructions } from './context-injection'
+import {
+  createNonEditableService,
+  type NonEditableDeps,
+  type NonEditableService,
+} from './non-editable'
+import {
+  openTranslation,
+  openTranslationResult,
+  type TranslationViewDeps,
+} from './open-translation'
 import type { TranslationProjectLink } from './project-link'
 import {
   readTranslationProjects,
@@ -35,13 +45,20 @@ import {
   TranslateIpcError,
   type TranslateAddMaterialArgs,
   type TranslateCreateArgs,
+  type TranslateInstructions,
+  type TranslateInstructionsForArgs,
   type TranslateMaterialKind,
   type TranslateOcrPageImageArgs,
   type TranslateOcrPrepareArgs,
   type TranslateOcrStartArgs,
   type TranslateOcrWriteArgs,
   type TranslateOpenTranslationArgs,
+  type TranslateOpenResultAnswer,
+  type TranslateOpenResultArgs,
   type TranslateOpenTranslationResult,
+  type TranslatePdfPrepareArgs,
+  type TranslatePdfStoreArgs,
+  type TranslatePdfWriteArgs,
   type TranslatePickedMaterials,
   type TranslatePickedParentDir,
   type TranslateProjectListEntry,
@@ -76,7 +93,16 @@ export interface TranslateIpcDeps {
   projects?: TranslationProjectLink
   /** page rendering and the .docx conversion for OCR (main/translate/ocr.ts); absent: no OCR */
   ocr?: OcrServiceDeps
+  /**
+   * scan detection, the PDF's tree, the result store and the translated-PDF
+   * writer (main/translate/non-editable.ts); absent: PDF sources are not
+   * checked for scans and a text PDF cannot be translated
+   */
+  nonEditable?: NonEditableDeps
 }
+
+/** the longest request text the glossary entries are picked by (a batch is far shorter) */
+export const INSTRUCTIONS_TEXT_LIMIT = 400_000
 
 export interface OpenDialogOptions {
   title?: string
@@ -162,6 +188,12 @@ export function createTranslateHandlers(deps: TranslateIpcDeps) {
     ocrWrite: guard(raw.ocrWrite),
     ocrRelease: guard(raw.ocrRelease),
     ocrForgetOwner: guard(raw.ocrForgetOwner),
+    instructionsFor: guard(raw.instructionsFor),
+    pdfPrepare: guard(raw.pdfPrepare),
+    pdfStore: guard(raw.pdfStore),
+    pdfWrite: guard(raw.pdfWrite),
+    pdfRelease: guard(raw.pdfRelease),
+    openResult: guard(raw.openResult),
   }
 }
 
@@ -183,6 +215,25 @@ function createRawHandlers(deps: TranslateIpcDeps) {
   const ocrService: OcrService | null = deps.ocr
     ? createOcrService(deps.ocr, deps.now, newToken)
     : null
+
+  const nonEditableService: NonEditableService | null = deps.nonEditable
+    ? createNonEditableService(deps.nonEditable, deps.now, newToken)
+    : null
+
+  function nonEditable(): NonEditableService {
+    if (!nonEditableService)
+      throw new TranslateIpcError('TRANSLATE_FAILED', 'PDF translation is not available here')
+    return nonEditableService
+  }
+
+  /** a listed source, its PDF kind resolved (scan detection) where that is available */
+  async function sourceEntry(dir: string, file: string) {
+    const project = await loadProject(dir)
+    const listed = project.sources.find((s) => s.file === file)
+    if (!listed) throw new TranslateIpcError('NOT_LISTED', 'this document is not in the project')
+    const entry = nonEditableService ? await nonEditableService.resolveKind(dir, listed) : listed
+    return { project, entry }
+  }
 
   function ocr(): OcrService {
     if (!ocrService) throw new TranslateIpcError('OCR_FAILED', 'OCR is not available here')
@@ -430,13 +481,50 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       const dir = registeredDir(args?.dir)
       const file = requireString(args.file, 'file')
       const view = viewDeps()
-      // the source entry (and its hash) comes from project.json, never from the renderer
-      const project = await loadProject(dir)
-      const entry = project.sources.find((s) => s.file === file)
-      if (!entry) throw new TranslateIpcError('NOT_LISTED', 'this document is not in the project')
+      // the source entry (and its hash) comes from project.json, never from the renderer;
+      // a PDF is checked for a scan the first time (recorded in project.json)
+      const { project, entry } = await sourceEntry(dir, file)
       // a project made before listing existed (or whose listing failed) is listed now, once
       await listOnce(dir)
-      return openTranslation(dir, entry, view)
+      return openTranslation(dir, entry, view, project.ocr)
+    },
+
+    async openResult(args: TranslateOpenResultArgs): Promise<TranslateOpenResultAnswer> {
+      const dir = registeredDir(args?.dir)
+      const file = requireString(args.file, 'file')
+      const view = viewDeps()
+      const { entry } = await sourceEntry(dir, file)
+      return openTranslationResult(dir, entry, args.output, view)
+    },
+
+    async instructionsFor(args: TranslateInstructionsForArgs): Promise<TranslateInstructions> {
+      const dir = registeredDir(args?.dir)
+      const text = args.text
+      if (typeof text !== 'string' || text.length > INSTRUCTIONS_TEXT_LIMIT)
+        throw new TranslateIpcError('INVALID_ARGUMENT', 'the request text is not valid')
+      const built = await buildTranslationInstructions(dir, text, {
+        settingsPath: deps.settingsPath(),
+      })
+      return { prompts: built.promptText, material: built.materialText }
+    },
+
+    /** `owner`: the webContents id that asks; its translations end when it goes */
+    async pdfPrepare(args: TranslatePdfPrepareArgs, owner?: number) {
+      const service = nonEditable()
+      const dir = registeredDir(args?.dir)
+      return service.pdfPrepare(dir, args.file, owner)
+    },
+
+    async pdfStore(args: TranslatePdfStoreArgs) {
+      return nonEditable().pdfStore(args?.token, args?.request)
+    },
+
+    async pdfWrite(args: TranslatePdfWriteArgs) {
+      return nonEditable().pdfWrite(args?.token, args?.bilingual)
+    },
+
+    async pdfRelease(token: string): Promise<void> {
+      return nonEditable().pdfRelease(token)
     },
 
     async setPaneHidden(args: TranslateSetPaneHiddenArgs): Promise<void> {
@@ -458,6 +546,7 @@ function createRawHandlers(deps: TranslateIpcDeps) {
 
     async ocrForgetOwner(owner: number): Promise<void> {
       ocrService?.forgetOwner(owner)
+      nonEditableService?.forgetOwner(owner)
     },
 
     async ocrStart(args: TranslateOcrStartArgs): Promise<void> {
@@ -545,4 +634,16 @@ export function registerTranslateIpc(ipc: Pick<IpcMain, 'handle'>, deps: Transla
   )
   ipc.handle(TRANSLATE_CHANNELS.ocrWrite, (_e, args: TranslateOcrWriteArgs) => h.ocrWrite(args))
   ipc.handle(TRANSLATE_CHANNELS.ocrRelease, (_e, token: string) => h.ocrRelease(token))
+  ipc.handle(TRANSLATE_CHANNELS.instructionsFor, (_e, args: TranslateInstructionsForArgs) =>
+    h.instructionsFor(args),
+  )
+  ipc.handle(TRANSLATE_CHANNELS.pdfPrepare, (e, args: TranslatePdfPrepareArgs) =>
+    h.pdfPrepare(args, watchOcrSender(e.sender as unknown as OcrSender)),
+  )
+  ipc.handle(TRANSLATE_CHANNELS.pdfStore, (_e, args: TranslatePdfStoreArgs) => h.pdfStore(args))
+  ipc.handle(TRANSLATE_CHANNELS.pdfWrite, (_e, args: TranslatePdfWriteArgs) => h.pdfWrite(args))
+  ipc.handle(TRANSLATE_CHANNELS.pdfRelease, (_e, token: string) => h.pdfRelease(token))
+  ipc.handle(TRANSLATE_CHANNELS.openResult, (_e, args: TranslateOpenResultArgs) =>
+    h.openResult(args),
+  )
 }

@@ -51,7 +51,7 @@ import { SettingsModal } from './SettingsModal'
 import type { SettingsTarget } from './SettingsModal'
 import { skillUpdateDue } from './IntegrationsPane'
 import { onFilesChanged } from './file-events'
-import { FirstConnectionDialog } from './FirstConnectionNotice'
+import { FirstConnectionDialog, homeFirstConnectionShown } from './FirstConnectionNotice'
 import { LaunchRecoveryList } from './RecoveryList'
 import type { SubscriptionConnection } from './subscription-client'
 import { subscriptionSummary } from './subscription-status'
@@ -1105,6 +1105,8 @@ export function Home({
   const [projectRequest, setProjectRequest] = useState<ProjectScreenRequest | null>(null)
   // the project screen asked for the first-connection notice ("[tidy up]" waits behind it)
   const [projectsNoticeAsked, setProjectsNoticeAsked] = useState(false)
+  // a translation window (OCR, PDF translation) asked for it before it may send
+  const [translateNoticeAsked, setTranslateNoticeAsked] = useState(false)
   const projectsOffered = typeof window.projectFolderApi?.listProjects === 'function'
   const translateOffered = typeof window.translateApi?.list === 'function'
   // an AI panel's "[view]" (instructions or memory changed) opens the screen at that section
@@ -3546,7 +3548,12 @@ export function Home({
           onOpenSettings={() => setSettingsRequest({ section: 'integrations' })}
         />
       ) : translateMode && translateOffered ? (
-        <TranslationPanel />
+        <TranslationPanel
+          aiSettings={aiSettings}
+          connection={connection}
+          onNoticeNeeded={() => setTranslateNoticeAsked(true)}
+          onOpenAiSettings={() => setSettingsRequest({ section: 'aiModel' })}
+        />
       ) : projectsMode && projectsOffered ? (
         <ProjectsPanel
           request={projectRequest}
@@ -3755,11 +3762,18 @@ export function Home({
       )}
 
       {/* the first-connection notice comes up where a connection is made or first
-          used from this screen: in Settings and on the ask panel (an editor's AI
-          panel shows it for itself) */}
-      {noticeDue && (settingsVisited || askMode || (projectsMode && projectsNoticeAsked)) && (
-        <FirstConnectionDialog onAcknowledge={onNoticeAcknowledge} />
-      )}
+          used from this screen: in Settings, on the ask panel, and when a project
+          or translation window is about to send (an editor's AI panel shows it
+          for itself) */}
+      {homeFirstConnectionShown({
+        noticeDue,
+        settingsVisited,
+        askMode,
+        projectsMode,
+        projectsNoticeAsked,
+        translateMode,
+        translateNoticeAsked,
+      }) && <FirstConnectionDialog onAcknowledge={onNoticeAcknowledge} />}
       {/* documents with unsaved content left in recovery copies, asked about
           once at launch; the main process keeps Home in front meanwhile */}
       <LaunchRecoveryList />

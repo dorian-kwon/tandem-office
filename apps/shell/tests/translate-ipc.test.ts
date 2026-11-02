@@ -475,7 +475,7 @@ describe('translation view handlers', () => {
     writeFileSync(original, '# hi')
     await addPicked(h, dir, 'source', original)
     const result = await h.openTranslation({ dir, file: 'doc.md' })
-    expect(result).toEqual({ sourceTabId: 't1', outputTabId: 't2', hashStatus: 'ok' })
+    expect(result).toEqual({ flow: 'edit', sourceTabId: 't1', outputTabId: 't2', hashStatus: 'ok' })
     expect(view.opened).toEqual([join(dir, 'source', 'doc.md'), join(dir, 'output', 'doc.md')])
     // the original itself is never opened
     expect(view.opened).not.toContain(original)

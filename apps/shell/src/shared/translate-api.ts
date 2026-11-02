@@ -1,5 +1,11 @@
 import type { OcrMode, ProjectFile } from '@genoffice/translate-project'
 import type { OcrPageImage, OcrPageResult, OcrPrepared, OcrWritten } from './translate-ocr'
+import type {
+  TranslatePdfPrepared,
+  TranslatePdfStoreAnswer,
+  TranslatePdfStoreRequest,
+  TranslatePdfWritten,
+} from './translate-pdf'
 
 /**
  * The translation tool's project bridge (main process side: `translate-ipc.ts`).
@@ -26,6 +32,12 @@ export const TRANSLATE_CHANNELS = {
   ocrPageImage: 'translate:ocr-page-image',
   ocrWrite: 'translate:ocr-write',
   ocrRelease: 'translate:ocr-release',
+  instructionsFor: 'translate:instructions-for',
+  pdfPrepare: 'translate:pdf-prepare',
+  pdfStore: 'translate:pdf-store',
+  pdfWrite: 'translate:pdf-write',
+  pdfRelease: 'translate:pdf-release',
+  openResult: 'translate:open-result',
 } as const
 
 export type TranslateMaterialKind = 'source' | 'reference' | 'glossary'
@@ -105,10 +117,78 @@ export interface TranslateOpenTranslationArgs {
 /** 'changed': the copy in source/ no longer matches the hash recorded when it was added */
 export type TranslateSourceHashStatus = 'ok' | 'changed' | 'missing'
 
-export interface TranslateOpenTranslationResult {
-  sourceTabId: string
+/**
+ * What "Open translation" did, by the source's kind:
+ * - `edit`: an editable document; the split view is open;
+ * - `translate-pdf`: a PDF with a text layer; nothing is open yet, the screen
+ *   runs the translation job (confirmation first) and then `openResult`;
+ * - `ocr`: a scanned PDF or an image; nothing is open yet, the screen runs
+ *   the OCR window and then `openResult` with the Word document.
+ * `existing` names the newest earlier result in output/ for that source
+ * (null when there is none), so the screen can offer to open it instead.
+ */
+export type TranslateOpenTranslationResult =
+  | {
+      flow: 'edit'
+      sourceTabId: string
+      outputTabId: string
+      hashStatus: TranslateSourceHashStatus
+    }
+  | {
+      flow: 'translate-pdf'
+      file: string
+      hashStatus: TranslateSourceHashStatus
+      existing: string | null
+    }
+  | {
+      flow: 'ocr'
+      kind: 'scan' | 'image'
+      file: string
+      hashStatus: TranslateSourceHashStatus
+      existing: string | null
+    }
+
+export interface TranslateInstructionsForArgs {
+  dir: string
+  /** the request text the glossary entries are picked by */
+  text: string
+}
+
+/** the translation context of one request: the person's prompts, and the glossary as material */
+export interface TranslateInstructions {
+  prompts: string
+  material: string
+}
+
+export interface TranslatePdfPrepareArgs {
+  dir: string
+  /** the plain file name of one of the project's PDF sources */
+  file: string
+}
+
+export interface TranslatePdfStoreArgs {
+  token: string
+  request: TranslatePdfStoreRequest
+}
+
+export interface TranslatePdfWriteArgs {
+  token: string
+  /** the translated page beside each original page (the PDF editor's bilingual option) */
+  bilingual: boolean
+}
+
+export interface TranslateOpenResultArgs {
+  dir: string
+  /** the source the result was made from */
+  file: string
+  /** a plain file name in output/ */
+  output: string
+}
+
+export interface TranslateOpenResultAnswer {
+  /** null when no editor shows the source (an image) */
+  sourceTabId: string | null
   outputTabId: string
-  hashStatus: TranslateSourceHashStatus
 }
 
 export interface TranslateSetPaneHiddenArgs {
@@ -171,6 +251,17 @@ export interface TranslateApi {
   ocrWrite(args: TranslateOcrWriteArgs): Promise<OcrWritten>
   /** drop the token (closing the dialog, stopping) */
   ocrRelease(token: string): Promise<void>
+  /** the project's translation context for one request (prompts, glossary picked by `text`) */
+  instructionsFor(args: TranslateInstructionsForArgs): Promise<TranslateInstructions>
+  /** read a text PDF's document tree under a token for the translation job; sends nothing */
+  pdfPrepare(args: TranslatePdfPrepareArgs): Promise<TranslatePdfPrepared>
+  /** the job's result-store calls, for that token's document and language only */
+  pdfStore(args: TranslatePdfStoreArgs): Promise<TranslatePdfStoreAnswer>
+  /** write the translated PDF from what is stored into output/ (never overwriting) */
+  pdfWrite(args: TranslatePdfWriteArgs): Promise<TranslatePdfWritten>
+  pdfRelease(token: string): Promise<void>
+  /** the source copy read-only on the left (when an editor shows it) and a result on the right */
+  openResult(args: TranslateOpenResultArgs): Promise<TranslateOpenResultAnswer>
 }
 
 // ---- errors ----
@@ -196,6 +287,10 @@ export type TranslateErrorCode =
   | 'OCR_BUSY'
   | 'OCR_EXPIRED'
   | 'OCR_FAILED'
+  | 'UNSUPPORTED_LANGUAGE'
+  | 'TRANSLATE_BUSY'
+  | 'TRANSLATE_EXPIRED'
+  | 'TRANSLATE_FAILED'
   | 'UNKNOWN'
 
 const TRANSLATE_ERROR_CODES: readonly TranslateErrorCode[] = [
@@ -216,6 +311,10 @@ const TRANSLATE_ERROR_CODES: readonly TranslateErrorCode[] = [
   'OCR_BUSY',
   'OCR_EXPIRED',
   'OCR_FAILED',
+  'UNSUPPORTED_LANGUAGE',
+  'TRANSLATE_BUSY',
+  'TRANSLATE_EXPIRED',
+  'TRANSLATE_FAILED',
   'UNKNOWN',
 ]
 
@@ -242,6 +341,8 @@ const CODE_BY_ERROR_NAME: Record<string, TranslateErrorCode> = {
   InvalidOcrSelectionError: 'INVALID_ARGUMENT',
   OcrCancelledError: 'OCR_CANCELLED',
   OcrFailedError: 'OCR_FAILED',
+  InvalidSourceKindError: 'INVALID_ARGUMENT',
+  UnsupportedTargetLanguageError: 'UNSUPPORTED_LANGUAGE',
 }
 
 /** Map a translate-project error (or anything else) to a TranslateIpcError. */

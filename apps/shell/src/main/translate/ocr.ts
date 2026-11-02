@@ -1,7 +1,5 @@
-import { constants } from 'node:fs'
-import { copyFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import { basename, extname, join, resolve } from 'node:path'
-import { randomBytes } from 'node:crypto'
 import {
   loadProject,
   verifySource,
@@ -23,6 +21,7 @@ import {
   type OcrWritten,
 } from '../../shared/translate-ocr'
 import { TranslateIpcError } from '../../shared/translate-api'
+import { writeNewFile } from './output-file'
 
 /**
  * The main-process half of the translation OCR (spec 6.5). The renderer runs
@@ -294,7 +293,7 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
         warnings: [],
       }
       const docx = await deps.markdownToDocx(treeToMarkdown(tree).markdown)
-      const docxPath = await writeNew(join(l.dir, 'output'), `${l.stem} (OCR)`, '.docx', docx)
+      const docxPath = await writeNewFile(join(l.dir, 'output'), `${l.stem} (OCR)`, '.docx', docx)
       leases.delete(l.token)
       return { docxPath }
     },
@@ -311,34 +310,3 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
 }
 
 export type OcrService = ReturnType<typeof createOcrService>
-
-/**
- * Write `bytes` as `<stem><ext>` in `dir`, or `<stem> (2)<ext>`, … when that
- * name is taken: the bytes go to a temporary file first and are copied under
- * the final name with an exclusive copy, so an existing file is never
- * replaced and a half-written file never carries the final name.
- */
-async function writeNew(
-  dir: string,
-  stem: string,
-  ext: string,
-  bytes: Uint8Array,
-): Promise<string> {
-  await mkdir(dir, { recursive: true })
-  const tmp = join(dir, `.ocr-${randomBytes(6).toString('hex')}.tmp`)
-  await writeFile(tmp, bytes, { flag: 'wx' })
-  try {
-    for (let n = 1; n <= 1000; n++) {
-      const path = join(dir, n === 1 ? `${stem}${ext}` : `${stem} (${n})${ext}`)
-      try {
-        await copyFile(tmp, path, constants.COPYFILE_EXCL)
-        return path
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
-      }
-    }
-    throw new TranslateIpcError('OCR_FAILED', 'no free file name in the output folder')
-  } finally {
-    await rm(tmp, { force: true }).catch(() => undefined)
-  }
-}

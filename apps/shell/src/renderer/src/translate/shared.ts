@@ -21,6 +21,10 @@ const ERROR_KEYS: Record<TranslateErrorCode, TranslateStringKey> = {
   OCR_BUSY: 'errOcrBusy',
   OCR_EXPIRED: 'errOcrExpired',
   OCR_FAILED: 'errOcrFailed',
+  UNSUPPORTED_LANGUAGE: 'errUnsupportedLanguage',
+  TRANSLATE_BUSY: 'errTranslateBusy',
+  TRANSLATE_EXPIRED: 'errTranslateExpired',
+  TRANSLATE_FAILED: 'errTranslateFailed',
   UNKNOWN: 'errUnknown',
 }
 

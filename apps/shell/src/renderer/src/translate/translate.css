@@ -210,3 +210,16 @@
   color: var(--danger);
   font-weight: 600;
 }
+
+.translate-pdf-bilingual {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--text);
+}
+
+.translate-existing {
+  width: min(480px, 90vw);
+  overflow-wrap: anywhere;
+}

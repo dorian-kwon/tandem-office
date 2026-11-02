@@ -103,6 +103,17 @@ export const READ_ONLY_IPC_ANSWERS: Readonly<Record<string, unknown>> = {
   'mindmap:save': refused,
   // HWP_CHANNELS.beginSave (both modes)
   'hwp:begin-save': refused,
+  // PDF_CHANNELS.save (in place, autosave and Save As) and the page edits that
+  // rewrite the open file in place (apps/pdf/src/shared/ipc.ts); each answers
+  // `{ ok: false, error }` on failure
+  'pdf:save': refused,
+  'pdf:insert-pdf': refused,
+  'pdf:insert-blank-page': refused,
+  'pdf:replace-pages': refused,
+  'pdf:set-page-size': refused,
+  'pdf:crop-pages': refused,
+  // PDF_CHANNELS.autoRename renames the open file
+  'pdf:auto-rename': { renamed: false },
   // the shell's own autosave default, read by every editor
   'app:get-auto-save-default': { on: false, updatedAt: 0 },
 }

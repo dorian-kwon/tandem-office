@@ -12,6 +12,7 @@ import { EPUB_CHANNELS } from '../../epub/src/shared/ipc'
 import { MINDMAP_CHANNELS } from '../../mindmap/src/shared/ipc'
 import { HWP_CHANNELS } from '../../hwp/src/shared/ipc'
 import { IPC_CHANNELS as SHEETS_CHANNELS } from '../../sheets/src/shared/ipc-channels'
+import { PDF_CHANNELS } from '../../pdf/src/shared/ipc'
 
 const key = (
   k: string,
@@ -91,8 +92,26 @@ describe('save channels refused for a read-only view', () => {
       if (channel === 'docs:save-as-pick') expect(answer).toBeNull()
       else if (channel === 'app:get-auto-save-default')
         expect(answer).toEqual({ on: false, updatedAt: 0 })
+      else if (channel === PDF_CHANNELS.autoRename) expect(answer).toEqual({ renamed: false })
       else expect(answer).toMatchObject({ ok: false, error: expect.any(String) })
     }
+  })
+})
+
+describe('a PDF source pane (translation of a PDF)', () => {
+  it('refuses the PDF save and every page edit that rewrites the open file', () => {
+    const channels = Object.keys(READ_ONLY_IPC_ANSWERS)
+    for (const channel of [
+      PDF_CHANNELS.save,
+      PDF_CHANNELS.insertPdf,
+      PDF_CHANNELS.insertBlankPage,
+      PDF_CHANNELS.replacePages,
+      PDF_CHANNELS.setPageSize,
+      PDF_CHANNELS.cropPages,
+      PDF_CHANNELS.autoRename,
+    ])
+      expect(channels).toContain(channel)
+    expect(READ_ONLY_IPC_ANSWERS[PDF_CHANNELS.save]).toMatchObject({ ok: false })
   })
 })
 

@@ -74,7 +74,7 @@ beforeEach(() => {
     pickParentDir: vi.fn().mockResolvedValue(null),
     openTranslation: vi
       .fn()
-      .mockResolvedValue({ sourceTabId: 't1', outputTabId: 't2', hashStatus: 'ok' }),
+      .mockResolvedValue({ flow: 'edit', sourceTabId: 't1', outputTabId: 't2', hashStatus: 'ok' }),
     setPaneHidden: vi.fn().mockResolvedValue(undefined),
   }
   ;(window as unknown as { translateApi: unknown }).translateApi = api
@@ -445,6 +445,7 @@ describe('TranslationPanel (opening the translation view)', () => {
 
   it('warns when the source copy changed since it was added', async () => {
     api.openTranslation.mockResolvedValue({
+      flow: 'edit',
       sourceTabId: 't1',
       outputTabId: 't2',
       hashStatus: 'changed',
@@ -544,6 +545,7 @@ describe('changed-source notice in the tab strip', () => {
 
   it('shows over the split after opening a changed source, and can be dismissed', async () => {
     api.openTranslation.mockResolvedValue({
+      flow: 'edit',
       sourceTabId: 't1',
       outputTabId: 't2',
       hashStatus: 'changed',

@@ -133,7 +133,14 @@ import { registerIntegrationsIpc } from './integrations-ipc'
 import { registerResultStoreIpc } from './result-store-ipc'
 import { registerTranslateIpc } from './translate/translate-ipc'
 import { TranslateIpcError } from '../shared/translate-api'
-import type { PageCountJobValue, PageImageJobValue, StructureJob } from './pdf-structure/protocol'
+import type {
+  PageCountJobValue,
+  PageImageJobValue,
+  StructureJob,
+  TextCountsJobValue,
+  TreeJobValue,
+} from './pdf-structure/protocol'
+import { ResultStore } from '../../../../packages/pdf-structure/src/store'
 import type { TranslationViewDeps } from './translate/open-translation'
 import { translationContextForFolder } from './translate/context-injection'
 import { translationProjectLink, type TranslationProjectLink } from './translate/project-link'
@@ -8917,18 +8924,25 @@ registerIntegrationsIpc({
     : join(APPS_ROOT, '..', 'packages', 'cli', 'package.json'),
 })
 registerResultStoreIpc(ipcMain, () => app.getPath('userData'))
-let translateOcrJobSeq = 0
-/** one structure job for the translation OCR, owned by the main window (ended with it) */
-async function translateOcrJob<T>(job: StructureJob): Promise<T> {
+let translateJobSeq = 0
+/**
+ * One structure job for the translation tool (OCR pages, scan detection, the
+ * PDF translation's tree and translated PDF), owned by the main window and
+ * ended with it. A failure is reported with `code` and a short English text.
+ */
+async function translateJob<T>(
+  job: StructureJob,
+  code: 'OCR_FAILED' | 'TRANSLATE_FAILED' = 'OCR_FAILED',
+): Promise<T> {
   const owner = shellWindow?.webContents
   if (!owner || owner.isDestroyed())
-    throw new TranslateIpcError('OCR_FAILED', 'there is no window to read the document in')
-  const outcome = await runWindowJob(owner, `translate-ocr-${++translateOcrJobSeq}`, job)
+    throw new TranslateIpcError(code, 'there is no window to read the document in')
+  const outcome = await runWindowJob(owner, `translate-${++translateJobSeq}`, job)
   if (!outcome.ok) {
     throw new TranslateIpcError(
-      'OCR_FAILED',
+      code,
       outcome.error === 'password-required'
-        ? 'a PDF with a password cannot be read by OCR'
+        ? 'a PDF with a password cannot be read here'
         : 'the document could not be read',
     )
   }
@@ -8960,17 +8974,42 @@ registerTranslateIpc(ipcMain, {
   // by the main window, the readings become .docx through the bundled CLI's converter
   ocr: {
     pdfPageCount: async (path) =>
-      (await translateOcrJob<PageCountJobValue>({ op: 'pageCount', source: { pdfPath: path } }))
+      (await translateJob<PageCountJobValue>({ op: 'pageCount', source: { pdfPath: path } }))
         .pageCount,
     renderPdfPage: async (path, page) =>
       (
-        await translateOcrJob<PageImageJobValue>({
+        await translateJob<PageImageJobValue>({
           op: 'pageImage',
           source: { pdfPath: path },
           page,
         })
       ).png,
     markdownToDocx: (markdown) => markdownDocxBytes(markdown),
+  },
+  // PDF sources: scan detection, and the text PDF's translation with the PDF editor's
+  // engine (tree and translated PDF in structure-job processes, the same result store)
+  nonEditable: {
+    pageTextCounts: async (path) =>
+      (
+        await translateJob<TextCountsJobValue>(
+          { op: 'textCounts', source: { pdfPath: path } },
+          'TRANSLATE_FAILED',
+        )
+      ).counts,
+    pdfTree: async (path) => {
+      const value = await translateJob<TreeJobValue>(
+        { op: 'tree', source: { pdfPath: path } },
+        'TRANSLATE_FAILED',
+      )
+      return { docHash: value.docHash, tree: value.tree }
+    },
+    writeTranslatedPdf: async (path, outPath, payload) => {
+      await translateJob(
+        { op: 'writeBack', source: { pdfPath: path }, outPath, payload },
+        'TRANSLATE_FAILED',
+      )
+    },
+    store: () => new ResultStore(app.getPath('userData')),
   },
 })
 registerTabsIpc()
