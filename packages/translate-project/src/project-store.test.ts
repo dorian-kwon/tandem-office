@@ -1,7 +1,8 @@
 import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import * as projectFile from './project-file'
 import {
   InvalidProjectNameError,
   NotAProjectError,
@@ -12,6 +13,11 @@ import {
   removeProject,
   saveProject,
 } from './project-store'
+
+vi.mock('./project-file', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./project-file')>()
+  return { ...actual, serializeProjectFile: vi.fn(actual.serializeProjectFile) }
+})
 
 let root: string
 
@@ -58,6 +64,29 @@ describe('createProject', () => {
     await expect(createProject(root, '', 'ko', 'en')).rejects.toBeInstanceOf(
       InvalidProjectNameError,
     )
+  })
+})
+
+describe('createProject names and failures', () => {
+  it.each(['CON', 'nul', 'com1.txt'])('rejects Windows reserved name %s', async (name) => {
+    await expect(createProject(root, name, 'ko', 'en')).rejects.toBeInstanceOf(
+      InvalidProjectNameError,
+    )
+  })
+
+  it.each(['console', 'Project NUL'])('accepts %s', async (name) => {
+    const { dir } = await createProject(root, name, 'ko', 'en')
+    expect(await projectStatus(dir)).toBe('ok')
+  })
+
+  it('removes the partial folder after a failed create so a retry succeeds', async () => {
+    vi.mocked(projectFile.serializeProjectFile).mockImplementationOnce(() => {
+      throw new Error('boom')
+    })
+    await expect(createProject(root, 'Retry', 'ko', 'en')).rejects.toThrow('boom')
+    expect(await isDir(join(root, 'Retry'))).toBe(false)
+    const { dir } = await createProject(root, 'Retry', 'ko', 'en')
+    expect(await projectStatus(dir)).toBe('ok')
   })
 })
 

@@ -33,6 +33,8 @@ export class NotAProjectError extends Error {
   }
 }
 
+const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i
+
 const projectFilePath = (dir: string): string => join(dir, STATE_DIR, PROJECT_FILE)
 
 /** Strip characters that are invalid in file names on Windows or POSIX. */
@@ -42,6 +44,8 @@ function safeFolderName(name: string): string {
     .join('')
   const trimmed = noInvalid.replace(/[. ]+$/, '').trim()
   if (trimmed === '' || trimmed === '.' || trimmed === '..') throw new InvalidProjectNameError(name)
+  // Windows device names are rejected on every platform because folders move between systems.
+  if (WINDOWS_RESERVED.test(trimmed)) throw new InvalidProjectNameError(name)
   return trimmed
 }
 
@@ -58,11 +62,17 @@ export async function createProject(
     if ((e as NodeJS.ErrnoException).code === 'EEXIST') throw new ProjectExistsError(dir)
     throw e
   }
-  for (const sub of SUBFOLDERS) await mkdir(join(dir, sub))
-  await mkdir(join(dir, STATE_DIR))
-  const project = defaultProjectFile(name, sourceLang, targetLang)
-  await saveProject(dir, project)
-  return { dir, project }
+  try {
+    for (const sub of SUBFOLDERS) await mkdir(join(dir, sub))
+    await mkdir(join(dir, STATE_DIR))
+    const project = defaultProjectFile(name, sourceLang, targetLang)
+    await saveProject(dir, project)
+    return { dir, project }
+  } catch (e) {
+    // This call just created the directory, so removing it on failure is safe.
+    await rm(dir, { recursive: true, force: true })
+    throw e
+  }
 }
 
 export async function loadProject(dir: string): Promise<ProjectFile> {
