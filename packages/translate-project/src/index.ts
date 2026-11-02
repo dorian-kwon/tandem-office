@@ -35,3 +35,5 @@ export {
   removeSource,
 } from './materials'
 export { withProjectLock } from './project-lock'
+export { composeContext } from './compose'
+export type { ComposedContext, ComposedItemKind } from './compose'
