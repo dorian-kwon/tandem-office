@@ -62,6 +62,10 @@ export type StructureJob =
     }
   | { op: 'images'; source: JobSource; outDir: string; baseName: string; minImagePx?: number }
   | { op: 'fingerprints'; source: JobSource }
+  /** the translation OCR's page list (main/translate/ocr.ts) */
+  | { op: 'pageCount'; source: JobSource }
+  /** one 1-based page as a PNG for the translation OCR's AI reading */
+  | { op: 'pageImage'; source: JobSource; page: number }
   /** the PDF tools window's blank-page candidates (apps/pdf/src/main/blank-pages.ts) */
   | { op: 'blankPages'; source: JobSource }
   /** the PDF tools window's add password, remove password and repair (apps/pdf/src/main/qpdf.ts, repair.ts) */
@@ -144,6 +148,17 @@ export interface FingerprintsJobValue {
   docHash: string
   /** in page order */
   fingerprints: string[]
+}
+
+export interface PageCountJobValue {
+  docHash: string
+  pageCount: number
+}
+
+export interface PageImageJobValue {
+  docHash: string
+  page: number
+  png: Uint8Array
 }
 
 export interface WriteBackJobValue {

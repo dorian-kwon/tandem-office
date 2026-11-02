@@ -1,4 +1,5 @@
 import type { OcrMode, ProjectFile } from '@genoffice/translate-project'
+import type { OcrPageImage, OcrPageResult, OcrPrepared, OcrWritten } from './translate-ocr'
 
 /**
  * The translation tool's project bridge (main process side: `translate-ipc.ts`).
@@ -20,6 +21,11 @@ export const TRANSLATE_CHANNELS = {
   pickParentDir: 'translate:pick-parent-dir',
   openTranslation: 'translate:open-translation',
   setPaneHidden: 'translate:set-pane-hidden',
+  ocrPrepare: 'translate:ocr-prepare',
+  ocrStart: 'translate:ocr-start',
+  ocrPageImage: 'translate:ocr-page-image',
+  ocrWrite: 'translate:ocr-write',
+  ocrRelease: 'translate:ocr-release',
 } as const
 
 export type TranslateMaterialKind = 'source' | 'reference' | 'glossary'
@@ -110,6 +116,28 @@ export interface TranslateSetPaneHiddenArgs {
   hidden: boolean
 }
 
+export interface TranslateOcrPrepareArgs {
+  dir: string
+  /** plain file names of the project's sources: one PDF, or one or more images in reading order */
+  files: string[]
+}
+
+export interface TranslateOcrStartArgs {
+  token: string
+  /** the confirmed 1-based items; main serves and accepts only these from now on */
+  pages: number[]
+}
+
+export interface TranslateOcrPageImageArgs {
+  token: string
+  index: number
+}
+
+export interface TranslateOcrWriteArgs {
+  token: string
+  pages: OcrPageResult[]
+}
+
 export interface TranslateApi {
   list(): Promise<TranslateProjectListEntry[]>
   create(args: TranslateCreateArgs): Promise<{ dir: string }>
@@ -129,6 +157,20 @@ export interface TranslateApi {
   openTranslation(args: TranslateOpenTranslationArgs): Promise<TranslateOpenTranslationResult>
   /** hide or show one pane of the translation view (only one can be hidden) */
   setPaneHidden(args: TranslateSetPaneHiddenArgs): Promise<void>
+  /**
+   * OCR ("AI reading", spec 6.5; run by `runOcr` in shared/translate-ocr.ts):
+   * list a scanned PDF's pages or the chosen images under a token. Nothing is
+   * read or sent by this call. Refused with OCR_DISABLED when the project's OCR is off.
+   */
+  ocrPrepare(args: TranslateOcrPrepareArgs): Promise<OcrPrepared>
+  /** after the person confirmed: fix the selection (one run per project at a time) */
+  ocrStart(args: TranslateOcrStartArgs): Promise<void>
+  /** one selected page or image, for the AI call the renderer makes */
+  ocrPageImage(args: TranslateOcrPageImageArgs): Promise<OcrPageImage>
+  /** write the readings into a new Word document in output/ (never overwriting) */
+  ocrWrite(args: TranslateOcrWriteArgs): Promise<OcrWritten>
+  /** drop the token (closing the dialog, stopping) */
+  ocrRelease(token: string): Promise<void>
 }
 
 // ---- errors ----
@@ -148,6 +190,12 @@ export type TranslateErrorCode =
   | 'SOURCE_MISSING'
   | 'SOURCE_NOT_EDITABLE'
   | 'OPEN_FAILED'
+  | 'OCR_DISABLED'
+  | 'EMPTY_SELECTION'
+  | 'OCR_CANCELLED'
+  | 'OCR_BUSY'
+  | 'OCR_EXPIRED'
+  | 'OCR_FAILED'
   | 'UNKNOWN'
 
 const TRANSLATE_ERROR_CODES: readonly TranslateErrorCode[] = [
@@ -162,6 +210,12 @@ const TRANSLATE_ERROR_CODES: readonly TranslateErrorCode[] = [
   'SOURCE_MISSING',
   'SOURCE_NOT_EDITABLE',
   'OPEN_FAILED',
+  'OCR_DISABLED',
+  'EMPTY_SELECTION',
+  'OCR_CANCELLED',
+  'OCR_BUSY',
+  'OCR_EXPIRED',
+  'OCR_FAILED',
   'UNKNOWN',
 ]
 
@@ -183,6 +237,11 @@ const CODE_BY_ERROR_NAME: Record<string, TranslateErrorCode> = {
   NotAProjectError: 'NOT_A_PROJECT',
   UnsupportedSourceError: 'UNSUPPORTED_SOURCE',
   ProjectFileError: 'PROJECT_FILE_INVALID',
+  OcrDisabledError: 'OCR_DISABLED',
+  EmptyOcrSelectionError: 'EMPTY_SELECTION',
+  InvalidOcrSelectionError: 'INVALID_ARGUMENT',
+  OcrCancelledError: 'OCR_CANCELLED',
+  OcrFailedError: 'OCR_FAILED',
 }
 
 /** Map a translate-project error (or anything else) to a TranslateIpcError. */

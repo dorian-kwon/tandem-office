@@ -72,6 +72,8 @@ import type {
   ImagesJobValue,
   JobSource,
   MarkdownJobValue,
+  PageCountJobValue,
+  PageImageJobValue,
   StructuredTextJobValue,
   StructureJob,
   TranslationInput,
@@ -163,6 +165,8 @@ export { NotAvailableError }
 
 /** cover render scale: pixels per point (about 108 dpi) */
 const COVER_SCALE = 1.5
+/** page images for AI reading at about 175 dpi, as the terminal's `pdf ai-read` renders them */
+const OCR_PAGE_SCALE = 175 / 72
 
 const sha256 = (data: Uint8Array): string => createHash('sha256').update(data).digest('hex')
 
@@ -501,6 +505,31 @@ export async function runStructureJob(
         job.source.password,
       )
       return { docHash, fingerprints } satisfies FingerprintsJobValue
+    }
+    case 'pageCount': {
+      const m = await deps.pdfium()
+      const pageCount = withPdfDocument(
+        m,
+        bytes,
+        (doc) => m._FPDF_GetPageCount(doc),
+        job.source.password,
+      )
+      return { docHash, pageCount } satisfies PageCountJobValue
+    }
+    case 'pageImage': {
+      const m = await deps.pdfium()
+      const png = withPdfDocument(
+        m,
+        bytes,
+        (doc) => {
+          const count = m._FPDF_GetPageCount(doc)
+          if (!Number.isInteger(job.page) || job.page < 1 || job.page > count) return undefined
+          return renderPageByIndexPng(m, doc, job.page - 1, OCR_PAGE_SCALE)?.data
+        },
+        job.source.password,
+      )
+      if (!png) throw new Error(`page ${job.page} could not be rendered`)
+      return { docHash, page: job.page, png } satisfies PageImageJobValue
     }
     case 'writeBack': {
       const write =

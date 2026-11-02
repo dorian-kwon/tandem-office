@@ -132,6 +132,8 @@ import { createDefaultAppService, execFileRunner } from './default-app'
 import { registerIntegrationsIpc } from './integrations-ipc'
 import { registerResultStoreIpc } from './result-store-ipc'
 import { registerTranslateIpc } from './translate/translate-ipc'
+import { TranslateIpcError } from '../shared/translate-api'
+import type { PageCountJobValue, PageImageJobValue, StructureJob } from './pdf-structure/protocol'
 import type { TranslationViewDeps } from './translate/open-translation'
 import { translationContextForFolder } from './translate/context-injection'
 import { translationProjectLink, type TranslationProjectLink } from './translate/project-link'
@@ -8915,6 +8917,24 @@ registerIntegrationsIpc({
     : join(APPS_ROOT, '..', 'packages', 'cli', 'package.json'),
 })
 registerResultStoreIpc(ipcMain, () => app.getPath('userData'))
+let translateOcrJobSeq = 0
+/** one structure job for the translation OCR, owned by the main window (ended with it) */
+async function translateOcrJob<T>(job: StructureJob): Promise<T> {
+  const owner = shellWindow?.webContents
+  if (!owner || owner.isDestroyed())
+    throw new TranslateIpcError('OCR_FAILED', 'there is no window to read the document in')
+  const outcome = await runWindowJob(owner, `translate-ocr-${++translateOcrJobSeq}`, job)
+  if (!outcome.ok) {
+    throw new TranslateIpcError(
+      'OCR_FAILED',
+      outcome.error === 'password-required'
+        ? 'a PDF with a password cannot be read by OCR'
+        : 'the document could not be read',
+    )
+  }
+  return outcome.value as T
+}
+
 /** Translation project folders as project folders (built on first use: the guide needs userData) */
 function translationProjects(): TranslationProjectLink {
   return translationProjectLink(projectFolderServices().guide, () => {
@@ -8935,6 +8955,22 @@ registerTranslateIpc(ipcMain, {
   projects: {
     ensureListed: (dir) => translationProjects().ensureListed(dir),
     unlist: (dir) => translationProjects().unlist(dir),
+  },
+  // OCR of scanned PDFs and images: pages are rendered in a structure-job process owned
+  // by the main window, the readings become .docx through the bundled CLI's converter
+  ocr: {
+    pdfPageCount: async (path) =>
+      (await translateOcrJob<PageCountJobValue>({ op: 'pageCount', source: { pdfPath: path } }))
+        .pageCount,
+    renderPdfPage: async (path, page) =>
+      (
+        await translateOcrJob<PageImageJobValue>({
+          op: 'pageImage',
+          source: { pdfPath: path },
+          page,
+        })
+      ).png,
+    markdownToDocx: (markdown) => markdownDocxBytes(markdown),
   },
 })
 registerTabsIpc()

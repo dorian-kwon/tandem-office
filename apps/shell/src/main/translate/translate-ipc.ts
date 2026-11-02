@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { stat } from 'node:fs/promises'
 import { basename, isAbsolute, resolve } from 'node:path'
 import type { IpcMain } from 'electron'
@@ -19,6 +20,7 @@ import {
   type ProjectFile,
 } from '@genoffice/translate-project'
 import { PickAllowlist } from './pick-allowlist'
+import { createOcrService, type OcrService, type OcrServiceDeps } from './ocr'
 import { openTranslation, type TranslationViewDeps } from './open-translation'
 import type { TranslationProjectLink } from './project-link'
 import {
@@ -34,6 +36,10 @@ import {
   type TranslateAddMaterialArgs,
   type TranslateCreateArgs,
   type TranslateMaterialKind,
+  type TranslateOcrPageImageArgs,
+  type TranslateOcrPrepareArgs,
+  type TranslateOcrStartArgs,
+  type TranslateOcrWriteArgs,
   type TranslateOpenTranslationArgs,
   type TranslateOpenTranslationResult,
   type TranslatePickedMaterials,
@@ -68,6 +74,8 @@ export interface TranslateIpcDeps {
   view?: TranslationViewDeps
   /** lists translation folders as project folders (decision 0088); absent: they are not */
   projects?: TranslationProjectLink
+  /** page rendering and the .docx conversion for OCR (main/translate/ocr.ts); absent: no OCR */
+  ocr?: OcrServiceDeps
 }
 
 export interface OpenDialogOptions {
@@ -148,6 +156,11 @@ export function createTranslateHandlers(deps: TranslateIpcDeps) {
     pickParentDir: guard(raw.pickParentDir),
     openTranslation: guard(raw.openTranslation),
     setPaneHidden: guard(raw.setPaneHidden),
+    ocrPrepare: guard(raw.ocrPrepare),
+    ocrStart: guard(raw.ocrStart),
+    ocrPageImage: guard(raw.ocrPageImage),
+    ocrWrite: guard(raw.ocrWrite),
+    ocrRelease: guard(raw.ocrRelease),
   }
 }
 
@@ -165,6 +178,15 @@ function guard<A extends unknown[], R>(fn: (...a: A) => Promise<R>): (...a: A) =
 function createRawHandlers(deps: TranslateIpcDeps) {
   const materialPicks = new PickAllowlist<TranslateMaterialKind>(deps.now, deps.newToken)
   const parentPicks = new PickAllowlist<null>(deps.now, deps.newToken)
+  const newToken = deps.newToken ?? (() => randomUUID())
+  const ocrService: OcrService | null = deps.ocr
+    ? createOcrService(deps.ocr, deps.now, newToken)
+    : null
+
+  function ocr(): OcrService {
+    if (!ocrService) throw new TranslateIpcError('OCR_FAILED', 'OCR is not available here')
+    return ocrService
+  }
 
   /** The stored spelling of `dir`, or a rejection when it is not a registered project. */
   function registeredDir(dir: unknown): string {
@@ -426,6 +448,28 @@ function createRawHandlers(deps: TranslateIpcDeps) {
         throw new TranslateIpcError('INVALID_ARGUMENT', 'no translation view is shown')
     },
 
+    async ocrPrepare(args: TranslateOcrPrepareArgs) {
+      const service = ocr()
+      const dir = registeredDir(args?.dir)
+      return service.prepare(dir, args.files)
+    },
+
+    async ocrStart(args: TranslateOcrStartArgs): Promise<void> {
+      return ocr().start(args?.token, args?.pages)
+    },
+
+    async ocrPageImage(args: TranslateOcrPageImageArgs) {
+      return ocr().pageImage(args?.token, args?.index)
+    },
+
+    async ocrWrite(args: TranslateOcrWriteArgs) {
+      return ocr().write(args?.token, args?.pages)
+    },
+
+    async ocrRelease(token: string): Promise<void> {
+      return ocr().release(token)
+    },
+
     async removeMaterial(args: TranslateRemoveMaterialArgs): Promise<ProjectFile> {
       const dir = registeredDir(args?.dir)
       const kind = requireKind(args.kind)
@@ -464,4 +508,13 @@ export function registerTranslateIpc(ipc: Pick<IpcMain, 'handle'>, deps: Transla
   ipc.handle(TRANSLATE_CHANNELS.setPaneHidden, (_e, args: TranslateSetPaneHiddenArgs) =>
     h.setPaneHidden(args),
   )
+  ipc.handle(TRANSLATE_CHANNELS.ocrPrepare, (_e, args: TranslateOcrPrepareArgs) =>
+    h.ocrPrepare(args),
+  )
+  ipc.handle(TRANSLATE_CHANNELS.ocrStart, (_e, args: TranslateOcrStartArgs) => h.ocrStart(args))
+  ipc.handle(TRANSLATE_CHANNELS.ocrPageImage, (_e, args: TranslateOcrPageImageArgs) =>
+    h.ocrPageImage(args),
+  )
+  ipc.handle(TRANSLATE_CHANNELS.ocrWrite, (_e, args: TranslateOcrWriteArgs) => h.ocrWrite(args))
+  ipc.handle(TRANSLATE_CHANNELS.ocrRelease, (_e, token: string) => h.ocrRelease(token))
 }

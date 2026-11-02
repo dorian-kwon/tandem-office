@@ -15,6 +15,12 @@ const ERROR_KEYS: Record<TranslateErrorCode, TranslateStringKey> = {
   SOURCE_MISSING: 'errSourceMissing',
   SOURCE_NOT_EDITABLE: 'errSourceNotEditable',
   OPEN_FAILED: 'errOpenFailed',
+  OCR_DISABLED: 'errOcrDisabled',
+  EMPTY_SELECTION: 'errOcrEmpty',
+  OCR_CANCELLED: 'errOcrCancelled',
+  OCR_BUSY: 'errOcrBusy',
+  OCR_EXPIRED: 'errOcrExpired',
+  OCR_FAILED: 'errOcrFailed',
   UNKNOWN: 'errUnknown',
 }
 
