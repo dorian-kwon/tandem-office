@@ -74,7 +74,11 @@ function parseSource(v: unknown): SourceEntry {
   if (!isRecord(v)) throw new ProjectFileError('source entry must be an object')
   const kind = str(v, 'kind', 'source ')
   if (!SOURCE_KINDS.includes(kind)) throw new ProjectFileError(`unknown source kind: ${kind}`)
-  return { file: str(v, 'file', 'source '), sha256: str(v, 'sha256', 'source '), kind: kind as SourceKind }
+  return {
+    file: str(v, 'file', 'source '),
+    sha256: str(v, 'sha256', 'source '),
+    kind: kind as SourceKind,
+  }
 }
 
 /** Parse and validate a project file. Unknown keys are dropped. */

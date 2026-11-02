@@ -30,7 +30,10 @@ describe('project file', () => {
     expect(() => parseProjectFile('{')).toThrow(ProjectFileError)
     const p = { ...defaultProjectFile('x', 'ko', 'en'), ocr: { kind: 'ai', provider: 'bard' } }
     expect(() => parseProjectFile(JSON.stringify(p))).toThrow(ProjectFileError)
-    const q = { ...defaultProjectFile('x', 'ko', 'en'), sources: [{ file: 'a', sha256: 'b', kind: 'zip' }] }
+    const q = {
+      ...defaultProjectFile('x', 'ko', 'en'),
+      sources: [{ file: 'a', sha256: 'b', kind: 'zip' }],
+    }
     expect(() => parseProjectFile(JSON.stringify(q))).toThrow(ProjectFileError)
   })
 
