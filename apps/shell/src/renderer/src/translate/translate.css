@@ -1,0 +1,102 @@
+/* The translation tool screens. Frame colors are tokens only. Buttons, fields and
+   lists reuse the project screen's classes (projects-panel.css). */
+
+.translate-pane {
+  max-width: 820px;
+}
+
+.translate-row-actions {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
+.translate-row-main {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  padding: 6px 4px;
+  color: var(--text);
+}
+
+.translate-row-main.is-disabled {
+  color: var(--text-tertiary);
+}
+
+.translate-open {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  padding: 6px 4px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.translate-open:hover {
+  background: var(--bg-hover);
+}
+
+.translate-open:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.translate-confirm {
+  max-width: 640px;
+  margin: 0 0 18px;
+  padding: 16px;
+  border: 1px solid var(--danger-border);
+  border-radius: 10px;
+  background: var(--danger-bg);
+  color: var(--text);
+}
+
+.translate-confirm-title {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.translate-select {
+  box-sizing: border-box;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+
+.translate-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.translate-lang-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.translate-lang-row > .projects-field {
+  min-width: 160px;
+}
+
+.translate-section {
+  margin: 0 0 20px;
+}
+
+.translate-error {
+  margin: 0 0 14px;
+}

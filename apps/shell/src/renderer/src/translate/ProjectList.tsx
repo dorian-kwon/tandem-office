@@ -1,0 +1,319 @@
+import { useCallback, useEffect, useState } from 'react'
+import { LANGS } from '@genoffice/i18n'
+import type {
+  TranslatePickedParentDir,
+  TranslateProjectListEntry,
+} from '../../../shared/translate-api'
+import { useI18n } from '../locale'
+import { languageName, makeText, translateErrorText } from './shared'
+import '../projects-panel.css'
+import './translate.css'
+import './translate-global'
+
+export interface ProjectListProps {
+  /** open a project's detail screen */
+  onOpen: (dir: string) => void
+}
+
+type Deleting = { entry: TranslateProjectListEntry; step: 'choose' | 'confirm-folder' }
+
+/** The translation tool's home: global system prompt, create dialog and the project list. */
+export function ProjectList({ onOpen }: ProjectListProps) {
+  const { lang } = useI18n()
+  const s = makeText(lang)
+  const api = window.translateApi
+  const [projects, setProjects] = useState<TranslateProjectListEntry[] | null>(null)
+  const [systemPrompt, setSystemPrompt] = useState('')
+  const [promptLoaded, setPromptLoaded] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [creating, setCreating] = useState(false)
+  const [name, setName] = useState('')
+  const [sourceLang, setSourceLang] = useState('en')
+  const [targetLang, setTargetLang] = useState('ko')
+  const [parent, setParent] = useState<TranslatePickedParentDir | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [deleting, setDeleting] = useState<Deleting | null>(null)
+
+  const fail = useCallback((err: unknown) => setError(translateErrorText(lang, err)), [lang])
+
+  const reload = useCallback(async () => {
+    if (!api) return
+    try {
+      setProjects(await api.list())
+    } catch (err) {
+      fail(err)
+    }
+  }, [api, fail])
+
+  useEffect(() => {
+    if (!api) return
+    void reload()
+    api.getSystemPrompt().then(
+      (text) => {
+        setSystemPrompt(text)
+        setPromptLoaded(true)
+      },
+      (err: unknown) => fail(err),
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per mount
+  }, [])
+
+  if (!api) return <main className="content projects-panel" />
+
+  const saveSystemPrompt = () => {
+    // never write the empty initial value over a stored prompt that failed to load
+    if (!promptLoaded) return
+    api.setSystemPrompt(systemPrompt).catch(fail)
+  }
+
+  const choosePlace = async () => {
+    try {
+      const picked = await api.pickParentDir()
+      if (picked) setParent(picked)
+    } catch (err) {
+      fail(err)
+    }
+  }
+
+  const submitCreate = async () => {
+    if (!parent || !name.trim()) return
+    setBusy(true)
+    setError(null)
+    try {
+      const { dir } = await api.create({
+        parentToken: parent.token,
+        name: name.trim(),
+        sourceLang,
+        targetLang,
+      })
+      setCreating(false)
+      setName('')
+      setParent(null)
+      await reload()
+      onOpen(dir)
+    } catch (err) {
+      fail(err)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const remove = async (dir: string, deleteFolder: boolean) => {
+    setBusy(true)
+    setError(null)
+    try {
+      await api.remove({ dir, deleteFolder })
+    } catch (err) {
+      fail(err)
+    } finally {
+      setDeleting(null)
+      setBusy(false)
+      await reload()
+    }
+  }
+
+  const renderRow = (entry: TranslateProjectListEntry) => {
+    const usable = entry.status === 'ok'
+    return (
+      <li key={entry.dir} className="projects-row" data-project-dir={entry.dir}>
+        {usable ? (
+          <button type="button" className="translate-open" onClick={() => onOpen(entry.dir)}>
+            <span className="projects-row-name">{entry.name}</span>
+            <span className="projects-row-path">
+              {languageName(lang, entry.sourceLang)} {'->'} {languageName(lang, entry.targetLang)}
+            </span>
+          </button>
+        ) : (
+          <div className="translate-row-main is-disabled" aria-disabled="true">
+            <span className="projects-row-name">{entry.name}</span>
+            <span className="projects-row-path">{entry.dir}</span>
+            <span className="projects-mark is-warning">
+              {entry.status === 'not-found' ? s('statusNotFound') : s('statusInvalid')}
+            </span>
+          </div>
+        )}
+        <div className="translate-row-actions">
+          {usable ? (
+            <button
+              type="button"
+              className="projects-small"
+              disabled={busy}
+              onClick={() => setDeleting({ entry, step: 'choose' })}
+            >
+              {s('deleteProject')}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="projects-small"
+              disabled={busy}
+              onClick={() => void remove(entry.dir, false)}
+            >
+              {s('removeFromList')}
+            </button>
+          )}
+        </div>
+      </li>
+    )
+  }
+
+  const languageSelect = (value: string, label: string, set: (code: string) => void) => (
+    <label className="projects-field">
+      <span className="projects-field-label">{label}</span>
+      <select className="translate-select" value={value} onChange={(e) => set(e.target.value)}>
+        {LANGS.map((code) => (
+          <option key={code} value={code}>
+            {languageName(lang, code)}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+
+  return (
+    <main className="content projects-panel">
+      <div className="translate-pane">
+        <div className="projects-head">
+          <h2 className="projects-title">{s('title')}</h2>
+        </div>
+        <p className="projects-desc">{s('intro')}</p>
+
+        <label className="projects-field translate-section">
+          <span className="projects-field-label">{s('systemPromptLabel')}</span>
+          <textarea
+            className="projects-textarea"
+            aria-label={s('systemPromptLabel')}
+            value={systemPrompt}
+            onChange={(e) => setSystemPrompt(e.target.value)}
+            onBlur={saveSystemPrompt}
+          />
+          <span className="projects-hint">{s('systemPromptHint')}</span>
+        </label>
+
+        {error && (
+          <div className="projects-note is-warning translate-error" role="alert">
+            {error}
+          </div>
+        )}
+
+        <div className="projects-toolbar">
+          <button
+            type="button"
+            className="projects-primary"
+            onClick={() => {
+              setCreating(true)
+              setError(null)
+            }}
+          >
+            {s('newProject')}
+          </button>
+        </div>
+
+        {creating && (
+          <form
+            className="projects-create"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void submitCreate()
+            }}
+          >
+            <label className="projects-field">
+              <span className="projects-field-label">{s('nameLabel')}</span>
+              <input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+            </label>
+            <div className="translate-lang-row">
+              {languageSelect(sourceLang, s('sourceLangLabel'), setSourceLang)}
+              {languageSelect(targetLang, s('targetLangLabel'), setTargetLang)}
+            </div>
+            <div className="projects-field">
+              <span className="projects-field-label">{s('parentLabel')}</span>
+              <p className="projects-location">{parent ? parent.dir : s('noFolderChosen')}</p>
+              <div>
+                <button type="button" className="projects-ghost" onClick={() => void choosePlace()}>
+                  {s('chooseFolder')}
+                </button>
+              </div>
+            </div>
+            <div className="projects-buttons">
+              <button
+                type="submit"
+                className="projects-primary"
+                disabled={busy || !parent || !name.trim()}
+              >
+                {s('create')}
+              </button>
+              <button type="button" className="projects-ghost" onClick={() => setCreating(false)}>
+                {s('cancel')}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {deleting && (
+          <div
+            className="translate-confirm"
+            role="alertdialog"
+            aria-label={s('deleteTitle', { name: deleting.entry.name })}
+          >
+            <p className="translate-confirm-title">
+              {s('deleteTitle', { name: deleting.entry.name })}
+            </p>
+            {deleting.step === 'choose' ? (
+              <div className="projects-buttons">
+                <button
+                  type="button"
+                  className="projects-ghost"
+                  disabled={busy}
+                  onClick={() => void remove(deleting.entry.dir, false)}
+                >
+                  {s('deleteListOnly')}
+                </button>
+                <button
+                  type="button"
+                  className="projects-ghost"
+                  disabled={busy}
+                  onClick={() => setDeleting({ entry: deleting.entry, step: 'confirm-folder' })}
+                >
+                  {s('deleteListAndFolder')}
+                </button>
+                <button type="button" className="projects-ghost" onClick={() => setDeleting(null)}>
+                  {s('cancel')}
+                </button>
+              </div>
+            ) : (
+              <>
+                <p className="projects-location">
+                  {s('deleteFolderConfirm', { dir: deleting.entry.dir })}
+                </p>
+                <div className="projects-buttons">
+                  <button
+                    type="button"
+                    className="projects-primary"
+                    disabled={busy}
+                    onClick={() => void remove(deleting.entry.dir, true)}
+                  >
+                    {s('deleteFolderConfirmButton')}
+                  </button>
+                  <button
+                    type="button"
+                    className="projects-ghost"
+                    onClick={() => setDeleting(null)}
+                  >
+                    {s('cancel')}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {projects !== null && projects.length === 0 && (
+          <p className="projects-empty">{s('emptyHint')}</p>
+        )}
+        {projects !== null && projects.length > 0 && (
+          <ul className="projects-list">{projects.map(renderRow)}</ul>
+        )}
+      </div>
+    </main>
+  )
+}

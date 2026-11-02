@@ -66,6 +66,9 @@ import { DriveNavIcon, DrivePanel, useDriveState } from './DrivePanel'
 import { driveUiText } from './i18n/strings-drive'
 import { ProjectsPanel, subscribeProjectScreen, type ProjectScreenRequest } from './ProjectsPanel'
 import { projectsText } from './i18n/strings-projects'
+import { translateText } from './i18n/strings-translate'
+import { TranslationPanel } from './translate/TranslationPanel'
+import './translate/translate-global'
 
 declare global {
   interface Window {
@@ -1098,15 +1101,18 @@ export function Home({
   const driveOffered = driveState !== null && driveState.state !== 'unavailable'
   // the project screen (decision 0088) takes over the content area the same way
   const [projectsMode, setProjectsMode] = useState(false)
+  const [translateMode, setTranslateMode] = useState(false)
   const [projectRequest, setProjectRequest] = useState<ProjectScreenRequest | null>(null)
   // the project screen asked for the first-connection notice ("[tidy up]" waits behind it)
   const [projectsNoticeAsked, setProjectsNoticeAsked] = useState(false)
   const projectsOffered = typeof window.projectFolderApi?.listProjects === 'function'
+  const translateOffered = typeof window.translateApi?.list === 'function'
   // an AI panel's "[view]" (instructions or memory changed) opens the screen at that section
   useEffect(
     () =>
       subscribeProjectScreen(window.projectFolderApi, (request) => {
         setProjectsMode(true)
+        setTranslateMode(false)
         setAskMode(false)
         setDriveMode(false)
         setSelectedFolder(null)
@@ -1600,6 +1606,7 @@ export function Home({
     setAskMode(false)
     setDriveMode(false)
     setProjectsMode(false)
+    setTranslateMode(false)
     setSelected(new Set())
     setRowMenu(null)
     setGroupFilter(null)
@@ -1622,6 +1629,7 @@ export function Home({
     setAskMode(false)
     setDriveMode(false)
     setProjectsMode(false)
+    setTranslateMode(false)
     setSelected(new Set())
     setRowMenu(null)
     setFolderMenu(null)
@@ -2955,7 +2963,7 @@ export function Home({
           }
           return
         }
-      } else if (event.key === ' ' && !askMode && !driveMode && !projectsMode) {
+      } else if (event.key === ' ' && !askMode && !driveMode && !projectsMode && !translateMode) {
         const checkedPath = selectedFolder ? folderSelectedPaths[0] : selectedPaths[0]
         const candidate = hoveredFilePathRef.current ?? checkedPath ?? null
         if (candidate) {
@@ -3286,7 +3294,15 @@ export function Home({
     })
 
   const activeNav =
-    !selectedFolder && !driveMode ? (projectsMode ? 'projects' : askMode ? 'ask' : view) : null
+    !selectedFolder && !driveMode
+      ? translateMode
+        ? 'translate'
+        : projectsMode
+          ? 'projects'
+          : askMode
+            ? 'ask'
+            : view
+      : null
 
   const onSidebarResizeStart = (e: ReactPointerEvent<HTMLDivElement>) => {
     const startX = e.clientX
@@ -3371,6 +3387,7 @@ export function Home({
               setAskMode(true)
               setDriveMode(false)
               setProjectsMode(false)
+              setTranslateMode(false)
               setSelectedFolder(null)
               setSelected(new Set())
               setRowMenu(null)
@@ -3399,6 +3416,7 @@ export function Home({
               data-testid="home-projects-nav"
               onClick={() => {
                 setProjectsMode(true)
+                setTranslateMode(false)
                 setAskMode(false)
                 setDriveMode(false)
                 setSelectedFolder(null)
@@ -3421,6 +3439,40 @@ export function Home({
                 />
               </svg>
               <span className="nav-label">{projectsText(lang, 'navProjects')}</span>
+            </button>
+          )}
+          {translateOffered && (
+            <button
+              className={`nav-item${activeNav === 'translate' ? ' active' : ''}`}
+              aria-current={activeNav === 'translate' ? 'page' : undefined}
+              data-testid="home-translate-nav"
+              onClick={() => {
+                setTranslateMode(true)
+                setProjectsMode(false)
+                setAskMode(false)
+                setDriveMode(false)
+                setSelectedFolder(null)
+                setSelected(new Set())
+                setRowMenu(null)
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path
+                  d="M2 3.5h7M5.5 2v1.5M3.2 3.5c.4 2.2 1.9 4 4 5M8.3 3.5c-.5 2.4-2.4 4.4-5.1 5.3"
+                  stroke="currentColor"
+                  strokeWidth="1.3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M8.5 13.5l2.4-6 2.4 6M9.3 11.5h3.2"
+                  stroke="currentColor"
+                  strokeWidth="1.3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span className="nav-label">{translateText(lang, 'navTranslate')}</span>
             </button>
           )}
           {/* decision 0032: the agent opens a window of its own, hence the mark on the right */}
@@ -3464,6 +3516,7 @@ export function Home({
                 setDriveMode(true)
                 setAskMode(false)
                 setProjectsMode(false)
+                setTranslateMode(false)
                 setSelectedFolder(null)
                 setSelected(new Set())
                 setRowMenu(null)
@@ -3492,6 +3545,8 @@ export function Home({
           dateLocale={i18n.dateLocale}
           onOpenSettings={() => setSettingsRequest({ section: 'integrations' })}
         />
+      ) : translateMode && translateOffered ? (
+        <TranslationPanel />
       ) : projectsMode && projectsOffered ? (
         <ProjectsPanel
           request={projectRequest}
@@ -3502,6 +3557,7 @@ export function Home({
           onOpenAiSettings={() => setSettingsRequest({ section: 'aiModel' })}
           onOpenHomeAsk={(chat) => {
             setProjectsMode(false)
+            setTranslateMode(false)
             setAskMode(true)
             setAskOpenChat((prev) => ({ ...chat, seq: (prev?.seq ?? 0) + 1 }))
           }}
