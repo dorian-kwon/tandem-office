@@ -71,7 +71,7 @@ export const ko = {
   errOcrEmpty: '페이지나 파일을 하나 이상 고르세요.',
   errOcrCancelled: '읽은 페이지 없이 OCR을 멈췄습니다.',
   errOcrBusy: '이 프로젝트에서 OCR이 이미 돌고 있습니다. 끝난 뒤 다시 시도하세요.',
-  errOcrExpired: 'OCR 창이 만료되었습니다. 다시 여세요.',
+  errOcrExpired: 'OCR 창이 만료되었거나 프로젝트의 OCR 설정이 바뀌었습니다. 다시 여세요.',
   errOcrFailed: 'OCR을 마치지 못했습니다.',
   ocrTitle: 'AI로 읽기(OCR)',
   ocrIntro:

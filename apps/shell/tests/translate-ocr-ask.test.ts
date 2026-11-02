@@ -97,4 +97,21 @@ describe('createOcrAsk', () => {
       kind: 'rate-limit',
     })
   })
+
+  it('Stop cancels only this call, not the window media calls', async () => {
+    const { bridge } = fakeBridge(() => [])
+    const ask = createOcrAsk({
+      confirmed,
+      ocr: 'claude',
+      current: () => confirmed,
+      lang: () => 'en',
+      bridge,
+    })
+    const controller = new AbortController()
+    const pending = ask('claude', request, controller.signal)
+    await Promise.resolve()
+    controller.abort()
+    await expect(pending).rejects.toBeTruthy()
+    expect(bridge.aiStreamCancel).toHaveBeenCalledWith(expect.any(String), 'request')
+  })
 })

@@ -161,6 +161,7 @@ export function createTranslateHandlers(deps: TranslateIpcDeps) {
     ocrPageImage: guard(raw.ocrPageImage),
     ocrWrite: guard(raw.ocrWrite),
     ocrRelease: guard(raw.ocrRelease),
+    ocrForgetOwner: guard(raw.ocrForgetOwner),
   }
 }
 
@@ -448,10 +449,15 @@ function createRawHandlers(deps: TranslateIpcDeps) {
         throw new TranslateIpcError('INVALID_ARGUMENT', 'no translation view is shown')
     },
 
-    async ocrPrepare(args: TranslateOcrPrepareArgs) {
+    /** `owner`: the webContents id that asks; its listings end when it goes (ocrForgetOwner) */
+    async ocrPrepare(args: TranslateOcrPrepareArgs, owner?: number) {
       const service = ocr()
       const dir = registeredDir(args?.dir)
-      return service.prepare(dir, args.files)
+      return service.prepare(dir, args.files, owner)
+    },
+
+    async ocrForgetOwner(owner: number): Promise<void> {
+      ocrService?.forgetOwner(owner)
     },
 
     async ocrStart(args: TranslateOcrStartArgs): Promise<void> {
@@ -481,8 +487,30 @@ function createRawHandlers(deps: TranslateIpcDeps) {
   }
 }
 
+/** the part of a webContents the OCR channels watch */
+export interface OcrSender {
+  id: number
+  once(event: 'destroyed', listener: () => void): unknown
+  on(event: 'render-process-gone', listener: () => void): unknown
+}
+
 export function registerTranslateIpc(ipc: Pick<IpcMain, 'handle'>, deps: TranslateIpcDeps): void {
   const h = createTranslateHandlers(deps)
+  // an OCR listing or run belongs to the window that made it: closing or crashing that
+  // window ends it at once instead of after the idle expiry
+  const watched = new Set<number>()
+  const watchOcrSender = (sender: OcrSender): number => {
+    const id = sender.id
+    if (!watched.has(id)) {
+      watched.add(id)
+      sender.once('destroyed', () => {
+        watched.delete(id)
+        void h.ocrForgetOwner(id)
+      })
+      sender.on('render-process-gone', () => void h.ocrForgetOwner(id))
+    }
+    return id
+  }
   ipc.handle(TRANSLATE_CHANNELS.list, () => h.list())
   ipc.handle(TRANSLATE_CHANNELS.create, (_e, args: TranslateCreateArgs) => h.create(args))
   ipc.handle(TRANSLATE_CHANNELS.remove, (_e, args: TranslateRemoveArgs) => h.remove(args))
@@ -508,8 +536,8 @@ export function registerTranslateIpc(ipc: Pick<IpcMain, 'handle'>, deps: Transla
   ipc.handle(TRANSLATE_CHANNELS.setPaneHidden, (_e, args: TranslateSetPaneHiddenArgs) =>
     h.setPaneHidden(args),
   )
-  ipc.handle(TRANSLATE_CHANNELS.ocrPrepare, (_e, args: TranslateOcrPrepareArgs) =>
-    h.ocrPrepare(args),
+  ipc.handle(TRANSLATE_CHANNELS.ocrPrepare, (e, args: TranslateOcrPrepareArgs) =>
+    h.ocrPrepare(args, watchOcrSender(e.sender as unknown as OcrSender)),
   )
   ipc.handle(TRANSLATE_CHANNELS.ocrStart, (_e, args: TranslateOcrStartArgs) => h.ocrStart(args))
   ipc.handle(TRANSLATE_CHANNELS.ocrPageImage, (_e, args: TranslateOcrPageImageArgs) =>

@@ -41,7 +41,7 @@ export class OcrCallError extends Error {
 /** the part of the home bridge (`window.aiOffice`) a call needs */
 export interface OcrStreamBridge {
   aiStream(request: AiStreamRequest): Promise<void>
-  aiStreamCancel(requestId: string): Promise<void>
+  aiStreamCancel(requestId: string, scope?: 'request'): Promise<void>
   onAiStream(handler: (chunk: AiStreamChunk) => void): () => void
 }
 
@@ -100,7 +100,8 @@ export function createOcrAsk(o: OcrAskOptions): OcrAsk {
       const transport = createIpcTransport<AiSettings>({
         onStream: (listener) => bridge.onAiStream(listener as (chunk: AiStreamChunk) => void),
         start: (req) => bridge.aiStream(req as unknown as AiStreamRequest),
-        cancel: (requestId) => void bridge.aiStreamCancel(requestId),
+        // Stop ends this call only, not media calls the home window may be making
+        cancel: (requestId) => void bridge.aiStreamCancel(requestId, 'request'),
         getSettings: () => settings,
         unknownErrorText: () => translateText(o.lang(), 'errOcrFailed'),
         errorText: (c) => aiRunErrorText(o.lang(), c),

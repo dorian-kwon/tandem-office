@@ -252,7 +252,8 @@ export interface HomeApi {
   aiGetSettings(): Promise<AiSettings>
   /** one streamed model turn over the shared ai:stream handler */
   aiStream(request: AiStreamRequest): Promise<void>
-  aiStreamCancel(requestId: string): Promise<void>
+  /** `scope` 'request': end this stream only, not the window's media calls (OCR, document jobs) */
+  aiStreamCancel(requestId: string, scope?: 'request'): Promise<void>
   /** subscribe to stream chunks; returns unsubscribe */
   onAiStream(handler: (chunk: AiStreamChunk) => void): () => void
   /** open the in-app manual, at `topic` (a help topic id) when given */

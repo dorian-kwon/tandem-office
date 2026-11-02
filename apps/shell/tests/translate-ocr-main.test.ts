@@ -3,7 +3,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { saveProject, loadProject } from '@genoffice/translate-project'
-import { createTranslateHandlers, type TranslateIpcDeps } from '../src/main/translate/translate-ipc'
+import { EventEmitter } from 'node:events'
+import {
+  createTranslateHandlers,
+  registerTranslateIpc,
+  type TranslateIpcDeps,
+} from '../src/main/translate/translate-ipc'
 import type { OcrServiceDeps } from '../src/main/translate/ocr'
 import { parseTranslateError, TRANSLATE_CHANNELS } from '../src/shared/translate-api'
 
@@ -288,5 +293,99 @@ describe('translate:ocr-* handlers', () => {
     await project([{ file: 'scan.pdf', kind: 'scan', bytes: new Uint8Array([1]) }])
     await handlers().ocrPrepare({ dir, files: ['scan.pdf'] })
     expect((await loadProject(dir)).ocr).toEqual({ kind: 'ai', provider: 'claude' })
+  })
+
+  describe('the OCR choice is checked again when the run starts', () => {
+    async function setOcr(ocr: { kind: 'off' } | { kind: 'ai'; provider: 'claude' | 'chatgpt' }) {
+      await saveProject(dir, { ...(await loadProject(dir)), ocr })
+    }
+
+    it('OCR switched off after listing: start is refused and no image is served', async () => {
+      await project([{ file: 'scan.pdf', kind: 'scan', bytes: new Uint8Array([1]) }])
+      const h = handlers()
+      const { token } = await h.ocrPrepare({ dir, files: ['scan.pdf'] })
+      await setOcr({ kind: 'off' })
+      expect(await codeOf(h.ocrStart({ token, pages: [1] }))).toBe('OCR_DISABLED')
+      expect(await codeOf(h.ocrPageImage({ token, index: 1 }))).toBe('OCR_EXPIRED')
+      expect(ocrDeps.renderPdfPage).not.toHaveBeenCalled()
+    })
+
+    it('provider changed after listing: start is refused as expired', async () => {
+      await project([{ file: 'scan.pdf', kind: 'scan', bytes: new Uint8Array([1]) }])
+      const h = handlers()
+      const { token } = await h.ocrPrepare({ dir, files: ['scan.pdf'] })
+      await setOcr({ kind: 'ai', provider: 'chatgpt' })
+      expect(await codeOf(h.ocrStart({ token, pages: [1] }))).toBe('OCR_EXPIRED')
+      expect(await codeOf(h.ocrPageImage({ token, index: 1 }))).toBe('OCR_EXPIRED')
+      expect(ocrDeps.renderPdfPage).not.toHaveBeenCalled()
+    })
+
+    it('an unchanged choice runs', async () => {
+      await project([{ file: 'scan.pdf', kind: 'scan', bytes: new Uint8Array([1]) }])
+      const h = handlers()
+      const { token } = await h.ocrPrepare({ dir, files: ['scan.pdf'] })
+      // saved again with the same choice
+      await setOcr({ kind: 'ai', provider: 'claude' })
+      await h.ocrStart({ token, pages: [1] })
+      await expect(h.ocrPageImage({ token, index: 1 })).resolves.toMatchObject({
+        mime: 'image/png',
+      })
+    })
+  })
+
+  describe('a listing belongs to the window that made it', () => {
+    function wire() {
+      const handlersByChannel = new Map<string, (e: unknown, ...a: unknown[]) => unknown>()
+      registerTranslateIpc(
+        {
+          handle: (channel: string, fn: never) => void handlersByChannel.set(channel, fn),
+        } as never,
+        {
+          settingsPath: () => settingsPath,
+          now: () => clock,
+          showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+          newToken: () => `t${++tokenSeq}`,
+          ocr: ocrDeps,
+        },
+      )
+      const sender = Object.assign(new EventEmitter(), { id: 7 })
+      const call = (channel: string, arg: unknown) =>
+        handlersByChannel.get(channel)!({ sender }, arg) as Promise<never>
+      return { sender, call }
+    }
+
+    it('closing the window ends its started run at once', async () => {
+      await project([{ file: 'scan.pdf', kind: 'scan', bytes: new Uint8Array([1]) }])
+      const { sender, call } = wire()
+      const { token } = (await call(TRANSLATE_CHANNELS.ocrPrepare, {
+        dir,
+        files: ['scan.pdf'],
+      })) as { token: string }
+      await call(TRANSLATE_CHANNELS.ocrStart, { token, pages: [1] })
+      expect(await codeOf(call(TRANSLATE_CHANNELS.ocrPrepare, { dir, files: ['scan.pdf'] }))).toBe(
+        'OCR_BUSY',
+      )
+      sender.emit('destroyed')
+      expect(await codeOf(call(TRANSLATE_CHANNELS.ocrPageImage, { token, index: 1 }))).toBe(
+        'OCR_EXPIRED',
+      )
+      await expect(
+        call(TRANSLATE_CHANNELS.ocrPrepare, { dir, files: ['scan.pdf'] }),
+      ).resolves.toBeTruthy()
+    })
+
+    it('a crashed renderer ends its run too', async () => {
+      await project([{ file: 'scan.pdf', kind: 'scan', bytes: new Uint8Array([1]) }])
+      const { sender, call } = wire()
+      const { token } = (await call(TRANSLATE_CHANNELS.ocrPrepare, {
+        dir,
+        files: ['scan.pdf'],
+      })) as { token: string }
+      await call(TRANSLATE_CHANNELS.ocrStart, { token, pages: [1] })
+      sender.emit('render-process-gone')
+      expect(await codeOf(call(TRANSLATE_CHANNELS.ocrStart, { token, pages: [1] }))).toBe(
+        'OCR_EXPIRED',
+      )
+    })
   })
 })

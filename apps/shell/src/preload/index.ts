@@ -241,8 +241,10 @@ const homeApi: HomeApi = {
   async aiStream(request) {
     await ipcRenderer.invoke('ai:stream', request)
   },
-  async aiStreamCancel(requestId) {
-    await ipcRenderer.invoke('ai:stream-cancel', requestId)
+  async aiStreamCancel(requestId, scope) {
+    // 'request': end this stream only, not the window's media calls (a document job's call)
+    if (scope) await ipcRenderer.invoke('ai:stream-cancel', requestId, scope)
+    else await ipcRenderer.invoke('ai:stream-cancel', requestId)
   },
   onAiStream(handler) {
     const listener = (_event: Electron.IpcRendererEvent, chunk: unknown) => handler(chunk as never)

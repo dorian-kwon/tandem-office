@@ -2,7 +2,12 @@ import { constants } from 'node:fs'
 import { copyFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, extname, join, resolve } from 'node:path'
 import { randomBytes } from 'node:crypto'
-import { loadProject, verifySource, type SourceEntry } from '@genoffice/translate-project'
+import {
+  loadProject,
+  verifySource,
+  type OcrMode,
+  type SourceEntry,
+} from '@genoffice/translate-project'
 import {
   materializeReading,
   readAiReadPayload,
@@ -64,6 +69,10 @@ interface Lease {
   count: number
   /** the stem the output file is named after */
   stem: string
+  /** the project's OCR choice when listed; the run starts only while it still holds */
+  ocr: Extract<OcrMode, { kind: 'ai' }>
+  /** the webContents that listed it; its leases go when it goes */
+  owner: number | null
   /** null until the person confirmed */
   selection: Set<number> | null
   touched: number
@@ -136,10 +145,11 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
 
   return {
     /** list the items (dir must already be a registered project) */
-    async prepare(dir: string, files: unknown): Promise<OcrPrepared> {
+    async prepare(dir: string, files: unknown, owner?: number): Promise<OcrPrepared> {
       sweep()
       const project = await loadProject(dir)
-      if (project.ocr.kind !== 'ai')
+      const ocr = project.ocr
+      if (ocr.kind !== 'ai')
         throw new TranslateIpcError('OCR_DISABLED', 'OCR is switched off for this project')
       const entries = entriesOf(project.sources, files)
       const isPdf = (e: SourceEntry) => e.kind === 'pdf' || e.kind === 'scan'
@@ -179,6 +189,8 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
         paths,
         count,
         stem: first.slice(0, first.length - extname(first).length) || first,
+        ocr,
+        owner: owner ?? null,
         selection: null,
         touched: now(),
       })
@@ -197,6 +209,26 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
       const l = lease(token)
       if (l.selection !== null) throw invalid('this OCR run has already started')
       const chosen = resolveOcrSelection({ kind: 'pages', pages }, l.count)
+      if (runningFor(l.key, l.token))
+        throw new TranslateIpcError('OCR_BUSY', 'OCR is already running for this project')
+      // the listing may be old: the OCR choice must still be the one the person confirmed.
+      // A failed check ends the lease, so no page of it is ever served.
+      const ocr = await loadProject(l.dir)
+        .then((p) => p.ocr)
+        .catch(() => null)
+      if (!leases.has(l.token))
+        throw new TranslateIpcError('OCR_EXPIRED', 'this OCR listing has ended')
+      if (!ocr || ocr.kind !== 'ai') {
+        leases.delete(l.token)
+        throw new TranslateIpcError('OCR_DISABLED', 'OCR is switched off for this project')
+      }
+      if (ocr.provider !== l.ocr.provider) {
+        leases.delete(l.token)
+        throw new TranslateIpcError(
+          'OCR_EXPIRED',
+          'the OCR setting of this project changed; open the OCR window again',
+        )
+      }
       if (runningFor(l.key, l.token))
         throw new TranslateIpcError('OCR_BUSY', 'OCR is already running for this project')
       l.selection = new Set(chosen)
@@ -269,6 +301,11 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
 
     async release(token: unknown): Promise<void> {
       if (typeof token === 'string') leases.delete(token)
+    },
+
+    /** the webContents went away (closed, crashed): its listings and runs end with it */
+    forgetOwner(owner: number): void {
+      for (const [token, l] of leases) if (l.owner === owner) leases.delete(token)
     },
   }
 }

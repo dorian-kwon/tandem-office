@@ -75,7 +75,7 @@ export const en = {
   errOcrEmpty: 'Choose at least one page or file.',
   errOcrCancelled: 'OCR stopped before any page was read.',
   errOcrBusy: 'OCR is already running for this project. Try again once it ends.',
-  errOcrExpired: 'This OCR window has expired. Open it again.',
+  errOcrExpired: "This OCR window has expired or the project's OCR setting changed. Open it again.",
   errOcrFailed: 'OCR could not be completed.',
   ocrTitle: 'Read with AI (OCR)',
   ocrIntro:
