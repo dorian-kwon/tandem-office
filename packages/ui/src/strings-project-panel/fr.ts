@@ -98,4 +98,12 @@ export const fr = {
   contextFailed: 'Le contexte du projet n’a pas pu être lu : cette demande est partie sans lui.',
   newDocumentSaveFailed:
     'Impossible de l’enregistrer dans le dossier du projet ; il reste sans titre : {error}',
+  // TODO(task-12): English placeholder until Task 12 translates the translation-context keys
+  translationContext: 'Translation context sent: {items}',
+  translationSystem: 'system prompt',
+  translationProject: 'project prompt',
+  translationGlossary: 'glossary ({count})',
+  translationGlossaryPart: 'glossary ({count} of {total})',
+  translationReferences: 'references ({count})',
+  translationCut: '(the prompts are long, so the end was left out)',
 } satisfies Record<keyof typeof zh, string>

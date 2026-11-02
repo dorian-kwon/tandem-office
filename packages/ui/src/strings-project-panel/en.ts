@@ -92,4 +92,11 @@ export const en = {
     'The project is no longer in the list, so this request went without the project’s context.',
   contextFailed: 'The project’s context could not be read, so this request went without it.',
   newDocumentSaveFailed: 'Could not save it in the project folder, so it stays untitled: {error}',
+  translationContext: 'Translation context sent: {items}',
+  translationSystem: 'system prompt',
+  translationProject: 'project prompt',
+  translationGlossary: 'glossary ({count})',
+  translationGlossaryPart: 'glossary ({count} of {total})',
+  translationReferences: 'references ({count})',
+  translationCut: '(the prompts are long, so the end was left out)',
 } satisfies Record<keyof typeof zh, string>

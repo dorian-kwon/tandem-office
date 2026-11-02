@@ -93,4 +93,12 @@ export const ms = {
   contextFailed: 'Konteks projek tidak dapat dibaca, jadi permintaan ini dihantar tanpanya.',
   newDocumentSaveFailed:
     'Tidak dapat disimpan dalam folder projek, jadi ia kekal tanpa tajuk: {error}',
+  // TODO(task-12): English placeholder until Task 12 translates the translation-context keys
+  translationContext: 'Translation context sent: {items}',
+  translationSystem: 'system prompt',
+  translationProject: 'project prompt',
+  translationGlossary: 'glossary ({count})',
+  translationGlossaryPart: 'glossary ({count} of {total})',
+  translationReferences: 'references ({count})',
+  translationCut: '(the prompts are long, so the end was left out)',
 } satisfies Record<keyof typeof zh, string>

@@ -99,4 +99,12 @@ export const it = {
     'Non è stato possibile leggere il contesto del progetto, quindi questa richiesta è partita senza.',
   newDocumentSaveFailed:
     'Impossibile salvarlo nella cartella del progetto, quindi resta senza titolo: {error}',
+  // TODO(task-12): English placeholder until Task 12 translates the translation-context keys
+  translationContext: 'Translation context sent: {items}',
+  translationSystem: 'system prompt',
+  translationProject: 'project prompt',
+  translationGlossary: 'glossary ({count})',
+  translationGlossaryPart: 'glossary ({count} of {total})',
+  translationReferences: 'references ({count})',
+  translationCut: '(the prompts are long, so the end was left out)',
 } satisfies Record<keyof typeof zh, string>

@@ -93,4 +93,12 @@ export const id = {
     'Proyek tidak lagi ada di daftar, jadi permintaan ini dikirim tanpa konteks proyek.',
   contextFailed: 'Konteks proyek tidak dapat dibaca, jadi permintaan ini dikirim tanpanya.',
   newDocumentSaveFailed: 'Tidak dapat disimpan di folder proyek, jadi masih tanpa judul: {error}',
+  // TODO(task-12): English placeholder until Task 12 translates the translation-context keys
+  translationContext: 'Translation context sent: {items}',
+  translationSystem: 'system prompt',
+  translationProject: 'project prompt',
+  translationGlossary: 'glossary ({count})',
+  translationGlossaryPart: 'glossary ({count} of {total})',
+  translationReferences: 'references ({count})',
+  translationCut: '(the prompts are long, so the end was left out)',
 } satisfies Record<keyof typeof zh, string>

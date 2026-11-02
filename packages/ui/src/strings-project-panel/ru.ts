@@ -93,4 +93,12 @@ export const ru = {
   contextFailed: 'Не удалось прочитать контекст проекта, поэтому этот запрос отправлен без него.',
   newDocumentSaveFailed:
     'Не удалось сохранить в папку проекта, поэтому документ остался без названия: {error}',
+  // TODO(task-12): review the translation-context keys (machine-drafted)
+  translationContext: 'Контекст перевода отправлен: {items}',
+  translationSystem: 'системный промпт',
+  translationProject: 'промпт проекта',
+  translationGlossary: 'глоссарий ({count})',
+  translationGlossaryPart: 'глоссарий ({count} из {total})',
+  translationReferences: 'справочные материалы ({count})',
+  translationCut: '(промпты слишком длинные, конец опущен)',
 } satisfies Record<keyof typeof zh, string>

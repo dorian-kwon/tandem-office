@@ -93,4 +93,12 @@ export const vi = {
     'Dự án không còn trong danh sách, nên yêu cầu này được gửi mà không có ngữ cảnh của dự án.',
   contextFailed: 'Không đọc được ngữ cảnh của dự án, nên yêu cầu này được gửi mà không có nó.',
   newDocumentSaveFailed: 'Không lưu được vào thư mục dự án nên tài liệu vẫn chưa có tên: {error}',
+  // TODO(task-12): English placeholder until Task 12 translates the translation-context keys
+  translationContext: 'Translation context sent: {items}',
+  translationSystem: 'system prompt',
+  translationProject: 'project prompt',
+  translationGlossary: 'glossary ({count})',
+  translationGlossaryPart: 'glossary ({count} of {total})',
+  translationReferences: 'references ({count})',
+  translationCut: '(the prompts are long, so the end was left out)',
 } satisfies Record<keyof typeof zh, string>

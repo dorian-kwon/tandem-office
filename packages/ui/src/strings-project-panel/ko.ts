@@ -88,4 +88,11 @@ export const ko = {
   contextUnknown: '프로젝트가 목록에 없어 이번 요청에는 프로젝트 내용을 넣지 못했습니다.',
   contextFailed: '프로젝트 내용을 읽지 못해 이번 요청에는 넣지 못했습니다.',
   newDocumentSaveFailed: '프로젝트 폴더에 저장하지 못해 제목 없는 문서로 남았습니다: {error}',
+  translationContext: '번역 맥락을 함께 보냈습니다: {items}',
+  translationSystem: '시스템 프롬프트',
+  translationProject: '프로젝트 프롬프트',
+  translationGlossary: '단어집 {count}개',
+  translationGlossaryPart: '단어집 {total}개 중 {count}개',
+  translationReferences: '참고자료 {count}개',
+  translationCut: '(프롬프트가 길어 뒤쪽이 빠졌습니다)',
 } satisfies Record<keyof typeof zh, string>

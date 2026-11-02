@@ -282,6 +282,56 @@ describe('notice and event text', () => {
     expect(views.map((v) => v.tone)).toEqual(['info', 'info', 'info', 'info', 'warning', 'info'])
   })
 
+  it('lists what a translation project sent, in Korean and English', () => {
+    const notice: ProjectNotice = {
+      kind: 'translation-context',
+      items: [
+        { kind: 'system', included: true },
+        { kind: 'project', included: true },
+        { kind: 'glossary', included: true, count: 12, total: 12 },
+        { kind: 'reference', included: true, count: 3 },
+      ],
+    }
+    expect(projectNoticeView('ko', notice)).toEqual({
+      text: '번역 맥락을 함께 보냈습니다: 시스템 프롬프트 · 프로젝트 프롬프트 · 단어집 12개 · 참고자료 3개',
+      tone: 'info',
+    })
+    expect(projectNoticeView('en', notice).text).toBe(
+      'Translation context sent: system prompt · project prompt · glossary (12) · references (3)',
+    )
+  })
+
+  it('leaves out empty parts and says when the glossary or the prompts were cut', () => {
+    const partial: ProjectNotice = {
+      kind: 'translation-context',
+      items: [
+        { kind: 'system', included: false },
+        { kind: 'project', included: true },
+        { kind: 'glossary', included: true, count: 200, total: 350 },
+        { kind: 'reference', included: false, count: 0 },
+      ],
+    }
+    expect(projectNoticeView('ko', partial).text).toBe(
+      '번역 맥락을 함께 보냈습니다: 프로젝트 프롬프트 · 단어집 350개 중 200개',
+    )
+    expect(projectNoticeView('en', partial).text).toBe(
+      'Translation context sent: project prompt · glossary (200 of 350)',
+    )
+    const cut: ProjectNotice = {
+      kind: 'translation-context',
+      items: [
+        { kind: 'system', included: true },
+        { kind: 'project', included: true },
+        { kind: 'glossary', included: false, count: 0, total: 40 },
+        { kind: 'reference', included: false, count: 0 },
+      ],
+      cut: true,
+    }
+    expect(projectNoticeView('ko', cut).text).toBe(
+      '번역 맥락을 함께 보냈습니다: 시스템 프롬프트 · 프로젝트 프롬프트 · 단어집 40개 중 0개 (프롬프트가 길어 뒤쪽이 빠졌습니다)',
+    )
+  })
+
   it('never names the sync service', () => {
     for (const service of ['onedrive', 'google-drive'] as const) {
       const text = projectNoticeView('en', { kind: 'sync-folder', service }).text

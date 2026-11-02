@@ -348,7 +348,40 @@ export function projectNoticeView(lang: Lang, notice: ProjectNotice): ProjectNot
     case 'sync-folder':
       // the service is never named: "that service" in every language
       return { text: projectPanelText(lang, 'syncFolder'), tone: 'info' }
+    case 'translation-context':
+      return { text: translationContextText(lang, notice), tone: 'info' }
   }
+}
+
+/**
+ * "Translation context sent: system prompt · project prompt · glossary (12) ·
+ * references (3)": the parts a translation project's request carried. An empty
+ * part is left out; a glossary cut short reads "N of M".
+ */
+function translationContextText(
+  lang: Lang,
+  notice: Extract<ProjectNotice, { kind: 'translation-context' }>,
+): string {
+  const parts: string[] = []
+  for (const item of notice.items) {
+    const count = item.count ?? 0
+    if (item.kind === 'system' && item.included) {
+      parts.push(projectPanelText(lang, 'translationSystem'))
+    } else if (item.kind === 'project' && item.included) {
+      parts.push(projectPanelText(lang, 'translationProject'))
+    } else if (item.kind === 'glossary') {
+      const total = item.total ?? count
+      if (total > count) {
+        parts.push(projectPanelText(lang, 'translationGlossaryPart', { count, total }))
+      } else if (count > 0) {
+        parts.push(projectPanelText(lang, 'translationGlossary', { count }))
+      }
+    } else if (item.kind === 'reference' && item.included && count > 0) {
+      parts.push(projectPanelText(lang, 'translationReferences', { count }))
+    }
+  }
+  const text = projectPanelText(lang, 'translationContext', { items: parts.join(' · ') })
+  return notice.cut ? `${text} ${projectPanelText(lang, 'translationCut')}` : text
 }
 
 /** The label of a notice action's button */

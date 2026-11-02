@@ -90,4 +90,12 @@ export const th = {
   contextUnknown: 'โปรเจกต์นี้ไม่อยู่ในรายการแล้ว คำขอนี้จึงส่งไปโดยไม่มีเนื้อหาของโปรเจกต์',
   contextFailed: 'อ่านเนื้อหาของโปรเจกต์ไม่ได้ คำขอนี้จึงส่งไปโดยไม่มีเนื้อหานั้น',
   newDocumentSaveFailed: 'บันทึกลงในโฟลเดอร์โปรเจกต์ไม่ได้ จึงยังไม่มีชื่อ: {error}',
+  // TODO(task-12): review the translation-context keys (machine-drafted)
+  translationContext: 'ส่งบริบทการแปลไปด้วยแล้ว: {items}',
+  translationSystem: 'พรอมต์ระบบ',
+  translationProject: 'พรอมต์โครงการ',
+  translationGlossary: 'อภิธานศัพท์ ({count})',
+  translationGlossaryPart: 'อภิธานศัพท์ ({count} จาก {total})',
+  translationReferences: 'เอกสารอ้างอิง ({count})',
+  translationCut: '(พรอมต์ยาวเกินไป ส่วนท้ายจึงถูกตัดออก)',
 } satisfies Record<keyof typeof zh, string>
