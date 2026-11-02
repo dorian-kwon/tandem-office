@@ -58,3 +58,21 @@ Use a translation project with a global system prompt (Home > Translation), a pr
 10. On the project screen, switch the translation project to "use without instructions": the next request shows no translation line and carries no prompts or glossary.
 11. Put `.ieumoffice/instructions.md` with some text into a translation project made before this change (not yet a listed project) and open the translation view: the view opens, the folder is not added to the project list, and no trust dialog appears. Add it through "Add folder" to see the normal trust dialog.
 12. Remove a translation project from the translation list (with and without deleting the folder): it also disappears from the project list.
+
+## OCR with the signed-in AI (Task 10b)
+
+Task 10b adds the OCR window (`OcrSelectDialog`) and its channels; Task 11 mounts it in the translation view. Until then, mount it from a dev build (or after Task 11) for a project with a scanned PDF of a few pages and two PNG/JPEG images, OCR set to "AI (Claude)". Watch the subscription's usage: each chosen page is one AI call.
+
+1. Open the window for the scanned PDF: every page is listed ("Page 1" ...), none is checked, "Chosen: 0 of N" shows and "Next" is disabled with the hint "Choose at least one to continue."
+2. "Select all" checks every page and the count reads N of N; "Clear selection" unchecks them and "Next" is disabled again.
+3. Check pages 1 and 3, press "Next": the confirmation reads "Pages or files to read: 2 (one AI call each)", "AI used: Claude …", "The chosen page images are sent to this AI." Nothing has been sent yet (no usage change, no program started).
+4. "Back" returns to the list with the same pages checked; "Cancel" closes the window. In both cases nothing was sent.
+5. Press "Start": the window shows "Reading… x of 2", then "Done. The text read is saved as <name> (OCR).docx in the output folder." The file is in the project's `output/` folder, opens in Word or the app, and holds the text of pages 1 and 3 only, in page order. Run it again: the second file is `<name> (OCR) (2).docx`; the first file is unchanged.
+6. "Stop" while it reads: no further page is sent; when some pages were read the document holds those and the window says it stopped early.
+7. Switch the project's OCR to "Off": opening the window shows "OCR is off for this project…" and lists nothing.
+8. Switch the OCR to "AI (ChatGPT)" with only the ChatGPT direct connection (or only Codex) signed in: the confirmation names that connection, not Claude, even when the app-wide "AI to use" is Claude. The app-wide choice in Settings is unchanged afterwards.
+9. Sign the chosen AI out: the confirmation shows the connect card and "Start" stays disabled; nothing switches to another AI.
+10. A metered Claude login accepted in Settings: the confirmation adds "Claude will charge for this". Not accepted: the connect card shows and "Start" is disabled.
+11. Fresh profile where the first-connection notice was never acknowledged: the home screen's first-connection dialog comes up and "Start" stays disabled until it is acknowledged.
+12. Two images: the list shows their file names in the order given, the confirmation counts only the checked ones, and the document holds their text in that order.
+13. While one OCR run of a project is reading, open the window for the same project again: it says OCR is already running for this project.
