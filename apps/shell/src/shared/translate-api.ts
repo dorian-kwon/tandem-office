@@ -1,4 +1,4 @@
-import type { ProjectFile } from '@genoffice/translate-project'
+import type { OcrMode, ProjectFile } from '@genoffice/translate-project'
 
 /**
  * The translation tool's project bridge (main process side: `translate-ipc.ts`).
@@ -13,7 +13,7 @@ export const TRANSLATE_CHANNELS = {
   getSystemPrompt: 'translate:get-system-prompt',
   setSystemPrompt: 'translate:set-system-prompt',
   getProject: 'translate:get-project',
-  saveProject: 'translate:save-project',
+  updateSettings: 'translate:update-settings',
   addMaterial: 'translate:add-material',
   removeMaterial: 'translate:remove-material',
   pickMaterials: 'translate:pick-materials',
@@ -68,6 +68,19 @@ export interface TranslatePickedParentDir {
   dir: string
 }
 
+/** The only project fields the renderer may change; material lists are never in it. */
+export interface TranslateSettingsPatch {
+  projectPrompt?: string
+  ocr?: OcrMode
+  sourceLang?: string
+  targetLang?: string
+}
+
+export interface TranslateUpdateSettingsArgs {
+  dir: string
+  patch: TranslateSettingsPatch
+}
+
 export interface TranslateRemoveMaterialArgs {
   dir: string
   kind: TranslateMaterialKind
@@ -82,7 +95,8 @@ export interface TranslateApi {
   getSystemPrompt(): Promise<string>
   setSystemPrompt(text: string): Promise<void>
   getProject(dir: string): Promise<ProjectFile>
-  saveProject(dir: string, project: ProjectFile): Promise<void>
+  /** change only the settings fields; returns the full updated project */
+  updateSettings(args: TranslateUpdateSettingsArgs): Promise<ProjectFile>
   addMaterial(args: TranslateAddMaterialArgs): Promise<ProjectFile>
   removeMaterial(args: TranslateRemoveMaterialArgs): Promise<ProjectFile>
   /** opens the native file dialog; null when cancelled */

@@ -37,6 +37,7 @@ import {
   type TranslateProjectListEntry,
   type TranslateRemoveArgs,
   type TranslateRemoveMaterialArgs,
+  type TranslateUpdateSettingsArgs,
 } from '../../shared/translate-api'
 
 /**
@@ -101,6 +102,8 @@ const FILTERS: Record<TranslateMaterialKind, { name: string; extensions: string[
   glossary: [{ name: 'Glossary', extensions: ['csv', 'tsv', 'txt', 'xlsx'] }],
 }
 
+const SETTINGS_KEYS = ['projectPrompt', 'ocr', 'sourceLang', 'targetLang']
+
 const KINDS: readonly TranslateMaterialKind[] = ['source', 'reference', 'glossary']
 
 function fold(path: string): string {
@@ -129,7 +132,7 @@ export function createTranslateHandlers(deps: TranslateIpcDeps) {
     getSystemPrompt: guard(raw.getSystemPrompt),
     setSystemPrompt: guard(raw.setSystemPrompt),
     getProject: guard(raw.getProject),
-    saveProject: guard(raw.saveProject),
+    updateSettings: guard(raw.updateSettings),
     addMaterial: guard(raw.addMaterial),
     removeMaterial: guard(raw.removeMaterial),
     pickMaterials: guard(raw.pickMaterials),
@@ -271,11 +274,36 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       return project
     },
 
-    async saveProject(dir: string, project: ProjectFile): Promise<void> {
-      const registered = registeredDir(dir)
-      // the renderer's object is checked by the same parser that reads project.json
-      const checked = parseProjectFile(JSON.stringify(project))
-      await withProjectLock(registered, () => saveProject(registered, checked))
+    async updateSettings(args: TranslateUpdateSettingsArgs): Promise<ProjectFile> {
+      const dir = registeredDir(args?.dir)
+      const patch: unknown = args.patch
+      if (typeof patch !== 'object' || patch === null || Array.isArray(patch))
+        throw new TranslateIpcError('INVALID_ARGUMENT', 'patch must be an object')
+      const keys = Object.keys(patch)
+      const unknown = keys.find((k) => !SETTINGS_KEYS.includes(k))
+      if (unknown) throw new TranslateIpcError('INVALID_ARGUMENT', `cannot change "${unknown}"`)
+      const fields = patch as Record<string, unknown>
+      for (const key of ['projectPrompt', 'sourceLang', 'targetLang']) {
+        const v = fields[key]
+        if (v === undefined) continue
+        if (typeof v !== 'string' || (key !== 'projectPrompt' && v === ''))
+          throw new TranslateIpcError('INVALID_ARGUMENT', `${key} is not valid`)
+      }
+      // read-modify-write under the project lock so a concurrent material change survives
+      return withProjectLock(dir, async () => {
+        const current = await loadProject(dir)
+        const merged = { ...current }
+        for (const key of keys) (merged as Record<string, unknown>)[key] = fields[key]
+        let checked: ProjectFile
+        try {
+          // the same parser that reads project.json validates the new ocr value
+          checked = parseProjectFile(JSON.stringify(merged))
+        } catch {
+          throw new TranslateIpcError('INVALID_ARGUMENT', 'the settings are not valid')
+        }
+        await saveProject(dir, checked)
+        return checked
+      })
     },
 
     async addMaterial(args: TranslateAddMaterialArgs): Promise<ProjectFile> {
@@ -340,8 +368,8 @@ export function registerTranslateIpc(ipc: Pick<IpcMain, 'handle'>, deps: Transla
   ipc.handle(TRANSLATE_CHANNELS.getSystemPrompt, () => h.getSystemPrompt())
   ipc.handle(TRANSLATE_CHANNELS.setSystemPrompt, (_e, text: string) => h.setSystemPrompt(text))
   ipc.handle(TRANSLATE_CHANNELS.getProject, (_e, dir: string) => h.getProject(dir))
-  ipc.handle(TRANSLATE_CHANNELS.saveProject, (_e, dir: string, project: ProjectFile) =>
-    h.saveProject(dir, project),
+  ipc.handle(TRANSLATE_CHANNELS.updateSettings, (_e, args: TranslateUpdateSettingsArgs) =>
+    h.updateSettings(args),
   )
   ipc.handle(TRANSLATE_CHANNELS.addMaterial, (_e, args: TranslateAddMaterialArgs) =>
     h.addMaterial(args),

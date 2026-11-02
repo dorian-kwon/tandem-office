@@ -245,7 +245,7 @@ describe('translate IPC handlers', () => {
     })
     writeAppSettings(settingsPath, { translationProjects: [] })
     await expect(h.getProject(other)).rejects.toThrow(/not a registered/)
-    await expect(h.saveProject(other, {} as never)).rejects.toThrow(/not a registered/)
+    await expect(h.updateSettings({ dir: other, patch: {} })).rejects.toThrow(/not a registered/)
     await expect(h.remove({ dir: other, deleteFolder: true })).rejects.toThrow(/not a registered/)
     expect(existsSync(other)).toBe(true)
     await expect(
@@ -257,18 +257,63 @@ describe('translate IPC handlers', () => {
     await expect(h.getProject('relative/dir')).rejects.toThrow(/not a registered/)
   })
 
-  it('save-project persists a valid project and rejects an invalid one', async () => {
+  it('update-settings changes only the four settings fields and returns the project', async () => {
     const h = handlers()
-    const { dir } = await createIn(h, {
-      name: 'S',
-      sourceLang: 'en',
-      targetLang: 'ko',
+    const { dir } = await createIn(h, { name: 'S', sourceLang: 'en', targetLang: 'ko' })
+    const updated = await h.updateSettings({
+      dir,
+      patch: {
+        targetLang: 'ja',
+        sourceLang: 'fr',
+        projectPrompt: 'formal',
+        ocr: { kind: 'off' },
+      },
     })
-    const p = await h.getProject(dir)
-    await h.saveProject(dir, { ...p, targetLang: 'ja' })
-    expect((await h.getProject(dir)).targetLang).toBe('ja')
-    await expect(h.saveProject(dir, { nope: true } as never)).rejects.toThrow()
+    expect(updated).toMatchObject({
+      targetLang: 'ja',
+      sourceLang: 'fr',
+      projectPrompt: 'formal',
+      ocr: { kind: 'off' },
+      name: 'S',
+    })
+    expect(await h.getProject(dir)).toEqual(updated)
   })
+
+  it('update-settings rejects an invalid ocr, bad values and unknown keys', async () => {
+    const h = handlers()
+    const { dir } = await createIn(h, { name: 'S', sourceLang: 'en', targetLang: 'ko' })
+    const before = await h.getProject(dir)
+    const bad = (patch: object) =>
+      expect(h.updateSettings({ dir, patch } as never)).rejects.toMatchObject({
+        code: 'INVALID_ARGUMENT',
+      })
+    await bad({ ocr: { kind: 'ai', provider: 'bogus' } })
+    await bad({ ocr: 'off' })
+    await bad({ projectPrompt: 5 })
+    await bad({ targetLang: '' })
+    await bad({ sources: [{ file: 'x.docx', sha256: 'x', kind: 'editable' }] })
+    await bad({ name: 'Renamed', projectPrompt: 'ok' })
+    expect(await h.getProject(dir)).toEqual(before)
+  })
+
+  it.each(['settings-first', 'material-first'])(
+    'update-settings keeps lists written by a concurrent addMaterial (%s)',
+    async (order) => {
+      const h = handlers()
+      const { dir } = await createIn(h, { name: 'S', sourceLang: 'en', targetLang: 'ko' })
+      const ref = join(root, 'ref.txt')
+      writeFileSync(ref, 'x')
+      dialogResult = { canceled: false, filePaths: [ref] }
+      const picked = (await h.pickMaterials('reference'))!
+      const add = () => h.addMaterial({ dir, kind: 'reference', token: picked.token, index: 0 })
+      const set = () => h.updateSettings({ dir, patch: { projectPrompt: 'p' } })
+      await Promise.all(order === 'settings-first' ? [set(), add()] : [add(), set()])
+      const final = await h.getProject(dir)
+      expect(final.references).toEqual(['ref.txt'])
+      expect(final.projectPrompt).toBe('p')
+      expect(existsSync(join(dir, 'references', 'ref.txt'))).toBe(true)
+    },
+  )
 
   it('get-project refreshes lastOpened in the settings entry only', async () => {
     const h = handlers()
