@@ -38,6 +38,7 @@ import type { NonEditableDeps } from '../src/main/translate/non-editable'
 import { createTranslateHandlers } from '../src/main/translate/translate-ipc'
 import { parseTranslateError } from '../src/shared/translate-api'
 import {
+  PDF_UNWRITABLE_TARGETS,
   PdfTranslateCancelledError,
   runPdfTranslation,
   translationTargetOf,
@@ -498,6 +499,13 @@ describe('text PDF translation', () => {
     expect(await codeOf(handlers().pdfPrepare({ dir, file: 'report.pdf' }))).toBe(
       'UNSUPPORTED_LANGUAGE',
     )
+    // the translated-PDF writer cannot lay out these scripts (the PDF editor refuses them too)
+    for (const targetLang of ['ar', 'he', 'hi']) {
+      await saveProject(dir, { ...(await loadProject(dir)), targetLang })
+      expect(await codeOf(handlers().pdfPrepare({ dir, file: 'report.pdf' }))).toBe(
+        'UNSUPPORTED_LANGUAGE',
+      )
+    }
   })
 })
 
@@ -611,6 +619,14 @@ describe('opening a result', () => {
       'OPEN_FAILED',
     )
     expect(v.opened).toEqual([])
+  })
+})
+
+describe('translated-PDF target languages', () => {
+  it('refuses the same languages as the PDF editor', async () => {
+    const { PDF_UNWRITABLE_LANGS } =
+      await import('../../pdf/src/renderer/translate/translate-model')
+    expect([...PDF_UNWRITABLE_TARGETS].sort()).toEqual([...PDF_UNWRITABLE_LANGS].sort())
   })
 })
 

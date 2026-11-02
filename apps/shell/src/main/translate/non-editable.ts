@@ -16,7 +16,7 @@ import type { DocumentTree } from '../../../../../packages/pdf-structure/src/tre
 import { withoutImageData } from '../pdf-structure/handlers'
 import { TranslateIpcError } from '../../shared/translate-api'
 import {
-  translationTargetOf,
+  pdfTranslationTargetOf,
   UnsupportedTargetLanguageError,
   type TranslatePdfPrepared,
   type TranslatePdfStoreAnswer,
@@ -216,7 +216,7 @@ export function createNonEditableService(
           'UNSUPPORTED_SOURCE',
           'only a PDF with a text layer is translated this way',
         )
-      const lang = translationTargetOf(project.targetLang)
+      const lang = pdfTranslationTargetOf(project.targetLang)
       if (!lang) throw new UnsupportedTargetLanguageError(project.targetLang)
       if ((await verifySource(dir, entry)) === 'missing')
         throw new TranslateIpcError('SOURCE_MISSING', 'the copy in the source folder is missing')

@@ -65,6 +65,20 @@ export function translationTargetOf(code: string): Lang | null {
   return TRANSLATION_LANGUAGES.find((l) => l === primary) ?? null
 }
 
+/**
+ * The target language a translated PDF can be written in for a project
+ * language code, or null: the engine's languages without those the
+ * translated-PDF writer cannot lay out (Arabic, Hebrew, Hindi; the same set
+ * as the PDF editor's PDF_UNWRITABLE_LANGS, which does not offer the
+ * translated PDF for them either; a test keeps the two equal).
+ */
+export const PDF_UNWRITABLE_TARGETS: ReadonlySet<string> = new Set(['ar', 'he', 'hi'])
+
+export function pdfTranslationTargetOf(code: string): Lang | null {
+  const lang = translationTargetOf(code)
+  return lang && !PDF_UNWRITABLE_TARGETS.has(lang) ? lang : null
+}
+
 export class UnsupportedTargetLanguageError extends Error {
   constructor(code: string) {
     super(`the PDF translation cannot translate into ${JSON.stringify(code)}`)
