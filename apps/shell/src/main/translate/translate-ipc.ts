@@ -20,6 +20,7 @@ import {
 } from '@genoffice/translate-project'
 import { PickAllowlist } from './pick-allowlist'
 import { openTranslation, type TranslationViewDeps } from './open-translation'
+import type { TranslationProjectLink } from './project-link'
 import {
   readTranslationProjects,
   readTranslationSystemPrompt,
@@ -65,6 +66,8 @@ export interface TranslateIpcDeps {
   newToken?: () => string
   /** the shell's tabs for the translation view; absent where there is no tab strip */
   view?: TranslationViewDeps
+  /** lists translation folders as project folders (decision 0088); absent: they are not */
+  projects?: TranslationProjectLink
 }
 
 export interface OpenDialogOptions {
@@ -238,6 +241,13 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       const rest = readTranslationProjects(path).filter((e) => fold(e.dir) !== fold(dir))
       writeTranslationProjects(path, [...rest, { dir, lastOpened: deps.now() }])
       parentPicks.consume(parentToken, 0)
+      try {
+        // the app just made this folder at the person's request: list it as a project
+        // folder so the AI panels carry its context (opening the view tries again)
+        await deps.projects?.ensureListed(dir)
+      } catch {
+        // the translation project exists either way
+      }
       return { dir }
     },
 
@@ -372,7 +382,7 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       const project = await loadProject(dir)
       const entry = project.sources.find((s) => s.file === file)
       if (!entry) throw new TranslateIpcError('NOT_LISTED', 'this document is not in the project')
-      return openTranslation(dir, entry, view)
+      return openTranslation(dir, entry, view, deps.projects)
     },
 
     async setPaneHidden(args: TranslateSetPaneHiddenArgs): Promise<void> {

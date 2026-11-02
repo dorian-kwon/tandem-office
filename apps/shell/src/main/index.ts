@@ -133,6 +133,8 @@ import { registerIntegrationsIpc } from './integrations-ipc'
 import { registerResultStoreIpc } from './result-store-ipc'
 import { registerTranslateIpc } from './translate/translate-ipc'
 import type { TranslationViewDeps } from './translate/open-translation'
+import { translationContextForFolder } from './translate/context-injection'
+import { translationProjectLink, type TranslationProjectLink } from './translate/project-link'
 import { restoreRememberedSplit } from './split-restore'
 import { FEEDBACK_SURVEY_URL, feedbackDetails, feedbackText, platformLabel } from './feedback'
 import { registerDriveIpc, type DriveService } from './drive/drive-ipc'
@@ -5697,6 +5699,9 @@ function projectFolderServices(): ProjectFolderRuntime {
       resolveCloudOnly: projectListCloudOnly,
       list: projectFileLister,
     }),
+    // a translation project folder also carries the translation tool's context
+    translationContext: (root) =>
+      translationContextForFolder(root, { settingsPath: APP_SETTINGS_PATH() }),
   })
   const chats = new ProjectChatStore({ guide, trash: (path) => shell.trashItem(path) })
   const scopes = new KbRunScopes()
@@ -8910,6 +8915,15 @@ registerIntegrationsIpc({
     : join(APPS_ROOT, '..', 'packages', 'cli', 'package.json'),
 })
 registerResultStoreIpc(ipcMain, () => app.getPath('userData'))
+/** Translation project folders as project folders (built on first use: the guide needs userData) */
+function translationProjects(): TranslationProjectLink {
+  return translationProjectLink(projectFolderServices().guide, () => {
+    // as the project IPC's projectsChanged: the walks follow the new folder
+    projectFileLister.invalidate()
+    fileIndexer?.refresh()
+  })
+}
+
 registerTranslateIpc(ipcMain, {
   settingsPath: APP_SETTINGS_PATH,
   now: () => Date.now(),
@@ -8918,6 +8932,10 @@ registerTranslateIpc(ipcMain, {
     return owner ? dialog.showOpenDialog(owner, options) : dialog.showOpenDialog(options)
   },
   view: translationViewDeps(),
+  projects: {
+    ensureListed: (dir) => translationProjects().ensureListed(dir),
+    selectFor: (projectId, paths) => translationProjects().selectFor(projectId, paths),
+  },
 })
 registerTabsIpc()
 registerSplitIpc()

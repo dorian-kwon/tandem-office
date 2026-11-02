@@ -4,6 +4,7 @@ import { basename, join } from 'node:path'
 import { verifySource, type SourceEntry } from '@genoffice/translate-project'
 import { appForPath } from '../app-routing'
 import { TranslateIpcError, type TranslateOpenTranslationResult } from '../../shared/translate-api'
+import type { TranslationProjectLink } from './project-link'
 
 /** What the translation view needs from the shell's tab manager (index.ts wires it). */
 export interface TranslationViewDeps {
@@ -38,11 +39,17 @@ function plainFileName(file: string): boolean {
  * when the source was added. Its hash is checked first: a missing copy is
  * refused, a changed one still opens and reports 'changed' so the screen can
  * warn. PDF, scan and image sources are refused (a later step opens them).
+ *
+ * With `link`, the folder is listed as a project folder and both copies are
+ * set to start their AI panels with it before their tabs open, so every AI
+ * request from either pane carries the translation context. A failure there
+ * never stops the view from opening.
  */
 export async function openTranslation(
   dir: string,
   source: SourceEntry,
   deps: TranslationViewDeps,
+  link?: TranslationProjectLink,
 ): Promise<TranslateOpenTranslationResult> {
   if (source.kind !== 'editable')
     throw new TranslateIpcError(
@@ -72,6 +79,8 @@ export async function openTranslation(
   if (!(await stat(outputPath)).isFile())
     throw new TranslateIpcError('OPEN_FAILED', 'the output path is not a file')
 
+  if (link) await linkProject(link, dir, [sourcePath, outputPath])
+
   const sourceTab = deps.openTab(sourcePath)
   if (sourceTab === undefined || !deps.setTabReadOnly(sourceTab.tabId))
     throw new TranslateIpcError('OPEN_FAILED', 'the source document could not be opened')
@@ -85,4 +94,17 @@ export async function openTranslation(
   const outputTabId = outputTab.tabId
   deps.showSplit(sourceTabId, outputTabId)
   return { sourceTabId, outputTabId, hashStatus }
+}
+
+async function linkProject(
+  link: TranslationProjectLink,
+  dir: string,
+  paths: string[],
+): Promise<void> {
+  try {
+    const projectId = await link.ensureListed(dir)
+    if (projectId !== null) await link.selectFor(projectId, paths)
+  } catch {
+    // the view still opens; its AI panels then start as they would anyway
+  }
 }

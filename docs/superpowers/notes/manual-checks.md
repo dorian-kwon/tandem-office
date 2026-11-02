@@ -41,3 +41,19 @@ Use a project with a docx source and one with a md source.
 14. Sheets source: open an xlsx source, change cells by mouse (drag-fill, context-menu paste) and use File > Save, the ribbon Save button, and wait with autosave on. Each save is refused with the read-only message and `source/<file>.xlsx` keeps its hash. Same for pptx with File > Save As.
 15. "Source copy changed" in the tab strip: after step 8, the strip shows "Source copy changed" next to the hide/show buttons (hover shows the full sentence); its close button removes it.
 16. Restore: remove `output/<file>` after quitting with the translation view open, relaunch: the source copy opens alone and is still read-only (typing refused, Save refused), and it is not in Recent.
+
+## Translation context in the AI panels (Task 10a)
+
+Use a translation project with a global system prompt (Home > Translation), a project prompt, a glossary of a few rows and one reference file, plus an ordinary project folder (decision 0088) with an `instructions.md`.
+
+1. Create a new translation project: no trust dialog appears, and the folder now also shows in the AI panel's project list (and on Home > Projects) under the project's folder name.
+2. Open the translation view on a docx and an md source. In both panes' AI panels the project chip already shows the translation project; nothing was picked by hand.
+3. Send a request from the right pane (e.g. "Translate the first paragraph"). Under the input a line reads "Translation context sent: system prompt · project prompt · glossary (N) · references (1)" (Korean UI: "번역 맥락을 함께 보냈습니다: …"). Send one from the left (read-only) pane too: the same line shows there.
+4. The answer follows the prompts and uses the glossary's target terms. If a request log or debug view is available, the system text holds a `<translation-context>` block with the global prompt, then the project prompt, the line `번역: <src> → <tgt>`, `단어집:` and `참고자료:`; the user message does not.
+5. Glossary over 200 rows: the line reads "glossary (200 of N)"; the first 200 rows of the file are sent (per-request term matching is not possible through the panel). A very long system prompt (over 32,000 characters): the line ends with "(the prompts are long, so the end was left out)".
+6. Change the project prompt or add a glossary row, send again without reopening anything: the next request carries the change.
+7. In the AI panel, choose "No project" for the output copy, then press "Open translation" again: the panel starts with the translation project again.
+8. Ordinary project folder: send a request with it chosen. No "Translation context sent" line appears and the answer behaves as before (its instructions only).
+9. On the project screen, switch the translation project to "use without instructions": the next request shows no translation line and carries no prompts or glossary.
+10. Put `.ieumoffice/instructions.md` with some text into a translation project created before this change (not yet a listed project) and open the translation view: the view opens, the folder is not added to the project list, and no trust dialog appears. Add it through "Add folder" to see the normal trust dialog.
+11. A tab of the output copy that was already open before the folder was listed: check whether its AI panel picks the project up (it may need the tab to be reopened).
