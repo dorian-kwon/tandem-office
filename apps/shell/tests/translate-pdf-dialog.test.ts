@@ -325,37 +325,114 @@ describe('PdfTranslateDialog after the review', () => {
     root = createRoot(host)
   })
 
-  it('"Translate again" confirms a full new translation before sending', async () => {
-    // everything is stored already (until the restart removes it)
+  /**
+   * A store that holds the first `count` blocks of `of` (until a restart
+   * clears it); the writes are recorded in `stored`.
+   */
+  async function storeHolding(of: DocumentTree, count: number | 'all') {
+    const { translationUnits } = await import('../../../packages/pdf-structure/src/translate')
+    const { translationBlockKeys } = await import('../../../packages/pdf-structure/src/store/keys')
+    const keys = translationBlockKeys(translationUnits(of))
+    const held = count === 'all' ? keys : keys.slice(0, count)
     let cleared = false
+    api.pdfPrepare.mockResolvedValue({ token: 'tok', lang: 'de', docHash: 'h', tree: of })
     api.pdfStore.mockImplementation(async ({ request }: { request: TranslatePdfStoreRequest }) => {
-      if (request.op === 'read' && cleared) return { translation: null }
-      if (request.op === 'read') {
-        const { translationUnits } = await import('../../../packages/pdf-structure/src/translate')
-        const { translationBlockKeys } =
-          await import('../../../packages/pdf-structure/src/store/keys')
-        const keys = translationBlockKeys(translationUnits(tree))
+      if (request.op === 'read')
         return {
-          translation: {
-            lang: 'de',
-            provider: 'claude-code',
-            model: '',
-            blocks: keys.map((key) => ({ key, status: 'translated', text: 'old', savedAt: 1 })),
-          },
+          translation: cleared
+            ? null
+            : {
+                lang: 'de',
+                provider: 'claude-code',
+                model: '',
+                blocks: held.map((key) => ({ key, status: 'translated', text: 'old', savedAt: 1 })),
+              },
         }
-      }
       stored.push(request as unknown as Record<string, unknown>)
       if (request.op === 'delete-except-edited') cleared = true
-      return request.op === 'delete-except-edited' ? { removed: 1 } : {}
+      return request.op === 'delete-except-edited' ? { removed: held.length } : {}
     })
-    await render({ restart: true })
+    return { total: keys.length, held: held.length }
+  }
+
+  const callsShown = () => Number(host.querySelector('[data-calls]')?.getAttribute('data-calls'))
+
+  it('stored progress with blocks left offers Continue (first) and Translate again', async () => {
+    const { total, held } = await storeHolding(bigTree, 2)
+    await render({ existing: 'report.de.pdf' })
+    expect(dialog()?.getAttribute('data-step')).toBe('choose')
+    expect(host.querySelector('[data-progress-stored]')?.getAttribute('data-progress-stored')).toBe(
+      `${held}/${total}`,
+    )
+    const cont = host.querySelector<HTMLButtonElement>('[data-action="continue"]')!
+    expect(cont.className).toContain('btn-primary')
+    expect(cont.textContent).toContain(`${total - held} blocks left`)
+    expect(host.querySelector('[data-action="again"]')).not.toBeNull()
+    expect(host.querySelector('[data-action="open-existing"]')).not.toBeNull()
+    expect(send).not.toHaveBeenCalled()
+    expect(stored).toEqual([])
+  })
+
+  it('Continue confirms the blocks left and sends only those', async () => {
+    const { total, held } = await storeHolding(bigTree, 2)
+    await render({ existing: 'report.de.pdf' })
+    await click(host.querySelector('[data-action="continue"]')!)
+    expect(dialog()?.getAttribute('data-step')).toBe('confirm')
+    expect(host.querySelector('[data-restart]')).toBeNull()
+    expect(host.querySelector('[data-done-before]')?.getAttribute('data-done-before')).toBe(
+      String(held),
+    )
+    const calls = callsShown()
+    expect(send).not.toHaveBeenCalled()
+    await click(button('Start'))
+    expect(stored.some((r) => r.op === 'delete-except-edited')).toBe(false)
+    expect(send).toHaveBeenCalledTimes(calls)
+    const sentBlocks = send.mock.calls.reduce((n, [request]) => {
+      const json = request.prompt.split('<document_blocks>\n')[1]!.split('\n</document_blocks>')[0]!
+      return n + (JSON.parse(json) as { blocks: unknown[] }).blocks.length
+    }, 0)
+    expect(sentBlocks).toBe(total - held)
+  })
+
+  it('Translate again confirms that everything is sent again, then restarts', async () => {
+    await storeHolding(bigTree, 2)
+    await render({ existing: 'report.de.pdf' })
+    const resumeCalls = await (async () => {
+      await click(host.querySelector('[data-action="continue"]')!)
+      const n = callsShown()
+      await click(button('Cancel'))
+      return n
+    })()
+    expect(resumeCalls).toBeGreaterThan(0)
+    act(() => root.unmount())
+    root = createRoot(host)
+    stored = []
+    await render({ existing: 'report.de.pdf' })
+    await click(host.querySelector('[data-action="again"]')!)
+    expect(dialog()?.getAttribute('data-step')).toBe('confirm')
     expect(host.querySelector('[data-restart]')).not.toBeNull()
-    expect(host.querySelector('[data-calls]')?.getAttribute('data-calls')).toBe('1')
+    const restartCalls = callsShown()
+    expect(restartCalls).toBeGreaterThan(resumeCalls)
     expect(send).not.toHaveBeenCalled()
     expect(stored).toEqual([])
     await click(button('Start'))
     expect(stored[0]).toEqual({ op: 'delete-except-edited' })
-    expect(send).toHaveBeenCalled()
+    expect(send).toHaveBeenCalledTimes(restartCalls)
+  })
+
+  it('all done: only Translate again and Open it; opening sends nothing', async () => {
+    await storeHolding(tree, 'all')
+    const onOpenResult = vi.fn()
+    const onClose = vi.fn()
+    await render({ existing: 'report.de.pdf', onOpenResult, onClose })
+    expect(host.querySelector('[data-action="continue"]')).toBeNull()
+    expect(host.querySelector('[data-action="again"]')).not.toBeNull()
+    await click(host.querySelector('[data-action="open-existing"]')!)
+    expect(onOpenResult).toHaveBeenCalledWith('report.de.pdf')
+    expect(onClose).toHaveBeenCalled()
+    expect(send).not.toHaveBeenCalled()
+    expect(stored).toEqual([])
+    expect(api.pdfRelease).toHaveBeenCalledWith('tok')
   })
 
   it('says which AI is used and what goes with the text', async () => {
@@ -517,7 +594,7 @@ describe('TranslationPanel mounting', () => {
     expect(dialog()).toBeNull()
   })
 
-  it('"Translate again" opens the window for a full new translation', async () => {
+  it('a PDF with an earlier result opens the window at its choice', async () => {
     openTranslationMock = vi.fn(async () => ({
       flow: 'translate-pdf',
       file: 'report.pdf',
@@ -526,8 +603,13 @@ describe('TranslationPanel mounting', () => {
     }))
     await renderPanel()
     await openRow('report.pdf')
-    await click(button('Translate again'))
+    // the PDF window makes the choice itself, from the engine's estimate
     expect(dialog()?.classList.contains('translate-pdf')).toBe(true)
+    expect(dialog()?.getAttribute('data-step')).toBe('choose')
+    expect(host.querySelector('[data-existing]')?.getAttribute('data-existing')).toBe(
+      'report.de.pdf',
+    )
+    await click(host.querySelector('[data-action="again"]')!)
     expect(host.querySelector('[data-restart]')).not.toBeNull()
   })
 

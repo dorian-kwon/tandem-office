@@ -13,8 +13,10 @@ import type { TranslationSend } from '../../../../../../packages/pdf-structure/s
 import { routeLabel } from '../../../../../pdf/src/renderer/doc-jobs/route'
 import type { TranslateApi } from '../../../shared/translate-api'
 import {
+  canContinue,
   PdfTranslateCancelledError,
   runPdfTranslation,
+  type PdfTranslateEstimates,
   type PdfTranslateBridge,
   type PdfTranslateGo,
   type RunPdfTranslationResult,
@@ -55,10 +57,11 @@ export interface PdfTranslateDialogProps {
   onOpenResult?: (output: string) => void
   onClose: () => void
   /**
-   * "Translate again": everything is translated again (blocks a person edited
-   * stay); the confirmation counts every block. The earlier result is kept.
+   * the newest earlier translated PDF in output/ (in the current target
+   * language), or null: the window then starts with a choice, and "Open it"
+   * opens that file without any AI call
    */
-  restart?: boolean
+  existing?: string | null
   /** the bridge; default window.translateApi (tests pass a fake) */
   api?: TranslateApi
   /** the model call for a confirmed route; default the shared ai:stream call */
@@ -70,7 +73,10 @@ export interface PdfTranslateDialogProps {
 
 type Step =
   | { kind: 'loading' }
-  | { kind: 'confirm'; estimate: DocumentJobEstimate }
+  /** an earlier result or stored progress: continue, translate again, or open the result */
+  | { kind: 'choose'; estimates: PdfTranslateEstimates }
+  /** the confirmation, with the estimate of the chosen mode */
+  | { kind: 'confirm'; estimates: PdfTranslateEstimates; restart: boolean }
   | { kind: 'running'; done: number; total: number }
   | { kind: 'writing' }
   | { kind: 'done'; output: string }
@@ -118,19 +124,23 @@ export function PdfTranslateDialog(props: PdfTranslateDialogProps): ReactElement
       dir: props.dir,
       file: props.file,
       bridge: bridgeOf(api),
-      ...(props.restart ? { restart: true } : {}),
       model: () => {
         const r = now()
         return r.state === 'ready'
           ? { provider: r.provider, model: r.model }
           : { provider: '', model: '' }
       },
-      confirm: (estimate, prepared) =>
+      confirm: (estimates, prepared) =>
         new Promise<PdfTranslateGo | null>((resolve) => {
           if (!alive) return resolve(null)
           setTargetLang(prepared.lang)
           answerRef.current = resolve
-          setStep({ kind: 'confirm', estimate })
+          // an earlier result or stored progress: the person chooses first; otherwise
+          // this is a first translation and goes straight to its confirmation
+          const choose = !!propsRef.current.existing || estimates.resume.done > 0
+          setStep(
+            choose ? { kind: 'choose', estimates } : { kind: 'confirm', estimates, restart: false },
+          )
         }),
       signal: controller.signal,
       onProgress: (e) => {
@@ -192,13 +202,16 @@ export function PdfTranslateDialog(props: PdfTranslateDialogProps): ReactElement
   const start = () => {
     const r = routeRef.current
     if (step.kind !== 'confirm') return
-    if (step.estimate.calls === 0) {
+    const { restart } = step
+    const estimate = restart ? step.estimates.restart : step.estimates.resume
+    if (estimate.calls === 0) {
       // everything is stored already: no call is made, the PDF is only written
-      setStep({ kind: 'running', done: step.estimate.done, total: step.estimate.total })
+      setStep({ kind: 'running', done: estimate.done, total: estimate.total })
       answer({
         send: () => Promise.reject(new PdfTranslateCancelledError()),
-        model: r.state === 'ready' ? { provider: r.provider, model: r.model } : step.estimate.model,
+        model: r.state === 'ready' ? { provider: r.provider, model: r.model } : estimate.model,
         bilingual,
+        restart,
       })
       return
     }
@@ -219,8 +232,22 @@ export function PdfTranslateDialog(props: PdfTranslateDialogProps): ReactElement
           return (request, signal) =>
             ask(request.system, [{ role: 'user', text: request.prompt }], signal)
         })()
-    setStep({ kind: 'running', done: step.estimate.done, total: step.estimate.total })
-    answer({ send, model: { provider: r.provider, model: r.model }, bilingual })
+    setStep({ kind: 'running', done: restart ? 0 : estimate.done, total: estimate.total })
+    answer({ send, model: { provider: r.provider, model: r.model }, bilingual, restart })
+  }
+
+  /** the choice made: its own confirmation, with that mode's estimate */
+  const choose = (restart: boolean) => {
+    if (step.kind !== 'choose') return
+    setStep({ kind: 'confirm', estimates: step.estimates, restart })
+  }
+
+  const openExisting = () => {
+    const existing = props.existing
+    answer(null)
+    runRef.current?.abort()
+    if (existing) props.onOpenResult?.(existing)
+    props.onClose()
   }
 
   const cancel = () => {
@@ -245,7 +272,12 @@ export function PdfTranslateDialog(props: PdfTranslateDialogProps): ReactElement
     )
   }
 
-  const title = step.kind === 'confirm' ? s('trConfirmTitle') : s('trTitle')
+  const title =
+    step.kind === 'confirm'
+      ? s('trConfirmTitle')
+      : step.kind === 'choose'
+        ? s('existingTitle')
+        : s('trTitle')
 
   return (
     <div className="modal-overlay">
@@ -269,10 +301,21 @@ export function PdfTranslateDialog(props: PdfTranslateDialogProps): ReactElement
             </div>
           </>
         )}
+        {step.kind === 'choose' && (
+          <PdfChoose
+            estimates={step.estimates}
+            existing={props.existing ?? null}
+            lang={lang}
+            onContinue={() => choose(false)}
+            onAgain={() => choose(true)}
+            onOpenExisting={openExisting}
+            onCancel={cancel}
+          />
+        )}
         {step.kind === 'confirm' && (
           <PdfConfirm
-            estimate={step.estimate}
-            restart={!!props.restart}
+            estimate={step.restart ? step.estimates.restart : step.estimates.resume}
+            restart={step.restart}
             targetLang={targetLang}
             route={route}
             bilingual={bilingual}
@@ -407,6 +450,84 @@ function stoppedText(result: RunPdfTranslationResult, lang: Lang): string {
     ...(resetsAt !== undefined ? { resetsAt } : {}),
   })
   return text ?? s('trStopped', { done: progress.done, total: progress.total })
+}
+
+/**
+ * The choice when an earlier result or stored progress exists. "Continue"
+ * (the primary action) only when part is stored and part is still to do: it
+ * sends only the rest. "Translate again" sends everything. "Open it" opens
+ * the earlier result. When everything is stored but no PDF was written yet,
+ * "Write the PDF" writes it without any call. Each sending choice goes on
+ * to its own confirmation; nothing is sent from here.
+ */
+function PdfChoose(props: {
+  estimates: PdfTranslateEstimates
+  existing: string | null
+  lang: Lang
+  onContinue: () => void
+  onAgain: () => void
+  onOpenExisting: () => void
+  onCancel: () => void
+}): ReactElement {
+  const s = makeText(props.lang)
+  const { resume } = props.estimates
+  const more = canContinue(resume)
+  const writeStored = !props.existing && resume.done > 0 && resume.pending === 0
+  return (
+    <>
+      {props.existing && (
+        <p data-existing={props.existing}>{s('existingText', { file: props.existing })}</p>
+      )}
+      {resume.done > 0 && (
+        <p data-progress-stored={`${resume.done}/${resume.total}`}>
+          {s('trStoredProgress', { done: resume.done, total: resume.total })}
+        </p>
+      )}
+      <div className="modal-buttons">
+        <button type="button" className="btn btn-secondary" onClick={props.onCancel}>
+          {s('cancel')}
+        </button>
+        {props.existing && (
+          <button
+            type="button"
+            className={more ? 'btn btn-secondary' : 'btn btn-primary'}
+            data-action="open-existing"
+            onClick={props.onOpenExisting}
+          >
+            {s('existingOpen')}
+          </button>
+        )}
+        <button
+          type="button"
+          className="btn btn-secondary"
+          data-action="again"
+          onClick={props.onAgain}
+        >
+          {s('existingAgainPdf')}
+        </button>
+        {writeStored && (
+          <button
+            type="button"
+            className="btn btn-primary"
+            data-action="write-stored"
+            onClick={props.onContinue}
+          >
+            {s('trWriteStored')}
+          </button>
+        )}
+        {more && (
+          <button
+            type="button"
+            className="btn btn-primary"
+            data-action="continue"
+            onClick={props.onContinue}
+          >
+            {s('trContinue', { pending: resume.pending })}
+          </button>
+        )}
+      </div>
+    </>
+  )
 }
 
 /** a recorded provider id as the screen names it (the id itself when unknown) */

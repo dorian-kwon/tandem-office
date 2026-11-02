@@ -45,7 +45,8 @@ import type { DocumentTree } from '../../../../packages/pdf-structure/src/tree/t
  *   (`startTranslationJob`): finished batches are kept in the result store
  *   under the PDF's content hash, so running again sends only what is
  *   missing; a stopped job can still write what is done (the rest stays in
- *   the source language); `restart` translates everything again;
+ *   the source language); a restart ("Translate again") sends everything
+ *   again, and is confirmed with its own estimate;
  * - the translated PDF is written by main into output/ under a new name.
  */
 
@@ -237,11 +238,31 @@ export interface PdfTranslateBridge {
   instructions(dir: string, text: string): Promise<{ prompts: string; material: string }>
 }
 
-/** what the person confirmed: where the requests go, and the output kind */
+/** what the person confirmed: where the requests go, the output kind and the mode */
 export interface PdfTranslateGo {
   send: TranslationSend
   model: JobModelChoice
   bilingual: boolean
+  /**
+   * true: translate everything again ("Translate again"): the stored
+   * translation is replaced, except blocks a person edited (the engine's
+   * restart with keepEdited, as the PDF editor's restart offers). false:
+   * continue, sending only the blocks not stored yet.
+   */
+  restart: boolean
+}
+
+/** the engine's estimate for each mode, made before anything is sent */
+export interface PdfTranslateEstimates {
+  /** continue: only the blocks not stored yet are sent */
+  resume: DocumentJobEstimate
+  /** translate again: every block is sent (blocks a person edited stay) */
+  restart: DocumentJobEstimate
+}
+
+/** "Continue" is offered when part is stored and part is still to do */
+export function canContinue(estimate: DocumentJobEstimate): boolean {
+  return estimate.done > 0 && estimate.pending > 0
 }
 
 export interface RunPdfTranslationOptions {
@@ -249,22 +270,17 @@ export interface RunPdfTranslationOptions {
   file: string
   bridge: PdfTranslateBridge
   /**
-   * The confirmation: the engine's estimate (calls, blocks done before, a
-   * provider change); null = cancelled, nothing is sent.
+   * The choice and the confirmation: the engine's estimate for each mode
+   * (calls, blocks done before, a provider change). The answer names the
+   * mode; the screen confirms with that mode's estimate. null = cancelled,
+   * nothing is sent.
    */
   confirm: (
-    estimate: DocumentJobEstimate,
+    estimates: PdfTranslateEstimates,
     prepared: TranslatePdfPrepared,
   ) => Promise<PdfTranslateGo | null>
-  /** the provider and model the estimate is made for (the route shown) */
+  /** the provider and model the estimates are made for (the route shown) */
   model: () => JobModelChoice
-  /**
-   * translate everything again ("Translate again"): the stored translation is
-   * replaced, except blocks a person edited (the engine's restart with
-   * keepEdited, as the PDF editor's restart offers); the estimate counts
-   * every block, so the confirmation shows what will be sent
-   */
-  restart?: boolean
   signal?: AbortSignal
   onProgress?: (event: JobProgressEvent<unknown>) => void
   /** called once the job ran, before the PDF is written (the screen shows "writing") */
@@ -292,18 +308,19 @@ export async function runPdfTranslation(
       lang,
       send: () => Promise.reject(new PdfTranslateCancelledError()),
     })
-    const restart = o.restart ? { restart: true, keepEdited: true } : {}
-    const estimate = await estimateTranslationJob({
-      docHash,
-      lang,
-      blocks: planParts.blocks,
-      batch: planParts.batch,
-      model: o.model(),
-      store,
-      ...restart,
-    })
-    const go = await o.confirm(estimate, prepared)
+    const plan = { docHash, lang, blocks: planParts.blocks, batch: planParts.batch, store }
+    const estimates: PdfTranslateEstimates = {
+      resume: await estimateTranslationJob({ ...plan, model: o.model() }),
+      restart: await estimateTranslationJob({
+        ...plan,
+        model: o.model(),
+        restart: true,
+        keepEdited: true,
+      }),
+    }
+    const go = await o.confirm(estimates, prepared)
     if (!go || o.signal?.aborted) throw new PdfTranslateCancelledError()
+    const restart = go.restart ? { restart: true, keepEdited: true } : {}
     const send = withTranslationContext(go.send, (text) => o.bridge.instructions(o.dir, text))
     const parts = translationJobParts(tree, { lang, send })
     const handle = startTranslationJob<TextUnit>({

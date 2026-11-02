@@ -47,6 +47,7 @@ import { parseTranslateError } from '../src/shared/translate-api'
 import {
   PDF_UNWRITABLE_TARGETS,
   PdfTranslateCancelledError,
+  canContinue,
   runPdfTranslation,
   translationTargetOf,
   type PdfTranslateBridge,
@@ -187,11 +188,11 @@ async function translate(
     file: 'report.pdf',
     bridge: bridgeOf(h),
     model: () => model,
-    ...(options.restart ? { restart: true } : {}),
     confirm: async () => ({
       send: fakeSend(requests),
       model,
       bilingual: options.bilingual ?? false,
+      restart: options.restart ?? false,
     }),
   })
 }
@@ -406,8 +407,8 @@ describe('text PDF translation', () => {
         file: 'report.pdf',
         bridge: wrapped,
         model: () => model,
-        confirm: async (estimate) => {
-          estimateSeen = estimate
+        confirm: async ({ resume }) => {
+          estimateSeen = resume
           expect(send).not.toHaveBeenCalled()
           return null
         },
@@ -435,9 +436,9 @@ describe('text PDF translation', () => {
       file: 'report.pdf',
       bridge: bridgeOf(h),
       model: () => model,
-      confirm: async (estimate) => {
-        calls = estimate.calls
-        return { send: fakeSend(again), model, bilingual: false }
+      confirm: async ({ resume }) => {
+        calls = resume.calls
+        return { send: fakeSend(again), model, bilingual: false, restart: false }
       },
     })
     expect(calls).toBe(0)
@@ -494,6 +495,7 @@ describe('text PDF translation', () => {
         },
         model,
         bilingual: false,
+        restart: false,
       }),
     })
     expect(result.summary.state).toBe('stopped')
@@ -756,10 +758,9 @@ describe('review fixes', () => {
       file: 'report.pdf',
       bridge: bridgeOf(h),
       model: () => model,
-      restart: true,
-      confirm: async (estimate) => {
-        calls = estimate.calls
-        return { send: fakeSend(again), model, bilingual: false }
+      confirm: async ({ restart }) => {
+        calls = restart.calls
+        return { send: fakeSend(again), model, bilingual: false, restart: true }
       },
     })
     expect(calls).toBe(first.length)
@@ -845,12 +846,13 @@ describe('review fixes', () => {
       file: 'report.pdf',
       bridge: bridgeOf(h),
       model: () => model,
-      confirm: async (estimate) => {
-        expect(estimate.calls).toBeGreaterThan(1)
+      confirm: async ({ resume }) => {
+        expect(resume.calls).toBeGreaterThan(1)
         return {
           send: (req, signal) => ask(req.system, [{ role: 'user', text: req.prompt }], signal),
           model,
           bilingual: false,
+          restart: false,
         }
       },
     })
@@ -862,5 +864,148 @@ describe('review fixes', () => {
       sent.every((r) => (r.settings as { provider?: string }).provider === 'claude-code'),
     ).toBe(true)
     await h.pdfRelease(result.token!)
+  })
+})
+
+describe('continue or translate again', () => {
+  async function addBigPdf(): Promise<void> {
+    const pages = Array.from({ length: 10 }, (_, i) => para(wordLines(i * 50, 45), 72, 760))
+    await addOriginal('report.pdf', await buildPdf(pages))
+  }
+
+  /** the first call answers; every later one hits the usage limit */
+  function limitAfter(first: number, requests: Array<{ system: string; prompt: string }>) {
+    const answer = fakeSend(requests)
+    let calls = 0
+    const send: TranslationSend = async (request, signal) => {
+      if (calls++ < first) return answer(request, signal)
+      throw Object.assign(new Error('limit'), { kind: 'rate-limit' })
+    }
+    return send
+  }
+
+  it('each mode is confirmed with its own count', async () => {
+    await addBigPdf()
+    const h = handlers()
+    // a run that stops after one call leaves part stored
+    const stopped = await runPdfTranslation({
+      dir,
+      file: 'report.pdf',
+      bridge: bridgeOf(h),
+      model: () => model,
+      confirm: async () => ({ send: limitAfter(1, []), model, bilingual: false, restart: false }),
+    })
+    expect(stopped.summary.state).toBe('stopped')
+    await h.pdfRelease(stopped.token!)
+    let seen: { resume: { calls: number; done: number; pending: number; total: number } } | null =
+      null
+    let restartCalls = -1
+    await expect(
+      runPdfTranslation({
+        dir,
+        file: 'report.pdf',
+        bridge: bridgeOf(h),
+        model: () => model,
+        confirm: async (estimates) => {
+          seen = estimates
+          restartCalls = estimates.restart.calls
+          return null
+        },
+      }),
+    ).rejects.toBeInstanceOf(PdfTranslateCancelledError)
+    const resume = seen!.resume
+    expect(canContinue(resume as never)).toBe(true)
+    expect(resume.done).toBeGreaterThan(0)
+    expect(resume.pending).toBe(resume.total - resume.done)
+    // translate again counts every block, so more calls than continuing
+    expect(restartCalls).toBeGreaterThan(resume.calls)
+  })
+
+  it('a stopped restart keeps what it finished; Continue then sends only the rest', async () => {
+    await addBigPdf()
+    const h = handlers()
+    const full: Array<{ system: string; prompt: string }> = []
+    await translate(h, { requests: full })
+    // translate again, stopped by a usage limit after one call
+    const restarted = await runPdfTranslation({
+      dir,
+      file: 'report.pdf',
+      bridge: bridgeOf(h),
+      model: () => model,
+      confirm: async () => ({ send: limitAfter(1, []), model, bilingual: false, restart: true }),
+    })
+    expect(restarted.summary.state).toBe('stopped')
+    await h.pdfRelease(restarted.token!)
+    // the next open: part is stored (what the restart finished), part is pending
+    await saveProject(dir, { ...(await loadProject(dir)), projectPrompt: 'Keep it short.' })
+    const rest: Array<{ system: string; prompt: string }> = []
+    let resumeCalls = -1
+    let offered = false
+    const result = await runPdfTranslation({
+      dir,
+      file: 'report.pdf',
+      bridge: bridgeOf(h),
+      model: () => model,
+      confirm: async ({ resume }) => {
+        offered = canContinue(resume)
+        resumeCalls = resume.calls
+        return { send: fakeSend(rest), model, bilingual: false, restart: false }
+      },
+    })
+    expect(offered).toBe(true)
+    expect(rest.length).toBe(resumeCalls)
+    expect(rest.length).toBeLessThan(full.length)
+    expect(rest.length).toBeGreaterThan(0)
+    for (const { system } of rest) expect(system).toContain('Keep it short.')
+    expect(result.summary.state).toBe('complete')
+    expect(result.output).toBe('report.de (2).pdf')
+  })
+
+  it('everything stored: Continue is not offered', async () => {
+    await addOriginal('report.pdf', textPdf)
+    const h = handlers()
+    await translate(h)
+    await expect(
+      runPdfTranslation({
+        dir,
+        file: 'report.pdf',
+        bridge: bridgeOf(h),
+        model: () => model,
+        confirm: async ({ resume, restart }) => {
+          expect(canContinue(resume)).toBe(false)
+          expect(resume.pending).toBe(0)
+          expect(restart.calls).toBeGreaterThan(0)
+          return null
+        },
+      }),
+    ).rejects.toBeInstanceOf(PdfTranslateCancelledError)
+  })
+})
+
+describe('a detection in flight', () => {
+  it('never overwrites the person’s choice made meanwhile', async () => {
+    await addOriginal('scan.pdf', scanPdf)
+    let release: (() => void) | null = null
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const real = nonEditableDeps().pageTextLayer
+    const h = handlers(view(), {
+      pageTextLayer: async (path) => {
+        const layer = await real(path)
+        await gate
+        return layer
+      },
+    })
+    const opening = h.openTranslation({ dir, file: 'scan.pdf' })
+    // while the check runs, the person says it is a text PDF
+    await new Promise((r) => setTimeout(r, 50))
+    await handlers().setSourceKind({ dir, file: 'scan.pdf', kind: 'pdf' })
+    release!()
+    await opening
+    expect((await loadProject(dir)).sources[0]?.kind).toBe('pdf')
+    expect(await h.openTranslation({ dir, file: 'scan.pdf' })).toMatchObject({
+      flow: 'translate-pdf',
+    })
   })
 })

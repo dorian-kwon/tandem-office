@@ -357,6 +357,7 @@ const CODE_BY_ERROR_NAME: Record<string, TranslateErrorCode> = {
   InvalidSourceKindError: 'INVALID_ARGUMENT',
   UnsupportedTargetLanguageError: 'UNSUPPORTED_LANGUAGE',
   SourceChangedError: 'SOURCE_CHANGED',
+  SourceKindChosenError: 'INVALID_ARGUMENT',
 }
 
 /** Map a translate-project error (or anything else) to a TranslateIpcError. */

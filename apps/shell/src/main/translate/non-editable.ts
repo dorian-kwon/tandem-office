@@ -6,6 +6,7 @@ import {
   loadProject,
   setSourceKind,
   SourceChangedError,
+  SourceKindChosenError,
   type ProjectFile,
   verifySource,
   type SourceEntry,
@@ -224,7 +225,8 @@ export function createNonEditableService(
       // only the copy that was checked: a source replaced meanwhile is left alone
       await setSourceKind(dir, entry.file, 'scan', { expectedSha256: entry.sha256 })
     } catch (err) {
-      if (err instanceof SourceChangedError) return entry
+      // replaced meanwhile, or the person chose its kind meanwhile: leave it
+      if (err instanceof SourceChangedError || err instanceof SourceKindChosenError) return entry
       throw err
     }
     return { ...entry, kind: 'scan' }

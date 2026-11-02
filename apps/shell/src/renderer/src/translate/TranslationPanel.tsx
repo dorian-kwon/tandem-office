@@ -24,7 +24,8 @@ import './translate-global'
  *
  * When an earlier result is in output/, the person first chooses between
  * opening it and running again, so a finished OCR or translation is not paid
- * for twice by accident. Failures and a changed source copy are reported on
+ * for twice by accident (for a PDF, the translation window offers that
+ * choice itself, with "Continue" when part of it is stored). Failures and a changed source copy are reported on
  * the detail screen.
  */
 
@@ -40,8 +41,8 @@ export interface TranslationPanelProps {
 }
 
 type Flow =
-  | { kind: 'choose'; dir: string; file: string; existing: string; again: 'pdf' | 'ocr' }
-  | { kind: 'pdf'; dir: string; file: string; restart: boolean }
+  | { kind: 'choose'; dir: string; file: string; existing: string }
+  | { kind: 'pdf'; dir: string; file: string; existing: string | null }
   | { kind: 'ocr'; dir: string; source: SourceEntry }
 
 export function TranslationPanel(props: TranslationPanelProps = {}) {
@@ -105,13 +106,17 @@ export function TranslationPanel(props: TranslationPanelProps = {}) {
       setListsVersion((n) => n + 1)
       if (result.hashStatus === 'changed')
         setNotice({ text: s('warnSourceChanged'), isError: false })
-      const again = result.flow === 'translate-pdf' ? 'pdf' : 'ocr'
-      if (result.existing) {
-        setFlow({ kind: 'choose', dir, file, existing: result.existing, again })
+      // the PDF window makes its own choice (continue, translate again, open the result)
+      // from the engine's estimate; the OCR asks here
+      if (result.flow === 'translate-pdf') {
+        setFlow({ kind: 'pdf', dir, file, existing: result.existing })
         return
       }
-      if (again === 'pdf') setFlow({ kind: 'pdf', dir, file, restart: false })
-      else await startOcr(dir, file)
+      if (result.existing) {
+        setFlow({ kind: 'choose', dir, file, existing: result.existing })
+        return
+      }
+      await startOcr(dir, file)
     } catch (err) {
       fail(dir, err)
     }
@@ -151,16 +156,12 @@ export function TranslationPanel(props: TranslationPanelProps = {}) {
                 className="btn btn-secondary"
                 data-action="again"
                 onClick={() => {
-                  const { dir, file, again } = flow
-                  // a real new translation: everything is sent again after the confirmation
-                  if (again === 'pdf') setFlow({ kind: 'pdf', dir, file, restart: true })
-                  else {
-                    setFlow(null)
-                    void startOcr(dir, file)
-                  }
+                  const { dir, file } = flow
+                  setFlow(null)
+                  void startOcr(dir, file)
                 }}
               >
-                {flow.again === 'pdf' ? s('existingAgainPdf') : s('existingAgainOcr')}
+                {s('existingAgainOcr')}
               </button>
               <button
                 type="button"
@@ -182,7 +183,7 @@ export function TranslationPanel(props: TranslationPanelProps = {}) {
         <PdfTranslateDialog
           dir={flow.dir}
           file={flow.file}
-          restart={flow.restart}
+          existing={flow.existing}
           aiSettings={aiSettings}
           connection={connection}
           {...(props.onNoticeNeeded ? { onNoticeNeeded: props.onNoticeNeeded } : {})}

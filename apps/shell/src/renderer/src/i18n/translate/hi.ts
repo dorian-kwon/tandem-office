@@ -163,4 +163,8 @@ export const hi = {
     'The translation stopped after several failed requests in a row. What is done is kept.',
   trStoppedStore:
     'The translation stopped because its results could not be saved. What is done is kept.',
+  // TODO(task-12): translate the continue strings below (English placeholders).
+  trStoredProgress: '{done} of {total} text blocks are already translated and kept.',
+  trContinue: 'Continue ({pending} blocks left)',
+  trWriteStored: 'Write the PDF from the stored translation',
 } satisfies Record<keyof typeof zh, string>

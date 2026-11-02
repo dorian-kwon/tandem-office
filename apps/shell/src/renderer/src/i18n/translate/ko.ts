@@ -150,4 +150,7 @@ export const ko = {
   trConfirmAppAi: '설정의 “사용할 AI”를 씁니다. (OCR은 프로젝트에서 고른 AI를 씁니다.)',
   trStoppedFailures: '요청이 여러 번 잇달아 실패해 번역을 멈췄습니다. 끝난 부분은 보관했습니다.',
   trStoppedStore: '결과를 저장하지 못해 번역을 멈췄습니다. 끝난 부분은 보관했습니다.',
+  trStoredProgress: '글 블록 {total}개 중 {done}개는 이미 번역해 보관했습니다.',
+  trContinue: '이어서 번역 (남은 블록 {pending}개)',
+  trWriteStored: '보관된 번역으로 PDF 쓰기',
 } satisfies Record<keyof typeof zh, string>
