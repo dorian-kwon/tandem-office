@@ -4,7 +4,12 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { NotListedError, addSource } from './materials'
 import { createProject, loadProject } from './project-store'
-import { InvalidSourceKindError, setSourceKind } from './source-kind'
+import {
+  InvalidSourceKindError,
+  SourceChangedError,
+  chosenSourceKind,
+  setSourceKind,
+} from './source-kind'
 
 let root: string
 let dir: string
@@ -87,5 +92,59 @@ describe('setSourceKind', () => {
       ['a.pdf', 'scan'],
       ['c.pdf', 'pdf'],
     ])
+  })
+})
+
+describe('setSourceKind with the hash it was decided for', () => {
+  it('refuses when the entry changed since the kind was decided', async () => {
+    await addPdf('a.pdf')
+    await expect(
+      setSourceKind(dir, 'a.pdf', 'scan', { expectedSha256: 'not-the-hash' }),
+    ).rejects.toBeInstanceOf(SourceChangedError)
+    expect((await loadProject(dir)).sources[0]?.kind).toBe('pdf')
+  })
+
+  it('writes when the hash still matches', async () => {
+    await addPdf('a.pdf')
+    const { sha256 } = (await loadProject(dir)).sources[0]!
+    const next = await setSourceKind(dir, 'a.pdf', 'scan', { expectedSha256: sha256 })
+    expect(next.sources[0]?.kind).toBe('scan')
+  })
+})
+
+describe('the person’s own choice of kind', () => {
+  it('is remembered for that copy and read back', async () => {
+    await addPdf('a.pdf')
+    const { sha256 } = (await loadProject(dir)).sources[0]!
+    expect(await chosenSourceKind(dir, 'a.pdf', sha256)).toBeNull()
+    await setSourceKind(dir, 'a.pdf', 'pdf', { expectedSha256: sha256, chosenByPerson: true })
+    expect(await chosenSourceKind(dir, 'a.pdf', sha256)).toBe('pdf')
+    await setSourceKind(dir, 'a.pdf', 'scan', { expectedSha256: sha256, chosenByPerson: true })
+    expect(await chosenSourceKind(dir, 'a.pdf', sha256)).toBe('scan')
+  })
+
+  it('does not carry over to another copy under the same name', async () => {
+    await addPdf('a.pdf')
+    const { sha256 } = (await loadProject(dir)).sources[0]!
+    await setSourceKind(dir, 'a.pdf', 'pdf', { chosenByPerson: true })
+    expect(await chosenSourceKind(dir, 'a.pdf', 'other-hash')).toBeNull()
+    expect(await chosenSourceKind(dir, 'a.pdf', sha256)).toBe('pdf')
+  })
+
+  it('an automatic change records no choice', async () => {
+    await addPdf('a.pdf')
+    const { sha256 } = (await loadProject(dir)).sources[0]!
+    await setSourceKind(dir, 'a.pdf', 'scan')
+    expect(await chosenSourceKind(dir, 'a.pdf', sha256)).toBeNull()
+  })
+
+  it('a damaged choices file reads as no choice', async () => {
+    await addPdf('a.pdf')
+    const { sha256 } = (await loadProject(dir)).sources[0]!
+    await mkdir(join(dir, '.tandem'), { recursive: true })
+    await writeFile(join(dir, '.tandem', 'source-kinds.json'), '{not json', 'utf8')
+    expect(await chosenSourceKind(dir, 'a.pdf', sha256)).toBeNull()
+    await setSourceKind(dir, 'a.pdf', 'pdf', { chosenByPerson: true })
+    expect(await chosenSourceKind(dir, 'a.pdf', sha256)).toBe('pdf')
   })
 })
