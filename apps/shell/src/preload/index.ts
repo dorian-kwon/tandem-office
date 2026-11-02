@@ -63,6 +63,8 @@ import type { DriveApi, DriveUiState } from '../shared/drive-api'
 import { MCP_SERVERS_CHANNELS, MCP_SERVERS_SETTINGS_KEY } from '../shared/mcp-servers-api'
 import type { McpServersApi, McpServersSettingsView } from '../shared/mcp-servers-api'
 import type { ResultStoreApi } from '../shared/result-store-api'
+import { TRANSLATE_CHANNELS } from '../shared/translate-api'
+import type { TranslateApi } from '../shared/translate-api'
 import type { TabsApi, TabSummary } from '../shared/tabs-api'
 import { TABS_CHANNELS } from '../shared/tabs-api'
 import { SPLIT_TABS_CHANNELS } from '../shared/split-view-api'
@@ -695,6 +697,21 @@ const resultStoreApi: ResultStoreApi = {
   },
 }
 contextBridge.exposeInMainWorld('aiOfficeResultStore', resultStoreApi)
+
+// Translation tool projects: the folder list, project files and materials.
+// Main only accepts folders from its registered list, so paths here are requests, not access.
+const translateApi: TranslateApi = {
+  list: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.list),
+  create: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.create, args),
+  remove: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.remove, args),
+  getSystemPrompt: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.getSystemPrompt),
+  setSystemPrompt: (text) => ipcRenderer.invoke(TRANSLATE_CHANNELS.setSystemPrompt, text),
+  getProject: (dir) => ipcRenderer.invoke(TRANSLATE_CHANNELS.getProject, dir),
+  saveProject: (dir, project) => ipcRenderer.invoke(TRANSLATE_CHANNELS.saveProject, dir, project),
+  addMaterial: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.addMaterial, args),
+  removeMaterial: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.removeMaterial, args),
+}
+contextBridge.exposeInMainWorld('translateApi', translateApi)
 
 // Google Drive (decisions 0033, 0085): state, picking, listing and opening.
 // Main keeps the tokens; this bridge only carries states, file lists and file ids.

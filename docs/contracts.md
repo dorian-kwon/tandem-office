@@ -288,13 +288,15 @@ metadata:
 
 **앱 설정(`app-settings.json`)의 값.** 데이터 폴더에 있다.
 
-| 값                      | 종류                                                                                           | 기본                   |
-| ----------------------- | ---------------------------------------------------------------------------------------------- | ---------------------- |
-| `skills.states`         | 식별자 → `{ enabled?, invoke?: 'auto' \| 'manual' }`. 사람이 바꾼 것만 적는다                  | 없음(출처별 처음 상태) |
-| `skills.hiddenBuiltins` | 숨긴 기본 스킬 이름 목록                                                                       | 없음                   |
-| `agentSkillNoticeSeen`  | 참/거짓. 에이전트 창의 스킬 안내를 봤는지                                                      | 없음                   |
-| `agentProjectPrefs`     | 프로젝트 폴더 절대 경로 → `{ codexWebSearch: 'cached' \| 'live' \| 'disabled', codexNetwork }` | 없음(`cached`, 거짓)   |
-| `hwpDefaultFormat`      | `'hwp'` 또는 `'hwpx'`. 파일이 없는 새 한글 문서의 첫 저장에 먼저 제안할 형식                   | `hwp`                  |
+| 값                        | 종류                                                                                                                                                                                           | 기본                   |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| `skills.states`           | 식별자 → `{ enabled?, invoke?: 'auto' \| 'manual' }`. 사람이 바꾼 것만 적는다                                                                                                                  | 없음(출처별 처음 상태) |
+| `skills.hiddenBuiltins`   | 숨긴 기본 스킬 이름 목록                                                                                                                                                                       | 없음                   |
+| `agentSkillNoticeSeen`    | 참/거짓. 에이전트 창의 스킬 안내를 봤는지                                                                                                                                                      | 없음                   |
+| `agentProjectPrefs`       | 프로젝트 폴더 절대 경로 → `{ codexWebSearch: 'cached' \| 'live' \| 'disabled', codexNetwork }`                                                                                                 | 없음(`cached`, 거짓)   |
+| `hwpDefaultFormat`        | `'hwp'` 또는 `'hwpx'`. 파일이 없는 새 한글 문서의 첫 저장에 먼저 제안할 형식                                                                                                                   | `hwp`                  |
+| `translationSystemPrompt` | 문자열. 번역 도구의 전체 시스템 프롬프트                                                                                                                                                       | 빈 문자열              |
+| `translationProjects`     | `{ dir, lastOpened }` 목록. 번역 프로젝트 폴더의 절대 경로와 마지막으로 연 시각(밀리초). 이 목록에 있는 폴더만 번역 창구가 받는다. `lastOpened`는 여기에만 적고 `project.json`에는 적지 않는다 | 빈 목록                |
 
 - 식별자는 `〈출처〉:〈이름〉`, 플러그인은 `plugin:〈플러그인〉:〈이름〉`이다. 출처 값은 `builtin`(기본), `app`(`~/.ieumoffice/skills`, 깃허브 포함), `user`(`~/.claude/skills`), `plugin`(설치된 Claude 플러그인), `codex`(`~/.agents/skills`)다. 저장되는 값이라 바꾸지 않는다. 프로젝트 스킬(`project`)은 저장하지 않는다.
 - 알 수 없는 값은 무시하고 처음 상태로 읽는다. 처음 상태는 `builtin`·`app`이 켜짐·스스로 쓰기, `user`·`plugin`·`codex`가 꺼짐이다.

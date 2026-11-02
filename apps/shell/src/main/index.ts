@@ -131,6 +131,7 @@ import { installCliLinkBestEffort } from './cli-link'
 import { createDefaultAppService, execFileRunner } from './default-app'
 import { registerIntegrationsIpc } from './integrations-ipc'
 import { registerResultStoreIpc } from './result-store-ipc'
+import { registerTranslateIpc } from './translate/translate-ipc'
 import { FEEDBACK_SURVEY_URL, feedbackDetails, feedbackText, platformLabel } from './feedback'
 import { registerDriveIpc, type DriveService } from './drive/drive-ipc'
 import { startMcpHub } from './mcp-client/hub-app'
@@ -8881,6 +8882,7 @@ registerIntegrationsIpc({
     : join(APPS_ROOT, '..', 'packages', 'cli', 'package.json'),
 })
 registerResultStoreIpc(ipcMain, () => app.getPath('userData'))
+registerTranslateIpc(ipcMain, { settingsPath: APP_SETTINGS_PATH, now: () => Date.now() })
 registerTabsIpc()
 registerSplitIpc()
 registerDroppedFilesIpc()

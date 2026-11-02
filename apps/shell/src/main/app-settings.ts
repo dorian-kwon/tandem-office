@@ -350,3 +350,59 @@ export function updateProjectsSettings(
   writeProjectsSettings(path, settings)
   return normalizeProjectsSettings(settings)
 }
+
+// ---- translation tool ----
+
+/** `translationSystemPrompt`: the global system prompt of the translation tool */
+export const TRANSLATION_SYSTEM_PROMPT_KEY = 'translationSystemPrompt'
+/** `translationProjects`: registered translation project folders and when each was opened */
+export const TRANSLATION_PROJECTS_KEY = 'translationProjects'
+
+export interface TranslationProjectEntry {
+  dir: string
+  /** epoch milliseconds */
+  lastOpened: number
+}
+
+/** The `translationSystemPrompt` value read back; anything but a string is the empty prompt */
+export function normalizeTranslationSystemPrompt(raw: unknown): string {
+  return typeof raw === 'string' ? raw : ''
+}
+
+/**
+ * The `translationProjects` value read back; entries without an absolute
+ * folder are dropped, a bad `lastOpened` reads as 0, repeated folders count once.
+ */
+export function normalizeTranslationProjects(raw: unknown): TranslationProjectEntry[] {
+  const out: TranslationProjectEntry[] = []
+  const seen = new Set<string>()
+  for (const item of Array.isArray(raw) ? raw : []) {
+    const entry = plainObject(item)
+    if (!entry || typeof entry.dir !== 'string' || !isAbsolute(entry.dir)) continue
+    const key = process.platform === 'win32' ? resolve(entry.dir).toLowerCase() : resolve(entry.dir)
+    if (seen.has(key)) continue
+    seen.add(key)
+    const opened = entry.lastOpened
+    out.push({
+      dir: entry.dir,
+      lastOpened: typeof opened === 'number' && Number.isFinite(opened) && opened >= 0 ? opened : 0,
+    })
+  }
+  return out
+}
+
+export function readTranslationSystemPrompt(path: string): string {
+  return normalizeTranslationSystemPrompt(readAppSettings(path)[TRANSLATION_SYSTEM_PROMPT_KEY])
+}
+
+export function writeTranslationSystemPrompt(path: string, text: string): void {
+  writeAppSetting(path, TRANSLATION_SYSTEM_PROMPT_KEY, normalizeTranslationSystemPrompt(text))
+}
+
+export function readTranslationProjects(path: string): TranslationProjectEntry[] {
+  return normalizeTranslationProjects(readAppSettings(path)[TRANSLATION_PROJECTS_KEY])
+}
+
+export function writeTranslationProjects(path: string, list: TranslationProjectEntry[]): void {
+  writeAppSetting(path, TRANSLATION_PROJECTS_KEY, normalizeTranslationProjects(list))
+}

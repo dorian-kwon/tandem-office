@@ -34,6 +34,7 @@
 - 에이전트 창의 사용자 MCP 중계(결정 0100, `src/main/agent/agent-mcp-relay.ts`): 세션을 시작할 때 켜진 서버마다 같은 이름의 중계 MCP 서버(루프백, 빈 포트, 세션 토큰)를 열어 허브로 넘기고, `ask` 도구는 에이전트 창의 카드로 묻는다. 세션 지시문의 중계 안내와 받은 내용 지키기 경고는 `agent-sessions.ts`, 문구는 `i18n/strings-agent-mcp.ts`와 `i18n/agent-mcp/<언어>.ts`다.
 - 키 봉인(결정 0063): `src/main/ai-secrets.ts`(safeStorage 코덱, 시작 때 평문 키 옮기기, `--reveal-ai-secrets`). 인터넷 도구 확인 창(결정 0062): `src/main/outbound-confirm.ts`.
 - 에이전트 창의 스킬과 웹(결정 0049): 세션에 실을 스킬과 양식 후보(`src/main/agent/agent-skills.ts`), 스킬 카드·설치 제안(`AgentSkillCard.tsx`, `AgentInstallProposal.tsx`), Codex 웹 검색·명령의 인터넷 접속의 시작 화면 선택과 Claude 웹 허락 표시(`renderer/src/agent/agent-web.ts`, 문구 `i18n/agent-web/`; 프로젝트 폴더별 기억은 `main/app-settings.ts`의 `agentProjectPrefs`를 `agent-window.ts`가 읽고 쓴다). 스킬을 바꾸는 IPC는 메인 창에서 온 요청만 받는데(`canManage`), 에이전트 창에는 깃허브 설치 미리보기에 필요한 `importGitHub`·`cancelImport`·`install` 셋만 더 열려 있다, 이전 사용자 한 번 안내(`i18n/agent-skills/`).
+- 번역 프로젝트 창구(`src/main/translate/translate-ipc.ts`, 계약 `src/shared/translate-api.ts`, preload `window.translateApi`): 채널은 모두 `translate:` 접두사. 목록·만들기·지우기, 전체 시스템 프롬프트, 프로젝트 파일 읽기·저장, 자료 더하기·빼기. 값은 `app-settings.json`의 `translationSystemPrompt`와 `translationProjects`(`app-settings.ts`)에 두고, `dir`을 받는 요청은 등록된 목록에 있는 폴더만 받는다. 로직은 `@genoffice/translate-project`가 한다.
 
 ## 맡지 않는 것 (경계)
 
