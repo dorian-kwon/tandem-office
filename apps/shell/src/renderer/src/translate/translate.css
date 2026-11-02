@@ -158,3 +158,55 @@
   line-height: 1;
   cursor: pointer;
 }
+
+/* the OCR window (OcrSelectDialog): the shell's .modal frame with a page list */
+.translate-ocr {
+  width: min(520px, 90vw);
+}
+
+.translate-ocr p + p,
+.translate-ocr p + .translate-ocr-tools {
+  margin-top: 10px;
+}
+
+.translate-ocr-tools {
+  display: flex;
+  gap: 8px;
+}
+
+.translate-ocr-items {
+  max-height: 280px;
+  margin: 10px 0 0;
+  padding: 6px 10px;
+  overflow-y: auto;
+  list-style: none;
+  border-radius: 8px;
+  background: var(--surface-subtle);
+  font-size: 13px;
+}
+
+.translate-ocr-items label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.translate-ocr-count {
+  margin-top: 10px;
+  color: var(--text-muted);
+}
+
+.translate-ocr-summary {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.translate-ocr-paid {
+  color: var(--danger);
+  font-weight: 600;
+}

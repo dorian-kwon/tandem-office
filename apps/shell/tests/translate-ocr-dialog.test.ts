@@ -1,0 +1,239 @@
+/**
+ * @vitest-environment jsdom
+ */
+import { act, createElement } from 'react'
+import { createRoot } from 'react-dom/client'
+import type { Root } from 'react-dom/client'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { AiSettings } from '@genoffice/ai-provider/browser'
+import type { SourceEntry } from '@genoffice/translate-project'
+import { OcrSelectDialog } from '../src/renderer/src/translate/OcrSelectDialog'
+import { LocaleProvider } from '../src/renderer/src/locale'
+import type { SubscriptionConnection } from '../src/renderer/src/subscription-client'
+import type { OcrAsk, OcrPrepared } from '../src/shared/translate-ocr'
+
+/**
+ * The OCR window against a fake bridge and a fake model call (no AI). The
+ * locale is English so buttons can be matched by text.
+ */
+
+const actEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+actEnvironment.IS_REACT_ACT_ENVIRONMENT = true
+
+const ANSWER = '<page-content>\nText\n</page-content>'
+const PDF: SourceEntry = { file: 'scan.pdf', sha256: 'x', kind: 'scan' }
+
+let host: HTMLDivElement
+let root: Root
+let api: Record<string, ReturnType<typeof vi.fn>>
+let ask: ReturnType<typeof vi.fn<OcrAsk>>
+let prepared: OcrPrepared
+
+function connection(statuses: SubscriptionConnection['statuses']): SubscriptionConnection {
+  const noop = () => undefined
+  return {
+    statuses,
+    busy: false,
+    failed: {},
+    codexImageAvailable: false,
+    install: noop,
+    update: noop,
+    cancelLogin: noop,
+    login: noop,
+    switchAccount: noop,
+    logout: noop,
+    recheck: noop,
+    refresh: noop,
+    acceptMetered: async () => undefined,
+    openInstallHelp: noop,
+    openConnectHelp: noop,
+  }
+}
+
+const SETTINGS = {
+  provider: 'auto',
+  providers: {},
+  subscriptionNoticeSeen: true,
+  subscriptionNoticeVersion: 99,
+} as unknown as AiSettings
+
+beforeEach(() => {
+  host = document.createElement('div')
+  document.body.append(host)
+  root = createRoot(host)
+  prepared = {
+    token: 'tok',
+    kind: 'pdf',
+    ocr: { kind: 'ai', provider: 'claude' },
+    items: [1, 2, 3].map((index) => ({ index, name: '' })),
+  }
+  api = {
+    ocrPrepare: vi.fn(async () => prepared),
+    ocrStart: vi.fn(async () => undefined),
+    ocrPageImage: vi.fn(async () => ({ data: new Uint8Array([1]), mime: 'image/png' })),
+    ocrWrite: vi.fn(async () => ({ docxPath: '/p/output/scan (OCR).docx' })),
+    ocrRelease: vi.fn(async () => undefined),
+  }
+  ask = vi.fn<OcrAsk>(async () => ANSWER)
+})
+
+afterEach(() => {
+  act(() => root.unmount())
+  host.remove()
+})
+
+async function render(
+  props: Partial<Parameters<typeof OcrSelectDialog>[0]> = {},
+  statuses: SubscriptionConnection['statuses'] = { 'claude-code': { state: 'ready' } as never },
+) {
+  await act(async () => {
+    root.render(
+      createElement(
+        LocaleProvider,
+        { initial: 'en' },
+        createElement(OcrSelectDialog, {
+          dir: '/p',
+          sources: [PDF],
+          aiSettings: SETTINGS,
+          connection: connection(statuses),
+          onOpenAiSettings: () => undefined,
+          onClose: () => undefined,
+          api: api as never,
+          makeAsk: () => ask,
+          ...props,
+        }),
+      ),
+    )
+  })
+}
+
+function button(text: string): HTMLButtonElement {
+  const found = [...host.querySelectorAll('button')].find((b) => b.textContent?.trim() === text)
+  if (!found) throw new Error(`no button "${text}"`)
+  return found
+}
+
+async function click(el: Element) {
+  await act(async () => {
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
+}
+
+const boxes = () => [...host.querySelectorAll<HTMLInputElement>('input[type=checkbox]')]
+
+describe('OcrSelectDialog', () => {
+  it('lists the pages with nothing chosen at first', async () => {
+    await render()
+    expect(api.ocrPrepare).toHaveBeenCalledWith({ dir: '/p', files: ['scan.pdf'] })
+    expect(boxes()).toHaveLength(3)
+    expect(boxes().every((b) => !b.checked)).toBe(true)
+    expect(host.textContent).toContain('Page 2')
+  })
+
+  it('select all checks every page', async () => {
+    await render()
+    await click(button('Select all'))
+    expect(boxes().every((b) => b.checked)).toBe(true)
+    expect(host.textContent).toContain('Chosen: 3 of 3')
+    await click(button('Clear selection'))
+    expect(boxes().every((b) => !b.checked)).toBe(true)
+  })
+
+  it('start is disabled with zero selected', async () => {
+    await render()
+    expect(button('Next').disabled).toBe(true)
+    await click(boxes()[1]!)
+    expect(button('Next').disabled).toBe(false)
+    await click(boxes()[1]!)
+    expect(button('Next').disabled).toBe(true)
+  })
+
+  it('the confirmation shows the count and the AI, and Back or Cancel sends nothing', async () => {
+    const onClose = vi.fn()
+    await render({ onClose })
+    await click(boxes()[0]!)
+    await click(boxes()[2]!)
+    await click(button('Next'))
+    expect(host.textContent).toContain('Pages or files to read: 2')
+    expect(host.querySelector('[data-provider]')?.getAttribute('data-provider')).toBe('claude-code')
+    expect(host.textContent).toContain('The chosen page images are sent to this AI.')
+    await click(button('Back'))
+    expect(boxes()).toHaveLength(3)
+    await click(button('Next'))
+    await click(button('Cancel'))
+    expect(onClose).toHaveBeenCalled()
+    expect(api.ocrStart).not.toHaveBeenCalled()
+    expect(api.ocrPageImage).not.toHaveBeenCalled()
+    expect(ask).not.toHaveBeenCalled()
+  })
+
+  it('Start reads only the chosen pages and reports the document', async () => {
+    const onFinished = vi.fn()
+    await render({ onFinished })
+    await click(boxes()[1]!)
+    await click(button('Next'))
+    await click(button('Start'))
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0))
+    })
+    expect(api.ocrStart).toHaveBeenCalledWith({ token: 'tok', pages: [2] })
+    expect(api.ocrPageImage).toHaveBeenCalledWith({ token: 'tok', index: 2 })
+    expect(ask).toHaveBeenCalledTimes(1)
+    expect(ask.mock.calls[0]![0]).toBe('claude')
+    expect(host.textContent).toContain('scan (OCR).docx')
+    expect(onFinished).toHaveBeenCalledWith(expect.objectContaining({ read: [2] }))
+  })
+
+  it('Start stays disabled while the AI is not connected', async () => {
+    await render({}, { 'claude-code': { state: 'signed-out' } as never })
+    await click(button('Select all'))
+    await click(button('Next'))
+    expect(button('Start').disabled).toBe(true)
+  })
+
+  it('a paid route says so in the confirmation', async () => {
+    await render(
+      {
+        aiSettings: { ...SETTINGS, meteredAccepted: { 'claude-code': true } } as AiSettings,
+      },
+      {
+        'claude-code': {
+          state: 'metered',
+          provider: 'claude-code',
+          meteredAccepted: true,
+        } as never,
+      },
+    )
+    await click(button('Select all'))
+    await click(button('Next'))
+    expect(host.querySelector('[data-paid]')).not.toBeNull()
+  })
+
+  it('an unread first-connection notice asks the home screen and holds the start', async () => {
+    const onNoticeNeeded = vi.fn()
+    await render({
+      onNoticeNeeded,
+      aiSettings: { ...SETTINGS, subscriptionNoticeSeen: false, subscriptionNoticeVersion: 0 },
+    })
+    await click(button('Select all'))
+    await click(button('Next'))
+    expect(onNoticeNeeded).toHaveBeenCalled()
+    expect(button('Start').disabled).toBe(true)
+  })
+
+  it('OCR switched off shows the reason and lists nothing', async () => {
+    api.ocrPrepare.mockRejectedValue(
+      new Error("Error invoking remote method 'translate:ocr-prepare': Error: [OCR_DISABLED] off"),
+    )
+    await render()
+    expect(host.textContent).toContain('OCR is off for this project')
+    expect(boxes()).toHaveLength(0)
+  })
+
+  it('closing the window releases the listing', async () => {
+    await render()
+    await act(async () => root.unmount())
+    root = createRoot(host)
+    expect(api.ocrRelease).toHaveBeenCalledWith('tok')
+  })
+})
