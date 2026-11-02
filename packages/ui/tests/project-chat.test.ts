@@ -463,6 +463,46 @@ describe('the earlier chat of the document (spec 5.3.4)', () => {
   })
 })
 
+describe('the request text for the project context (translation glossary)', () => {
+  it('sends the last user message and its selection quote with the context read', async () => {
+    const { controller, fake } = setup({ selection: P1 })
+    await controller.start()
+    controller.persist({
+      role: 'user',
+      text: 'Translate this',
+      scope: { label: 'Selection', text: 'The engine starts.' },
+    })
+    controller.persist({ role: 'assistant', text: 'not a request' })
+    await controller.prepareSend()
+    expect(fake.bridge.readContext).toHaveBeenLastCalledWith({
+      projectId: 'p1',
+      query: 'Translate this\nThe engine starts.',
+    })
+    // used once: a later send without a new message reads without it
+    await controller.finishSend()
+    await controller.prepareSend()
+    expect(fake.bridge.readContext).toHaveBeenLastCalledWith({ projectId: 'p1' })
+  })
+
+  it('sends no query when there is no user message yet', async () => {
+    const { controller, fake } = setup({ selection: P1 })
+    await controller.start()
+    await controller.prepareSend()
+    expect(fake.bridge.readContext).toHaveBeenLastCalledWith({ projectId: 'p1' })
+  })
+
+  it('keeps a message recorded before the selection was known', async () => {
+    const { controller, fake } = setup({ selection: P1 })
+    expect(controller.persist({ role: 'user', text: 'early term' })).toBe(false)
+    await controller.start()
+    await controller.prepareSend()
+    expect(fake.bridge.readContext).toHaveBeenLastCalledWith({
+      projectId: 'p1',
+      query: 'early term',
+    })
+  })
+})
+
 describe('tool records of another editor (spec 5.3.2)', () => {
   it('collapses them into one summary; memory lines stay', async () => {
     const remember = {

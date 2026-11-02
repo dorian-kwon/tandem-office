@@ -96,6 +96,7 @@ export const ar = {
   translationProject: 'موجّه المشروع',
   translationGlossary: 'مسرد المصطلحات ({count})',
   translationGlossaryPart: 'مسرد المصطلحات ({count} من {total})',
+  translationGlossaryMatching: 'مسرد المصطلحات ({count} مطابقة من {total})',
   translationReferences: 'المراجع ({count})',
   translationCut: '(الموجّهات طويلة، فحُذفت نهايتها)',
 } satisfies Record<keyof typeof zh, string>

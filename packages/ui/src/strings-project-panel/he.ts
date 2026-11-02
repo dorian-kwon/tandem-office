@@ -95,6 +95,7 @@ export const he = {
   translationProject: 'הנחיית פרויקט',
   translationGlossary: 'מילון מונחים ({count})',
   translationGlossaryPart: 'מילון מונחים ({count} מתוך {total})',
+  translationGlossaryMatching: 'מילון מונחים ({count} תואמים מתוך {total})',
   translationReferences: 'חומרי עזר ({count})',
   translationCut: '(ההנחיות ארוכות, ולכן הסוף הושמט)',
 } satisfies Record<keyof typeof zh, string>

@@ -93,6 +93,7 @@ export const ko = {
   translationProject: '프로젝트 프롬프트',
   translationGlossary: '단어집 {count}개',
   translationGlossaryPart: '단어집 {total}개 중 {count}개',
+  translationGlossaryMatching: '단어집 {total}개 중 맞는 {count}개',
   translationReferences: '참고자료 {count}개',
   translationCut: '(프롬프트가 길어 뒤쪽이 빠졌습니다)',
 } satisfies Record<keyof typeof zh, string>

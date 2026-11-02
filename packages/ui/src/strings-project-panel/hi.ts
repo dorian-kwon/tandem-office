@@ -100,6 +100,7 @@ export const hi = {
   translationProject: 'प्रोजेक्ट प्रॉम्प्ट',
   translationGlossary: 'शब्दावली ({count})',
   translationGlossaryPart: 'शब्दावली ({total} में से {count})',
+  translationGlossaryMatching: 'शब्दावली ({total} में से {count} मेल खाते)',
   translationReferences: 'संदर्भ सामग्री ({count})',
   translationCut: '(प्रॉम्प्ट लंबे हैं, इसलिए अंत छोड़ दिया गया)',
 } satisfies Record<keyof typeof zh, string>

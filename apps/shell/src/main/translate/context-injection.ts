@@ -32,10 +32,20 @@ export interface TranslationContextOptions {
 }
 
 export interface TranslationInstructions extends ComposedContext {
+  /** the prompts (app-wide, project) and the language pair: the start of `text` */
+  promptText: string
+  /** glossary entries and reference file names: the rest of `text` ('' when none) */
+  materialText: string
   /** glossary entries in the text */
   glossaryIncluded: number
   /** entries in the project's glossary */
   glossaryTotal: number
+  /**
+   * How the entries were chosen: `all` (the glossary is within the limit), `matching` (over
+   * the limit, the entries whose term appears in the request text), `first` (over the limit
+   * and nothing matched, or no request text: the first entries in file order)
+   */
+  glossarySelection: 'all' | 'matching' | 'first'
   /** reference file names in the text */
   referenceCount: number
   /** the prompts alone were over the limit: the text was cut and holds no glossary entry */
@@ -55,16 +65,20 @@ function cutAt(text: string, limit: number): string {
  * The context one AI request carries for the translation project in `dir`:
  * the global system prompt (app settings), the project prompt with the
  * language pair, glossary entries and reference file names, as
- * `composeContext` writes them.
+ * `composeContext` writes them. `paragraph` is the request text (the
+ * person's message and the selection it is about), or '' when unknown.
  *
- * Glossary entries:
- * - with request text (`paragraph`), `selectGlossary` picks them: the whole
- *   glossary up to DEFAULT_GLOSSARY_LIMIT entries, else the entries whose
- *   source term appears in the text;
- * - without request text nothing can be matched, so the glossary is taken in
- *   file order, at most DEFAULT_GLOSSARY_LIMIT entries.
+ * Glossary entries (the spec rule of `selectGlossary`):
+ * - a glossary within DEFAULT_GLOSSARY_LIMIT entries goes whole;
+ * - over it, the entries whose source term appears in `paragraph`;
+ * - over it with no match (or no request text), the first
+ *   DEFAULT_GLOSSARY_LIMIT entries in file order, so a short request such as
+ *   "translate this" still carries terms.
  * Over `limitChars`, whole entries are dropped from the end until the text
  * fits; if the prompts alone are over it, the text is cut there (`cut`).
+ *
+ * `options` (a deviation from the plan's two-argument form) carries the
+ * settings path, which is per process.
  */
 export async function buildTranslationInstructions(
   dir: string,
@@ -75,11 +89,18 @@ export async function buildTranslationInstructions(
   const glossary = await loadGlossary(dir)
   const systemPrompt = readTranslationSystemPrompt(options.settingsPath)
   const limit = options.limitChars ?? INSTRUCTIONS_LIMIT_CHARS
-  const candidates =
-    paragraph.trim() === ''
-      ? glossary.slice(0, DEFAULT_GLOSSARY_LIMIT)
-      : selectGlossary(glossary, paragraph, DEFAULT_GLOSSARY_LIMIT)
-  return fitted(systemPrompt, project, candidates, glossary.length, limit)
+  let candidates: GlossaryEntry[]
+  let selection: TranslationInstructions['glossarySelection']
+  if (glossary.length <= DEFAULT_GLOSSARY_LIMIT) {
+    candidates = glossary
+    selection = 'all'
+  } else {
+    const matching =
+      paragraph.trim() === '' ? [] : selectGlossary(glossary, paragraph, DEFAULT_GLOSSARY_LIMIT)
+    candidates = matching.length > 0 ? matching : glossary.slice(0, DEFAULT_GLOSSARY_LIMIT)
+    selection = matching.length > 0 ? 'matching' : 'first'
+  }
+  return fitted(systemPrompt, project, candidates, glossary.length, selection, limit)
 }
 
 function fitted(
@@ -87,6 +108,7 @@ function fitted(
   project: ProjectFile,
   candidates: GlossaryEntry[],
   total: number,
+  selection: TranslationInstructions['glossarySelection'],
   limit: number,
 ): TranslationInstructions {
   // `candidates` is already the selection: composeContext keeps every one of them
@@ -98,13 +120,26 @@ function fitted(
       paragraph: '',
       glossaryLimit: count,
     })
-  const result = (composed: ComposedContext, count: number, cut: boolean) => ({
-    ...composed,
-    glossaryIncluded: count,
-    glossaryTotal: total,
-    referenceCount: project.references.length,
-    cut,
-  })
+  // the prompts part alone: no glossary entry and no reference name
+  const promptText = composeContext({
+    systemPrompt,
+    project: { ...project, references: [] },
+    glossary: [],
+    paragraph: '',
+  }).text
+  const result = (composed: ComposedContext, count: number, cut: boolean) => {
+    const prompts = cut ? composed.text : promptText
+    return {
+      ...composed,
+      promptText: prompts,
+      materialText: composed.text.slice(prompts.length).replace(/^\n+/, ''),
+      glossaryIncluded: count,
+      glossaryTotal: total,
+      glossarySelection: selection,
+      referenceCount: project.references.length,
+      cut,
+    }
+  }
   const all = compose(candidates.length)
   if (all.text.length <= limit) return result(all, candidates.length, false)
   // the text grows with each entry: find the most entries that still fit
@@ -117,12 +152,15 @@ function fitted(
   }
   const best = compose(low)
   if (best.text.length <= limit) return result(best, low, false)
-  return result({ ...best, text: cutAt(best.text, limit) }, 0, true)
+  // the prompts alone are over the limit: send their start, and no material
+  const text = cutAt(promptText, limit)
+  return result({ ...best, text }, 0, true)
 }
 
 /** What the project guide adds to a translation project's context */
 export interface TranslationFolderContext {
-  text: string
+  prompts: string
+  material: string
   items: ProjectTranslationItem[]
   cut: boolean
 }
@@ -139,20 +177,20 @@ function registeredDir(root: string, options: TranslationContextOptions): string
 /**
  * The translation context of a project folder, or null when the folder is not
  * a registered translation project (an ordinary project folder) or its
- * project file cannot be read. The panel's request text does not reach the
- * project guide, so the glossary goes without per-request selection (see
- * `buildTranslationInstructions` with an empty paragraph).
+ * project file cannot be read. `query` is the request text the AI panel
+ * passed along (absent: none), used only to pick glossary entries.
  */
 export async function translationContextForFolder(
   root: string,
   options: TranslationContextOptions,
+  query?: string,
 ): Promise<TranslationFolderContext | null> {
   const dir = registeredDir(root, options)
   if (dir === undefined) return null
   if ((await projectStatus(dir)) !== 'ok') return null
   let built: TranslationInstructions
   try {
-    built = await buildTranslationInstructions(dir, '', options)
+    built = await buildTranslationInstructions(dir, query ?? '', options)
   } catch {
     // a broken glossary or project file sends nothing of the translation tool
     return null
@@ -160,7 +198,8 @@ export async function translationContextForFolder(
   const included = (kind: ProjectTranslationItem['kind']) =>
     built.items.find((item) => item.kind === kind)?.included ?? false
   return {
-    text: built.text,
+    prompts: built.promptText,
+    material: built.materialText,
     cut: built.cut,
     items: [
       { kind: 'system', included: included('system') },
@@ -170,6 +209,7 @@ export async function translationContextForFolder(
         included: built.glossaryIncluded > 0,
         count: built.glossaryIncluded,
         total: built.glossaryTotal,
+        ...(built.glossarySelection === 'matching' ? { selection: 'matching' as const } : {}),
       },
       {
         kind: 'reference',

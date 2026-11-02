@@ -305,6 +305,14 @@ const INITIAL_STATE: ProjectChatState = {
 }
 
 /** The chat logic without React (the hook wraps it; tests drive it directly) */
+/** A user message as the request text: its words, then the selection it is about */
+function requestText(record: ProjectChatRecord): string {
+  return [record.text, record.scope?.text ?? '']
+    .map((part) => part.trim())
+    .filter((part) => part !== '')
+    .join('\n')
+}
+
 export function createProjectChatController(initial: ProjectChatOptions): ProjectChatController {
   let options = initial
   const bridge: ProjectChatBridge | null =
@@ -334,6 +342,8 @@ export function createProjectChatController(initial: ProjectChatOptions): Projec
   let startToken = 0
   /** an "open this chat" that came before the selection was known */
   let deferredOpen: ProjectChatRef | null = null
+  /** the last user message's text, read by the next `prepareSend` once (never stored) */
+  let pendingQuery: string | null = null
 
   const markUnwritable = () => {
     if (!state.unwritable) setState({ unwritable: true })
@@ -680,6 +690,8 @@ export function createProjectChatController(initial: ProjectChatOptions): Projec
       return result
     },
     persist(record) {
+      // the request text for the next context read (a translation glossary picks terms by it)
+      if (record.role === 'user') pendingQuery = requestText(record)
       if (!state.ready) return false
       const chat = state.chat
       if (!chat) return false
@@ -720,8 +732,10 @@ export function createProjectChatController(initial: ProjectChatOptions): Projec
     settled: () => writes,
     async prepareSend() {
       flush()
+      const query = pendingQuery
+      pendingQuery = null
       if (!run) return { status: 'none' }
-      return run.prepare()
+      return query ? run.prepare(query) : run.prepare()
     },
     async finishSend() {
       await run?.finish()

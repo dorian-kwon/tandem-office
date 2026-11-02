@@ -97,6 +97,7 @@ export const en = {
   translationProject: 'project prompt',
   translationGlossary: 'glossary ({count})',
   translationGlossaryPart: 'glossary ({count} of {total})',
+  translationGlossaryMatching: 'glossary ({count} matching of {total})',
   translationReferences: 'references ({count})',
   translationCut: '(the prompts are long, so the end was left out)',
 } satisfies Record<keyof typeof zh, string>

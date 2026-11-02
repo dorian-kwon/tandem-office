@@ -301,6 +301,24 @@ describe('notice and event text', () => {
     )
   })
 
+  it('says when the glossary entries were picked by the request words', () => {
+    const notice: ProjectNotice = {
+      kind: 'translation-context',
+      items: [
+        { kind: 'system', included: false },
+        { kind: 'project', included: true },
+        { kind: 'glossary', included: true, count: 3, total: 350, selection: 'matching' },
+        { kind: 'reference', included: false, count: 0 },
+      ],
+    }
+    expect(projectNoticeView('ko', notice).text).toBe(
+      '번역 맥락을 함께 보냈습니다: 프로젝트 프롬프트 · 단어집 350개 중 맞는 3개',
+    )
+    expect(projectNoticeView('en', notice).text).toBe(
+      'Translation context sent: project prompt · glossary (3 matching of 350)',
+    )
+  })
+
   it('leaves out empty parts and says when the glossary or the prompts were cut', () => {
     const partial: ProjectNotice = {
       kind: 'translation-context',

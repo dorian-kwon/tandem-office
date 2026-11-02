@@ -4,6 +4,7 @@ import {
   PROJECT_FOLDER_NAMES,
   PROJECT_FOLDER_CHANNELS,
   PROJECT_FOLDER_EVENTS,
+  READ_CONTEXT_QUERY_MAX_CHARS,
   type AddFolderResult,
   type AppendProjectChatArgs,
   type CreateProjectResult,
@@ -184,6 +185,13 @@ function projectIdOf(raw: unknown): ProjectId {
   const id = record(raw).projectId
   if (!isValidProjectId(id)) throw new Error(PROJECT_IPC_BAD_REQUEST)
   return id
+}
+
+/** `readContext`'s optional request text: a string cut at the limit; anything else is none */
+function queryOf(raw: unknown): string | undefined {
+  const query = record(raw).query
+  if (typeof query !== 'string' || query.trim() === '') return undefined
+  return query.slice(0, READ_CONTEXT_QUERY_MAX_CHARS)
 }
 
 function chatRefOf(raw: unknown): ProjectChatRef {
@@ -511,7 +519,11 @@ export function registerProjectFolderIpc(deps: ProjectIpcDeps): ProjectIpcContro
     },
 
     // ---- one send ----
-    readContext: (_sender, raw) => svc().guide.readContext(projectIdOf(raw)),
+    readContext: (_sender, raw) => {
+      const id = projectIdOf(raw)
+      const query = queryOf(raw)
+      return svc().guide.readContext(id, query === undefined ? {} : { query })
+    },
     openScope: (sender, raw) => svc().tools.openScope(sender, raw),
     closeScope: (sender, raw) => svc().tools.closeScope(sender, raw),
 

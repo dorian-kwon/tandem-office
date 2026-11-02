@@ -96,6 +96,7 @@ export const th = {
   translationProject: 'พรอมต์โครงการ',
   translationGlossary: 'อภิธานศัพท์ ({count})',
   translationGlossaryPart: 'อภิธานศัพท์ ({count} จาก {total})',
+  translationGlossaryMatching: 'อภิธานศัพท์ (ตรงกัน {count} จาก {total})',
   translationReferences: 'เอกสารอ้างอิง ({count})',
   translationCut: '(พรอมต์ยาวเกินไป ส่วนท้ายจึงถูกตัดออก)',
 } satisfies Record<keyof typeof zh, string>

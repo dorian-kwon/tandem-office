@@ -356,7 +356,8 @@ export function projectNoticeView(lang: Lang, notice: ProjectNotice): ProjectNot
 /**
  * "Translation context sent: system prompt · project prompt · glossary (12) ·
  * references (3)": the parts a translation project's request carried. An empty
- * part is left out; a glossary cut short reads "N of M".
+ * part is left out; a glossary cut short reads "N of M", one picked by the
+ * request's words "N matching of M".
  */
 function translationContextText(
   lang: Lang,
@@ -371,7 +372,9 @@ function translationContextText(
       parts.push(projectPanelText(lang, 'translationProject'))
     } else if (item.kind === 'glossary') {
       const total = item.total ?? count
-      if (total > count) {
+      if (item.selection === 'matching') {
+        parts.push(projectPanelText(lang, 'translationGlossaryMatching', { count, total }))
+      } else if (total > count) {
         parts.push(projectPanelText(lang, 'translationGlossaryPart', { count, total }))
       } else if (count > 0) {
         parts.push(projectPanelText(lang, 'translationGlossary', { count }))

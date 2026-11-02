@@ -99,6 +99,7 @@ export const ru = {
   translationProject: 'промпт проекта',
   translationGlossary: 'глоссарий ({count})',
   translationGlossaryPart: 'глоссарий ({count} из {total})',
+  translationGlossaryMatching: 'глоссарий ({count} совпадающих из {total})',
   translationReferences: 'справочные материалы ({count})',
   translationCut: '(промпты слишком длинные, конец опущен)',
 } satisfies Record<keyof typeof zh, string>

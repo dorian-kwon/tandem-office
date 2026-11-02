@@ -92,6 +92,7 @@ export const zh = {
   translationProject: '项目提示词',
   translationGlossary: '术语表（{count}）',
   translationGlossaryPart: '术语表（{total} 条中的 {count} 条）',
+  translationGlossaryMatching: '术语表（{total} 条中匹配的 {count} 条）',
   translationReferences: '参考资料（{count}）',
   translationCut: '（提示词过长，末尾已省略）',
 }

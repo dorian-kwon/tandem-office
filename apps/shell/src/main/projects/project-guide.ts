@@ -169,15 +169,17 @@ export interface ProjectGuideDeps {
   touchWriteMs?: number
   /**
    * The translation tool's context for a folder (`translate/context-injection.ts`), or null
-   * when the folder is not a translation project. Asked only under trust `use`; absent,
-   * null or failing adds nothing, so an ordinary project's context is unchanged.
+   * when the folder is not a translation project. `query` is the request text, when the
+   * panel passed it. Asked only under trust `use`; absent, null or failing adds nothing,
+   * so an ordinary project's context is unchanged.
    */
-  translationContext?: (root: string) => Promise<ProjectTranslationContext | null>
+  translationContext?: (root: string, query?: string) => Promise<ProjectTranslationContext | null>
 }
 
 /** What the translation hook adds to one request's context */
 export interface ProjectTranslationContext {
-  text: string
+  prompts: string
+  material: string
   items: ProjectTranslationItem[]
   cut: boolean
 }
@@ -859,9 +861,13 @@ export class ProjectGuide {
    * What the next request carries (spec 5.4): name, instructions (cut at the limit),
    * memory (whole), file names, notices. Under `without` the instructions, memory and
    * root agent files are left out. A file changed outside the app gives one
-   * "changed" notice, then its new hash is recorded.
+   * "changed" notice, then its new hash is recorded. `query` (the request text) only
+   * reaches the translation hook; it is not stored.
    */
-  async readContext(id: ProjectId): Promise<ProjectContextResult> {
+  async readContext(
+    id: ProjectId,
+    options: { query?: string } = {},
+  ): Promise<ProjectContextResult> {
     const settings = this.read()
     const entry = this.entry(id, settings)
     if (!entry) return { status: 'unknown' }
@@ -890,7 +896,7 @@ export class ProjectGuide {
     let translation: ProjectTranslationContext | null = null
     if (trust === 'use' && record && this.deps.translationContext) {
       try {
-        translation = await this.deps.translationContext(root)
+        translation = await this.deps.translationContext(root, options.query)
       } catch {
         // an unreadable translation project sends nothing of the translation tool
         translation = null
@@ -923,7 +929,9 @@ export class ProjectGuide {
         filesOmitted: files.omitted,
         canRemember: switches.memoryEnabled && trust === 'use' && !unwritable,
         notices,
-        ...(translation ? { translation: { text: translation.text } } : {}),
+        ...(translation
+          ? { translation: { prompts: translation.prompts, material: translation.material } }
+          : {}),
       },
     }
   }

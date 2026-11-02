@@ -95,18 +95,32 @@ describe('buildTranslationInstructions', () => {
 
   it('selects glossary entries by the request text when the glossary is large', async () => {
     await addGlossaryRows(rows(300))
-    const built = await buildTranslationInstructions(dir, 'see term7 here', { settingsPath })
-    // selectGlossary matches by substring: term7 only (term70.. are not in the text)
-    expect(built.text).toContain('term7 → 용어7')
-    expect(built.text).not.toContain('term8 →')
-    expect(built.glossaryIncluded).toBe(1)
+    // term250 is past the first 200 entries: only per-request matching can find it
+    const built = await buildTranslationInstructions(dir, 'see term250 here', { settingsPath })
+    expect(built.text).toContain('term250 → 용어250')
+    expect(built.text).not.toContain('term0 →')
+    // selectGlossary matches substrings: term2, term25 and term250
+    expect(built.glossaryIncluded).toBe(3)
     expect(built.glossaryTotal).toBe(300)
+    expect(built.glossarySelection).toBe('matching')
+  })
+
+  it('falls back to the first entries when nothing in the request matches', async () => {
+    await addGlossaryRows(rows(300))
+    const built = await buildTranslationInstructions(dir, 'translate this paragraph', {
+      settingsPath,
+    })
+    expect(built.glossaryIncluded).toBe(200)
+    expect(built.glossarySelection).toBe('first')
+    expect(built.text).toContain('term0 → 용어0')
+    expect(built.text).not.toContain('term200 →')
   })
 
   it('without request text takes the whole glossary when it is small', async () => {
     await addGlossaryRows(rows(50))
     const built = await buildTranslationInstructions(dir, '', { settingsPath })
     expect(built.glossaryIncluded).toBe(50)
+    expect(built.glossarySelection).toBe('all')
     expect(built.text).toContain('term49 → 용어49')
   })
 
@@ -115,9 +129,23 @@ describe('buildTranslationInstructions', () => {
     const built = await buildTranslationInstructions(dir, '', { settingsPath })
     expect(built.glossaryIncluded).toBe(200)
     expect(built.glossaryTotal).toBe(300)
+    expect(built.glossarySelection).toBe('first')
     expect(built.text).toContain('term0 → 용어0')
     expect(built.text).toContain('term199 → 용어199')
     expect(built.text).not.toContain('term200 →')
+  })
+
+  it('splits the text into the prompts and the material', async () => {
+    writeTranslationSystemPrompt(settingsPath, 'GLOBAL')
+    await setPrompt('PROJECT')
+    await addGlossaryRows([['engine', '엔진']])
+    const ref = join(root, 'style.pdf')
+    writeFileSync(ref, 'x')
+    await addReference(dir, ref)
+    const built = await buildTranslationInstructions(dir, '', { settingsPath })
+    expect(built.promptText).toBe('GLOBAL\n\nPROJECT\n번역: en → ko')
+    expect(built.materialText).toBe('단어집:\nengine → 엔진\n\n참고자료:\n- style.pdf')
+    expect(`${built.promptText}\n\n${built.materialText}`).toBe(built.text)
   })
 
   it('drops whole glossary entries from the end when the text is over the limit', async () => {
@@ -161,7 +189,8 @@ describe('translationContextForFolder', () => {
     writeTranslationSystemPrompt(settingsPath, 'GLOBAL')
     await addGlossaryRows(rows(3))
     const context = await translationContextForFolder(dir, { settingsPath })
-    expect(context?.text).toContain('GLOBAL')
+    expect(context?.prompts).toContain('GLOBAL')
+    expect(context?.material).toContain('term2 → 용어2')
     expect(context?.items).toEqual([
       { kind: 'system', included: true },
       { kind: 'project', included: true },
@@ -169,6 +198,20 @@ describe('translationContextForFolder', () => {
       { kind: 'reference', included: false, count: 0 },
     ])
     expect(context?.cut).toBe(false)
+  })
+
+  it('uses the request text it is given to pick entries of a large glossary', async () => {
+    writeTranslationProjects(settingsPath, [{ dir, lastOpened: 1 }])
+    await addGlossaryRows(rows(300))
+    const context = await translationContextForFolder(dir, { settingsPath }, 'about term250')
+    expect(context?.material).toContain('term250 → 용어250')
+    expect(context?.items[2]).toEqual({
+      kind: 'glossary',
+      included: true,
+      count: 3,
+      total: 300,
+      selection: 'matching',
+    })
   })
 
   it('matches the folder through another spelling of its path', async () => {

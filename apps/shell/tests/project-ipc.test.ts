@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   PROJECT_FOLDER_CHANNELS,
+  READ_CONTEXT_QUERY_MAX_CHARS,
   PROJECT_FOLDER_EVENTS,
   type ProjectChatAppendedEvent,
   type ProjectChatInfo,
@@ -285,6 +286,24 @@ describe('registration', () => {
     for (const bad of [undefined, {}, { projectId: '../x' }, { projectId: 7 }]) {
       await expect(t.call('readContext', DOCS, bad)).rejects.toThrow(PROJECT_IPC_BAD_REQUEST)
     }
+  })
+})
+
+describe('readContext request text', () => {
+  it('passes a string query on, cut at the limit, and nothing else', async () => {
+    await t.call('readContext', DOCS, { projectId: 'p1' })
+    expect(t.guide.readContext).toHaveBeenLastCalledWith('p1', {})
+    await t.call('readContext', DOCS, { projectId: 'p1', query: 'translate term7' })
+    expect(t.guide.readContext).toHaveBeenLastCalledWith('p1', { query: 'translate term7' })
+    for (const query of [7, null, '   ', { text: 'x' }]) {
+      await t.call('readContext', DOCS, { projectId: 'p1', query })
+      expect(t.guide.readContext).toHaveBeenLastCalledWith('p1', {})
+    }
+    const long = 'a'.repeat(READ_CONTEXT_QUERY_MAX_CHARS + 10)
+    await t.call('readContext', DOCS, { projectId: 'p1', query: long })
+    expect(t.guide.readContext).toHaveBeenLastCalledWith('p1', {
+      query: 'a'.repeat(READ_CONTEXT_QUERY_MAX_CHARS),
+    })
   })
 })
 

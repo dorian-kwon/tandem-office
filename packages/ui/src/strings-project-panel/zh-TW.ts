@@ -94,6 +94,7 @@ export const zhTW = {
   translationProject: '專案提示詞',
   translationGlossary: '詞彙表（{count}）',
   translationGlossaryPart: '詞彙表（{total} 條中的 {count} 條）',
+  translationGlossaryMatching: '詞彙表（{total} 條中相符的 {count} 條）',
   translationReferences: '參考資料（{count}）',
   translationCut: '（提示詞過長，結尾已省略）',
 } satisfies Record<keyof typeof zh, string>

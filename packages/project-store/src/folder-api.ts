@@ -360,6 +360,12 @@ export interface ProjectTranslationItem {
   count?: number
   /** glossary: entries in the project's glossary */
   total?: number
+  /**
+   * glossary: how the entries were chosen. `matching`: the glossary is over the limit and
+   * these are the entries whose term appears in the request; absent: all of them, or (no
+   * match, no request text) the first ones in the file.
+   */
+  selection?: 'matching'
 }
 
 /** What a send carries for the chosen project; read just before the send and fixed for that request */
@@ -383,10 +389,15 @@ export interface ProjectContextBundle {
   notices: ProjectNotice[]
   /**
    * Present only when the folder is a registered translation project and trust is `use`:
-   * the translation tool's context text (its prompts, the language pair, glossary entries
-   * and reference file names), already within the limit.
+   * the translation tool's context (its prompts and the language pair; glossary entries and
+   * reference file names apart, as material), together within the limit.
    */
-  translation?: { text: string }
+  translation?: {
+    /** the translation prompts (app-wide, then the project's) and the language pair */
+    prompts: string
+    /** glossary entries and reference file names ('' when there are none) */
+    material: string
+  }
 }
 
 export type ProjectContextResult =
@@ -707,6 +718,18 @@ export interface ProjectIdArgs {
   projectId: ProjectId
 }
 
+/** `readContext`: the project, and optionally the request's text (the person's message and its selection) */
+export interface ReadContextArgs extends ProjectIdArgs {
+  /**
+   * Used only to pick a translation project's glossary entries for this request;
+   * never stored. Main cuts it at `READ_CONTEXT_QUERY_MAX_CHARS`.
+   */
+  query?: string
+}
+
+/** The longest `ReadContextArgs.query` main uses; the rest is ignored */
+export const READ_CONTEXT_QUERY_MAX_CHARS = 100_000
+
 /**
  * "New project" (spec 5.1). The renderer sends the typed name only: main
  * creates `<default save folder>/<name>`, or with `otherPlace` asks for the
@@ -795,7 +818,7 @@ export interface ProjectFolderApi {
 
   // ---- one send ----
   /** Name, instructions, memory and file names for the next request; records changed hashes */
-  readContext(args: ProjectIdArgs): Promise<ProjectContextResult>
+  readContext(args: ReadContextArgs): Promise<ProjectContextResult>
   /** Mints the run scope the tools carry; rejects for an unknown or missing project */
   openScope(args: ProjectIdArgs): Promise<string>
   /** Ends a run; only the window that opened a scope can close it */

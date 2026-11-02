@@ -99,6 +99,7 @@ export const ja = {
   translationProject: 'プロジェクトプロンプト',
   translationGlossary: '用語集（{count}件）',
   translationGlossaryPart: '用語集（{total}件中{count}件）',
+  translationGlossaryMatching: '用語集（{total}件中、一致した{count}件）',
   translationReferences: '参考資料（{count}件）',
   translationCut: '（プロンプトが長いため末尾を省略しました）',
 } satisfies Record<keyof typeof zh, string>

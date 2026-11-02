@@ -32,7 +32,8 @@ function folder(name: string): string {
 const answer = (value: ProjectTrustAnswer) => vi.fn(async () => value)
 
 const TRANSLATION = {
-  text: 'GLOBAL\n\n번역: en → ko',
+  prompts: 'GLOBAL\n\n번역: en → ko',
+  material: '단어집:\nengine → 엔진',
   cut: false,
   items: [
     { kind: 'system' as const, included: true },
@@ -71,21 +72,40 @@ describe('ProjectGuide.readContext with a translation hook', () => {
     const withHook = await makeGuide({ translationContext: hook }).readContext(without.projectId)
     if (withHook.status !== 'ok') throw new Error('no context')
     expect(withHook.context).toEqual(without)
+    // byte for byte, also with a request text: the bridge answer is the same JSON
+    expect(JSON.stringify(withHook.context)).toBe(JSON.stringify(without))
+    const withQuery = await makeGuide({ translationContext: hook }).readContext(without.projectId, {
+      query: 'translate the engine part',
+    })
+    expect(JSON.stringify(withQuery)).toBe(JSON.stringify({ status: 'ok', context: without }))
     expect('translation' in withHook.context).toBe(false)
-    expect(hook).toHaveBeenCalledWith(root)
+    expect(hook).toHaveBeenCalledWith(root, undefined)
   })
 
   it('adds the translation text and one notice for a translation project under use', async () => {
     const root = folder('manual')
     const guide = makeGuide({ translationContext: async () => TRANSLATION })
     const context = await contextOf(guide, root)
-    expect(context.translation).toEqual({ text: TRANSLATION.text })
+    expect(context.translation).toEqual({
+      prompts: TRANSLATION.prompts,
+      material: TRANSLATION.material,
+    })
     expect(context.notices).toContainEqual({
       kind: 'translation-context',
       items: TRANSLATION.items,
     })
     // the 0088 parts stay as they were
     expect(context.instructions).toBeNull()
+  })
+
+  it('hands the request text to the hook', async () => {
+    const root = folder('query')
+    const hook = vi.fn(async () => TRANSLATION)
+    const guide = makeGuide({ translationContext: hook })
+    const added = await guide.addFolder(root, answer('use'))
+    if (added.status !== 'added') throw new Error('not added')
+    await guide.readContext(added.project.id, { query: 'translate the engine part' })
+    expect(hook).toHaveBeenLastCalledWith(root, 'translate the engine part')
   })
 
   it('marks a cut translation context in its notice', async () => {
