@@ -70,7 +70,11 @@ export async function createProject(
     return { dir, project }
   } catch (e) {
     // This call just created the directory, so removing it on failure is safe.
-    await rm(dir, { recursive: true, force: true })
+    try {
+      await rm(dir, { recursive: true, force: true })
+    } catch {
+      // Cleanup is best effort; the original failure is the one worth reporting.
+    }
     throw e
   }
 }

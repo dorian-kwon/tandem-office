@@ -14,6 +14,11 @@ import {
   saveProject,
 } from './project-store'
 
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>()
+  return { ...actual, rm: vi.fn(actual.rm) }
+})
+
 vi.mock('./project-file', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./project-file')>()
   return { ...actual, serializeProjectFile: vi.fn(actual.serializeProjectFile) }
@@ -26,6 +31,8 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  vi.mocked(projectFile.serializeProjectFile).mockReset()
+  vi.mocked(rm).mockReset()
   await rm(root, { recursive: true, force: true })
 })
 
@@ -77,6 +84,14 @@ describe('createProject names and failures', () => {
   it.each(['console', 'Project NUL'])('accepts %s', async (name) => {
     const { dir } = await createProject(root, name, 'ko', 'en')
     expect(await projectStatus(dir)).toBe('ok')
+  })
+
+  it('reports the original error when cleanup itself fails', async () => {
+    vi.mocked(projectFile.serializeProjectFile).mockImplementationOnce(() => {
+      throw new Error('boom')
+    })
+    vi.mocked(rm).mockRejectedValueOnce(new Error('EPERM cleanup'))
+    await expect(createProject(root, 'Stuck', 'ko', 'en')).rejects.toThrow('boom')
   })
 
   it('removes the partial folder after a failed create so a retry succeeds', async () => {
