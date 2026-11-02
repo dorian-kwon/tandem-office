@@ -66,6 +66,8 @@ export type StructureJob =
   | { op: 'pageCount'; source: JobSource }
   /** one 1-based page as a PNG for the translation OCR's AI reading */
   | { op: 'pageImage'; source: JobSource; page: number }
+  /** characters in each page's text layer, for the translation tool's scan detection */
+  | { op: 'textCounts'; source: JobSource }
   /** the PDF tools window's blank-page candidates (apps/pdf/src/main/blank-pages.ts) */
   | { op: 'blankPages'; source: JobSource }
   /** the PDF tools window's add password, remove password and repair (apps/pdf/src/main/qpdf.ts, repair.ts) */
@@ -155,6 +157,12 @@ export interface PageCountJobValue {
   pageCount: number
 }
 
+export interface TextCountsJobValue {
+  docHash: string
+  /** characters in each page's text layer, in page order */
+  counts: number[]
+}
+
 export interface PageImageJobValue {
   docHash: string
   page: number
@@ -223,6 +231,9 @@ const OPS: ReadonlySet<string> = new Set<StructureOp>([
   'epub',
   'images',
   'fingerprints',
+  'pageCount',
+  'pageImage',
+  'textCounts',
   'writeBack',
   'blankPages',
   'encrypt',

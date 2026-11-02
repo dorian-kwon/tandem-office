@@ -74,6 +74,7 @@ import type {
   MarkdownJobValue,
   PageCountJobValue,
   PageImageJobValue,
+  TextCountsJobValue,
   StructuredTextJobValue,
   StructureJob,
   TranslationInput,
@@ -515,6 +516,34 @@ export async function runStructureJob(
         job.source.password,
       )
       return { docHash, pageCount } satisfies PageCountJobValue
+    }
+    case 'textCounts': {
+      const m = await deps.pdfium()
+      const counts = withPdfDocument(
+        m,
+        bytes,
+        (doc) => {
+          const total = m._FPDF_GetPageCount(doc)
+          const out: number[] = []
+          for (let i = 0; i < total; i++) {
+            const page = m._FPDF_LoadPage(doc, i)
+            let chars = 0
+            if (page) {
+              const text = m._FPDFText_LoadPage(page)
+              if (text) {
+                chars = Math.max(0, m._FPDFText_CountChars(text))
+                m._FPDFText_ClosePage(text)
+              }
+              m._FPDF_ClosePage(page)
+            }
+            out.push(chars)
+            onProgress(i + 1, total)
+          }
+          return out
+        },
+        job.source.password,
+      )
+      return { docHash, counts } satisfies TextCountsJobValue
     }
     case 'pageImage': {
       const m = await deps.pdfium()
