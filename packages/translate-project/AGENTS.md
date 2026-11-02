@@ -11,7 +11,7 @@
 
 ## 항상 지켜야 하는 것
 
-- 순수 TypeScript만 쓴다. 런타임 의존성을 더하지 않고 `node:*`도 import하지 않는다.
+- 순수 TypeScript만 쓴다. 런타임 npm 의존성을 더하지 않는다. Node 전용이라 `node:zlib` 같은 내장 모듈은 쓸 수 있다.
 - `ProjectFile`에는 시스템 프롬프트 필드가 없다. 프로젝트 프롬프트(`projectPrompt`)만 사용자가 고치며, 파서는 모르는 키를 버린다.
 - 형식이 틀린 파일은 `ProjectFileError`로 던진다. 버전은 1만 받는다.
 - 기본 OCR은 `{ kind: 'ai', provider: 'claude' }`다.
