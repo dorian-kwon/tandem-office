@@ -24,3 +24,13 @@ export {
   removeProject,
   saveProject,
 } from './project-store'
+export {
+  NotListedError,
+  addGlossary,
+  addReference,
+  addSource,
+  loadGlossary,
+  removeGlossary,
+  removeReference,
+  removeSource,
+} from './materials'
