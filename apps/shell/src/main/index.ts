@@ -7029,7 +7029,7 @@ let splitMemoryTimer: ReturnType<typeof setTimeout> | null = null
 function splitShape(state: SplitViewState | null): string {
   return state === null
     ? 'none'
-    : `${state.aTabId}|${state.bTabId}|${state.orientation}|${state.focus}`
+    : `${state.aTabId}|${state.bTabId}|${state.orientation}|${state.focus}|${state.collapsed}`
 }
 
 /** one split change: tell every pane view its role, push the state to the strip,
@@ -7079,6 +7079,7 @@ function persistSplitMemory(manager: TabManager, state: SplitViewState | null): 
         orientation: state.orientation,
         ratio: state.ratio,
         focus: state.focus,
+        collapsed: state.collapsed,
       },
       { settingsPath: APP_SETTINGS_PATH },
     )
@@ -7134,7 +7135,7 @@ function restoreSplitMemoryOrHome(): void {
     return
   }
   if (aTabId !== undefined && bTabId !== undefined) {
-    manager.beginSplit(aTabId, bTabId, orientation, ratio, focus)
+    manager.beginSplit(aTabId, bTabId, orientation, ratio, focus, memory?.collapsed ?? null)
   }
 }
 

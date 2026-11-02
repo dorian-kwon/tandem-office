@@ -12,6 +12,10 @@ export interface SplitMemory {
   orientation?: SplitMemoryOrientation
   ratio?: number
   focus?: SplitMemoryFocus
+  /** the pane hidden by the translation view's toggle (two documents only) */
+  collapsed?: SplitMemoryFocus
+  /** the pane opened read-only by the translation view (two documents only) */
+  readOnly?: SplitMemoryFocus
 }
 
 export interface SplitMemoryState {
@@ -20,6 +24,8 @@ export interface SplitMemoryState {
   orientation?: SplitMemoryOrientation
   ratio?: number
   focus?: SplitMemoryFocus
+  collapsed?: SplitMemoryFocus | null
+  readOnly?: SplitMemoryFocus | null
 }
 
 export interface SplitMemoryOptions {
@@ -74,6 +80,12 @@ function normalizeStoredMemory(raw: unknown): SplitMemory | null {
     if (record.focus !== 'a' && record.focus !== 'b') return null
     memory.focus = record.focus
   }
+  for (const key of ['collapsed', 'readOnly'] as const) {
+    const value = record[key]
+    if (value === undefined) continue
+    if (value !== 'a' && value !== 'b') return null
+    if (memory.b !== undefined) memory[key] = value
+  }
 
   return memory
 }
@@ -101,6 +113,11 @@ export function writeSplitMemory(
   }
   if (state.focus === 'a' || state.focus === 'b') {
     memory.focus = state.focus
+  }
+  // a hidden or read-only pane only means something with two documents
+  if (memory.b !== undefined) {
+    if (state.collapsed === 'a' || state.collapsed === 'b') memory.collapsed = state.collapsed
+    if (state.readOnly === 'a' || state.readOnly === 'b') memory.readOnly = state.readOnly
   }
 
   const writeSetting = options.writeSetting ?? writeAppSetting

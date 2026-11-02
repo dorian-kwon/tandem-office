@@ -196,3 +196,31 @@ describe('injected settings access', () => {
     expect(readSplitMemory(injected)).toBeNull()
   })
 })
+
+describe('translation view fields (hidden pane, read-only pane)', () => {
+  const pair = { aTabIdPath: '/p/source/a.docx', bTabIdPath: '/p/output/a.docx' }
+
+  it('stores and reads the hidden pane and the read-only pane', () => {
+    writeSplitMemory({ ...pair, focus: 'b', collapsed: 'a', readOnly: 'a' }, options())
+    expect(readSplitMemory(options())).toMatchObject({ collapsed: 'a', readOnly: 'a' })
+  })
+
+  it('leaves both out when nothing is hidden or read-only', () => {
+    writeSplitMemory({ ...pair, collapsed: null }, options())
+    const memory = readSplitMemory(options())
+    expect(memory).not.toHaveProperty('collapsed')
+    expect(memory).not.toHaveProperty('readOnly')
+  })
+
+  it('drops them for a single remembered document', () => {
+    writeSplitMemory({ aTabIdPath: '/p/a.docx', collapsed: 'b', readOnly: 'a' }, options())
+    expect(readSplitMemory(options())).toEqual({ version: 1, a: '/p/a.docx' })
+  })
+
+  it('rejects unusable stored values', () => {
+    seed({ version: 1, a: '/a', b: '/b', collapsed: 'left' })
+    expect(readSplitMemory(options())).toBeNull()
+    seed({ version: 1, a: '/a', b: '/b', readOnly: true })
+    expect(readSplitMemory(options())).toBeNull()
+  })
+})

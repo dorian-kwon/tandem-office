@@ -15,6 +15,12 @@ export interface SplitViewState {
   ratio: number
   /** the pane that holds focus */
   focus: 'a' | 'b'
+  /**
+   * The pane hidden by the translation view's hide toggle, or null. A hidden
+   * pane keeps its tab and view alive (scroll and position included); the
+   * other pane takes the whole content area. Never equal to `focus`.
+   */
+  collapsed: 'a' | 'b' | null
 }
 
 /** Gap between the two panes, in CSS px (tuning value). */

@@ -76,10 +76,13 @@ import type {
 import {
   activationMode,
   clampSplitRatio,
+  normalizeCollapsed,
   oppositeDocumentId,
-  paneRects,
+  paneOfSide,
   SPLIT_EVEN_RATIO,
   splitSurvivor,
+  visiblePaneRects,
+  withPaneHidden,
 } from './split-layout'
 import type { GenerateHandoff } from '../shared/generate-api'
 import { dropGenerateHandoff, queueGenerateHandoffFor } from './generate/handoff'
@@ -427,12 +430,17 @@ export class TabManager {
     }
     const split = this.split
     if (split && (this.activeId === split.aTabId || this.activeId === split.bTabId)) {
+      // a pane hidden by the translation view's toggle only turns invisible:
+      // its bounds stay as they were, so the document keeps its scroll
+      const rects = visiblePaneRects(bounds, split)
       for (const t of this.tabs) {
-        t.view?.setVisible(t.id === split.aTabId || t.id === split.bTabId)
+        t.view?.setVisible(
+          (t.id === split.aTabId && rects.a !== null) ||
+            (t.id === split.bTabId && rects.b !== null),
+        )
       }
-      const rects = paneRects(bounds, split.orientation, split.ratio)
-      this.tabById(split.aTabId)?.view?.setBounds(rects.a)
-      this.tabById(split.bTabId)?.view?.setBounds(rects.b)
+      if (rects.a) this.tabById(split.aTabId)?.view?.setBounds(rects.a)
+      if (rects.b) this.tabById(split.bTabId)?.view?.setBounds(rects.b)
       return
     }
     for (const t of this.tabs) t.view?.setVisible(t.id === this.activeId)
@@ -1046,7 +1054,8 @@ export class TabManager {
       if (mode === 'pane') {
         const side = id === this.split.aTabId ? 'a' : 'b'
         if (this.split.focus !== side) {
-          this.split = { ...this.split, focus: side }
+          // picking a hidden pane's tab shows that pane again
+          this.split = normalizeCollapsed({ ...this.split, focus: side })
           this.notifySplitChanged()
         }
       }
@@ -1148,7 +1157,7 @@ export class TabManager {
     const split = this.split
     if (!split || split.focus === side) return
     const id = side === 'a' ? split.aTabId : split.bTabId
-    this.split = { ...split, focus: side }
+    this.split = normalizeCollapsed({ ...split, focus: side })
     if (this.tabs.some((t) => t.id === id)) {
       if (this.activeId !== id) this.previousActiveId = this.activeId
       this.activeId = id
@@ -1210,7 +1219,7 @@ export class TabManager {
       next.ratio > 0 && next.ratio < 1
         ? { ...next, ratio: clampSplitRatio(next.ratio, this.contentBounds(), next.orientation) }
         : next
-    this.split = bounded
+    this.split = normalizeCollapsed(bounded)
     if (activeTabId !== undefined && this.tabs.some((t) => t.id === activeTabId)) {
       if (this.activeId !== activeTabId) this.previousActiveId = this.activeId
       this.activeId = activeTabId
@@ -1254,6 +1263,7 @@ export class TabManager {
             orientation: intent.orientation,
             ratio: SPLIT_EVEN_RATIO,
             focus: 'b',
+            collapsed: null,
           },
           tabId,
         )
@@ -1277,6 +1287,7 @@ export class TabManager {
             orientation: intent.orientation,
             ratio: split.ratio,
             focus: 'b',
+            collapsed: null,
           },
           tabId,
         )
@@ -1308,6 +1319,7 @@ export class TabManager {
     orientation: SplitOrientation,
     ratio: number,
     focus: 'a' | 'b',
+    collapsed: 'a' | 'b' | null = null,
   ): void {
     if (aTabId === bTabId) return
     const a = this.tabById(aTabId)
@@ -1317,9 +1329,34 @@ export class TabManager {
     if (a.kind === 'home' || a.kind === 'help' || b.kind === 'home' || b.kind === 'help') return
     const safeRatio = Number.isFinite(ratio) ? Math.min(1, Math.max(0, ratio)) : SPLIT_EVEN_RATIO
     this.setSplit(
-      { aTabId, bTabId, orientation, ratio: safeRatio, focus },
+      { aTabId, bTabId, orientation, ratio: safeRatio, focus, collapsed },
       focus === 'a' ? aTabId : bTabId,
     )
+  }
+
+  /**
+   * The translation view's hide toggle: hide or show the left (top) or right
+   * (bottom) pane. A hidden pane's tab and view stay alive and keep their
+   * scroll; the other pane fills the content area and takes focus. Only one
+   * pane can be hidden: hiding one shows the other. False without a split.
+   */
+  setPaneHidden(side: 'left' | 'right', hidden: boolean): boolean {
+    const split = this.split
+    if (!split) return false
+    const next = { ...split, ...withPaneHidden(split, paneOfSide(side), hidden) }
+    if (next.collapsed === split.collapsed && next.focus === split.focus) return true
+    const focusId = next.focus === 'a' ? next.aTabId : next.bTabId
+    this.split = next
+    if (this.activeId === split.aTabId || this.activeId === split.bTabId) {
+      if (this.activeId !== focusId) this.previousActiveId = this.activeId
+      this.activeId = focusId
+    }
+    this.layout()
+    this.refreshActiveTargets()
+    this.focusActiveView()
+    this.onChanged()
+    this.notifySplitChanged()
+    return true
   }
 
   /**
@@ -1435,7 +1472,8 @@ export class TabManager {
         this.split.bTabId === split.bTabId &&
         this.split.orientation === split.orientation &&
         this.split.ratio === split.ratio &&
-        this.split.focus === split.focus)
+        this.split.focus === split.focus &&
+        this.split.collapsed === split.collapsed)
     if (same && this.activeId === activeId) return
     this.split = split
     if (this.tabs.some((t) => t.id === activeId)) this.activeId = activeId

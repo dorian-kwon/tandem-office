@@ -189,3 +189,47 @@ export function oppositeDocumentId(input: {
   }
   return null
 }
+
+/** The translation view names panes by screen side; pane a is the left (or top) one. */
+export function paneOfSide(side: 'left' | 'right'): 'a' | 'b' {
+  return side === 'left' ? 'a' : 'b'
+}
+
+/**
+ * The hide toggle's next state. Only one pane can be hidden (`collapsed` holds
+ * one side), so hiding a pane while the other is hidden shows the other. A
+ * hidden pane never keeps focus: focus moves to the pane that stays visible.
+ */
+export function withPaneHidden(
+  split: Pick<SplitViewState, 'focus' | 'collapsed'>,
+  pane: 'a' | 'b',
+  hidden: boolean,
+): Pick<SplitViewState, 'focus' | 'collapsed'> {
+  if (hidden) {
+    const other = pane === 'a' ? 'b' : 'a'
+    return { focus: split.focus === pane ? other : split.focus, collapsed: pane }
+  }
+  return { focus: split.focus, collapsed: split.collapsed === pane ? null : split.collapsed }
+}
+
+/** A pane that takes focus is shown again; a missing value means nothing is hidden. */
+export function normalizeCollapsed<T extends Pick<SplitViewState, 'focus' | 'collapsed'>>(
+  split: T,
+): T {
+  const collapsed = split.collapsed ?? null
+  return { ...split, collapsed: collapsed === split.focus ? null : collapsed }
+}
+
+/**
+ * Pane rectangles with the hide toggle applied: a hidden pane gets no rectangle
+ * (its view is only made invisible, so its scroll position survives) and the
+ * visible pane fills the content area.
+ */
+export function visiblePaneRects(
+  content: Rect,
+  split: Pick<SplitViewState, 'orientation' | 'ratio' | 'collapsed'>,
+): { a: Rect | null; b: Rect | null } {
+  if (split.collapsed === 'a') return { a: null, b: content }
+  if (split.collapsed === 'b') return { a: content, b: null }
+  return paneRects(content, split.orientation, split.ratio)
+}
