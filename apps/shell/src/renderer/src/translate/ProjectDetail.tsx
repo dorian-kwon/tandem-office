@@ -14,6 +14,8 @@ export interface ProjectDetailProps {
   onBack: () => void
   /** called with the source file's name when the person opens a translation */
   onStartTranslation: (sourceFile: string) => void
+  /** what opening the translation view reported (an error, or the changed-source warning) */
+  startNotice?: { text: string; isError: boolean } | null
 }
 
 type OcrChoice = 'claude' | 'chatgpt' | 'off'
@@ -38,7 +40,12 @@ function filesOf(project: ProjectFile, kind: TranslateMaterialKind): string[] {
 }
 
 /** One translation project: three separate upload lists, prompt, OCR and the start button. */
-export function ProjectDetail({ dir, onBack, onStartTranslation }: ProjectDetailProps) {
+export function ProjectDetail({
+  dir,
+  onBack,
+  onStartTranslation,
+  startNotice,
+}: ProjectDetailProps) {
   const { lang } = useI18n()
   const s = makeText(lang)
   const api = window.translateApi
@@ -174,6 +181,14 @@ export function ProjectDetail({ dir, onBack, onStartTranslation }: ProjectDetail
         {error && (
           <div className="projects-note is-warning translate-error" role="alert">
             {error}
+          </div>
+        )}
+        {startNotice && (
+          <div
+            className="projects-note is-warning translate-error"
+            role={startNotice.isError ? 'alert' : 'status'}
+          >
+            {startNotice.text}
           </div>
         )}
 

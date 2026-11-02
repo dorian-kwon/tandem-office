@@ -100,3 +100,31 @@
 .translate-error {
   margin: 0 0 14px;
 }
+
+/* The translation view's hide/show control in the tab strip (TranslationPaneToggle). */
+.translate-pane-toggle {
+  -webkit-app-region: no-drag;
+  display: flex;
+  flex-shrink: 0;
+  align-self: center;
+  gap: 2px;
+  margin: 0 4px;
+}
+
+.translate-pane-toggle-btn {
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--tab-separator);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tabstrip-text);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.translate-pane-toggle-btn.is-hidden {
+  color: var(--tabstrip-text-active);
+  border-style: dashed;
+}

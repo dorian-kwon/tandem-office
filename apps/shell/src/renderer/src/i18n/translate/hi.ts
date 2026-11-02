@@ -58,4 +58,16 @@ export const hi = {
   startPickHint: 'Several documents added: use "Open translation" on the one to translate.',
   promptNotSaved: 'Not saved yet. Leave the field again to retry.',
   uploadPartial: 'Added before the error: {files}',
+  errSourceMissing:
+    "The source copy is missing from the project's source folder. Add the document again.",
+  errSourceNotEditable: 'PDF, scanned and image documents cannot open in the translation view yet.',
+  errOpenFailed:
+    'The document could not be opened. If it is open in a separate window, close that window and try again.',
+  warnSourceChanged:
+    'The source copy has changed since it was added. The translation view shows the changed copy.',
+  paneToggleGroup: 'Translation view (the source is read-only)',
+  hideSource: 'Hide source',
+  showSource: 'Show source',
+  hideOutput: 'Hide translation',
+  showOutput: 'Show translation',
 } satisfies Record<keyof typeof zh, string>

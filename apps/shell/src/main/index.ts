@@ -132,6 +132,7 @@ import { createDefaultAppService, execFileRunner } from './default-app'
 import { registerIntegrationsIpc } from './integrations-ipc'
 import { registerResultStoreIpc } from './result-store-ipc'
 import { registerTranslateIpc } from './translate/translate-ipc'
+import type { TranslationViewDeps } from './translate/open-translation'
 import { FEEDBACK_SURVEY_URL, feedbackDetails, feedbackText, platformLabel } from './feedback'
 import { registerDriveIpc, type DriveService } from './drive/drive-ipc'
 import { startMcpHub } from './mcp-client/hub-app'
@@ -5309,20 +5310,27 @@ function openGeneratedDocument(filePath: string): boolean {
   return openDocumentPath(filePath)
 }
 
-function routeDocumentPath(filePath: string): boolean {
+/**
+ * `recordRecent: false` keeps the file out of Recent (the translation view's
+ * project copies: reopening a source copy from Recent would not be read-only).
+ */
+function routeDocumentPath(filePath: string, options: { recordRecent?: boolean } = {}): boolean {
+  const remember = (): void => {
+    if (options.recordRecent !== false) recordRecentFile(filePath)
+  }
   if (!existsSync(filePath)) return false
   // a detached editor window already shows this file — focus it, never a second copy
   if (focusDetachedByPath(filePath)) return true
   if (!tabManager) return false
   if (DOCX_RE.test(filePath) || ODT_RE.test(filePath)) {
-    recordRecentFile(filePath)
+    remember()
     const existing = tabManager.findDocsTabByPath(filePath)
     if (existing) tabManager.activateTab(existing)
     else tabManager.openDocsTab(filePath)
     return true
   }
   if (XLSX_RE.test(filePath)) {
-    recordRecentFile(filePath)
+    remember()
     const existing = tabManager.findSheetsTabByPath(filePath)
     if (existing) {
       tabManager.activateTab(existing)
@@ -5333,7 +5341,7 @@ function routeDocumentPath(filePath: string): boolean {
     return true
   }
   if (PPTX_RE.test(filePath)) {
-    recordRecentFile(filePath)
+    remember()
     const existing = tabManager.findSlidesTabByPath(filePath)
     if (existing) {
       tabManager.activateTab(existing)
@@ -5344,42 +5352,42 @@ function routeDocumentPath(filePath: string): boolean {
     return true
   }
   if (PDF_RE.test(filePath)) {
-    recordRecentFile(filePath)
+    remember()
     const existing = tabManager.findPdfTabByPath(filePath)
     if (existing) tabManager.activateTab(existing)
     else tabManager.openPdfTab(filePath)
     return true
   }
   if (TEXT_RE.test(filePath)) {
-    recordRecentFile(filePath)
+    remember()
     const existing = tabManager.findMarkdownTabByPath(filePath)
     if (existing) tabManager.activateTab(existing)
     else tabManager.openMarkdownTab(filePath)
     return true
   }
   if (HTML_RE.test(filePath)) {
-    recordRecentFile(filePath)
+    remember()
     const existing = tabManager.findHtmlTabByPath(filePath)
     if (existing) tabManager.activateTab(existing)
     else tabManager.openHtmlTab(filePath)
     return true
   }
   if (MINDMAP_RE.test(filePath)) {
-    recordRecentFile(filePath)
+    remember()
     const existing = tabManager.findMindmapTabByPath(filePath)
     if (existing) tabManager.activateTab(existing)
     else tabManager.openMindmapTab(filePath)
     return true
   }
   if (HWP_RE.test(filePath)) {
-    recordRecentFile(filePath)
+    remember()
     const existing = tabManager.findHwpTabByPath(filePath)
     if (existing) tabManager.activateTab(existing)
     else tabManager.openHwpTab(filePath)
     return true
   }
   if (EPUB_RE.test(filePath)) {
-    recordRecentFile(filePath)
+    remember()
     const existing = tabManager.findEpubTabByPath(filePath)
     if (existing) tabManager.activateTab(existing)
     else tabManager.openEpubTab(filePath)
@@ -7275,6 +7283,32 @@ function isPathOpenInAnyTab(path: string): boolean {
 }
 
 /**
+ * The translation view's tabs (src/main/translate/open-translation.ts). A
+ * file shown in a detached window does not land in the strip, so the caller
+ * reports it as not opened.
+ */
+function translationViewDeps(): TranslationViewDeps {
+  return {
+    openTab: (path) => {
+      const manager = ensureTabManager()
+      if (!routeDocumentPath(path, { recordRecent: false })) return undefined
+      return manager.findTabByPath(path)?.id
+    },
+    setTabReadOnly: (tabId) => tabManager?.setTabReadOnly(tabId) ?? false,
+    showSplit: (sourceTabId, outputTabId) =>
+      ensureTabManager().beginSplit(sourceTabId, outputTabId, 'side', SPLIT_EVEN_RATIO, 'b', null),
+    // the toggle only acts on a translation split (one read-only pane)
+    setPaneHidden: (side, hidden) => {
+      const manager = tabManager
+      const split = manager?.splitState()
+      if (!manager || !split) return false
+      if (!manager.isReadOnlyTab(split.aTabId) && !manager.isReadOnlyTab(split.bTabId)) return false
+      return manager.setPaneHidden(side, hidden)
+    },
+  }
+}
+
+/**
  * Split-view IPC: the strip's split state and divider channels, the editors'
  * pane-role bridge (packages/electron-utils/src/split-pane-bridge.ts), and the
  * same-document save probe the editors consult before writing.
@@ -8902,6 +8936,7 @@ registerTranslateIpc(ipcMain, {
     const owner = BrowserWindow.getFocusedWindow()
     return owner ? dialog.showOpenDialog(owner, options) : dialog.showOpenDialog(options)
   },
+  view: translationViewDeps(),
 })
 registerTabsIpc()
 registerSplitIpc()

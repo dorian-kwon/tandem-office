@@ -18,6 +18,8 @@ export const TRANSLATE_CHANNELS = {
   removeMaterial: 'translate:remove-material',
   pickMaterials: 'translate:pick-materials',
   pickParentDir: 'translate:pick-parent-dir',
+  openTranslation: 'translate:open-translation',
+  setPaneHidden: 'translate:set-pane-hidden',
 } as const
 
 export type TranslateMaterialKind = 'source' | 'reference' | 'glossary'
@@ -88,6 +90,26 @@ export interface TranslateRemoveMaterialArgs {
   file: string
 }
 
+export interface TranslateOpenTranslationArgs {
+  dir: string
+  /** the plain file name of one of the project's sources */
+  file: string
+}
+
+/** 'changed': the copy in source/ no longer matches the hash recorded when it was added */
+export type TranslateSourceHashStatus = 'ok' | 'changed' | 'missing'
+
+export interface TranslateOpenTranslationResult {
+  sourceTabId: string
+  outputTabId: string
+  hashStatus: TranslateSourceHashStatus
+}
+
+export interface TranslateSetPaneHiddenArgs {
+  side: 'left' | 'right'
+  hidden: boolean
+}
+
 export interface TranslateApi {
   list(): Promise<TranslateProjectListEntry[]>
   create(args: TranslateCreateArgs): Promise<{ dir: string }>
@@ -103,6 +125,10 @@ export interface TranslateApi {
   pickMaterials(kind: TranslateMaterialKind): Promise<TranslatePickedMaterials | null>
   /** opens the native folder dialog; null when cancelled */
   pickParentDir(): Promise<TranslatePickedParentDir | null>
+  /** the translation view: the source copy read-only on the left, the output copy on the right */
+  openTranslation(args: TranslateOpenTranslationArgs): Promise<TranslateOpenTranslationResult>
+  /** hide or show one pane of the translation view (only one can be hidden) */
+  setPaneHidden(args: TranslateSetPaneHiddenArgs): Promise<void>
 }
 
 // ---- errors ----
@@ -119,6 +145,9 @@ export type TranslateErrorCode =
   | 'NOT_REGISTERED'
   | 'INVALID_ARGUMENT'
   | 'PROJECT_FILE_INVALID'
+  | 'SOURCE_MISSING'
+  | 'SOURCE_NOT_EDITABLE'
+  | 'OPEN_FAILED'
   | 'UNKNOWN'
 
 const TRANSLATE_ERROR_CODES: readonly TranslateErrorCode[] = [
@@ -130,6 +159,9 @@ const TRANSLATE_ERROR_CODES: readonly TranslateErrorCode[] = [
   'NOT_REGISTERED',
   'INVALID_ARGUMENT',
   'PROJECT_FILE_INVALID',
+  'SOURCE_MISSING',
+  'SOURCE_NOT_EDITABLE',
+  'OPEN_FAILED',
   'UNKNOWN',
 ]
 

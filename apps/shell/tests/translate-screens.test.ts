@@ -9,6 +9,8 @@ import type { ProjectFile } from '@genoffice/translate-project'
 import type { TranslateApi, TranslateProjectListEntry } from '../src/shared/translate-api'
 import { ProjectList } from '../src/renderer/src/translate/ProjectList'
 import { ProjectDetail } from '../src/renderer/src/translate/ProjectDetail'
+import { TranslationPanel } from '../src/renderer/src/translate/TranslationPanel'
+import { TranslationPaneToggle } from '../src/renderer/src/translate/TranslationPaneToggle'
 import { LocaleProvider } from '../src/renderer/src/locale'
 
 /**
@@ -66,6 +68,10 @@ beforeEach(() => {
     removeMaterial: vi.fn(),
     pickMaterials: vi.fn().mockResolvedValue(null),
     pickParentDir: vi.fn().mockResolvedValue(null),
+    openTranslation: vi
+      .fn()
+      .mockResolvedValue({ sourceTabId: 't1', outputTabId: 't2', hashStatus: 'ok' }),
+    setPaneHidden: vi.fn().mockResolvedValue(undefined),
   }
   ;(window as unknown as { translateApi: unknown }).translateApi = api
 })
@@ -412,5 +418,92 @@ describe('ProjectDetail', () => {
     expect(buttonByText('Start translation').disabled).toBe(false)
     await click(buttonByText('Start translation'))
     expect(p.onStartTranslation).toHaveBeenCalledWith('a.docx')
+  })
+})
+
+describe('TranslationPanel (opening the translation view)', () => {
+  async function openDetail() {
+    api.list.mockResolvedValue([entry({ dir: '/p/a', name: 'A' })])
+    api.getProject.mockResolvedValue(
+      project({ sources: [{ file: 'a.docx', sha256: 'x', kind: 'editable' }] }),
+    )
+    await render(TranslationPanel, {})
+    await click(host.querySelector('.translate-open')!)
+  }
+
+  it('asks main to open the chosen file of this project', async () => {
+    await openDetail()
+    await click(buttonByText('Open translation'))
+    expect(api.openTranslation).toHaveBeenCalledWith({ dir: '/p/a', file: 'a.docx' })
+    expect(host.querySelector('[role="alert"]')).toBeNull()
+    expect(host.querySelector('[role="status"]')).toBeNull()
+  })
+
+  it('warns when the source copy changed since it was added', async () => {
+    api.openTranslation.mockResolvedValue({
+      sourceTabId: 't1',
+      outputTabId: 't2',
+      hashStatus: 'changed',
+    })
+    await openDetail()
+    await click(buttonByText('Open translation'))
+    expect(host.querySelector('[role="status"]')?.textContent).toContain(
+      'The source copy has changed',
+    )
+  })
+
+  it('shows a localized error, not the raw Electron text', async () => {
+    api.openTranslation.mockRejectedValue(
+      new Error(
+        "Error invoking remote method 'translate:open-translation': Error: [SOURCE_MISSING] gone",
+      ),
+    )
+    await openDetail()
+    await click(buttonByText('Open translation'))
+    const alert = host.querySelector('[role="alert"]')?.textContent ?? ''
+    expect(alert).toContain('source copy is missing')
+    expect(alert).not.toContain('invoking')
+  })
+})
+
+describe('TranslationPaneToggle', () => {
+  const tabs = [
+    {
+      id: 'src',
+      kind: 'docs' as const,
+      title: 'a.docx',
+      closable: true,
+      active: false,
+      readOnly: true as const,
+    },
+    { id: 'out', kind: 'docs' as const, title: 'a.docx', closable: true, active: true },
+  ]
+  const split = {
+    aTabId: 'src',
+    bTabId: 'out',
+    orientation: 'side' as const,
+    ratio: 0.5,
+    focus: 'b' as const,
+    collapsed: null,
+  }
+
+  it('is absent for an ordinary split', async () => {
+    await render(TranslationPaneToggle, {
+      split,
+      tabs: tabs.map((t) => ({ ...t, readOnly: undefined })),
+    })
+    expect(host.querySelector('[role="group"]')).toBeNull()
+  })
+
+  it('hides the source pane, then offers to show it again', async () => {
+    await render(TranslationPaneToggle, { split, tabs })
+    await click(buttonByText('Hide source'))
+    expect(api.setPaneHidden).toHaveBeenCalledWith({ side: 'left', hidden: true })
+    await render(TranslationPaneToggle, { split: { ...split, collapsed: 'a' }, tabs })
+    expect(buttonByText('Show source').getAttribute('aria-pressed')).toBe('true')
+    await click(buttonByText('Show source'))
+    expect(api.setPaneHidden).toHaveBeenLastCalledWith({ side: 'left', hidden: false })
+    await click(buttonByText('Hide translation'))
+    expect(api.setPaneHidden).toHaveBeenLastCalledWith({ side: 'right', hidden: true })
   })
 })

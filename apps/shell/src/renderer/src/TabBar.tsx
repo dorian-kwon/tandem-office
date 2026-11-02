@@ -6,6 +6,7 @@ import { TEAR_OFF_SLACK, insertionIndexForX, isBeyondBand } from '../../shared/t
 import { notifyFilesChanged } from './file-events'
 import { productName } from '@genoffice/i18n'
 import { useI18n } from './locale'
+import { TranslationPaneToggle } from './translate/TranslationPaneToggle'
 import iconDocx from './assets/file-docx.svg'
 import iconXlsx from './assets/file-xlsx.svg'
 import iconPptx from './assets/file-pptx.svg'
@@ -603,6 +604,7 @@ export function TabBar({ split }: TabBarProps) {
           {t(splitHint.orientation === 'side' ? 'splitHintRight' : 'splitHintBottom')}
         </div>
       )}
+      <TranslationPaneToggle split={split} tabs={tabs} />
       <button
         className="tab-overflow-btn"
         title={t('tabList')}

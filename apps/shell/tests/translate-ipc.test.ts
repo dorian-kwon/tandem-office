@@ -439,3 +439,86 @@ describe('registerTranslateIpc', () => {
     expect(seen.every((c) => c.startsWith('translate:'))).toBe(true)
   })
 })
+
+describe('translation view handlers', () => {
+  function viewHandlers(view = fakeView()) {
+    return {
+      view,
+      h: createTranslateHandlers({
+        settingsPath: () => settingsPath,
+        now: () => clock,
+        showOpenDialog: async () => dialogResult,
+        view,
+      }),
+    }
+  }
+
+  function fakeView() {
+    const opened: string[] = []
+    return {
+      opened,
+      openTab: (path: string) => {
+        opened.push(path)
+        return `t${opened.length}`
+      },
+      setTabReadOnly: () => true,
+      showSplit: () => {},
+      setPaneHidden: (_side: 'left' | 'right', _hidden: boolean) => true,
+    }
+  }
+
+  it('open-translation takes the source entry from the project file', async () => {
+    const { h, view } = viewHandlers()
+    const { dir } = await createIn(h, { name: 'V', sourceLang: 'en', targetLang: 'ko' })
+    const original = join(root, 'doc.md')
+    writeFileSync(original, '# hi')
+    await addPicked(h, dir, 'source', original)
+    const result = await h.openTranslation({ dir, file: 'doc.md' })
+    expect(result).toEqual({ sourceTabId: 't1', outputTabId: 't2', hashStatus: 'ok' })
+    expect(view.opened).toEqual([join(dir, 'source', 'doc.md'), join(dir, 'output', 'doc.md')])
+    // the original itself is never opened
+    expect(view.opened).not.toContain(original)
+  })
+
+  it('open-translation rejects unregistered folders and files not in the project', async () => {
+    const { h, view } = viewHandlers()
+    await expect(h.openTranslation({ dir: root, file: 'x.md' })).rejects.toMatchObject({
+      code: 'NOT_REGISTERED',
+    })
+    const { dir } = await createIn(h, { name: 'W', sourceLang: 'en', targetLang: 'ko' })
+    await expect(h.openTranslation({ dir, file: 'x.md' })).rejects.toMatchObject({
+      code: 'NOT_LISTED',
+    })
+    await expect(h.openTranslation({ dir, file: 5 } as never)).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+    })
+    expect(view.opened).toEqual([])
+  })
+
+  it('open-translation without a tab strip fails with OPEN_FAILED', async () => {
+    const h = handlers()
+    const { dir } = await createIn(h, { name: 'X', sourceLang: 'en', targetLang: 'ko' })
+    const original = join(root, 'doc.md')
+    writeFileSync(original, '# hi')
+    await addPicked(h, dir, 'source', original)
+    await expect(h.openTranslation({ dir, file: 'doc.md' })).rejects.toMatchObject({
+      code: 'OPEN_FAILED',
+    })
+  })
+
+  it('set-pane-hidden validates its arguments and needs a translation view', async () => {
+    const view = { ...fakeView(), setPaneHidden: (_s: 'left' | 'right', _h: boolean) => false }
+    const { h } = viewHandlers(view)
+    await expect(h.setPaneHidden({ side: 'top', hidden: true } as never)).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+    })
+    await expect(h.setPaneHidden({ side: 'left', hidden: 'yes' } as never)).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+    })
+    await expect(h.setPaneHidden({ side: 'left', hidden: true })).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+    })
+    const ok = viewHandlers()
+    await expect(ok.h.setPaneHidden({ side: 'right', hidden: true })).resolves.toBeUndefined()
+  })
+})

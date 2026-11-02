@@ -12,6 +12,9 @@ const ERROR_KEYS: Record<TranslateErrorCode, TranslateStringKey> = {
   NOT_REGISTERED: 'errNotRegistered',
   INVALID_ARGUMENT: 'errInvalidArgument',
   PROJECT_FILE_INVALID: 'errProjectFileInvalid',
+  SOURCE_MISSING: 'errSourceMissing',
+  SOURCE_NOT_EDITABLE: 'errSourceNotEditable',
+  OPEN_FAILED: 'errOpenFailed',
   UNKNOWN: 'errUnknown',
 }
 

@@ -19,6 +19,7 @@ import {
   type ProjectFile,
 } from '@genoffice/translate-project'
 import { PickAllowlist } from './pick-allowlist'
+import { openTranslation, type TranslationViewDeps } from './open-translation'
 import {
   readTranslationProjects,
   readTranslationSystemPrompt,
@@ -32,11 +33,14 @@ import {
   type TranslateAddMaterialArgs,
   type TranslateCreateArgs,
   type TranslateMaterialKind,
+  type TranslateOpenTranslationArgs,
+  type TranslateOpenTranslationResult,
   type TranslatePickedMaterials,
   type TranslatePickedParentDir,
   type TranslateProjectListEntry,
   type TranslateRemoveArgs,
   type TranslateRemoveMaterialArgs,
+  type TranslateSetPaneHiddenArgs,
   type TranslateUpdateSettingsArgs,
 } from '../../shared/translate-api'
 
@@ -59,6 +63,8 @@ export interface TranslateIpcDeps {
   ) => Promise<{ canceled: boolean; filePaths: string[] }>
   /** override for the allowlist token generator (tests) */
   newToken?: () => string
+  /** the shell's tabs for the translation view; absent where there is no tab strip */
+  view?: TranslationViewDeps
 }
 
 export interface OpenDialogOptions {
@@ -137,6 +143,8 @@ export function createTranslateHandlers(deps: TranslateIpcDeps) {
     removeMaterial: guard(raw.removeMaterial),
     pickMaterials: guard(raw.pickMaterials),
     pickParentDir: guard(raw.pickParentDir),
+    openTranslation: guard(raw.openTranslation),
+    setPaneHidden: guard(raw.setPaneHidden),
   }
 }
 
@@ -167,6 +175,11 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       'NOT_REGISTERED',
       'this folder is not a registered translation project',
     )
+  }
+
+  function viewDeps(): TranslationViewDeps {
+    if (!deps.view) throw new TranslateIpcError('OPEN_FAILED', 'there is no window to open it in')
+    return deps.view
   }
 
   function touch(dir: string): void {
@@ -349,6 +362,29 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       return { token: parentPicks.add(null, [dir]), dir }
     },
 
+    async openTranslation(
+      args: TranslateOpenTranslationArgs,
+    ): Promise<TranslateOpenTranslationResult> {
+      const dir = registeredDir(args?.dir)
+      const file = requireString(args.file, 'file')
+      const view = viewDeps()
+      // the source entry (and its hash) comes from project.json, never from the renderer
+      const project = await loadProject(dir)
+      const entry = project.sources.find((s) => s.file === file)
+      if (!entry) throw new TranslateIpcError('NOT_LISTED', 'this document is not in the project')
+      return openTranslation(dir, entry, view)
+    },
+
+    async setPaneHidden(args: TranslateSetPaneHiddenArgs): Promise<void> {
+      const side = args?.side
+      if (side !== 'left' && side !== 'right')
+        throw new TranslateIpcError('INVALID_ARGUMENT', 'side must be left or right')
+      if (typeof args.hidden !== 'boolean')
+        throw new TranslateIpcError('INVALID_ARGUMENT', 'hidden must be true or false')
+      if (!viewDeps().setPaneHidden(side, args.hidden))
+        throw new TranslateIpcError('INVALID_ARGUMENT', 'no translation view is shown')
+    },
+
     async removeMaterial(args: TranslateRemoveMaterialArgs): Promise<ProjectFile> {
       const dir = registeredDir(args?.dir)
       const kind = requireKind(args.kind)
@@ -381,4 +417,10 @@ export function registerTranslateIpc(ipc: Pick<IpcMain, 'handle'>, deps: Transla
     h.pickMaterials(kind),
   )
   ipc.handle(TRANSLATE_CHANNELS.pickParentDir, () => h.pickParentDir())
+  ipc.handle(TRANSLATE_CHANNELS.openTranslation, (_e, args: TranslateOpenTranslationArgs) =>
+    h.openTranslation(args),
+  )
+  ipc.handle(TRANSLATE_CHANNELS.setPaneHidden, (_e, args: TranslateSetPaneHiddenArgs) =>
+    h.setPaneHidden(args),
+  )
 }

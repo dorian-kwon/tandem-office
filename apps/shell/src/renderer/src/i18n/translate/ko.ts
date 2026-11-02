@@ -56,4 +56,13 @@ export const ko = {
   startPickHint: '문서가 여럿입니다. 번역할 문서의 "번역 열기"를 누르세요.',
   promptNotSaved: '아직 저장되지 않았습니다. 입력란을 다시 벗어나면 다시 저장합니다.',
   uploadPartial: '오류 전에 올라간 파일: {files}',
+  errSourceMissing: '프로젝트의 source 폴더에 원문 사본이 없습니다. 문서를 다시 올려 주세요.',
+  errSourceNotEditable: 'PDF, 스캔, 그림 문서는 아직 번역 화면에서 열 수 없습니다.',
+  errOpenFailed: '문서를 열지 못했습니다. 따로 뗀 창에 열려 있다면 그 창을 닫고 다시 시도하세요.',
+  warnSourceChanged: '올린 뒤에 원문 사본이 바뀌었습니다. 번역 화면은 바뀐 사본을 보여 줍니다.',
+  paneToggleGroup: '번역 화면(원문은 읽기 전용)',
+  hideSource: '원문 숨기기',
+  showSource: '원문 보이기',
+  hideOutput: '번역본 숨기기',
+  showOutput: '번역본 보이기',
 } satisfies Record<keyof typeof zh, string>
