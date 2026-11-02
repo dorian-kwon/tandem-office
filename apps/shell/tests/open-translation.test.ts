@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -175,8 +183,11 @@ describe('openTranslation', () => {
     expect(opened).toEqual([])
   })
 
-  it('rejects an editable kind no editor opens (ods/odp)', async () => {
-    const entry = await addSource('sheet.ods', 'bytes')
+  it('rejects an editable kind no editor opens (ods listed by an older version)', async () => {
+    // import refuses .ods now; a project made before that may still list one
+    const copy = await addSource('sheet.txt', 'bytes')
+    renameSync(join(dir, 'source', copy.file), join(dir, 'source', 'sheet.ods'))
+    const entry: SourceEntry = { ...copy, file: 'sheet.ods' }
     expect(await codeOf(openTranslation(dir, entry, deps))).toBe('UNSUPPORTED_SOURCE')
     expect(opened).toEqual([])
   })

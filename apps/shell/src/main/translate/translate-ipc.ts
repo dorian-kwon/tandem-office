@@ -7,6 +7,8 @@ import {
   addReference,
   addSource,
   createProject,
+  EDITABLE_SOURCE_EXTENSIONS,
+  IMAGE_SOURCE_EXTENSIONS,
   loadProject,
   NotAProjectError,
   parseProjectFile,
@@ -111,39 +113,17 @@ export interface OpenDialogOptions {
   filters?: { name: string; extensions: string[] }[]
 }
 
+/** what the add-source dialog offers: the types `classifySource` accepts, nothing else */
+export const SOURCE_DIALOG_EXTENSIONS: readonly string[] = [
+  ...EDITABLE_SOURCE_EXTENSIONS,
+  'pdf',
+  ...IMAGE_SOURCE_EXTENSIONS,
+]
+
 const FILTERS: Record<TranslateMaterialKind, { name: string; extensions: string[] }[]> = {
-  source: [
-    {
-      name: 'Documents',
-      extensions: [
-        'docx',
-        'xlsx',
-        'pptx',
-        'hwp',
-        'hwpx',
-        'epub',
-        'md',
-        'markdown',
-        'txt',
-        'html',
-        'htm',
-        'odt',
-        'ods',
-        'odp',
-        'pdf',
-        'png',
-        'jpg',
-        'jpeg',
-        'gif',
-        'bmp',
-        'tif',
-        'tiff',
-        'webp',
-      ],
-    },
-  ],
+  source: [{ name: 'Documents', extensions: [...SOURCE_DIALOG_EXTENSIONS] }],
   reference: [{ name: 'All files', extensions: ['*'] }],
-  glossary: [{ name: 'Glossary', extensions: ['csv', 'tsv', 'txt', 'xlsx'] }],
+  glossary: [{ name: 'Glossary', extensions: ['csv', 'txt', 'xlsx'] }],
 }
 
 const SETTINGS_KEYS = ['projectPrompt', 'ocr', 'sourceLang', 'targetLang']

@@ -1,7 +1,12 @@
 import { constants } from 'node:fs'
 import { copyFile, mkdir, readdir, stat } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
-import { verifySource, type OcrMode, type SourceEntry } from '@genoffice/translate-project'
+import {
+  IMAGE_SOURCE_EXTENSIONS,
+  verifySource,
+  type OcrMode,
+  type SourceEntry,
+} from '@genoffice/translate-project'
 import { appForPath } from '../app-routing'
 import { pdfTranslationTargetOf } from '../../shared/translate-pdf'
 import {
@@ -41,8 +46,8 @@ export interface ProjectContext {
   targetLang?: string
 }
 
-/** the image types the OCR reads (main/translate/ocr.ts) */
-const OCR_IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg']
+/** the image types the OCR reads: the project's image sources (PNG, JPEG) */
+const OCR_IMAGE_EXTENSIONS = IMAGE_SOURCE_EXTENSIONS.map((ext) => `.${ext}`)
 
 function stemOf(file: string): string {
   const ext = extname(file)

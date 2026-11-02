@@ -1,18 +1,40 @@
 import type { DocumentTabKind } from '../shared/tabs-api'
 
-// shared by the open route, the open-dialog filter and the rename gate so they cannot drift
-const DOCX_RE = /\.docx$/i
-// OpenDocument text opens in the Word tab too (apps/docs docFormatOfPath picks the format)
-const ODT_RE = /\.odt$/i
-const XLSX_RE = /\.(xlsx|xlsm|xls|csv|tsv)$/i
-const PPTX_RE = /\.pptx$/i
-const PDF_RE = /\.pdf$/i
-const HTML_RE = /\.html?$/i
-const MINDMAP_RE = /\.xmind$/i
-const HWP_RE = /\.hwpx?$/i
-const EPUB_RE = /\.epub$/i
+/**
+ * The extensions each editor tab opens, lower case without the dot. The
+ * regular expressions below are built from this table, so the open route, the
+ * open-dialog filter, the rename gate and the translation tool's source types
+ * (`EDITABLE_SOURCE_EXTENSIONS` in @genoffice/translate-project, held equal by
+ * tests/translate-source-types.test.ts) cannot drift.
+ */
+export const ROUTED_EXTENSIONS = {
+  docx: ['docx'],
+  // OpenDocument text opens in the Word tab too (apps/docs docFormatOfPath picks the format)
+  odt: ['odt'],
+  xlsx: ['xlsx', 'xlsm', 'xls', 'csv', 'tsv'],
+  pptx: ['pptx'],
+  pdf: ['pdf'],
+  html: ['html', 'htm'],
+  mindmap: ['xmind'],
+  hwp: ['hwp', 'hwpx'],
+  epub: ['epub'],
+  text: ['md', 'markdown', 'txt', 'json'],
+} as const satisfies Record<string, readonly string[]>
 
-const TEXT_RE = /\.(md|markdown|txt|json)$/i
+const extensionRe = (exts: readonly string[]): RegExp => new RegExp(`\\.(${exts.join('|')})$`, 'i')
+
+// shared by the open route, the open-dialog filter and the rename gate so they cannot drift
+const DOCX_RE = extensionRe(ROUTED_EXTENSIONS.docx)
+const ODT_RE = extensionRe(ROUTED_EXTENSIONS.odt)
+const XLSX_RE = extensionRe(ROUTED_EXTENSIONS.xlsx)
+const PPTX_RE = extensionRe(ROUTED_EXTENSIONS.pptx)
+const PDF_RE = extensionRe(ROUTED_EXTENSIONS.pdf)
+const HTML_RE = extensionRe(ROUTED_EXTENSIONS.html)
+const MINDMAP_RE = extensionRe(ROUTED_EXTENSIONS.mindmap)
+const HWP_RE = extensionRe(ROUTED_EXTENSIONS.hwp)
+const EPUB_RE = extensionRe(ROUTED_EXTENSIONS.epub)
+
+const TEXT_RE = extensionRe(ROUTED_EXTENSIONS.text)
 
 export { DOCX_RE, ODT_RE, XLSX_RE, PPTX_RE, PDF_RE, HTML_RE, MINDMAP_RE, HWP_RE, EPUB_RE, TEXT_RE }
 

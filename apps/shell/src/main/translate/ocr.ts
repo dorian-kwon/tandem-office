@@ -1,6 +1,7 @@
 import { readFile, stat } from 'node:fs/promises'
 import { basename, extname, join, resolve } from 'node:path'
 import {
+  IMAGE_SOURCE_EXTENSIONS,
   loadProject,
   verifySource,
   type OcrMode,
@@ -46,7 +47,8 @@ export const OCR_MAX_IMAGE_BYTES = 20 * 1024 * 1024
 /** a token nobody used for this long is dropped and no longer blocks its project */
 export const OCR_LEASE_IDLE_MS = 30 * 60_000
 
-const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg']
+/** the image types the OCR reads: the project's image sources (PNG, JPEG) */
+const IMAGE_EXTENSIONS = IMAGE_SOURCE_EXTENSIONS.map((ext) => `.${ext}`)
 
 export interface OcrServiceDeps {
   /** page count of a PDF (a structure job in the app) */
