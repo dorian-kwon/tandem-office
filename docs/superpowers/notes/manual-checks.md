@@ -1,5 +1,20 @@
 # Manual checks for the translation tool
 
+## Known limitations
+
+Collected from the task reports (tasks 9 to 11). They are deliberate or accepted for now; none is a regression.
+
+- Source pane edits are possible in memory but cannot be saved. The file in `source/` is never written by the translation view.
+- Residual PDF-editor save-dialog flows (reduce file size, sign, redaction copy) can target `source/` with an operating-system overwrite confirmation. The app does not block them.
+- There is no operating-system read-only flag on `source/`; the guard is in the app only.
+- The read-only tab is hidden from the MCP tools, so an outside program does not see the source copy as an open document.
+- Text-PDF translation uses the app-wide "AI to use" from Settings, while OCR uses the project's choice. Paid logins that the project names are labelled paid before anything is sent.
+- A glossary over 200 entries sends only the entries whose terms match the paragraph (or the text); it does not send the whole list.
+- "Translate again" keeps blocks a person edited in the PDF editor's bilingual view; there is no choice to discard them.
+- Unsupported inputs: GIF, BMP, TIFF and WebP images, password-protected PDFs and images over 20 MB. Arabic, Hebrew and Hindi cannot be the target language of a translated PDF.
+- An OCR run holds the project for up to 30 minutes of idleness; closing or reloading the window does not release it.
+- No end-to-end spec was run: the app was never launched in this environment (no `cargo`, so the Rust sheets engine does not build). Every item below is unverified in a running app.
+
 The renderer could not be built and launched on the Mac used for development (no
 `cargo`, so the Rust sheets engine does not build), so no e2e spec was written
 for these screens. Run these by hand in a full build.
@@ -80,7 +95,7 @@ Task 10b adds the OCR window (`OcrSelectDialog`) and its channels; Task 11 mount
 15. Usage per page: each selected page may be sent more than once. A malformed answer is asked again once, and a timeout, network or overload error is retried once, so in the worst case one page costs about 4 calls. Check the subscription usage against this when testing.
 16. Paid login chosen through the project: with the project's OCR set to "AI (Claude)" and only an accepted metered Claude login available, the confirmation shows "Claude will charge for this" before anything is sent. The project's explicit OCR provider counts as the person's own choice; this is flagged for the owner's confirmation.
 17. Open the OCR window and pick pages, then switch the project's OCR to "Off" (or to the other AI) in the project settings, and press Next and Start: nothing is sent and the window says OCR is off (or that the window expired or the OCR setting changed).
-18. Close the app window (or reload) while OCR is reading: opening the OCR window for the same project again works at once, without "already running".
+18. Close the app window while OCR is reading. Reloading the window does not release the OCR run either: it ends only when it finishes, is released by the window, or sits idle for 30 minutes. Opening the OCR window for the same project again before then says OCR is already running; after the idle expiry it opens normally. Check that the wait is acceptable.
 
 ## PDF, scan and image sources (Task 11)
 
