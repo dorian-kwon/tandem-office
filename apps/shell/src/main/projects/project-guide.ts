@@ -23,6 +23,7 @@ import {
   type ProjectMemoryEditResult,
   type ProjectMemoryOp,
   type ProjectNotice,
+  type ProjectTranslationItem,
   type ProjectSelection,
   type ProjectSettings,
   type ProjectTrustAnswer,
@@ -166,6 +167,19 @@ export interface ProjectGuideDeps {
   contextFiles?: (request: ContextFilesRequest) => Promise<ContextFiles>
   /** At most one write of a project's use time per this long; default `PROJECT_TOUCH_WRITE_MS` */
   touchWriteMs?: number
+  /**
+   * The translation tool's context for a folder (`translate/context-injection.ts`), or null
+   * when the folder is not a translation project. Asked only under trust `use`; absent,
+   * null or failing adds nothing, so an ordinary project's context is unchanged.
+   */
+  translationContext?: (root: string) => Promise<ProjectTranslationContext | null>
+}
+
+/** What the translation hook adds to one request's context */
+export interface ProjectTranslationContext {
+  text: string
+  items: ProjectTranslationItem[]
+  cut: boolean
 }
 
 /**
@@ -873,6 +887,23 @@ export class ProjectGuide {
     if (unwritable) notices.push({ kind: 'unwritable' })
     notices.push(...this.takeSyncNotice(id, root))
 
+    let translation: ProjectTranslationContext | null = null
+    if (trust === 'use' && record && this.deps.translationContext) {
+      try {
+        translation = await this.deps.translationContext(root)
+      } catch {
+        // an unreadable translation project sends nothing of the translation tool
+        translation = null
+      }
+      if (translation) {
+        notices.push({
+          kind: 'translation-context',
+          items: translation.items,
+          ...(translation.cut ? { cut: true as const } : {}),
+        })
+      }
+    }
+
     let files: ContextFiles = { files: [], omitted: 0 }
     if (this.deps.contextFiles) {
       const visibility = await this.aiVisibility(id)
@@ -892,6 +923,7 @@ export class ProjectGuide {
         filesOmitted: files.omitted,
         canRemember: switches.memoryEnabled && trust === 'use' && !unwritable,
         notices,
+        ...(translation ? { translation: { text: translation.text } } : {}),
       },
     }
   }

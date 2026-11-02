@@ -87,6 +87,7 @@ export type {
   ProjectMemoryOp,
   ProjectMemoryRefusal,
   ProjectNotice,
+  ProjectTranslationItem,
   ProjectReadRefusal,
   ProjectReadRequest,
   ProjectReadResult,

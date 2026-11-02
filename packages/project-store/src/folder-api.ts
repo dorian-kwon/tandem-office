@@ -344,6 +344,23 @@ export type ProjectNotice =
   | { kind: 'unwritable' }
   /** First use of a folder under a sync service; instructions, memory and chats upload with it */
   | { kind: 'sync-folder'; service?: 'onedrive' | 'google-drive' }
+  /**
+   * The folder is a translation project: what of its translation context this request
+   * carries (the translation tool's prompts, glossary and reference names). `cut`: the
+   * prompts alone were over the limit and their end was left out.
+   */
+  | { kind: 'translation-context'; items: ProjectTranslationItem[]; cut?: true }
+
+/** One part of a translation project's context, as the AI panel lists it */
+export interface ProjectTranslationItem {
+  kind: 'system' | 'project' | 'glossary' | 'reference'
+  /** whether this part has anything in this request */
+  included: boolean
+  /** glossary: entries sent; reference: file names sent */
+  count?: number
+  /** glossary: entries in the project's glossary */
+  total?: number
+}
 
 /** What a send carries for the chosen project; read just before the send and fixed for that request */
 export interface ProjectContextBundle {
@@ -364,6 +381,12 @@ export interface ProjectContextBundle {
   /** Whether `project_remember` is offered (memory on, trust `use`, folder writable) */
   canRemember: boolean
   notices: ProjectNotice[]
+  /**
+   * Present only when the folder is a registered translation project and trust is `use`:
+   * the translation tool's context text (its prompts, the language pair, glossary entries
+   * and reference file names), already within the limit.
+   */
+  translation?: { text: string }
 }
 
 export type ProjectContextResult =
