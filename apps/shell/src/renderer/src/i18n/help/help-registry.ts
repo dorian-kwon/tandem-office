@@ -281,6 +281,27 @@ export const HELP_TOPICS: HelpTopicMeta[] = [
     ],
   },
   {
+    id: 'translate',
+    group: 'ai',
+    // right after Projects: a translation project is a project with its own screens
+    order: 1.6,
+    keywords: [
+      '번역',
+      'translate',
+      'translation',
+      '翻译',
+      '翻訳',
+      '단어집',
+      'glossary',
+      '术语表',
+      '用語集',
+      'OCR',
+      'PDF',
+      'bilingual',
+      '대역',
+    ],
+  },
+  {
     id: 'subscription',
     group: 'ai',
     order: 2,
