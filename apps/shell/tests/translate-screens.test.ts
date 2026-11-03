@@ -76,6 +76,8 @@ beforeEach(() => {
       .fn()
       .mockResolvedValue({ flow: 'edit', sourceTabId: 't1', outputTabId: 't2', hashStatus: 'ok' }),
     setPaneHidden: vi.fn().mockResolvedValue(undefined),
+    pickExisting: vi.fn().mockResolvedValue(null),
+    relocate: vi.fn().mockResolvedValue(null),
   }
   ;(window as unknown as { translateApi: unknown }).translateApi = api
 })
@@ -150,6 +152,56 @@ describe('ProjectList', () => {
     expect(api.remove).not.toHaveBeenCalled()
     await click(buttonByText('Delete folder permanently'))
     expect(api.remove).toHaveBeenCalledWith({ dir: '/p/ok', deleteFolder: true })
+  })
+
+  it('opens an existing project folder through main and then opens it', async () => {
+    const onOpen = vi.fn()
+    api.pickExisting.mockResolvedValue({ dir: '/p/moved', name: 'Moved', contextLinked: true })
+    await render(ProjectList, { onOpen })
+    await click(buttonByText('Open existing project folder'))
+    expect(api.pickExisting).toHaveBeenCalledWith()
+    expect(onOpen).toHaveBeenCalledWith('/p/moved')
+    expect(api.list).toHaveBeenCalledTimes(2)
+  })
+
+  it('says so when the opened folder could not be linked for the AI panels', async () => {
+    const onOpen = vi.fn()
+    api.pickExisting.mockResolvedValue({ dir: '/p/f', name: 'F', contextLinked: false })
+    await render(ProjectList, { onOpen })
+    await click(buttonByText('Open existing project folder'))
+    expect(host.textContent).toContain('holds AI instructions or memory from elsewhere')
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
+  it('a cancelled pick changes nothing; a non-project folder shows a localized error', async () => {
+    const onOpen = vi.fn()
+    await render(ProjectList, { onOpen })
+    await click(buttonByText('Open existing project folder'))
+    expect(onOpen).not.toHaveBeenCalled()
+    api.pickExisting.mockRejectedValue(new Error('[NOT_A_PROJECT] not a translation project: /x'))
+    await click(buttonByText('Open existing project folder'))
+    expect(host.textContent).toContain('This folder is not a translation project.')
+    expect(host.textContent).not.toContain('/x')
+  })
+
+  it('a not-found row offers to locate the folder', async () => {
+    api.list.mockResolvedValue([entry({ dir: '/p/gone', name: 'Gone', status: 'not-found' })])
+    api.relocate.mockResolvedValue({ dir: '/p/here', name: 'Gone', contextLinked: true })
+    await render(ProjectList, { onOpen: vi.fn() })
+    const gone = host.querySelector('li.projects-row') as HTMLElement
+    await click(within(gone, 'Locate folder…'))
+    expect(api.relocate).toHaveBeenCalledWith({ dir: '/p/gone' })
+    expect(api.list).toHaveBeenCalledTimes(2)
+  })
+
+  it('a refused folder delete (documents open) shows the localized reason', async () => {
+    api.list.mockResolvedValue([entry({ dir: '/p/ok', name: 'Fine' })])
+    api.remove.mockRejectedValue(new Error('[PROJECT_IN_USE] documents of this project are open'))
+    await render(ProjectList, { onOpen: vi.fn() })
+    await click(buttonByText('Delete'))
+    await click(buttonByText('Remove from list and delete folder'))
+    await click(buttonByText('Delete folder permanently'))
+    expect(host.textContent).toContain('Documents from this project are open.')
   })
 
   it('list-only delete never deletes the folder', async () => {

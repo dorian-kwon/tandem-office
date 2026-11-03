@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { LANGS } from '@genoffice/i18n'
 import type {
+  TranslateAdoptedProject,
   TranslatePickedParentDir,
   TranslateProjectListEntry,
 } from '../../../shared/translate-api'
@@ -33,6 +34,8 @@ export function ProjectList({ onOpen }: ProjectListProps) {
   const [parent, setParent] = useState<TranslatePickedParentDir | null>(null)
   const [busy, setBusy] = useState(false)
   const [deleting, setDeleting] = useState<Deleting | null>(null)
+  /** an added folder whose AI context is not linked (foreign instructions or memory) */
+  const [notLinked, setNotLinked] = useState(false)
 
   const fail = useCallback((err: unknown) => setError(translateErrorText(lang, err)), [lang])
 
@@ -98,6 +101,28 @@ export function ProjectList({ onOpen }: ProjectListProps) {
     }
   }
 
+  /**
+   * A project folder made elsewhere (moved, copied) or a listed one whose folder
+   * moved: main opens the folder dialog and checks the project file. A folder the
+   * AI panels cannot use yet stays in the list with a note instead of opening.
+   */
+  const adopt = async (pick: () => Promise<TranslateAdoptedProject | null>) => {
+    setBusy(true)
+    setError(null)
+    setNotLinked(false)
+    try {
+      const adopted = await pick()
+      if (!adopted) return
+      await reload()
+      if (adopted.contextLinked) onOpen(adopted.dir)
+      else setNotLinked(true)
+    } catch (err) {
+      fail(err)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const remove = async (dir: string, deleteFolder: boolean) => {
     setBusy(true)
     setError(null)
@@ -143,14 +168,26 @@ export function ProjectList({ onOpen }: ProjectListProps) {
               {s('deleteProject')}
             </button>
           ) : (
-            <button
-              type="button"
-              className="projects-small"
-              disabled={busy}
-              onClick={() => void remove(entry.dir, false)}
-            >
-              {s('removeFromList')}
-            </button>
+            <>
+              {entry.status === 'not-found' && (
+                <button
+                  type="button"
+                  className="projects-small"
+                  disabled={busy}
+                  onClick={() => void adopt(() => api.relocate({ dir: entry.dir }))}
+                >
+                  {s('locateFolder')}
+                </button>
+              )}
+              <button
+                type="button"
+                className="projects-small"
+                disabled={busy}
+                onClick={() => void remove(entry.dir, false)}
+              >
+                {s('removeFromList')}
+              </button>
+            </>
           )}
         </div>
       </li>
@@ -195,6 +232,11 @@ export function ProjectList({ onOpen }: ProjectListProps) {
             {error}
           </div>
         )}
+        {notLinked && (
+          <div className="projects-note is-warning" role="status" data-not-linked>
+            {s('adoptNotLinked')}
+          </div>
+        )}
 
         <div className="projects-toolbar">
           <button
@@ -206,6 +248,14 @@ export function ProjectList({ onOpen }: ProjectListProps) {
             }}
           >
             {s('newProject')}
+          </button>
+          <button
+            type="button"
+            className="projects-ghost"
+            disabled={busy}
+            onClick={() => void adopt(() => api.pickExisting())}
+          >
+            {s('openExisting')}
           </button>
         </div>
 

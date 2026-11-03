@@ -130,7 +130,17 @@ beforeEach(() => {
       output: bilingual ? 'report.de.bilingual.pdf' : 'report.de.pdf',
     })),
     pdfRelease: vi.fn(async () => undefined),
-    instructionsFor: vi.fn(async () => ({ prompts: 'Be formal.', material: 'fox → Fuchs' })),
+    instructionsFor: vi.fn(async () => ({
+      prompts: 'Be formal.',
+      material: 'fox → Fuchs',
+      summary: {
+        systemPrompt: true,
+        projectPrompt: false,
+        glossaryTotal: 350,
+        glossaryLimit: 200,
+        referenceNames: ['style.pdf', 'terms.docx'],
+      },
+    })),
   }
 })
 
@@ -197,7 +207,59 @@ describe('PdfTranslateDialog', () => {
     expect(host.textContent).toContain('is sent to this AI')
     expect(send).not.toHaveBeenCalled()
     expect(stored).toEqual([])
-    expect(api.instructionsFor).not.toHaveBeenCalled()
+    // only the read-only summary call with no request text; nothing went to the AI
+    expect(api.instructionsFor.mock.calls).toEqual([[{ dir: '/p', text: '' }]])
+  })
+
+  it('the confirmation lists the project context that goes with every request', async () => {
+    await render()
+    const ctx = host.querySelector('[data-context]')
+    expect(ctx).not.toBeNull()
+    const text = ctx!.textContent ?? ''
+    expect(text).toContain('System prompt for all projects: yes')
+    expect(text).toContain('Project prompt: none (empty)')
+    expect(text).toContain('350 entries, more than 200')
+    expect(text).toContain('Reference file names (2')
+    expect(text).toContain('style.pdf, terms.docx')
+    expect(send).not.toHaveBeenCalled()
+    expect(stored).toEqual([])
+  })
+
+  it('a small glossary goes whole, and no references says none', async () => {
+    api.instructionsFor.mockResolvedValue({
+      prompts: '',
+      material: '',
+      summary: {
+        systemPrompt: false,
+        projectPrompt: true,
+        glossaryTotal: 12,
+        glossaryLimit: 200,
+        referenceNames: [],
+      },
+    })
+    await render()
+    const text = host.querySelector('[data-context]')?.textContent ?? ''
+    expect(text).toContain('System prompt for all projects: none (empty)')
+    expect(text).toContain('Project prompt: yes')
+    expect(text).toContain('Glossary: all 12 entries')
+    expect(text).toContain('Reference files: none')
+  })
+
+  it('the context stays listed while the job runs', async () => {
+    let release!: () => void
+    const answer = send.getMockImplementation()!
+    send.mockImplementationOnce(
+      (request, signal) =>
+        new Promise<string>((resolve) => {
+          release = () => void answer(request, signal).then(resolve)
+        }),
+    )
+    await render()
+    await click(button('Start'))
+    expect(dialog()?.getAttribute('data-step')).toBe('running')
+    expect(host.querySelector('[data-context]')).not.toBeNull()
+    release()
+    await settle()
   })
 
   it('Start runs the job, writes into output/ and opens the result', async () => {

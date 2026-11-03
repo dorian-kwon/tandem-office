@@ -11,7 +11,7 @@ import type { Lang } from '@genoffice/i18n'
 import type { DocumentJobEstimate } from '../../../../../../packages/pdf-structure/src/jobs/job'
 import type { TranslationSend } from '../../../../../../packages/pdf-structure/src/translate'
 import { routeLabel } from '../../../../../pdf/src/renderer/doc-jobs/route'
-import type { TranslateApi } from '../../../shared/translate-api'
+import type { TranslateApi, TranslateContextSummary } from '../../../shared/translate-api'
 import {
   canContinue,
   PdfTranslateCancelledError,
@@ -100,6 +100,8 @@ export function PdfTranslateDialog(props: PdfTranslateDialogProps): ReactElement
   const [step, setStep] = useState<Step>({ kind: 'loading' })
   const [bilingual, setBilingual] = useState(false)
   const [targetLang, setTargetLang] = useState<string | null>(null)
+  /** what of the project goes with every request; read once, sends nothing */
+  const [context, setContext] = useState<TranslateContextSummary | null>(null)
   const propsRef = useRef(props)
   propsRef.current = props
   const route = pdfJobRoute(props.aiSettings, props.connection.statuses)
@@ -119,6 +121,14 @@ export function PdfTranslateDialog(props: PdfTranslateDialogProps): ReactElement
     }
     const controller = new AbortController()
     runRef.current = controller
+    // a read of the project's composition with no request text, for the confirmation;
+    // it calls no AI (the glossary entries of each request are picked per block later)
+    api.instructionsFor({ dir: props.dir, text: '' }).then(
+      (answer) => {
+        if (alive && answer?.summary) setContext(answer.summary)
+      },
+      () => undefined,
+    )
     const now = () => routeRef.current
     void runPdfTranslation({
       dir: props.dir,
@@ -311,6 +321,9 @@ export function PdfTranslateDialog(props: PdfTranslateDialogProps): ReactElement
             onOpenExisting={openExisting}
             onCancel={cancel}
           />
+        )}
+        {(step.kind === 'confirm' || step.kind === 'running') && context && (
+          <ContextSummary summary={context} lang={lang} />
         )}
         {step.kind === 'confirm' && (
           <PdfConfirm
@@ -527,6 +540,41 @@ function PdfChoose(props: {
         )}
       </div>
     </>
+  )
+}
+
+/**
+ * The project context every request of this job carries (spec 6.6): the two
+ * prompts, the glossary and the reference file names, as main composes them.
+ */
+function ContextSummary(props: { summary: TranslateContextSummary; lang: Lang }): ReactElement {
+  const s = makeText(props.lang)
+  const { summary } = props
+  const glossary =
+    summary.glossaryTotal === 0
+      ? s('ctxGlossaryNone')
+      : summary.glossaryTotal <= summary.glossaryLimit
+        ? s('ctxGlossaryAll', { count: summary.glossaryTotal })
+        : s('ctxGlossaryPerBlock', { count: summary.glossaryTotal, limit: summary.glossaryLimit })
+  const references = summary.referenceNames
+  return (
+    <div className="translate-ocr-summary" data-context>
+      <p>{s('ctxTitle')}</p>
+      <ul>
+        <li data-context-system={summary.systemPrompt}>
+          {summary.systemPrompt ? s('ctxSystemOn') : s('ctxSystemOff')}
+        </li>
+        <li data-context-project={summary.projectPrompt}>
+          {summary.projectPrompt ? s('ctxProjectOn') : s('ctxProjectOff')}
+        </li>
+        <li data-context-glossary={summary.glossaryTotal}>{glossary}</li>
+        <li data-context-references={references.length}>
+          {references.length === 0
+            ? s('ctxReferencesNone')
+            : s('ctxReferences', { count: references.length, names: references.join(', ') })}
+        </li>
+      </ul>
+    </div>
   )
 }
 
