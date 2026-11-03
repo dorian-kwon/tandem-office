@@ -415,7 +415,7 @@ describe('ProjectDetail', () => {
     expect(host.querySelector('[role="status"]')?.textContent).toContain('Not saved')
     await blur(area)
     expect(api.updateSettings).toHaveBeenCalledTimes(2)
-    expect(host.querySelector('[role="status"]')).toBeNull()
+    expect(host.querySelector('[role="status"]')?.textContent).toBe('Saved')
   })
 
   it('a multi-file upload that fails midway names the files already added', async () => {

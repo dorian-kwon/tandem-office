@@ -7,6 +7,8 @@ export const pl = {
     'Projekt tłumaczeniowy gromadzi w jednym folderze dokumenty do przetłumaczenia, materiały referencyjne i glosariusze.',
   systemPromptLabel: 'Prompt systemowy dla wszystkich projektów',
   systemPromptHint: 'Zapisywany po opuszczeniu pola. Dotyczy każdego projektu tłumaczeniowego.',
+  save: 'Zapisz',
+  saved: 'Zapisano',
   newProject: 'Nowy projekt',
   emptyHint: 'Brak projektów tłumaczeniowych. Utwórz jeden, aby zacząć.',
   nameLabel: 'Nazwa projektu',

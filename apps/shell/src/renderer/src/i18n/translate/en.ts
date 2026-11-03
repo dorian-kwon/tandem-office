@@ -7,6 +7,8 @@ export const en = {
     'A translation project keeps the documents to translate, reference material and glossaries together in one folder.',
   systemPromptLabel: 'System prompt for all projects',
   systemPromptHint: 'Saved when you leave the field. It applies to every translation project.',
+  save: 'Save',
+  saved: 'Saved',
   newProject: 'New project',
   emptyHint: 'No translation projects yet. Create one to start.',
   nameLabel: 'Project name',

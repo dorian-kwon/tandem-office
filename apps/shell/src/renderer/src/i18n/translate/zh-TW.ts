@@ -6,6 +6,8 @@ export const zhTW = {
   intro: '翻譯專案會把待翻譯的文件、參考資料和詞彙表放在同一個資料夾裡。',
   systemPromptLabel: '所有專案共用的系統提示詞',
   systemPromptHint: '離開輸入欄時儲存。對每個翻譯專案都有效。',
+  save: '儲存',
+  saved: '已儲存',
   newProject: '新增專案',
   emptyHint: '還沒有翻譯專案。新增一個即可開始。',
   nameLabel: '專案名稱',

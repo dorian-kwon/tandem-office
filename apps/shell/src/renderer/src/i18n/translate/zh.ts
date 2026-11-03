@@ -5,6 +5,8 @@ export const zh = {
   intro: '翻译项目把待翻译的文档、参考资料和术语表放在同一个文件夹里。',
   systemPromptLabel: '所有项目共用的系统提示词',
   systemPromptHint: '离开输入框时保存。对每个翻译项目都有效。',
+  save: '保存',
+  saved: '已保存',
   newProject: '新建项目',
   emptyHint: '还没有翻译项目。新建一个即可开始。',
   nameLabel: '项目名称',

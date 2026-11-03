@@ -26,6 +26,7 @@ export function ProjectList({ onOpen }: ProjectListProps) {
   const [projects, setProjects] = useState<TranslateProjectListEntry[] | null>(null)
   const [systemPrompt, setSystemPrompt] = useState('')
   const [promptLoaded, setPromptLoaded] = useState(false)
+  const [promptSaved, setPromptSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
@@ -66,7 +67,10 @@ export function ProjectList({ onOpen }: ProjectListProps) {
   const saveSystemPrompt = () => {
     // never write the empty initial value over a stored prompt that failed to load
     if (!promptLoaded) return
-    api.setSystemPrompt(systemPrompt).catch(fail)
+    api
+      .setSystemPrompt(systemPrompt)
+      .then(() => setPromptSaved(true))
+      .catch(fail)
   }
 
   const choosePlace = async () => {
@@ -221,10 +225,28 @@ export function ProjectList({ onOpen }: ProjectListProps) {
             className="projects-textarea"
             aria-label={s('systemPromptLabel')}
             value={systemPrompt}
-            onChange={(e) => setSystemPrompt(e.target.value)}
+            onChange={(e) => {
+              setSystemPrompt(e.target.value)
+              setPromptSaved(false)
+            }}
             onBlur={saveSystemPrompt}
           />
           <span className="projects-hint">{s('systemPromptHint')}</span>
+          <div className="projects-buttons translate-save-row">
+            <button
+              type="button"
+              className="projects-primary"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={saveSystemPrompt}
+            >
+              {s('save')}
+            </button>
+            {promptSaved && (
+              <span className="projects-hint" role="status">
+                {s('saved')}
+              </span>
+            )}
+          </div>
         </label>
 
         {error && (

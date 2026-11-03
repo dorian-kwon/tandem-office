@@ -63,6 +63,7 @@ export function ProjectDetail({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [promptFailed, setPromptFailed] = useState(false)
+  const [promptSaved, setPromptSaved] = useState(false)
   // the newest project object, so a blur-save never writes a stale list over an upload
   const latest = useRef<ProjectFile | null>(null)
 
@@ -124,6 +125,17 @@ export function ProjectDetail({
       sources: next.sources,
       references: next.references,
       glossaryFiles: next.glossaryFiles,
+    })
+  }
+
+  const savePrompt = () => {
+    if (prompt === latest.current?.projectPrompt) {
+      setPromptSaved(true)
+      return
+    }
+    void save({ projectPrompt: prompt }).then((ok) => {
+      setPromptFailed(!ok)
+      setPromptSaved(ok)
     })
   }
 
@@ -326,13 +338,28 @@ export function ProjectDetail({
                 className="projects-textarea"
                 aria-label={s('promptLabel')}
                 value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                onBlur={() => {
-                  if (prompt === latest.current?.projectPrompt) return
-                  void save({ projectPrompt: prompt }).then((ok) => setPromptFailed(!ok))
+                onChange={(e) => {
+                  setPrompt(e.target.value)
+                  setPromptSaved(false)
                 }}
+                onBlur={savePrompt}
               />
               <span className="projects-hint">{s('promptHint')}</span>
+              <div className="projects-buttons translate-save-row">
+                <button
+                  type="button"
+                  className="projects-primary"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={savePrompt}
+                >
+                  {s('save')}
+                </button>
+                {promptSaved && !promptFailed && (
+                  <span className="projects-hint" role="status">
+                    {s('saved')}
+                  </span>
+                )}
+              </div>
               {promptFailed && (
                 <span className="projects-hint" role="status">
                   {s('promptNotSaved')}

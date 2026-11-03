@@ -8,6 +8,8 @@ export const fr = {
   systemPromptLabel: 'Prompt système de tous les projets',
   systemPromptHint:
     'Enregistré quand vous quittez le champ. S’applique à tous les projets de traduction.',
+  save: 'Enregistrer',
+  saved: 'Enregistré',
   newProject: 'Nouveau projet',
   emptyHint: 'Aucun projet de traduction pour l’instant. Créez-en un pour commencer.',
   nameLabel: 'Nom du projet',

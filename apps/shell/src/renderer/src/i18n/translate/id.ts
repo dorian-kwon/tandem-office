@@ -8,6 +8,8 @@ export const id = {
   systemPromptLabel: 'Prompt sistem untuk semua proyek',
   systemPromptHint:
     'Disimpan saat Anda meninggalkan kolom ini. Berlaku untuk setiap proyek terjemahan.',
+  save: 'Simpan',
+  saved: 'Tersimpan',
   newProject: 'Proyek baru',
   emptyHint: 'Belum ada proyek terjemahan. Buat satu untuk memulai.',
   nameLabel: 'Nama proyek',

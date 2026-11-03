@@ -7,6 +7,8 @@ export const vi = {
     'Một dự án dịch thuật gom các tài liệu cần dịch, tài liệu tham khảo và bảng thuật ngữ vào cùng một thư mục.',
   systemPromptLabel: 'Prompt hệ thống cho mọi dự án',
   systemPromptHint: 'Được lưu khi bạn rời khỏi ô này. Áp dụng cho mọi dự án dịch thuật.',
+  save: 'Lưu',
+  saved: 'Đã lưu',
   newProject: 'Dự án mới',
   emptyHint: 'Chưa có dự án dịch thuật nào. Hãy tạo một dự án để bắt đầu.',
   nameLabel: 'Tên dự án',

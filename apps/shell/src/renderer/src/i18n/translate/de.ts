@@ -8,6 +8,8 @@ export const de = {
   systemPromptLabel: 'System-Prompt für alle Projekte',
   systemPromptHint:
     'Wird gespeichert, wenn Sie das Feld verlassen. Gilt für jedes Übersetzungsprojekt.',
+  save: 'Speichern',
+  saved: 'Gespeichert',
   newProject: 'Neues Projekt',
   emptyHint: 'Noch keine Übersetzungsprojekte. Erstellen Sie eines, um zu beginnen.',
   nameLabel: 'Projektname',

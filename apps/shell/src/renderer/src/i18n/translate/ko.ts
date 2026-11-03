@@ -6,6 +6,8 @@ export const ko = {
   intro: '번역 프로젝트는 번역할 문서와 참고자료, 단어집을 폴더 하나에 모아 둡니다.',
   systemPromptLabel: '모든 프로젝트에 쓰는 시스템 프롬프트',
   systemPromptHint: '입력란을 벗어나면 저장됩니다. 모든 번역 프로젝트에 적용됩니다.',
+  save: '저장',
+  saved: '저장됨',
   newProject: '새 프로젝트',
   emptyHint: '아직 번역 프로젝트가 없습니다. 새로 만들어 시작하세요.',
   nameLabel: '프로젝트 이름',

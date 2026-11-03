@@ -8,6 +8,8 @@ export const ms = {
   systemPromptLabel: 'Prompt sistem untuk semua projek',
   systemPromptHint:
     'Disimpan apabila anda meninggalkan medan ini. Terpakai untuk setiap projek terjemahan.',
+  save: 'Simpan',
+  saved: 'Disimpan',
   newProject: 'Projek baharu',
   emptyHint: 'Belum ada projek terjemahan. Cipta satu untuk bermula.',
   nameLabel: 'Nama projek',
