@@ -229,3 +229,18 @@
   color: var(--text-muted);
   font-size: 12px;
 }
+
+/* The new-project form: space the rows out so labels, selects and buttons do not touch. */
+.translate-pane .projects-create {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.translate-pane .projects-create .projects-location {
+  margin: 0;
+}
+
+.translate-pane .projects-create .projects-buttons {
+  margin: 4px 0 0;
+}
