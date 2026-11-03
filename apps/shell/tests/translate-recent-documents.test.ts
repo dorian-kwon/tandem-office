@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createProject } from '@genoffice/translate-project'
+import { createProject, loadProject, saveProject } from '@genoffice/translate-project'
 import { readAppSettings, writeTranslationProjects } from '../src/main/app-settings'
 import {
   listRecentDocuments,
@@ -25,8 +25,16 @@ beforeEach(async () => {
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
 describe('recent translation documents', () => {
+  async function withSource(name: string) {
+    writeFileSync(join(dir, 'source', name), 'x')
+    const project = await loadProject(dir)
+    project.sources.push({ file: name, kind: 'editable', sha256: 'h' })
+    await saveProject(dir, project)
+  }
+
   it('lists newest first with project name and languages', async () => {
-    writeFileSync(join(dir, 'output', 'b.md'), 'x')
+    await withSource('a.md')
+    await withSource('b.md')
     recordRecentDocument(settingsPath, { dir, file: 'a.md', output: 'a.md' }, 100)
     recordRecentDocument(settingsPath, { dir, file: 'b.md', output: 'b.md' }, 200)
     const list = await listRecentDocuments(settingsPath)
@@ -70,18 +78,49 @@ describe('recent translation documents', () => {
     expect(await listRecentDocuments(settingsPath)).toEqual([])
   })
 
-  it('marks an entry unavailable when the output file or the folder is gone', async () => {
+  it('is available when the source entry and its copy exist, even if output is missing', async () => {
+    await withSource('a.md')
+    rmSync(join(dir, 'output', 'a.md'))
     recordRecentDocument(settingsPath, { dir, file: 'a.md', output: 'a.md' }, 100)
-    recordRecentDocument(settingsPath, { dir, file: 'gone.md', output: 'gone.md' }, 200)
+    expect((await listRecentDocuments(settingsPath))[0].available).toBe(true)
+  })
+
+  it('is unavailable when the source copy is missing', async () => {
+    await withSource('a.md')
+    rmSync(join(dir, 'source', 'a.md'))
+    recordRecentDocument(settingsPath, { dir, file: 'a.md', output: 'a.md' }, 100)
+    expect((await listRecentDocuments(settingsPath))[0].available).toBe(false)
+  })
+
+  it('is unavailable when the source entry is no longer listed in the project', async () => {
+    writeFileSync(join(dir, 'source', 'a.md'), 'x')
+    recordRecentDocument(settingsPath, { dir, file: 'a.md', output: 'a.md' }, 100)
+    expect((await listRecentDocuments(settingsPath))[0].available).toBe(false)
+  })
+
+  it('marks entries unavailable when the folder is gone', async () => {
+    await withSource('a.md')
+    recordRecentDocument(settingsPath, { dir, file: 'a.md', output: 'a.md' }, 100)
     let list = await listRecentDocuments(settingsPath)
-    expect(list.map((r) => [r.file, r.available])).toEqual([
-      ['gone.md', false],
-      ['a.md', true],
-    ])
+    expect(list[0].available).toBe(true)
     rmSync(dir, { recursive: true, force: true })
     list = await listRecentDocuments(settingsPath)
     expect(list.every((r) => !r.available)).toBe(true)
     expect(list[0].projectName).toBe('Demo')
+  })
+
+  it('keeps the newest of duplicates in an unsorted stored list', async () => {
+    writeFileSync(
+      settingsPath,
+      JSON.stringify({
+        translationProjects: [{ dir, lastOpened: 1 }],
+        translationRecentDocuments: [
+          { dir, file: 'a.md', output: 'a.md', openedAt: 10 },
+          { dir, file: 'a.md', output: 'a.md', openedAt: 90 },
+        ],
+      }),
+    )
+    expect((await listRecentDocuments(settingsPath)).map((r) => r.openedAt)).toEqual([90])
   })
 
   it('ignores damaged stored values and unsafe names', async () => {

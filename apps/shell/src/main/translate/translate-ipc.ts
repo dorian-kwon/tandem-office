@@ -566,7 +566,8 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       const view = viewDeps()
       const { project, entry } = await sourceEntry(dir, file)
       const answer = await openTranslationResult(dir, entry, args.output, view, project.targetLang)
-      noteRecent(dir, entry.file, args.output as string)
+      // openTranslationResult accepted `output`, so it is a plain file name here
+      if (typeof args.output === 'string') noteRecent(dir, entry.file, args.output)
       return answer
     },
 

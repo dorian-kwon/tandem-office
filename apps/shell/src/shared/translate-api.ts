@@ -68,7 +68,7 @@ export interface TranslateRecentDocument {
   targetLang: string
   /** epoch milliseconds */
   openedAt: number
-  /** false when the project folder or the output file is gone */
+  /** false when the project folder, the source entry or its copy in source/ is gone */
   available: boolean
 }
 

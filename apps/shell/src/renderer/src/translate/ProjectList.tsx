@@ -16,7 +16,7 @@ export interface ProjectListProps {
   /** open a project's detail screen */
   onOpen: (dir: string) => void
   /** reopen a recent document: its project and source file name */
-  onOpenRecent?: (dir: string, file: string) => void
+  onOpenRecent?: (dir: string, file: string) => Promise<void>
 }
 
 /** "3 minutes ago" in the screen language */
@@ -406,7 +406,10 @@ export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
                     <button
                       type="button"
                       className="translate-open"
-                      onClick={() => onOpenRecent?.(doc.dir, doc.file)}
+                      onClick={() => {
+                        setError(null)
+                        void onOpenRecent?.(doc.dir, doc.file).catch(fail)
+                      }}
                     >
                       <span className="projects-row-name">{doc.file}</span>
                       <span className="projects-row-path">

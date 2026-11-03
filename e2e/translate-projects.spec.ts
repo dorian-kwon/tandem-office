@@ -138,8 +138,9 @@ test('translation project: create, upload, split view, read-only source, remove'
           page.evaluate(
             async () =>
               (
-                window as unknown as { aiOfficeTabs: { getSplit(): Promise<unknown> } }
-              ).aiOfficeTabs.getSplit() !== null,
+                (window as unknown as { aiOfficeTabs: { getSplit(): Promise<unknown> } })
+                  .aiOfficeTabs
+              ).getSplit() !== null,
           ),
         { timeout: 30_000 },
       )
@@ -216,10 +217,25 @@ test('translation project: create, upload, split view, read-only source, remove'
     const splitShown = () =>
       page.evaluate(
         async () =>
-          (
+          (await (
             window as unknown as { aiOfficeTabs: { getSplit(): Promise<unknown> } }
-          ).aiOfficeTabs.getSplit() !== null,
+          ).aiOfficeTabs.getSplit()) !== null,
       )
+    // close both tabs of the split first, so the click has to make the split again
+    await page.evaluate(async () => {
+      const t = (
+        window as unknown as {
+          aiOfficeTabs: {
+            list(): Promise<{ id: string; filePath?: string }[]>
+            close(id: string): Promise<void>
+          }
+        }
+      ).aiOfficeTabs
+      for (const tab of await t.list())
+        if (tab.filePath && /[\\/](source|output)[\\/]contract\.md$/.test(tab.filePath))
+          await t.close(tab.id)
+    })
+    await expect.poll(async () => !(await splitShown()), { timeout: 30_000 }).toBe(true)
     await page.locator('.tab-bar .tab-item.tab-home').click()
     await page.getByRole('button', { name: 'Translation', exact: true }).first().click()
     await page.getByRole('button', { name: 'All projects' }).click()
@@ -228,7 +244,13 @@ test('translation project: create, upload, split view, read-only source, remove'
     await expect(recentRow).toContainText('Demo contract')
     await recentRow.getByRole('button').click()
     await expect.poll(splitShown, { timeout: 30_000 }).toBe(true)
-    await expect(page.getByRole('button', { name: 'Hide source' })).toBeVisible()
+    await expect
+      .poll(
+        async () =>
+          (await readViews()).filter((v) => v.text.includes('supplier shall deliver')).length,
+        { timeout: 30_000 },
+      )
+      .toBe(2)
 
     // source copy on disk never changed during all of this
     expect(sha256(await readFile(join(projectDir, 'source', 'contract.md')))).toBe(

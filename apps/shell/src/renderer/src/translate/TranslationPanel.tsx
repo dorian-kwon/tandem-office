@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { AiSettings } from '@genoffice/ai-provider/browser'
 import type { SourceEntry } from '@genoffice/translate-project'
+import type { TranslateOpenTranslationResult } from '../../../shared/translate-api'
 import { useI18n } from '../locale'
 import type { SubscriptionConnection } from '../subscription-client'
 import { OcrSelectDialog } from './OcrSelectDialog'
@@ -87,12 +88,12 @@ export function TranslationPanel(props: TranslationPanelProps = {}) {
     }
   }
 
-  const startTranslation = async (dir: string, file: string): Promise<void> => {
-    const api = window.translateApi
-    if (!api) return
-    setNotice(null)
+  const handleOpened = async (
+    dir: string,
+    file: string,
+    result: TranslateOpenTranslationResult,
+  ): Promise<void> => {
     try {
-      const result = await api.openTranslation({ dir, file })
       if (result.flow === 'edit') {
         // the tab strip shows it over the split; the detail screen keeps it too
         if (result.hashStatus === 'changed') markSourceChanged(result.sourceTabId)
@@ -122,6 +123,20 @@ export function TranslationPanel(props: TranslationPanelProps = {}) {
     }
   }
 
+  const startTranslation = async (dir: string, file: string): Promise<void> => {
+    const api = window.translateApi
+    if (!api) return
+    setNotice(null)
+    let result: TranslateOpenTranslationResult
+    try {
+      result = await api.openTranslation({ dir, file })
+    } catch (err) {
+      fail(dir, err)
+      return
+    }
+    await handleOpened(dir, file, result)
+  }
+
   const close = () => setFlow(null)
   const connection = props.connection
   const aiSettings = props.aiSettings ?? null
@@ -131,10 +146,15 @@ export function TranslationPanel(props: TranslationPanelProps = {}) {
     return (
       <ProjectList
         onOpen={setOpenDir}
-        onOpenRecent={(dir, file) => {
+        onOpenRecent={async (dir, file) => {
+          const api = window.translateApi
+          if (!api) return
+          // navigate only after the open worked; a failure stays on the list
+          const result = await api.openTranslation({ dir, file })
           current.current = dir
           setOpenDir(dir)
-          void startTranslation(dir, file)
+          setNotice(null)
+          await handleOpened(dir, file, result)
         }}
       />
     )

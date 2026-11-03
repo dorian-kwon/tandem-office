@@ -41,7 +41,7 @@ function sameDoc(a: StoredRecent, b: StoredRecent): boolean {
 
 /** The stored value read back: bad entries are dropped, newest first, one per project+file, capped. */
 function normalize(raw: unknown): StoredRecent[] {
-  const out: StoredRecent[] = []
+  const valid: StoredRecent[] = []
   for (const item of Array.isArray(raw) ? raw : []) {
     if (typeof item !== 'object' || item === null) continue
     const e = item as Record<string, unknown>
@@ -49,11 +49,12 @@ function normalize(raw: unknown): StoredRecent[] {
     if (!plainName(e.file) || !plainName(e.output)) continue
     const at = e.openedAt
     if (typeof at !== 'number' || !Number.isFinite(at) || at < 0) continue
-    const entry = { dir: e.dir, file: e.file, output: e.output, openedAt: at }
-    if (out.some((o) => sameDoc(o, entry))) continue
-    out.push(entry)
+    valid.push({ dir: e.dir, file: e.file, output: e.output, openedAt: at })
   }
-  out.sort((a, b) => b.openedAt - a.openedAt)
+  // newest first, then keep the newest of each project+file
+  valid.sort((x, y) => y.openedAt - x.openedAt)
+  const out: StoredRecent[] = []
+  for (const entry of valid) if (!out.some((o) => sameDoc(o, entry))) out.push(entry)
   return out.slice(0, RECENT_DOCUMENTS_LIMIT)
 }
 
@@ -92,7 +93,10 @@ export async function listRecentDocuments(
       projectName = project.name
       sourceLang = project.sourceLang
       targetLang = project.targetLang
-      available = (await stat(join(dir, 'output', e.output))).isFile()
+      // what the click does: open the project's source entry `file` through the normal path
+      available =
+        project.sources.some((src) => src.file === e.file) &&
+        (await stat(join(dir, 'source', e.file))).isFile()
     } catch {
       // the folder or the project file is gone: shown, but not openable
     }

@@ -491,6 +491,16 @@ describe('channels answer the shell window only', () => {
     expect((await h.list()).map((e) => e.dir)).toEqual([dir])
   })
 
+  it('the recent-documents channel is registered and refuses other windows', async () => {
+    const answers = register((sender) => sender === shell)
+    const recent = answers.get(TRANSLATE_CHANNELS.recent)!
+    expect(recent).toBeDefined()
+    await expect(Promise.resolve().then(() => recent({ sender: editor }))).rejects.toMatchObject({
+      message: expect.stringContaining('INVALID_ARGUMENT'),
+    })
+    expect(await recent({ sender: shell })).toEqual([])
+  })
+
   it('answers the shell window', async () => {
     const answers = register((sender) => sender === shell)
     const listed = await answers.get(TRANSLATE_CHANNELS.list)!({ sender: shell })
