@@ -277,6 +277,11 @@ test('translation project: a document with an embedded picture says OCR is neede
   const zip = new JSZip()
   zip.file('[Content_Types].xml', '<Types/>')
   zip.file('word/document.xml', '<w:document/>')
+  // only media the body refers to counts, so the picture has its relationship
+  zip.file(
+    'word/_rels/document.xml.rels',
+    '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/></Relationships>',
+  )
   zip.file('word/media/image1.png', picture)
   const docx = join(work, 'with-picture.docx')
   const docxBytes = await zip.generateAsync({ type: 'nodebuffer', compression: 'STORE' })

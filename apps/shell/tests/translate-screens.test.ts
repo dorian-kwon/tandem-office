@@ -593,6 +593,34 @@ describe('ProjectDetail picture notice', () => {
     expect(host.querySelector('[role="alert"]')).toBeNull()
   })
 
+  it('drops a stale notice when a later count fails', async () => {
+    api.getProject.mockResolvedValue(
+      project({ sources: [{ file: 'a.docx', sha256: 'x', kind: 'editable' }] }),
+    )
+    api.pictureInfo.mockResolvedValue([{ file: 'a.docx', kind: 'source', pictures: 2 }])
+    api.removeMaterial.mockResolvedValue(project())
+    await render(ProjectDetail, props())
+    expect(host.querySelector('[data-picture-notice][data-file="a.docx"]')).not.toBeNull()
+    api.pictureInfo.mockRejectedValue(new Error('[UNKNOWN] nope'))
+    await click(buttonByText('Delete'))
+    expect(api.pictureInfo).toHaveBeenCalledTimes(2)
+    expect(host.querySelector('[data-picture-notice]')).toBeNull()
+  })
+
+  it('counts again when the lists are reloaded', async () => {
+    api.getProject.mockResolvedValue(
+      project({ sources: [{ file: 'a.docx', sha256: 'x', kind: 'editable' }] }),
+    )
+    api.pictureInfo.mockResolvedValue([{ file: 'a.docx', kind: 'source', pictures: 2 }])
+    const base = props()
+    await render(ProjectDetail, base)
+    expect(host.querySelector('[data-picture-notice]')).not.toBeNull()
+    api.pictureInfo.mockResolvedValue([{ file: 'a.docx', kind: 'source', pictures: 0 }])
+    await render(ProjectDetail, { ...base, listsVersion: 1 })
+    expect(api.pictureInfo).toHaveBeenCalledTimes(2)
+    expect(host.querySelector('[data-picture-notice]')).toBeNull()
+  })
+
   it('counts again after a file was added', async () => {
     api.getProject.mockResolvedValue(project())
     api.pickMaterials.mockResolvedValue({ token: 't', names: ['n.docx'] })

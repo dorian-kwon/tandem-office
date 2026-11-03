@@ -106,7 +106,10 @@ export function ProjectDetail({
             next.set(pictureKey(item.kind, item.file), item.pictures)
         setPictures(next)
       },
-      () => undefined,
+      // a failed ask drops what an earlier one said: it may name a removed or replaced file
+      () => {
+        if (ask === picturesAsk.current) setPictures(new Map())
+      },
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps -- per project
   }, [dir])
@@ -154,6 +157,7 @@ export function ProjectDetail({
       },
       () => undefined,
     )
+    loadPictures()
     return () => {
       alive = false
     }
