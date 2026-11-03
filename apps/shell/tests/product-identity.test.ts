@@ -8,6 +8,8 @@ import {
   createI18n,
   DEV_USER_DATA_DIR_NAME,
   LANGS,
+  PRODUCT_FILE_NAME,
+  PRODUCT_ID_NAME,
   PRODUCT_NAME,
   UPSTREAM_NAME_LITERAL,
   UPSTREAM_PRODUCT_NAME,
@@ -87,9 +89,17 @@ describe('one product name', () => {
     }
   })
 
-  it('shows the Korean name only in the Korean UI', () => {
+  it('shows the same name in every UI language', () => {
+    expect(PRODUCT_NAME).toBe('tandem office')
+    for (const lang of LANGS) expect(productName(lang), lang).toBe(PRODUCT_NAME)
+  })
+
+  it('keeps the name of the project it is forked from out of the UI', () => {
     for (const lang of LANGS) {
-      expect(productName(lang), lang).toBe(lang === 'ko' ? '이음오피스' : PRODUCT_NAME)
+      for (const key of Object.keys(strings.zh) as Array<keyof typeof strings.zh>) {
+        const shown = createI18n(strings)(lang, key)
+        expect(shown, `${lang}.${key}`).not.toMatch(/IeumOffice|이음오피스/)
+      }
     }
   })
 })
@@ -116,13 +126,13 @@ describe('the name in the shell UI', () => {
         expect(t(lang, key), `${lang}.${key}`).not.toContain(UPSTREAM_PRODUCT_NAME)
       }
     }
-    expect(t('ko', 'onbTitle1')).toContain('이음오피스')
-    expect(t('en', 'onbTitle1')).toContain('IeumOffice')
+    expect(t('ko', 'onbTitle1')).toContain('tandem office')
+    expect(t('en', 'onbTitle1')).toContain('tandem office')
   })
 
   it('names the product in the manual: titles and bodies', async () => {
-    expect(topicTitle('install', 'en')).toBe('Installing IeumOffice')
-    expect(topicTitle('install', 'ko')).toBe('이음오피스 설치')
+    expect(topicTitle('install', 'en')).toBe('Installing tandem office')
+    expect(topicTitle('install', 'ko')).toBe('tandem office 설치')
     for (const lang of ['en', 'ko', 'ja'] as const) {
       for (const topic of HELP_TOPICS) {
         expect(topicTitle(topic.id, lang)).not.toContain(UPSTREAM_PRODUCT_NAME)
@@ -131,40 +141,65 @@ describe('the name in the shell UI', () => {
       }
     }
     // file names keep the Latin name whatever the language
-    expect(await helpBody('install', 'ko')).toContain('IeumOffice-Setup-<version>.exe')
-    expect(await helpBody('getting-started', 'ko')).toContain('이음오피스')
+    expect(await helpBody('install', 'ko')).toContain('tandem-office-Setup-<version>.exe')
+    expect(await helpBody('getting-started', 'ko')).toContain('tandem office')
   })
 })
 
 describe('coexistence with the upstream app on one machine', () => {
   it('installs under its own product id and install name', () => {
-    expect(config.appId).toBe('io.github.pblsketch.ieumoffice')
+    // nor the ones of IeumOffice, the fork this product comes from
+    expect(config.appId).not.toBe('io.github.pblsketch.ieumoffice')
+    expect(config.productName).not.toBe('IeumOffice')
+    expect(config.appId).toBe('io.github.pblsketch.tandemoffice')
     expect(config.appId).not.toBe(UPSTREAM.appId)
     expect(config.productName).not.toBe(UPSTREAM.productName)
-    expect(config.nsis.artifactName).toBe('${productName}-Setup-${version}.${ext}')
+    // the downloaded files carry the name without spaces: GitHub Releases
+    // rewrites spaces in asset names and the update feed must match the file
+    expect(config.nsis.artifactName).toBe('tandem-office-Setup-${version}.${ext}')
     expect(loadBuilderConfig({ GENOFFICE_WIN_ARM64: '1' }).nsis.artifactName).toBe(
-      '${productName}-Setup-${version}-arm64.${ext}',
+      'tandem-office-Setup-${version}-arm64.${ext}',
     )
-    expect(shellPackage.desktopName).toBe('ieumoffice.desktop')
-    expect(config.linux.executableName).toBe('ieumoffice')
-    expect(config.deb.packageName).toBe('ieumoffice')
-    expect(config.deb.artifactName).toBe('ieumoffice_${version}_${arch}.deb')
-    expect(config.rpm.packageName).toBe('ieumoffice')
-    expect(config.rpm.artifactName).toBe('ieumoffice-${version}.${arch}.rpm')
+    expect(config.appImage.artifactName).toBe('tandem-office-${version}.${ext}')
+    expect(config.mac.artifactName).toBe('tandem-office-${version}-${arch}-mac.${ext}')
+    for (const name of [
+      config.nsis.artifactName,
+      config.appImage.artifactName,
+      config.mac.artifactName,
+      config.dmg.artifactName,
+      config.deb.artifactName,
+      config.rpm.artifactName,
+    ]) {
+      expect(name).not.toMatch(/\s|productName/)
+      expect(name.startsWith(PRODUCT_FILE_NAME), name).toBe(true)
+    }
+    expect(shellPackage.desktopName).toBe('tandem-office.desktop')
+    expect(config.linux.executableName).toBe('tandem-office')
+    expect(config.deb.packageName).toBe('tandem-office')
+    expect(config.deb.artifactName).toBe('tandem-office_${version}_${arch}.deb')
+    expect(config.rpm.packageName).toBe('tandem-office')
+    expect(config.rpm.artifactName).toBe('tandem-office-${version}.${arch}.rpm')
   })
 
   it('keeps its settings and data in its own folders', () => {
     // packaged: Electron's default userData is <appData>/<productName>;
     // unpacked runs set DEV_USER_DATA_DIR_NAME explicitly (src/main/index.ts).
     // The single-instance lock lives in userData, so it is separate as well.
-    expect(USER_DATA_DIR_NAME).toBe('IeumOffice')
-    expect(DEV_USER_DATA_DIR_NAME).toBe('IeumOffice-Dev')
+    expect(USER_DATA_DIR_NAME).toBe('tandem office')
+    expect(DEV_USER_DATA_DIR_NAME).toBe('tandem office-Dev')
     const main = readFileSync(join(SHELL, 'src/main/index.ts'), 'utf8')
     expect(main).toContain(
       "app.setPath('userData', join(app.getPath('appData'), DEV_USER_DATA_DIR_NAME))",
     )
-    // nothing may adopt, move or copy a folder the upstream app owns
-    for (const upstreamDir of ['GenOffice-Dev', 'GenOffice Dev', 'AI Office']) {
+    // nothing may adopt, move or copy a folder the upstream app (or IeumOffice,
+    // the fork this product comes from) owns
+    for (const upstreamDir of [
+      'GenOffice-Dev',
+      'GenOffice Dev',
+      'AI Office',
+      'IeumOffice',
+      'IeumOffice-Dev',
+    ]) {
       expect(main, upstreamDir).not.toContain(`'${upstreamDir}'`)
     }
   })
@@ -174,7 +209,8 @@ describe('coexistence with the upstream app on one machine', () => {
     // <local app data>/<packaged package.json name>-updater
     const upstreamName = shellPackage.name
     expect(upstreamName).toBe('@genoffice/shell')
-    expect(config.extraMetadata.name).toBe('ieumoffice')
+    expect(config.extraMetadata.name).toBe(PRODUCT_FILE_NAME)
+    expect(config.extraMetadata.name).not.toBe('ieumoffice')
     expect(config.extraMetadata.name).not.toBe(upstreamName)
     // a plain name survives electron-builder's file-name sanitizing unchanged
     expect(config.extraMetadata.name).toMatch(/^[a-z][a-z0-9-]*$/)
@@ -189,7 +225,8 @@ describe('coexistence with the upstream app on one machine', () => {
     )
     expect(progIds.length).toBeGreaterThan(0)
     for (const progId of progIds) {
-      expect(progId).toMatch(/^IeumOffice\.[A-Za-z][A-Za-z0-9]*$/)
+      expect(progId).toMatch(/^TandemOffice\.[A-Za-z][A-Za-z0-9]*$/)
+      expect(progId.startsWith(`${PRODUCT_ID_NAME}.`)).toBe(true)
       // Windows limits a ProgId to 39 characters
       expect(progId.length, progId).toBeLessThanOrEqual(39)
       expect(UPSTREAM.progIds).not.toContain(progId)
@@ -208,8 +245,8 @@ describe('coexistence with the upstream app on one machine', () => {
     expect(entry, '.xmind is not offered on mac / Linux').toBeTruthy()
     // the same derivation electron-builder.cjs applies to the Windows list;
     // the NSIS Open-With ProgId (build/installer.nsh) spells the same value out
-    const progId = `${PRODUCT_NAME}.${entry!.name.replace(/[^A-Za-z0-9]/g, '')}`
-    expect(progId).toMatch(/^IeumOffice\.[A-Za-z][A-Za-z0-9]*$/)
+    const progId = `${PRODUCT_ID_NAME}.${entry!.name.replace(/[^A-Za-z0-9]/g, '')}`
+    expect(progId).toMatch(/^TandemOffice\.[A-Za-z][A-Za-z0-9]*$/)
     expect(progId.length, progId).toBeLessThanOrEqual(39)
     expect(UPSTREAM.progIds).not.toContain(progId)
     // the label is the product's own word for the type
@@ -231,8 +268,8 @@ describe('coexistence with the upstream app on one machine', () => {
     expect(entry, '.epub is not offered on mac / Linux').toBeTruthy()
     // the same derivation electron-builder.cjs applies to the Windows list;
     // the NSIS Open-With ProgId (build/installer.nsh) spells the same value out
-    const progId = `${PRODUCT_NAME}.${entry!.name.replace(/[^A-Za-z0-9]/g, '')}`
-    expect(progId).toMatch(/^IeumOffice\.[A-Za-z][A-Za-z0-9]*$/)
+    const progId = `${PRODUCT_ID_NAME}.${entry!.name.replace(/[^A-Za-z0-9]/g, '')}`
+    expect(progId).toMatch(/^TandemOffice\.[A-Za-z][A-Za-z0-9]*$/)
     expect(progId.length, progId).toBeLessThanOrEqual(39)
     expect(UPSTREAM.progIds).not.toContain(progId)
     const winExts = config.win.fileAssociations.map((candidate: { ext: string }) => candidate.ext)
@@ -305,7 +342,7 @@ describe('what the installer no longer carries', () => {
       GENOFFICE_GA4_API_SECRET: 'secret',
       GENOFFICE_FONT_CDN_URL: 'https://fonts.example.test/v1',
     }
-    expect(loadBuilderConfig(env).extraMetadata).toEqual({ name: 'ieumoffice' })
+    expect(loadBuilderConfig(env).extraMetadata).toEqual({ name: PRODUCT_FILE_NAME })
     expect(builderSource).not.toMatch(/GA4|FONT_CDN|genofficeAnalytics|genofficeFontCdn/)
   })
 })

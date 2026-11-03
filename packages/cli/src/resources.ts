@@ -3,6 +3,7 @@ import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { PRODUCT_FILE_NAME } from '@genoffice/i18n'
 import { APP_BINARY_NAME, SKILL_NAME } from './names'
 
 /**
@@ -135,7 +136,7 @@ export function bundledSkillPath(): string | null {
 }
 
 /** Linux names the binary from electron-builder's `linux.executableName`; it sits in the product's own /opt folder. */
-const LINUX_APP_BINARY = 'ieumoffice'
+const LINUX_APP_BINARY = PRODUCT_FILE_NAME
 
 export interface AppLaunch {
   command: string
@@ -143,7 +144,7 @@ export interface AppLaunch {
 }
 
 /**
- * How to start the IeumOffice GUI: the app binary that hosts this CLI, an installed app, or the dev checkout.
+ * How to start the tandem office GUI: the app binary that hosts this CLI, an installed app, or the dev checkout.
  * Only this product's own install locations are probed: an upstream GenOffice on the machine is never started.
  */
 export function appLaunch(env: NodeJS.ProcessEnv = process.env): AppLaunch | null {

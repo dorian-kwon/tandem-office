@@ -18,14 +18,22 @@ const { join } = require('node:path')
 // on the machine derives from these: the installer's product id and install
 // folder, the executable name, the userData folder and the Windows ProgIds.
 // None of them may coincide with the upstream GenOffice app, so both can be
-// installed on one machine without touching each other's registration.
-const APP_ID = 'io.github.pblsketch.ieumoffice'
-const PRODUCT_NAME = 'IeumOffice'
-// package.json "name" of the packaged app (the workspace keeps upstream's
-// "@genoffice/shell"): electron-builder and electron-updater name the per-user
-// folder that caches the installer and downloaded updates after it
-// (<local app data>/<name>-updater), so a shared name is a shared folder.
-const PACKAGED_APP_NAME = 'ieumoffice'
+// installed on one machine without touching each other's registration (nor
+// with IeumOffice, the fork this product comes from: it registers
+// io.github.pblsketch.ieumoffice, IeumOffice and ieumoffice).
+const APP_ID = 'io.github.pblsketch.tandemoffice'
+const PRODUCT_NAME = 'tandem office'
+// PRODUCT_NAME without spaces (PRODUCT_FILE_NAME in product.ts): the
+// installer files people download, the Linux executable and packages.
+// package.json "name" of the packaged app is this name as well (the workspace
+// keeps upstream's "@genoffice/shell"): electron-builder and electron-updater
+// name the per-user folder that caches the installer and downloaded updates
+// after it (<local app data>/<name>-updater), so a shared name is a shared folder.
+const PRODUCT_FILE_NAME = 'tandem-office'
+const PACKAGED_APP_NAME = PRODUCT_FILE_NAME
+// PRODUCT_NAME as a registry identifier (PRODUCT_ID_NAME in product.ts): the
+// prefix of the Windows ProgIds, which take no spaces.
+const PRODUCT_ID_NAME = 'TandemOffice'
 const REPO_OWNER = 'pblsketch'
 const REPO_NAME = 'openoffice'
 const MAINTAINER = 'pblsketch <pblsketch@users.noreply.github.com>'
@@ -345,9 +353,9 @@ const WIN_OPEN_WITH_ONLY_EXTS = new Set(['txt', 'json', 'xmind', 'hwp', 'hwpx', 
 // (HKCU\Software\Classes\<name>). The upstream app registers the bare names
 // below ("Word Document"), so sharing them would let either install overwrite
 // the other's open command and either uninstall delete it: Windows gets
-// product-scoped ProgIds instead ("IeumOffice.WordDocument"). The same ids are
+// product-scoped ProgIds instead ("TandemOffice.WordDocument"). The same ids are
 // spelled out in src/main/default-app.ts and build/installer.nsh.
-const winProgId = (name) => `${PRODUCT_NAME}.${name.replace(/[^A-Za-z0-9]/g, '')}`
+const winProgId = (name) => `${PRODUCT_ID_NAME}.${name.replace(/[^A-Za-z0-9]/g, '')}`
 const FILE_ASSOCIATIONS = [
   {
     ext: 'docx',
@@ -663,13 +671,14 @@ const config = {
   // Windows with the unscoped names (and with the two types it must not claim).
   npmRebuild: false,
   mac: {
-    // Two separate arch packages (NOT universal): arm64 keeps the exact
-    // artifact names and update-feed entries it always had, x64 (via
+    // Two separate arch packages (NOT universal): arm64 by default, x64 (via
     // GENOFFICE_MAC_X64=1, see includeMacX64 above) adds the Intel package:
-    // IeumOffice-<v>-x64.dmg (config.dmg.artifactName below) and the
-    // arch-less IeumOffice-<v>-mac.zip. Both zips land in one latest-mac.yml,
+    // tandem-office-<v>-x64.dmg (config.dmg.artifactName below) and
+    // tandem-office-<v>-x64-mac.zip. Both zips land in one latest-mac.yml,
     // which a Mac install only reads for the version. Dual-arch packs ship the
     // same lipo fat xlsx-sidecar (see assertUniversalSidecar above).
+    // the zip's name; the dmg has its own (config.dmg.artifactName below)
+    artifactName: `${PRODUCT_FILE_NAME}-\${version}-\${arch}-mac.\${ext}`,
     target: [
       { target: 'dmg', arch: includeMacX64 ? ['arm64', 'x64'] : ['arm64'] },
       { target: 'zip', arch: includeMacX64 ? ['arm64', 'x64'] : ['arm64'] },
@@ -735,10 +744,8 @@ const config = {
   linux: {
     // AppImage (self-contained, any distro) + deb (apt install, pulls in the
     // GTK/NSS runtime deps) + rpm (dnf/zypper install on Fedora / RHEL /
-    // openSUSE). Default artifact names are kept on purpose —
-    // GenOffice-<v>.AppImage / genoffice_<v>_amd64.deb — because the public
-    // README download links and the already-published linux-v0.5.149 release
-    // use them.
+    // openSUSE). Every file is named with PRODUCT_FILE_NAME: productName has a
+    // space, which GitHub Releases rewrites in asset names.
     target: [
       { target: 'AppImage', arch: ['x64'] },
       { target: 'deb', arch: ['x64'] },
@@ -754,22 +761,22 @@ const config = {
     fileAssociations: FILE_ASSOCIATIONS,
     // Icon SET directory, not the single 1024px png: electron-builder does
     // not resize a lone png, so deb/rpm would install only
-    // hicolor/1024x1024/apps/ieumoffice.png — a size absent from the hicolor
+    // hicolor/1024x1024/apps/tandem-office.png — a size absent from the hicolor
     // theme index, leaving GNOME/KDE launchers on the generic fallback icon
     // (upstream issue #90). The set ships every standard raster size.
     icon: 'build/icons',
     // mac and win name the binary from productName; linux instead derives it
     // from package.json "name", and "@genoffice/shell" sanitizes to the
     // invalid "@genofficeshell". Setting it explicitly also makes the
-    // generated ieumoffice.desktop match the WM_CLASS Electron reports (it
+    // generated tandem-office.desktop match the WM_CLASS Electron reports (it
     // takes that from the executable basename), so the running window links
     // back to its launcher entry.
     executableName: PACKAGED_APP_NAME,
     // Electron takes its X11 app_id from package.json "desktopName"
-    // (ieumoffice.desktop); syncDesktopName makes electron-builder name the
+    // (tandem-office.desktop); syncDesktopName makes electron-builder name the
     // .desktop file and its StartupWMClass from the same value. Without it
-    // StartupWMClass falls back to productName ("IeumOffice"), which does not
-    // match the "ieumoffice" WM_CLASS the window actually reports — and X11
+    // StartupWMClass falls back to productName ("tandem office"), which does not
+    // match the "tandem-office" WM_CLASS the window actually reports — and X11
     // compares case-sensitively, so the taskbar shows an unlinked window.
     syncDesktopName: true,
     extraResources: [
@@ -782,11 +789,11 @@ const config = {
   // Same "@genoffice/shell" problem as executableName above: the default deb
   // artifact name derives from package.json "name", and the scope's "/" makes
   // fpm treat "@genoffice" as a directory. Spell the published name out
-  // (ieumoffice_<version>_amd64.deb) and pin the control Package field so apt
+  // (tandem-office_<version>_amd64.deb) and pin the control Package field so apt
   // treats successive releases as upgrades of the same package and never
   // collides with an upstream genoffice deb install.
   deb: {
-    artifactName: 'ieumoffice_${version}_${arch}.deb',
+    artifactName: `${PRODUCT_FILE_NAME}_\${version}_\${arch}.deb`,
     packageName: PACKAGED_APP_NAME,
     // Ubuntu 24.04 (and Debian 13) rebuilt part of the X/GTK stack for 64-bit
     // time_t and renamed those packages with a "t64" suffix: where the old
@@ -825,7 +832,7 @@ const config = {
   // the rpm is a GitHub-Release download only, so latest-linux.yml lists
   // AppImage + deb.
   rpm: {
-    artifactName: 'ieumoffice-${version}.${arch}.rpm',
+    artifactName: `${PRODUCT_FILE_NAME}-\${version}.\${arch}.rpm`,
     packageName: PACKAGED_APP_NAME,
     publish: null,
     afterInstall: 'build/linux-after-install.sh',
@@ -844,8 +851,8 @@ const config = {
     // no spaces: GitHub Releases rewrites them in asset names, and the update
     // feed must name the file exactly as it is downloaded
     artifactName: winArm64
-      ? '${productName}-Setup-${version}-arm64.${ext}'
-      : '${productName}-Setup-${version}.${ext}',
+      ? `${PRODUCT_FILE_NAME}-Setup-\${version}-arm64.\${ext}`
+      : `${PRODUCT_FILE_NAME}-Setup-\${version}.\${ext}`,
   },
   beforePack: async (context) => {
     ensurePlatformHelpers()
@@ -863,6 +870,9 @@ const config = {
         `win extraResources source missing: ${WIN_SIDECAR} (cargo build --target ${winSidecarTarget} first)`,
       )
     }
+  },
+  appImage: {
+    artifactName: `${PRODUCT_FILE_NAME}-\${version}.\${ext}`,
   },
   dmg: {
     sign: true,
@@ -918,7 +928,7 @@ config.dmg.sign = false
 // Every dmg names its CPU (decision 0065). electron-builder leaves the arch
 // out of an x64 name, which would make the Intel dmg the one without a label;
 // the arm64 name stays the one the site and the README point at.
-config.dmg.artifactName = '${productName}-${version}-${arch}.${ext}'
+config.dmg.artifactName = `${PRODUCT_FILE_NAME}-\${version}-\${arch}.\${ext}`
 
 // Auto-update feed: the releases of the public repository. Always configured,
 // so every installer carries an app-update.yml and can update itself — the
