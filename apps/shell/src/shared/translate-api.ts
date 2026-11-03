@@ -1,4 +1,4 @@
-import type { OcrMode, ProjectFile } from '@genoffice/translate-project'
+import type { OcrMode, ProjectFile, ReferenceStatus } from '@genoffice/translate-project'
 import type { OcrPageImage, OcrPageResult, OcrPrepared, OcrWritten } from './translate-ocr'
 import type {
   TranslatePdfPrepared,
@@ -42,9 +42,27 @@ export const TRANSLATE_CHANNELS = {
   pickExisting: 'translate:pick-existing',
   relocate: 'translate:relocate',
   recent: 'translate:recent',
+  referenceStatus: 'translate:reference-status',
+  referenceText: 'translate:reference-text',
 } as const
 
 export type TranslateMaterialKind = 'source' | 'reference' | 'glossary'
+
+/** how a reference file stands in the keyword index (packages/translate-project reference-index.ts) */
+export type TranslateReferenceStatus = ReferenceStatus
+
+export interface TranslateReferenceTextArgs {
+  dir: string
+  /** a plain file name listed in the project's references */
+  file: string
+}
+
+/** the converted markdown of one reference, for reading only */
+export interface TranslateReferenceText {
+  text: string
+  /** the text was longer than the screen shows (REFERENCE_VIEW_MAX_CHARS) */
+  truncated: boolean
+}
 
 export type TranslateProjectStatus = 'ok' | 'not-found' | 'invalid'
 
@@ -203,14 +221,19 @@ export interface TranslateContextSummary {
   glossaryTotal: number
   /** over this many entries, each request carries only the entries whose terms appear in it */
   glossaryLimit: number
-  /** reference file names (their names only; contents are never sent) */
+  /** reference file names; excerpts picked by each request's words go with it (`references`) */
   referenceNames: string[]
 }
 
-/** the translation context of one request: the person's prompts, and the glossary as material */
+/**
+ * the translation context of one request: the person's prompts, the glossary as material,
+ * and the reference excerpts picked for the request text
+ */
 export interface TranslateInstructions {
   prompts: string
   material: string
+  /** labelled reference chunks ('' when none) */
+  references: string
   summary: TranslateContextSummary
 }
 
@@ -315,6 +338,13 @@ export interface TranslateApi {
   ocrWrite(args: TranslateOcrWriteArgs): Promise<OcrWritten>
   /** drop the token (closing the dialog, stopping) */
   ocrRelease(token: string): Promise<void>
+  /**
+   * each reference's conversion status; converts first what the index does not know yet
+   * (references added before it existed, or changed in the folder)
+   */
+  referenceStatus(dir: string): Promise<Record<string, TranslateReferenceStatus>>
+  /** the converted text of a converted reference, read-only (nothing can be written back) */
+  referenceText(args: TranslateReferenceTextArgs): Promise<TranslateReferenceText>
   /** the project's translation context for one request (prompts, glossary picked by `text`) */
   instructionsFor(args: TranslateInstructionsForArgs): Promise<TranslateInstructions>
   /** read a text PDF's document tree under a token for the translation job; sends nothing */

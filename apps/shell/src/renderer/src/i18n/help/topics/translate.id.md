@@ -24,7 +24,8 @@ Proyek terjemahan menyimpan dokumen yang ingin Anda terjemahkan, materi acuan, d
 
 ## File acuan
 
-- Bersama permintaan terjemahan, hanya nama file acuan yang dikirim, bukan isinya.
+- Saat Anda menambahkan file acuan, aplikasi mengonversinya ke teks (disimpan di `references/.md/`; file itu sendiri tidak pernah diubah) dan mengindeks kata-katanya. Setiap permintaan terjemahan membawa bagian yang paling cocok dengan teks yang diterjemahkan, hingga 6.000 karakter, bersama nama file. Jika seluruh teks acuan tidak lebih panjang dari itu, semuanya dikirim.
+- Di detail proyek, setiap file acuan menunjukkan statusnya: **Dikonversi ke teks** (buka dengan **Lihat teks hasil konversi**, hanya baca), **Perlu OCR** (hasil pindaian atau gambar: tidak ada yang dikirim; tambahkan sebagai dokumen yang akan diterjemahkan, baca dengan OCR, lalu tambahkan dokumen Word hasilnya sebagai acuan) atau **Tidak dapat dibaca**.
 - Bila perlu, AI dapat membaca file acuan melalui alat proyek.
 
 ## PDF hasil pindai dan gambar (OCR)

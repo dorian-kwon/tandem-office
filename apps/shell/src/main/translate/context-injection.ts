@@ -1,13 +1,16 @@
 import {
   composeContext,
   DEFAULT_GLOSSARY_LIMIT,
+  DEFAULT_REFERENCE_CHARS,
   loadGlossary,
   loadProject,
   projectStatus,
+  queryReferences,
   selectGlossary,
   type ComposedContext,
   type GlossaryEntry,
   type ProjectFile,
+  type ReferenceChunk,
 } from '@genoffice/translate-project'
 import type { ProjectTranslationItem } from '@genoffice/project-store'
 import { readTranslationProjects, readTranslationSystemPrompt } from '../app-settings'
@@ -26,7 +29,10 @@ import { canonicalPath, samePath } from '../projects/paths'
 export interface TranslationContextOptions {
   /** `<userData>/app-settings.json`: the global system prompt and the registered list */
   settingsPath: string
-  /** the text never gets longer than this; default INSTRUCTIONS_LIMIT_CHARS (32,000) */
+  /**
+   * the text and the reference chunks together never get longer than this;
+   * default INSTRUCTIONS_LIMIT_CHARS (32,000)
+   */
   limitChars?: number
   platform?: NodeJS.Platform
 }
@@ -76,6 +82,8 @@ function cutAt(text: string, limit: number): string {
  *   "translate this" still carries terms.
  * Over `limitChars`, whole entries are dropped from the end until the text
  * fits; if the prompts alone are over it, the text is cut there (`cut`).
+ * Reference chunks (`referencesText`) are picked by the same request text
+ * and fill what room the text leaves, up to DEFAULT_REFERENCE_CHARS.
  *
  * `options` (a deviation from the plan's two-argument form) carries the
  * settings path, which is per process.
@@ -100,7 +108,43 @@ export async function buildTranslationInstructions(
     candidates = matching.length > 0 ? matching : glossary.slice(0, DEFAULT_GLOSSARY_LIMIT)
     selection = matching.length > 0 ? 'matching' : 'first'
   }
-  return fitted(systemPrompt, project, candidates, glossary.length, selection, limit)
+  const built = fitted(systemPrompt, project, candidates, glossary.length, selection, limit)
+  return withReferences(dir, built, systemPrompt, project, paragraph, limit)
+}
+
+/**
+ * The reference chunks for `paragraph` (reference-index.ts) in the room the
+ * text left under `limit`, at most DEFAULT_REFERENCE_CHARS characters of
+ * chunk text: BM25 over the request text, or every chunk when all of them
+ * fit. Labelled chunks that still overflow the room are dropped from the end.
+ * An unreadable index sends no chunk; it never fails the request.
+ */
+async function withReferences(
+  dir: string,
+  built: TranslationInstructions,
+  systemPrompt: string,
+  project: ProjectFile,
+  paragraph: string,
+  limit: number,
+): Promise<TranslationInstructions> {
+  const none = { ...built, referencesText: '', referenceChunks: 0 }
+  const room = limit - built.text.length - 2
+  if (built.cut || room <= 0 || project.references.length === 0) return none
+  let chunks: ReferenceChunk[]
+  try {
+    chunks = await queryReferences(dir, paragraph, Math.min(DEFAULT_REFERENCE_CHARS, room))
+  } catch {
+    return none
+  }
+  const label = (list: ReferenceChunk[]) =>
+    composeContext({ systemPrompt, project, glossary: [], paragraph: '', references: list })
+      .referencesText
+  let text = label(chunks)
+  while (chunks.length > 0 && text.length > room) {
+    chunks = chunks.slice(0, -1)
+    text = label(chunks)
+  }
+  return { ...built, referencesText: text, referenceChunks: chunks.length }
 }
 
 function fitted(
@@ -161,6 +205,8 @@ function fitted(
 export interface TranslationFolderContext {
   prompts: string
   material: string
+  /** the reference chunks picked for the request, labelled ('' when none) */
+  references: string
   items: ProjectTranslationItem[]
   cut: boolean
 }
@@ -221,6 +267,7 @@ export async function translationContextForFolder(
   return {
     prompts: `${built.promptText}\n\n${TRANSLATION_EDITING_RULES}`,
     material: built.materialText,
+    references: built.referencesText,
     cut: built.cut,
     items: [
       { kind: 'system', included: included('system') },

@@ -136,7 +136,7 @@ export const pl = {
     'Wszystko jest już przetłumaczone. Nic nie jest wysyłane; PDF powstaje z zapisanego tłumaczenia.',
   trConfirmProvider: 'Używane AI: {provider}',
   trConfirmSends:
-    'Tekst dokumentu jest wysyłany do tego AI wraz z Twoimi promptami tłumaczenia, glosariuszem (w całości, gdy jest mały, w przeciwnym razie wpisami, których terminy występują w tekście) i nazwami plików referencyjnych (bez ich zawartości).',
+    'Tekst dokumentu jest wysyłany do tego AI wraz z Twoimi promptami tłumaczenia, glosariuszem (w całości, gdy jest mały, w przeciwnym razie wpisami, których terminy występują w tekście), nazwami plików referencyjnych i fragmentami ich tekstu najlepiej pasującymi do każdego żądania (do 6000 znaków).',
   trConfirmPaid: '{provider} naliczy za to opłatę',
   trProviderChange: 'Wcześniejszą część przetłumaczono przy użyciu {before}; reszta używa {after}.',
   trBilingual: 'Dwujęzycznie: tłumaczenie obok każdej oryginalnej strony',
@@ -188,5 +188,18 @@ export const pl = {
   ctxGlossaryPerBlock:
     'Glosariusz: {count} wpisów, więcej niż {limit}, więc każde żądanie zawiera tylko wpisy, których terminy występują w jego blokach tekstu',
   ctxReferencesNone: 'Pliki referencyjne: brak',
-  ctxReferences: 'Nazwy plików referencyjnych ({count}, tylko nazwy, nigdy zawartość): {names}',
+  ctxReferences:
+    'Pliki referencyjne ({count}): {names}. Każde żądanie zawiera też fragmenty ich przekonwertowanego tekstu, które najlepiej do niego pasują (do 6000 znaków).',
+  refConverted: 'Przekonwertowano na tekst',
+  refNeedsOcr: 'Wymaga OCR',
+  refNeedsOcrHint:
+    'Ten plik nie ma warstwy tekstowej, więc nic z niego nie jest wysyłane. Aby go użyć, dodaj go jako dokument do tłumaczenia, odczytaj przez OCR i dodaj tutaj powstały dokument Word.',
+  refFailed: 'Nie udało się odczytać',
+  refUnsupported: 'To nie jest format tekstowy',
+  refChecking: 'Sprawdzanie…',
+  viewConverted: 'Pokaż przekonwertowany tekst',
+  convertedTitle: 'Przekonwertowany tekst: {name}',
+  convertedReadOnly:
+    'Tylko do odczytu. Fragmenty tego tekstu mogą być wysyłane do AI wraz z żądaniami; sam plik nigdy nie jest zmieniany.',
+  convertedTruncated: 'Tekst jest długi; pokazano tylko jego początek.',
 } satisfies Record<keyof typeof zh, string>

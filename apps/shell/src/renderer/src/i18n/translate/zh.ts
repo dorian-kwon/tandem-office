@@ -124,7 +124,7 @@ export const zh = {
   trConfirmNothing: '全部内容都已翻译。不会发送任何内容；PDF 将根据已保存的译文生成。',
   trConfirmProvider: '使用的 AI：{provider}',
   trConfirmSends:
-    '文档的文字会连同您的翻译提示词、术语表（较少时发送全部，否则只发送其词条出现在文中的部分）以及参考文件的名称（不含内容）一起发送给这个 AI。',
+    '文档的文字会连同您的翻译提示词、术语表（较少时发送全部，否则只发送其词条出现在文中的部分）、参考文件的名称，以及每次请求中与该请求最匹配的参考文字片段（最多 6,000 个字符）一起发送给这个 AI。',
   trConfirmPaid: '{provider} 会为此收费',
   trProviderChange: '之前的部分由 {before} 翻译，其余部分使用 {after}。',
   trBilingual: '双语：译文显示在每页原文旁边',
@@ -170,5 +170,17 @@ export const zh = {
   ctxGlossaryPerBlock:
     '术语表：{count} 个条目，超过 {limit} 个，因此每次请求只附带在其文本块中出现的术语条目',
   ctxReferencesNone: '参考资料：无',
-  ctxReferences: '参考资料文件名 {count} 个（仅名称，从不发送内容）：{names}',
+  ctxReferences:
+    '参考资料文件 {count} 个：{names}。每次请求还会附带转换后文字中与该请求最匹配的部分（最多 6,000 个字符）。',
+  refConverted: '已转换为文字',
+  refNeedsOcr: '需要 OCR',
+  refNeedsOcrHint:
+    '此文件没有文字层，因此不会发送任何内容。如需使用，请将其添加为待翻译文档，用 OCR 读取，再把生成的 Word 文档添加到这里。',
+  refFailed: '无法读取',
+  refUnsupported: '不是文字格式',
+  refChecking: '正在检查…',
+  viewConverted: '查看转换后的文字',
+  convertedTitle: '转换后的文字：{name}',
+  convertedReadOnly: '只读。这段文字的部分内容可能随请求发送给 AI；文件本身不会被更改。',
+  convertedTruncated: '文字较长，只显示开头部分。',
 }

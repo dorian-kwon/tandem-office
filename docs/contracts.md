@@ -469,13 +469,15 @@ metadata:
 ```
 <번역 프로젝트 폴더>/
 ├── source/       원본 사본(더할 때 복사, 앱은 다시 쓰지 않는다)
-├── references/   참고자료 사본(AI에는 이름만 간다)
+├── references/   참고자료 사본(앱은 다시 쓰지 않는다)
+│   └── .md/      변환한 글 `<참고자료 이름>.md`(색인이 다시 만든다)
 ├── glossary/     단어집 사본(.csv, .txt, .xlsx)
 ├── output/       번역 결과(편집할 수 있는 원본의 같은 이름 사본, `<이름>.<언어>.pdf`, `<이름> (OCR).docx`)
 └── .tandem/
     ├── project.json
     ├── glossary.json
-    └── source-kinds.json
+    ├── source-kinds.json
+    └── references-index.json
 ```
 
 - 같은 이름의 파일을 더하면 `이름 (2).확장자`처럼 번호를 붙이고, 아무것도 덮어쓰지 않는다. 원본은 `source/`와 `output/` 둘 다에 없는 이름을 받는다(지운 원본의 번역이 `output/`에 남기 때문이다).
@@ -486,6 +488,8 @@ metadata:
 **`glossary.json`** — `glossary/`의 파일들을 차례대로 읽어 합친 항목 목록 `[{ "source", "target", "note"? }]`. 원어와 번역어가 같은 항목은 한 번만 둔다. 단어집을 더하거나 뺄 때마다 다시 만든다. 없으면 단어집이 없는 것이다. 단어집 파일은 첫 열이 원어, 둘째 열이 번역어, 셋째 열이 메모이고, 첫 줄이 두 열의 이름(source/target, term/translation, 원어/번역어 등)이면 건너뛴다. 글은 UTF-16(바이트 순서 표시가 있거나 0 바이트로 알아볼 때), UTF-8, CP949 순으로 읽는다.
 
 **`source-kinds.json`** — `{ "version": 1, "chosen": { "<source 파일 이름>": { "sha256", "kind" } } }`. 사람이 PDF를 "텍스트 PDF"나 "스캔 PDF"로 고친 선택이다. 해시가 같은 사본에만 적용되고, 고르는 길은 `project.json`의 `kind`가 이긴다. 없거나 망가졌으면 고른 것이 없다.
+
+**`references-index.json`** — `{ "version": 1, "files": [{ "file", "sha256", "status", "mdSha256"?, "chunks": [{ "heading", "offset", "length", "terms" }] }] }`. 참고자료마다 원본 SHA-256, 상태(`converted`, `needs-ocr`, `unsupported`, `failed`), 변환한 글 `references/.md/<file>.md`의 SHA-256, 조각(제목, 그 글 안의 위치와 길이, 낱말 빈도)이다. 원본이나 변환한 글의 해시가 바뀌면 다시 변환한다. 없거나 망가졌으면 빈 색인으로 읽고 다시 만든다. 조각의 글은 변환한 글에서 위치로 읽는다. 낱말은 NFKC와 소문자로 맞추고, 한중일 글자는 두 글자씩, 그 밖은 글자와 숫자의 묶음이다.
 
 **이 PC에만 두는 것.** `app-settings.json`의 `translationSystemPrompt`(모든 프로젝트의 시스템 프롬프트)와 `translationProjects`(`{ dir, lastOpened, listed? }`의 목록. `listed`는 프로젝트 폴더 목록에 한 번 올렸다는 표시).
 

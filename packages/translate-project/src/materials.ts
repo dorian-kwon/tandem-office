@@ -4,6 +4,11 @@ import { basename, join } from 'node:path'
 import { parseGlossary, type GlossaryEntry } from './glossary'
 import type { ProjectFile } from './project-file'
 import { withProjectLock } from './project-lock'
+import {
+  syncReferenceIndex,
+  type ReferenceConverter,
+  type ReferenceStatus,
+} from './reference-index'
 import { loadProject, saveProject } from './project-store'
 import { copyIntoWithSuffix, importSource } from './source-guard'
 
@@ -57,7 +62,29 @@ export function removeSource(dir: string, file: string): Promise<ProjectFile> {
   })
 }
 
-export function addReference(dir: string, originalPath: string): Promise<ProjectFile> {
+export interface ReferenceOptions {
+  /**
+   * converts a reference file to markdown for the keyword index (the shell
+   * passes file-parse's reader); absent: the index is left as it is
+   */
+  convert?: ReferenceConverter
+}
+
+/** Index the references; a failure here never fails the material change (reference-index.ts). */
+async function syncQuietly(
+  dir: string,
+  files: readonly string[],
+  convert: ReferenceConverter | undefined,
+): Promise<void> {
+  if (!convert) return
+  await syncReferenceIndex(dir, files, convert).catch(() => undefined)
+}
+
+export function addReference(
+  dir: string,
+  originalPath: string,
+  options: ReferenceOptions = {},
+): Promise<ProjectFile> {
   return withProjectLock(dir, async () => {
     const project = await loadProject(dir)
     const name = await copyIntoWithSuffix(join(dir, 'references'), originalPath)
@@ -68,11 +95,16 @@ export function addReference(dir: string, originalPath: string): Promise<Project
       await removeQuietly(join(dir, 'references', name))
       throw e
     }
+    await syncQuietly(dir, next.references, options.convert)
     return next
   })
 }
 
-export function removeReference(dir: string, file: string): Promise<ProjectFile> {
+export function removeReference(
+  dir: string,
+  file: string,
+  options: ReferenceOptions = {},
+): Promise<ProjectFile> {
   return withProjectLock(dir, async () => {
     assertPlainName(file)
     const project = await loadProject(dir)
@@ -80,7 +112,23 @@ export function removeReference(dir: string, file: string): Promise<ProjectFile>
     const next = { ...project, references: project.references.filter((r) => r !== file) }
     await saveProject(dir, next)
     await rm(join(dir, 'references', file), { force: true })
+    await syncQuietly(dir, next.references, options.convert)
     return next
+  })
+}
+
+/**
+ * Bring the reference index in line with the project's list under the
+ * project lock: references added before the index existed, or changed in
+ * references/ by hand, are converted again. Answers each file's status.
+ */
+export function refreshReferences(
+  dir: string,
+  convert: ReferenceConverter,
+): Promise<Record<string, ReferenceStatus>> {
+  return withProjectLock(dir, async () => {
+    const project = await loadProject(dir)
+    return syncReferenceIndex(dir, project.references, convert)
   })
 }
 

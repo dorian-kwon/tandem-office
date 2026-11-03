@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -7,6 +15,7 @@ import {
   addReference,
   composeContext,
   createProject,
+  DEFAULT_REFERENCE_CHARS,
   loadProject,
   saveProject,
   type GlossaryEntry,
@@ -250,5 +259,60 @@ describe('translationContextForFolder', () => {
     writeTranslationProjects(settingsPath, [{ dir, lastOpened: 1 }])
     writeFileSync(join(dir, '.tandem', 'project.json'), '{broken')
     expect(await translationContextForFolder(dir, { settingsPath })).toBeNull()
+  })
+})
+
+describe('reference chunks', () => {
+  const asText = async (path: string) => ({ ok: true as const, md: readFileSync(path, 'utf8') })
+
+  async function addTextReference(name: string, body: string): Promise<void> {
+    const path = join(root, name)
+    writeFileSync(path, body)
+    await addReference(dir, path, { convert: asText })
+  }
+
+  const filler = (word: string, n = 400) => `${word} `.repeat(n).trim()
+
+  it('picks the chunks that match the request text, apart from the glossary material', async () => {
+    await addTextReference(
+      'law.md',
+      ['# Liability', `liability clause ${filler('law')}`, '# Weather', filler('rain')].join(
+        '\n\n',
+      ),
+    )
+    await addTextReference('guide.md', ['# Style', filler('style', 1500)].join('\n\n'))
+    const built = await buildTranslationInstructions(dir, 'the liability clause', { settingsPath })
+    expect(built.referencesText).toContain('[law.md — Liability]')
+    expect(built.referencesText).not.toContain('rain rain')
+    expect(built.referencesText.length).toBeLessThanOrEqual(DEFAULT_REFERENCE_CHARS + 200)
+    expect(built.text).not.toContain('liability clause')
+    expect(built.materialText).toContain('- law.md')
+  })
+
+  it('sends a small corpus whole, whatever the request', async () => {
+    await addTextReference('a.md', '# One\n\nfirst words')
+    const built = await buildTranslationInstructions(dir, '', { settingsPath })
+    expect(built.referencesText).toBe('[a.md — One]\n# One\n\nfirst words')
+  })
+
+  it('a reference that needs OCR adds no chunk and blocks nothing', async () => {
+    const path = join(root, 'scan.png')
+    writeFileSync(path, 'png')
+    await addReference(dir, path, { convert: async () => ({ ok: false, reason: 'needs-ocr' }) })
+    const built = await buildTranslationInstructions(dir, 'anything', { settingsPath })
+    expect(built.referencesText).toBe('')
+    expect(built.materialText).toContain('- scan.png')
+  })
+
+  it('the folder context carries the chunks within the limit', async () => {
+    writeTranslationProjects(settingsPath, [{ dir, lastOpened: 1 }])
+    await addTextReference('a.md', `# One\n\n${filler('first', 300)}`)
+    const context = await translationContextForFolder(dir, { settingsPath }, 'first')
+    expect(context?.references).toContain('[a.md — One]')
+    const small = await translationContextForFolder(dir, { settingsPath, limitChars: 900 }, 'first')
+    const total =
+      (small?.prompts.length ?? 0) + (small?.material.length ?? 0) + (small?.references.length ?? 0)
+    expect(total).toBeLessThanOrEqual(900)
+    expect(small?.references).toBe('')
   })
 })

@@ -138,7 +138,7 @@ export const nl = {
     'Alles is al vertaald. Er wordt niets verstuurd; de PDF wordt gemaakt van de opgeslagen vertaling.',
   trConfirmProvider: 'Gebruikte AI: {provider}',
   trConfirmSends:
-    'De tekst van het document wordt naar deze AI gestuurd, samen met je vertaalprompts, de woordenlijst (helemaal als die klein is, anders de items waarvan de termen in de tekst voorkomen) en de namen van de referentiebestanden (niet hun inhoud).',
+    'De tekst van het document wordt naar deze AI gestuurd, samen met je vertaalprompts, de woordenlijst (helemaal als die klein is, anders de items waarvan de termen in de tekst voorkomen), de namen van de referentiebestanden en de delen van hun tekst die het best bij elk verzoek passen (tot 6.000 tekens).',
   trConfirmPaid: '{provider} brengt hiervoor kosten in rekening',
   trProviderChange: 'Het eerdere deel is vertaald met {before}; de rest gebruikt {after}.',
   trBilingual: 'Tweetalig: de vertaling naast elke originele pagina',
@@ -191,5 +191,18 @@ export const nl = {
   ctxGlossaryPerBlock:
     'Woordenlijst: {count} items, meer dan {limit}, dus elk verzoek bevat alleen de items waarvan de term in de tekstblokken voorkomt',
   ctxReferencesNone: 'Referentiebestanden: geen',
-  ctxReferences: 'Namen van referentiebestanden ({count}, alleen namen, nooit de inhoud): {names}',
+  ctxReferences:
+    'Referentiebestanden ({count}): {names}. Elk verzoek bevat ook de delen van hun omgezette tekst die er het best bij passen (tot 6.000 tekens).',
+  refConverted: 'Omgezet naar tekst',
+  refNeedsOcr: 'OCR nodig',
+  refNeedsOcrHint:
+    'Dit bestand heeft geen tekstlaag, dus er wordt niets van verstuurd. Om het te gebruiken voeg je het toe als te vertalen document, lees je het met OCR en voeg je het resulterende Word-document hier toe.',
+  refFailed: 'Kan niet worden gelezen',
+  refUnsupported: 'Geen tekstformaat',
+  refChecking: 'Controleren…',
+  viewConverted: 'Omgezette tekst bekijken',
+  convertedTitle: 'Omgezette tekst: {name}',
+  convertedReadOnly:
+    'Alleen-lezen. Delen van deze tekst kunnen met verzoeken naar de AI gaan; het bestand zelf wordt nooit gewijzigd.',
+  convertedTruncated: 'De tekst is lang; alleen het begin wordt getoond.',
 } satisfies Record<keyof typeof zh, string>

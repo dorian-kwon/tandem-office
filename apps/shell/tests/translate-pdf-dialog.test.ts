@@ -219,7 +219,8 @@ describe('PdfTranslateDialog', () => {
     expect(text).toContain('System prompt for all projects: yes')
     expect(text).toContain('Project prompt: none (empty)')
     expect(text).toContain('350 entries, more than 200')
-    expect(text).toContain('Reference file names (2')
+    expect(text).toContain('Reference files (2): style.pdf, terms.docx')
+    expect(text).toContain('parts of their converted text that best match it')
     expect(text).toContain('style.pdf, terms.docx')
     expect(send).not.toHaveBeenCalled()
     expect(stored).toEqual([])
@@ -500,7 +501,9 @@ describe('PdfTranslateDialog after the review', () => {
   it('says which AI is used and what goes with the text', async () => {
     await render()
     expect(host.querySelector('[data-hint="app-ai"]')?.textContent).toContain('AI to use')
-    expect(host.textContent).toContain('names of the reference files (not their contents)')
+    expect(host.textContent).toContain(
+      'the names of the reference files and the parts of their text that best match each request',
+    )
   })
 })
 
@@ -517,6 +520,7 @@ describe('ProjectDetail PDF kind', () => {
     ;(window as unknown as { translateApi: unknown }).translateApi = {
       ...api,
       getProject: vi.fn(async () => project()),
+      referenceStatus: vi.fn(async () => ({})),
       setSourceKind,
     }
     await act(async () => {
@@ -560,6 +564,7 @@ describe('TranslationPanel mounting', () => {
         },
       ]),
       getProject: vi.fn(async () => project()),
+      referenceStatus: vi.fn(async () => ({})),
       getSystemPrompt: vi.fn(async () => ''),
       openTranslation: openTranslationMock,
       openResult: openResultMock,

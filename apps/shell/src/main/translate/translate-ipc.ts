@@ -14,6 +14,8 @@ import {
   NotAProjectError,
   parseProjectFile,
   projectStatus,
+  readConvertedReference,
+  refreshReferences,
   removeGlossary,
   removeProject,
   removeReference,
@@ -21,7 +23,9 @@ import {
   saveProject,
   withProjectLock,
   type ProjectFile,
+  type ReferenceConverter,
 } from '@genoffice/translate-project'
+import { convertReference } from './reference-convert'
 import { PickAllowlist } from './pick-allowlist'
 import { createOcrService, type OcrService, type OcrServiceDeps } from './ocr'
 import { buildTranslationInstructions } from './context-injection'
@@ -69,6 +73,9 @@ import {
   type TranslatePickedParentDir,
   type TranslateProjectListEntry,
   type TranslateRecentDocument,
+  type TranslateReferenceStatus,
+  type TranslateReferenceText,
+  type TranslateReferenceTextArgs,
   type TranslateRemoveArgs,
   type TranslateRelocateArgs,
   type TranslateRemoveMaterialArgs,
@@ -113,7 +120,15 @@ export interface TranslateIpcDeps {
    * never deleted while it does. Absent: nothing is open (tests).
    */
   isPathOpen?: (dir: string) => boolean
+  /**
+   * a reference file as markdown for the keyword index; absent: file-parse's reader
+   * (reference-convert.ts). Tests inject one.
+   */
+  convertReference?: ReferenceConverter
 }
+
+/** the converted text the detail screen shows at most (a whole book is far shorter) */
+export const REFERENCE_VIEW_MAX_CHARS = 2_000_000
 
 /** the longest request text the glossary entries are picked by (a batch is far shorter) */
 export const INSTRUCTIONS_TEXT_LIMIT = 400_000
@@ -190,6 +205,8 @@ export function createTranslateHandlers(deps: TranslateIpcDeps) {
     setSourceKind: guard(raw.setSourceKind),
     pickExisting: guard(raw.pickExisting),
     relocate: guard(raw.relocate),
+    referenceStatus: guard(raw.referenceStatus),
+    referenceText: guard(raw.referenceText),
   }
 }
 
@@ -208,6 +225,7 @@ function createRawHandlers(deps: TranslateIpcDeps) {
   const materialPicks = new PickAllowlist<TranslateMaterialKind>(deps.now, deps.newToken)
   const parentPicks = new PickAllowlist<null>(deps.now, deps.newToken)
   const newToken = deps.newToken ?? (() => randomUUID())
+  const convert: ReferenceConverter = deps.convertReference ?? convertReference
   const ocrService: OcrService | null = deps.ocr
     ? createOcrService(deps.ocr, deps.now, newToken)
     : null
@@ -517,7 +535,7 @@ function createRawHandlers(deps: TranslateIpcDeps) {
         kind === 'source'
           ? await addSource(dir, path)
           : kind === 'reference'
-            ? await addReference(dir, path)
+            ? await addReference(dir, path, { convert })
             : await addGlossary(dir, path)
       materialPicks.consume(token, args.index)
       return next
@@ -591,6 +609,7 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       return {
         prompts: built.promptText,
         material: built.materialText,
+        references: built.referencesText,
         summary: {
           systemPrompt: readTranslationSystemPrompt(settingsPath).trim() !== '',
           projectPrompt: project.projectPrompt.trim() !== '',
@@ -599,6 +618,24 @@ function createRawHandlers(deps: TranslateIpcDeps) {
           referenceNames: [...project.references],
         },
       }
+    },
+
+    async referenceStatus(dirArg: string): Promise<Record<string, TranslateReferenceStatus>> {
+      const dir = registeredDir(dirArg)
+      return refreshReferences(dir, convert)
+    },
+
+    async referenceText(args: TranslateReferenceTextArgs): Promise<TranslateReferenceText> {
+      const dir = registeredDir(args?.dir)
+      const file = requireString(args.file, 'file')
+      const project = await loadProject(dir)
+      const text = project.references.includes(file)
+        ? await readConvertedReference(dir, file)
+        : null
+      if (text === null)
+        throw new TranslateIpcError('NOT_LISTED', 'this reference has no converted text')
+      const truncated = text.length > REFERENCE_VIEW_MAX_CHARS
+      return { text: truncated ? text.slice(0, REFERENCE_VIEW_MAX_CHARS) : text, truncated }
     },
 
     async pickExisting(): Promise<TranslateAdoptedProject | null> {
@@ -674,7 +711,7 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       const kind = requireKind(args.kind)
       const file = requireString(args.file, 'file')
       if (kind === 'source') return removeSource(dir, file)
-      if (kind === 'reference') return removeReference(dir, file)
+      if (kind === 'reference') return removeReference(dir, file, { convert })
       return removeGlossary(dir, file)
     },
   }
@@ -782,4 +819,8 @@ export function registerTranslateIpc(
   )
   handle(TRANSLATE_CHANNELS.pickExisting, () => h.pickExisting())
   handle(TRANSLATE_CHANNELS.relocate, (_e, args: TranslateRelocateArgs) => h.relocate(args))
+  handle(TRANSLATE_CHANNELS.referenceStatus, (_e, dir: string) => h.referenceStatus(dir))
+  handle(TRANSLATE_CHANNELS.referenceText, (_e, args: TranslateReferenceTextArgs) =>
+    h.referenceText(args),
+  )
 }

@@ -125,7 +125,7 @@ export const zhTW = {
   trConfirmNothing: '全部內容都已翻譯。不會傳送任何內容；PDF 將根據已儲存的譯文產生。',
   trConfirmProvider: '使用的 AI：{provider}',
   trConfirmSends:
-    '文件的文字會連同您的翻譯提示詞、詞彙表（較少時傳送全部，否則只傳送其詞條出現在文中的部分）以及參考檔案的名稱（不含內容）一起傳送給這個 AI。',
+    '文件的文字會連同您的翻譯提示詞、詞彙表（較少時傳送全部，否則只傳送其詞條出現在文中的部分）、參考檔案的名稱，以及每次請求中與該請求最相符的參考文字片段（最多 6,000 個字元）一起傳送給這個 AI。',
   trConfirmPaid: '{provider} 會為此收費',
   trProviderChange: '先前的部分由 {before} 翻譯，其餘部分使用 {after}。',
   trBilingual: '雙語：譯文顯示在每頁原文旁邊',
@@ -171,5 +171,17 @@ export const zhTW = {
   ctxGlossaryPerBlock:
     '詞彙表：{count} 個項目，超過 {limit} 個，因此每次請求只附上在其文字區塊中出現的術語項目',
   ctxReferencesNone: '參考資料：無',
-  ctxReferences: '參考資料檔名 {count} 個（僅名稱，從不傳送內容）：{names}',
+  ctxReferences:
+    '參考資料檔案 {count} 個：{names}。每次請求還會附帶轉換後文字中與該請求最相符的部分（最多 6,000 個字元）。',
+  refConverted: '已轉換為文字',
+  refNeedsOcr: '需要 OCR',
+  refNeedsOcrHint:
+    '此檔案沒有文字層，因此不會傳送任何內容。如需使用，請將其新增為要翻譯的文件，以 OCR 讀取，再把產生的 Word 文件新增到這裡。',
+  refFailed: '無法讀取',
+  refUnsupported: '不是文字格式',
+  refChecking: '正在檢查…',
+  viewConverted: '檢視轉換後的文字',
+  convertedTitle: '轉換後的文字：{name}',
+  convertedReadOnly: '唯讀。這段文字的部分內容可能隨請求傳送給 AI；檔案本身不會被變更。',
+  convertedTruncated: '文字較長，只顯示開頭部分。',
 } satisfies Record<keyof typeof zh, string>

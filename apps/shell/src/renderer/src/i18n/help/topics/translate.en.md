@@ -24,7 +24,8 @@ A translation project keeps the documents you want to translate, your reference 
 
 ## Reference files
 
-- Only the names of the reference files are sent along with a translation request. Their contents are not.
+- When you add a reference file, the app converts it to text (kept in `references/.md/`; the file itself is never changed) and indexes its words. With each translation request, the parts that best match the text being translated go along, up to 6,000 characters, together with the file names. When all reference text together is no longer than that, it goes whole.
+- Each reference in the project detail shows its state: **Converted to text** (open it with **View converted text**, read-only), **Needs OCR** (a scan or an image: nothing of it is sent; add it as a document to translate, read it with OCR, and add the resulting Word document as a reference) or **Could not be read**.
 - When it needs one, the AI can read a reference file through the project tools.
 
 ## Scanned PDFs and images (OCR)

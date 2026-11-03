@@ -138,7 +138,7 @@ export const pt = {
     'Tudo já está traduzido. Nada é enviado; o PDF é gerado a partir da tradução guardada.',
   trConfirmProvider: 'IA utilizada: {provider}',
   trConfirmSends:
-    'O texto do documento é enviado a esta IA, com seus prompts de tradução, o glossário (inteiro se for pequeno; caso contrário, as entradas cujos termos aparecem no texto) e os nomes dos arquivos de referência (não o conteúdo deles).',
+    'O texto do documento é enviado a esta IA, com seus prompts de tradução, o glossário (inteiro se for pequeno; caso contrário, as entradas cujos termos aparecem no texto), os nomes dos arquivos de referência e os trechos do texto deles que melhor combinam com cada pedido (até 6.000 caracteres).',
   trConfirmPaid: '{provider} cobrará por isso',
   trProviderChange: 'A parte anterior foi traduzida com {before}; o restante usa {after}.',
   trBilingual: 'Bilíngue: a tradução ao lado de cada página original',
@@ -191,5 +191,17 @@ export const pt = {
     'Glossário: {count} entradas, mais de {limit}, então cada solicitação leva só as entradas cujos termos aparecem nos seus blocos de texto',
   ctxReferencesNone: 'Arquivos de referência: nenhum',
   ctxReferences:
-    'Nomes dos arquivos de referência ({count}, só os nomes, nunca o conteúdo): {names}',
+    'Arquivos de referência ({count}): {names}. Cada pedido também leva os trechos do texto convertido que melhor combinam com ele (até 6.000 caracteres).',
+  refConverted: 'Convertido em texto',
+  refNeedsOcr: 'Precisa de OCR',
+  refNeedsOcrHint:
+    'Este arquivo não tem camada de texto, então nada dele é enviado. Para usá-lo, adicione-o como documento a traduzir, leia-o com OCR e adicione aqui o documento do Word resultante.',
+  refFailed: 'Não foi possível ler',
+  refUnsupported: 'Não é um formato de texto',
+  refChecking: 'Verificando…',
+  viewConverted: 'Ver o texto convertido',
+  convertedTitle: 'Texto convertido: {name}',
+  convertedReadOnly:
+    'Somente leitura. Trechos deste texto podem ser enviados à IA com os pedidos; o arquivo em si nunca é alterado.',
+  convertedTruncated: 'O texto é longo; só o início é mostrado.',
 } satisfies Record<keyof typeof zh, string>

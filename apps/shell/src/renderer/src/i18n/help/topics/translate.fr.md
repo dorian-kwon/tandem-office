@@ -24,7 +24,8 @@ Un projet de traduction réunit dans un même dossier les documents que vous vou
 
 ## Fichiers de référence
 
-- Avec une demande de traduction, seuls les noms des fichiers de référence sont envoyés, pas leur contenu.
+- Quand vous ajoutez un fichier de référence, l’app le convertit en texte (gardé dans `references/.md/` ; le fichier lui-même n’est jamais modifié) et indexe ses mots. Chaque demande de traduction emporte les passages qui correspondent le mieux au texte à traduire, 6 000 caractères au plus, avec les noms des fichiers. Quand tout le texte de référence tient dans cette limite, il est envoyé en entier.
+- Dans le détail du projet, chaque référence indique son état : **Converti en texte** (ouvrez-le avec **Voir le texte converti**, en lecture seule), **OCR nécessaire** (un scan ou une image : rien n’en est envoyé ; ajoutez-le comme document à traduire, lisez-le par OCR, puis ajoutez le document Word obtenu comme référence) ou **Lecture impossible**.
 - Si besoin, l’IA peut lire un fichier de référence grâce aux outils du projet.
 
 ## PDF numérisés et images (OCR)

@@ -177,3 +177,36 @@ describe('composeContext', () => {
     expect(items[2].label).toBe('단어집 (2개)')
   })
 })
+
+describe('composeContext reference chunks', () => {
+  it('labels each chunk with its file and heading, apart from the main text', () => {
+    const out = composeContext({
+      ...base,
+      project: project({ references: ['law.pdf'] }),
+      references: [
+        { file: 'law.pdf', heading: 'Liability', text: 'Clause 4 text.' },
+        { file: 'notes.md', heading: '', text: 'No heading here.' },
+      ],
+    })
+    expect(out.referencesText).toBe(
+      '[law.pdf — Liability]\nClause 4 text.\n\n[notes.md]\nNo heading here.',
+    )
+    expect(out.text).not.toContain('Clause 4 text.')
+    expect(out.referenceChunks).toBe(2)
+  })
+
+  it('is empty without chunks', () => {
+    const out = composeContext({ ...base, project: project() })
+    expect(out.referencesText).toBe('')
+    expect(out.referenceChunks).toBe(0)
+  })
+
+  it('keeps labels on one line', () => {
+    const out = composeContext({
+      ...base,
+      project: project(),
+      references: [{ file: 'a\nb.md', heading: 'x\ny', text: 'body' }],
+    })
+    expect(out.referencesText).toBe('[a b.md — x y]\nbody')
+  })
+})

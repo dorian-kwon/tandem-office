@@ -79,6 +79,8 @@ beforeEach(() => {
     setPaneHidden: vi.fn().mockResolvedValue(undefined),
     pickExisting: vi.fn().mockResolvedValue(null),
     relocate: vi.fn().mockResolvedValue(null),
+    referenceStatus: vi.fn().mockResolvedValue({}),
+    referenceText: vi.fn().mockResolvedValue({ text: '', truncated: false }),
   }
   ;(window as unknown as { translateApi: unknown }).translateApi = api
 })
@@ -475,6 +477,68 @@ describe('ProjectDetail', () => {
     expect(buttonByText('Start translation').disabled).toBe(false)
     await click(buttonByText('Start translation'))
     expect(p.onStartTranslation).toHaveBeenCalledWith('a.docx')
+  })
+})
+
+describe('ProjectDetail reference status', () => {
+  const props = () => ({ dir: '/p/a', onBack: vi.fn(), onStartTranslation: vi.fn() })
+
+  it('shows each reference’s conversion status', async () => {
+    api.getProject.mockResolvedValue(
+      project({ references: ['a.docx', 'scan.pdf', 'bad.hwp', 'x.zip'] }),
+    )
+    api.referenceStatus.mockResolvedValue({
+      'a.docx': 'converted',
+      'scan.pdf': 'needs-ocr',
+      'bad.hwp': 'failed',
+      'x.zip': 'unsupported',
+    })
+    await render(ProjectDetail, props())
+    expect(api.referenceStatus).toHaveBeenCalledWith('/p/a')
+    const status = (file: string) =>
+      host
+        .querySelector(`[data-reference-status][data-file="${file}"]`)
+        ?.getAttribute('data-reference-status')
+    expect(status('a.docx')).toBe('converted')
+    expect(status('scan.pdf')).toBe('needs-ocr')
+    expect(status('bad.hwp')).toBe('failed')
+    expect(status('x.zip')).toBe('unsupported')
+    const section = host.querySelector('[data-material-kind="reference"]')!
+    expect(section.textContent).toContain('Converted to text')
+    expect(section.textContent).toContain('Needs OCR')
+    expect(section.textContent).toContain('Could not be read')
+    // only a converted reference offers its text
+    expect(section.querySelectorAll('[data-action="view-converted"]')).toHaveLength(1)
+  })
+
+  it('opens the converted text read-only and closes it', async () => {
+    api.getProject.mockResolvedValue(project({ references: ['a.docx'] }))
+    api.referenceStatus.mockResolvedValue({ 'a.docx': 'converted' })
+    api.referenceText.mockResolvedValue({ text: '# Terms\n\nengine', truncated: false })
+    await render(ProjectDetail, props())
+    await click(host.querySelector('[data-action="view-converted"]')!)
+    expect(api.referenceText).toHaveBeenCalledWith({ dir: '/p/a', file: 'a.docx' })
+    const dialog = host.querySelector('[role="dialog"]')!
+    expect(dialog.querySelector('pre')?.textContent).toBe('# Terms\n\nengine')
+    // nothing in it can be edited or saved
+    expect(dialog.querySelectorAll('textarea, input, [contenteditable="true"]')).toHaveLength(0)
+    expect([...dialog.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Close'])
+    await click(buttonByText('Close'))
+    expect(host.querySelector('[role="dialog"]')).toBeNull()
+  })
+
+  it('reads the statuses again after a reference was added', async () => {
+    api.getProject.mockResolvedValue(project())
+    api.pickMaterials.mockResolvedValue({ token: 't', names: ['n.md'] })
+    api.addMaterial.mockResolvedValue(project({ references: ['n.md'] }))
+    await render(ProjectDetail, props())
+    api.referenceStatus.mockResolvedValue({ 'n.md': 'converted' })
+    const section = host.querySelector('[data-material-kind="reference"]')!
+    await click([...section.querySelectorAll('button')].at(-1)!)
+    expect(api.referenceStatus).toHaveBeenCalledTimes(2)
+    expect(host.querySelector('[data-file="n.md"]')?.getAttribute('data-reference-status')).toBe(
+      'converted',
+    )
   })
 })
 

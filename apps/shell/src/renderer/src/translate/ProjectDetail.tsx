@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { LANGS } from '@genoffice/i18n'
 import type { OcrMode, ProjectFile } from '@genoffice/translate-project'
-import type { TranslateMaterialKind, TranslateSettingsPatch } from '../../../shared/translate-api'
+import type {
+  TranslateMaterialKind,
+  TranslateReferenceStatus,
+  TranslateReferenceText,
+  TranslateSettingsPatch,
+} from '../../../shared/translate-api'
 import { useI18n } from '../locale'
 import type { TranslateStringKey } from '../i18n/strings-translate'
 import { languageName, makeText, translateErrorText } from './shared'
@@ -42,6 +47,13 @@ function pdfKindOf(project: ProjectFile, file: string): 'pdf' | 'scan' | null {
   return kind === 'pdf' || kind === 'scan' ? kind : null
 }
 
+const REFERENCE_STATUS_TEXT: Record<TranslateReferenceStatus, TranslateStringKey> = {
+  converted: 'refConverted',
+  'needs-ocr': 'refNeedsOcr',
+  failed: 'refFailed',
+  unsupported: 'refUnsupported',
+}
+
 function filesOf(project: ProjectFile, kind: TranslateMaterialKind): string[] {
   if (kind === 'source') return project.sources.map((e) => e.file)
   return kind === 'reference' ? project.references : project.glossaryFiles
@@ -66,6 +78,23 @@ export function ProjectDetail({
   const [promptSaved, setPromptSaved] = useState(false)
   // the newest project object, so a blur-save never writes a stale list over an upload
   const latest = useRef<ProjectFile | null>(null)
+  // each reference's conversion status; null until main answered
+  const [refStatus, setRefStatus] = useState<Record<string, TranslateReferenceStatus> | null>(null)
+  const [viewing, setViewing] = useState<({ file: string } & TranslateReferenceText) | null>(null)
+  const refStatusAsk = useRef(0)
+
+  /** ask main for the statuses (it converts what its index does not know yet) */
+  const loadRefStatus = useCallback(() => {
+    if (!api) return
+    const ask = ++refStatusAsk.current
+    api.referenceStatus(dir).then(
+      (statuses) => {
+        if (ask === refStatusAsk.current) setRefStatus(statuses)
+      },
+      () => undefined,
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- per project
+  }, [dir])
 
   const adopt = useCallback((next: ProjectFile) => {
     latest.current = next
@@ -81,6 +110,7 @@ export function ProjectDetail({
       },
       (err: unknown) => setError(translateErrorText(lang, err)),
     )
+    loadRefStatus()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per project
   }, [dir])
 
@@ -165,6 +195,7 @@ export function ProjectDetail({
         const detail = added.length > 0 ? ` ${s('uploadPartial', { files: added.join(', ') })}` : ''
         setError(translateErrorText(lang, err) + detail)
       }
+      if (kind === 'reference' && added.length > 0) loadRefStatus()
     } catch (err) {
       setError(translateErrorText(lang, err))
     } finally {
@@ -190,11 +221,35 @@ export function ProjectDetail({
     setError(null)
     try {
       adoptLists(await api.removeMaterial({ dir, kind, file }))
+      if (kind === 'reference') loadRefStatus()
     } catch (err) {
       setError(translateErrorText(lang, err))
     } finally {
       setBusy(false)
     }
+  }
+
+  /** the converted text of a reference, shown read-only */
+  const viewConverted = async (file: string) => {
+    setError(null)
+    try {
+      setViewing({ file, ...(await api.referenceText({ dir, file })) })
+    } catch (err) {
+      setError(translateErrorText(lang, err))
+    }
+  }
+
+  const referenceStatusOf = (file: string) => {
+    const status = refStatus?.[file]
+    return (
+      <span
+        className="translate-kind"
+        data-reference-status={status ?? 'checking'}
+        data-file={file}
+      >
+        {status ? s(REFERENCE_STATUS_TEXT[status]) : s('refChecking')}
+      </span>
+    )
   }
 
   const languageSelect = (value: string, label: string, key: 'sourceLang' | 'targetLang') => (
@@ -270,6 +325,12 @@ export function ProjectDetail({
                         <li key={file} className="projects-row">
                           <div className="translate-row-main">
                             <span className="projects-row-name">{file}</span>
+                            {kind === 'reference' && referenceStatusOf(file)}
+                            {kind === 'reference' && refStatus?.[file] === 'needs-ocr' && (
+                              <span className="projects-hint translate-ref-hint">
+                                {s('refNeedsOcrHint')}
+                              </span>
+                            )}
                             {kind === 'source' && pdfKindOf(project, file) && (
                               <span
                                 className="translate-kind"
@@ -295,6 +356,17 @@ export function ProjectDetail({
                               {pdfKindOf(project, file) === 'scan'
                                 ? s('treatAsText')
                                 : s('treatAsScan')}
+                            </button>
+                          )}
+                          {kind === 'reference' && refStatus?.[file] === 'converted' && (
+                            <button
+                              type="button"
+                              className="projects-small"
+                              data-action="view-converted"
+                              aria-label={`${s('viewConverted')}: ${file}`}
+                              onClick={() => void viewConverted(file)}
+                            >
+                              {s('viewConverted')}
                             </button>
                           )}
                           {kind === 'source' && (
@@ -389,6 +461,27 @@ export function ProjectDetail({
           </>
         )}
       </div>
+      {viewing && (
+        <div className="modal-overlay">
+          <div
+            className="modal translate-converted"
+            role="dialog"
+            aria-modal="true"
+            aria-label={s('convertedTitle', { name: viewing.file })}
+          >
+            <h3>{s('convertedTitle', { name: viewing.file })}</h3>
+            <p className="projects-hint">{s('convertedReadOnly')}</p>
+            {viewing.truncated && <p className="projects-hint">{s('convertedTruncated')}</p>}
+            {/* plain text in a <pre>: nothing here can be edited or written back */}
+            <pre className="translate-converted-text">{viewing.text}</pre>
+            <div className="modal-buttons">
+              <button type="button" className="btn btn-secondary" onClick={() => setViewing(null)}>
+                {s('trClose')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }

@@ -24,7 +24,8 @@ Projek terjemahan menyimpan dokumen yang anda mahu terjemah, bahan rujukan dan g
 
 ## Fail rujukan
 
-- Bersama permintaan terjemahan, hanya nama fail rujukan dihantar, bukan kandungannya.
+- Apabila anda menambah fail rujukan, aplikasi menukarnya kepada teks (disimpan dalam `references/.md/`; fail itu sendiri tidak pernah diubah) dan mengindeks perkataannya. Setiap permintaan terjemahan membawa bahagian yang paling sepadan dengan teks yang diterjemah, sehingga 6,000 aksara, bersama nama fail. Jika semua teks rujukan tidak melebihi had itu, semuanya dihantar.
+- Dalam butiran projek, setiap fail rujukan menunjukkan statusnya: **Ditukar kepada teks** (buka dengan **Lihat teks tukaran**, baca sahaja), **Perlu OCR** (imbasan atau imej: tiada apa-apa dihantar; tambahkan sebagai dokumen untuk diterjemah, baca dengan OCR, kemudian tambahkan dokumen Word yang terhasil sebagai rujukan) atau **Tidak dapat dibaca**.
 - Apabila perlu, AI boleh membaca fail rujukan melalui alat projek.
 
 ## PDF imbasan dan imej (OCR)

@@ -24,7 +24,8 @@ Ein Übersetzungsprojekt hält die Dokumente, die Sie übersetzen möchten, Ihr 
 
 ## Referenzdateien
 
-- Mit einer Übersetzungsanfrage werden nur die Namen der Referenzdateien gesendet, nicht ihr Inhalt.
+- Wenn Sie eine Referenzdatei hinzufügen, wandelt die App sie in Text um (abgelegt in `references/.md/`; die Datei selbst wird nie geändert) und indiziert ihre Wörter. Jede Übersetzungsanfrage enthält die Stellen, die am besten zum zu übersetzenden Text passen, höchstens 6.000 Zeichen, zusammen mit den Dateinamen. Ist der gesamte Referenztext nicht länger, geht er vollständig mit.
+- In den Projektdetails zeigt jede Referenz ihren Zustand: **In Text umgewandelt** (mit **Umgewandelten Text ansehen** schreibgeschützt öffnen), **OCR nötig** (ein Scan oder Bild: daraus wird nichts gesendet; fügen Sie es als zu übersetzendes Dokument hinzu, lesen Sie es per OCR und fügen Sie das entstandene Word-Dokument als Referenz hinzu) oder **Nicht lesbar**.
 - Bei Bedarf kann die KI eine Referenzdatei über die Projektwerkzeuge lesen.
 
 ## Gescannte PDFs und Bilder (OCR)

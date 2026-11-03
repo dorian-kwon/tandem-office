@@ -24,7 +24,8 @@ Projekt tłumaczeniowy gromadzi w jednym folderze dokumenty, które chcesz przet
 
 ## Pliki referencyjne
 
-- Wraz z żądaniem tłumaczenia wysyłane są tylko nazwy plików referencyjnych, bez ich zawartości.
+- Po dodaniu pliku referencyjnego aplikacja konwertuje go na tekst (przechowywany w `references/.md/`; sam plik nigdy nie jest zmieniany) i indeksuje jego słowa. Każde żądanie tłumaczenia zawiera fragmenty najlepiej pasujące do tłumaczonego tekstu, do 6000 znaków, razem z nazwami plików. Gdy cały tekst referencyjny nie przekracza tej długości, wysyłany jest w całości.
+- W szczegółach projektu każdy plik referencyjny pokazuje swój stan: **Przekonwertowano na tekst** (otwórz go przez **Pokaż przekonwertowany tekst**, tylko do odczytu), **Wymaga OCR** (skan lub obraz: nic z niego nie jest wysyłane; dodaj go jako dokument do tłumaczenia, odczytaj przez OCR i dodaj powstały dokument Word jako plik referencyjny) albo **Nie udało się odczytać**.
 - Gdy trzeba, AI może przeczytać plik referencyjny za pomocą narzędzi projektu.
 
 ## Skanowane PDF-y i obrazy (OCR)

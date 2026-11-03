@@ -397,6 +397,11 @@ export interface ProjectContextBundle {
     prompts: string
     /** glossary entries and reference file names ('' when there are none) */
     material: string
+    /**
+     * excerpts of reference files picked for this request by keyword search, each
+     * labelled with its file and heading ('' or absent when there are none)
+     */
+    references?: string
   }
 }
 

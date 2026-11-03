@@ -180,6 +180,8 @@ export interface ProjectGuideDeps {
 export interface ProjectTranslationContext {
   prompts: string
   material: string
+  /** reference chunks picked for this request ('' when none) */
+  references: string
   items: ProjectTranslationItem[]
   cut: boolean
 }
@@ -930,7 +932,13 @@ export class ProjectGuide {
         canRemember: switches.memoryEnabled && trust === 'use' && !unwritable,
         notices,
         ...(translation
-          ? { translation: { prompts: translation.prompts, material: translation.material } }
+          ? {
+              translation: {
+                prompts: translation.prompts,
+                material: translation.material,
+                references: translation.references,
+              },
+            }
           : {}),
       },
     }

@@ -131,7 +131,7 @@ export const vi = {
     'Mọi thứ đã được dịch. Không có gì được gửi đi; PDF được tạo từ bản dịch đã lưu.',
   trConfirmProvider: 'AI được dùng: {provider}',
   trConfirmSends:
-    'Văn bản của tài liệu được gửi cho AI này cùng với các prompt dịch của bạn, bảng thuật ngữ (toàn bộ nếu nhỏ, nếu không thì các mục có thuật ngữ xuất hiện trong văn bản) và tên các tệp tham khảo (không gửi nội dung).',
+    'Văn bản của tài liệu được gửi cho AI này cùng với các prompt dịch của bạn, bảng thuật ngữ (toàn bộ nếu nhỏ, nếu không thì các mục có thuật ngữ xuất hiện trong văn bản), tên các tệp tham khảo và những đoạn văn bản tham khảo khớp nhất với từng yêu cầu (tối đa 6.000 ký tự).',
   trConfirmPaid: '{provider} sẽ tính phí cho việc này',
   trProviderChange: 'Phần trước đó được dịch bằng {before}; phần còn lại dùng {after}.',
   trBilingual: 'Song ngữ: bản dịch nằm cạnh mỗi trang gốc',
@@ -181,5 +181,18 @@ export const vi = {
   ctxGlossaryPerBlock:
     'Bảng thuật ngữ: {count} mục, nhiều hơn {limit}, nên mỗi yêu cầu chỉ mang các mục có thuật ngữ xuất hiện trong các khối văn bản của nó',
   ctxReferencesNone: 'Tệp tham khảo: không có',
-  ctxReferences: 'Tên tệp tham khảo ({count}, chỉ tên, không bao giờ gửi nội dung): {names}',
+  ctxReferences:
+    'Tệp tham khảo ({count}): {names}. Mỗi yêu cầu cũng mang theo những đoạn văn bản đã chuyển đổi khớp nhất với yêu cầu đó (tối đa 6.000 ký tự).',
+  refConverted: 'Đã chuyển thành văn bản',
+  refNeedsOcr: 'Cần OCR',
+  refNeedsOcrHint:
+    'Tệp này không có lớp văn bản nên không có nội dung nào được gửi. Để dùng, hãy thêm nó làm tài liệu cần dịch, đọc bằng OCR rồi thêm tài liệu Word thu được vào đây.',
+  refFailed: 'Không đọc được',
+  refUnsupported: 'Không phải định dạng văn bản',
+  refChecking: 'Đang kiểm tra…',
+  viewConverted: 'Xem văn bản đã chuyển đổi',
+  convertedTitle: 'Văn bản đã chuyển đổi: {name}',
+  convertedReadOnly:
+    'Chỉ đọc. Một phần văn bản này có thể được gửi cho AI cùng các yêu cầu; bản thân tệp không bao giờ bị thay đổi.',
+  convertedTruncated: 'Văn bản dài; chỉ hiển thị phần đầu.',
 } satisfies Record<keyof typeof zh, string>

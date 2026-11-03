@@ -230,6 +230,32 @@
   font-size: 12px;
 }
 
+/* a reference that needs OCR: why nothing of it is sent, under its name */
+.translate-ref-hint {
+  display: block;
+  margin-top: 2px;
+}
+
+/* the read-only view of a reference's converted text */
+.translate-converted {
+  width: min(720px, 90vw);
+  max-width: 720px;
+}
+
+.translate-converted-text {
+  max-height: 60vh;
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--surface-subtle);
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  user-select: text;
+}
+
 /* The new-project form: space the rows out so labels, selects and buttons do not touch. */
 .translate-pane .projects-create {
   display: flex;

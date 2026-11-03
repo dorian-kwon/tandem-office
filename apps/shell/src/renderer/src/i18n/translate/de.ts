@@ -144,7 +144,7 @@ export const de = {
     'Alles ist bereits übersetzt. Es wird nichts gesendet; die PDF wird aus der gespeicherten Übersetzung erstellt.',
   trConfirmProvider: 'Verwendete KI: {provider}',
   trConfirmSends:
-    'Der Text des Dokuments wird an diese KI gesendet, zusammen mit Ihren Übersetzungs-Prompts, dem Glossar (vollständig, wenn es klein ist, sonst die Einträge, deren Begriffe im Text vorkommen) und den Namen der Referenzdateien (nicht deren Inhalt).',
+    'Der Text des Dokuments wird an diese KI gesendet, zusammen mit Ihren Übersetzungs-Prompts, dem Glossar (vollständig, wenn es klein ist, sonst die Einträge, deren Begriffe im Text vorkommen), den Namen der Referenzdateien und den Textstellen daraus, die am besten zur jeweiligen Anfrage passen (höchstens 6.000 Zeichen).',
   trConfirmPaid: '{provider} berechnet dafür Kosten',
   trProviderChange: 'Der frühere Teil wurde mit {before} übersetzt; der Rest verwendet {after}.',
   trBilingual: 'Zweisprachig: die Übersetzung neben jeder Originalseite',
@@ -197,5 +197,18 @@ export const de = {
   ctxGlossaryPerBlock:
     'Glossar: {count} Einträge, mehr als {limit}, daher enthält jede Anfrage nur die Einträge, deren Begriffe in ihren Textblöcken vorkommen',
   ctxReferencesNone: 'Referenzdateien: keine',
-  ctxReferences: 'Namen der Referenzdateien ({count}, nur Namen, nie der Inhalt): {names}',
+  ctxReferences:
+    'Referenzdateien ({count}): {names}. Jede Anfrage enthält außerdem die Stellen ihres umgewandelten Texts, die am besten zu ihr passen (höchstens 6.000 Zeichen).',
+  refConverted: 'In Text umgewandelt',
+  refNeedsOcr: 'OCR nötig',
+  refNeedsOcrHint:
+    'Diese Datei hat keine Textebene, daher wird nichts daraus gesendet. Um sie zu nutzen, fügen Sie sie als zu übersetzendes Dokument hinzu, lesen Sie sie per OCR und fügen Sie das entstandene Word-Dokument hier hinzu.',
+  refFailed: 'Nicht lesbar',
+  refUnsupported: 'Kein Textformat',
+  refChecking: 'Wird geprüft…',
+  viewConverted: 'Umgewandelten Text ansehen',
+  convertedTitle: 'Umgewandelter Text: {name}',
+  convertedReadOnly:
+    'Nur lesen. Teile dieses Texts können mit Anfragen an die KI gesendet werden; die Datei selbst wird nie geändert.',
+  convertedTruncated: 'Der Text ist lang; nur sein Anfang wird gezeigt.',
 } satisfies Record<keyof typeof zh, string>

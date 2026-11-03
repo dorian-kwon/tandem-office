@@ -1,19 +1,29 @@
 import { DEFAULT_GLOSSARY_LIMIT, selectGlossary } from './glossary'
 import type { GlossaryEntry } from './glossary'
 import type { ProjectFile } from './project-file'
+import type { ReferenceChunk } from './reference-index'
 
 export type ComposedItemKind = 'system' | 'project' | 'glossary' | 'reference'
 
 export type ComposedContext = {
   text: string
+  /**
+   * the reference chunks picked for this request (reference-index.ts), each
+   * labelled `[file — heading]`; kept apart from `text` so the caller fences
+   * them as material of their own ('' when none)
+   */
+  referencesText: string
+  /** chunks in `referencesText` */
+  referenceChunks: number
   items: { kind: ComposedItemKind; label: string; included: boolean }[]
 }
 
 /**
  * Builds the context block sent with an AI request: system prompt, project prompt with the
  * language pair, the glossary entries relevant to `paragraph`, and reference file names.
- * Pure and deterministic. All inputs are plain data; no template syntax is interpreted, and
- * reference materials are listed by name only (their contents are never available here).
+ * Pure and deterministic. All inputs are plain data; no template syntax is interpreted.
+ * `text` lists reference files by name only; the chunks chosen for this request (passed in
+ * `references`, never read here) go to `referencesText`.
  */
 export function composeContext(input: {
   systemPrompt: string
@@ -21,6 +31,7 @@ export function composeContext(input: {
   glossary: GlossaryEntry[]
   paragraph: string
   glossaryLimit?: number
+  references?: readonly ReferenceChunk[]
 }): ComposedContext {
   const { project } = input
   const system = input.systemPrompt.trim()
@@ -53,8 +64,19 @@ export function composeContext(input: {
     .join('\n')
     .trim()
 
+  const chunks = input.references ?? []
+  const referencesText = chunks
+    .map((c) => {
+      const heading = oneLine(c.heading)
+      const label = heading ? `${oneLine(c.file)} — ${heading}` : oneLine(c.file)
+      return `[${label}]\n${c.text.trim()}`
+    })
+    .join('\n\n')
+
   return {
     text,
+    referencesText,
+    referenceChunks: chunks.length,
     items: [
       { kind: 'system', label: '시스템 프롬프트', included: system !== '' },
       { kind: 'project', label: '프로젝트 프롬프트', included: true },

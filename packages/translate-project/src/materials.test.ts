@@ -8,10 +8,12 @@ import {
   addReference,
   addSource,
   loadGlossary,
+  refreshReferences,
   removeGlossary,
   removeReference,
   removeSource,
 } from './materials'
+import { referenceStatuses } from './reference-index'
 import { GlossaryFormatError } from './glossary'
 import { createProject, loadProject } from './project-store'
 import * as store from './project-store'
@@ -101,6 +103,34 @@ describe('references', () => {
     vi.mocked(store.saveProject).mockRejectedValueOnce(new Error('disk full'))
     await expect(addReference(dir, await make('ref.txt', 'x'))).rejects.toThrow('disk full')
     expect(await readdir(join(dir, 'references'))).toEqual([])
+  })
+
+  const asText = async (path: string) => ({ ok: true as const, md: await readFile(path, 'utf8') })
+
+  it('converts and indexes a reference when it is added, and drops it when removed', async () => {
+    await addReference(dir, await make('ref.txt', 'reference words'), { convert: asText })
+    expect(await referenceStatuses(dir)).toEqual({ 'ref.txt': 'converted' })
+    expect(await readFile(join(dir, 'references', '.md', 'ref.txt.md'), 'utf8')).toBe(
+      'reference words',
+    )
+    await removeReference(dir, 'ref.txt', { convert: asText })
+    expect(await referenceStatuses(dir)).toEqual({})
+    expect(await exists(join(dir, 'references', '.md', 'ref.txt.md'))).toBe(false)
+  })
+
+  it('a failing conversion is recorded and never fails the add', async () => {
+    const convert = async () => {
+      throw new Error('parser crashed')
+    }
+    const p = await addReference(dir, await make('ref.docx', 'x'), { convert })
+    expect(p.references).toEqual(['ref.docx'])
+    expect(await referenceStatuses(dir)).toEqual({ 'ref.docx': 'failed' })
+  })
+
+  it('refreshReferences converts references added before the index existed', async () => {
+    await addReference(dir, await make('old.txt', 'older words'))
+    expect(await referenceStatuses(dir)).toEqual({})
+    expect(await refreshReferences(dir, asText)).toEqual({ 'old.txt': 'converted' })
   })
 })
 

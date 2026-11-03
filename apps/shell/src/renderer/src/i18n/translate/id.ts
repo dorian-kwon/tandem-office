@@ -136,7 +136,7 @@ export const id = {
     'Semuanya sudah diterjemahkan. Tidak ada yang dikirim; PDF dibuat dari terjemahan yang tersimpan.',
   trConfirmProvider: 'AI yang digunakan: {provider}',
   trConfirmSends:
-    'Teks dokumen dikirim ke AI ini bersama prompt terjemahan Anda, glosarium (utuh jika kecil, jika tidak hanya entri yang istilahnya muncul dalam teks), dan nama file acuan (bukan isinya).',
+    'Teks dokumen dikirim ke AI ini bersama prompt terjemahan Anda, glosarium (utuh jika kecil, jika tidak hanya entri yang istilahnya muncul dalam teks), nama file acuan, dan bagian teks acuan yang paling cocok dengan setiap permintaan (hingga 6.000 karakter).',
   trConfirmPaid: '{provider} akan menagih biaya untuk ini',
   trProviderChange: 'Bagian sebelumnya diterjemahkan dengan {before}; sisanya memakai {after}.',
   trBilingual: 'Dwibahasa: terjemahan di samping setiap halaman asli',
@@ -188,5 +188,18 @@ export const id = {
   ctxGlossaryPerBlock:
     'Glosarium: {count} entri, lebih dari {limit}, jadi setiap permintaan hanya membawa entri yang istilahnya muncul di blok teksnya',
   ctxReferencesNone: 'File acuan: tidak ada',
-  ctxReferences: 'Nama file acuan ({count}, hanya nama, tidak pernah isinya): {names}',
+  ctxReferences:
+    'File acuan ({count}): {names}. Setiap permintaan juga membawa bagian teks hasil konversinya yang paling cocok dengan permintaan itu (hingga 6.000 karakter).',
+  refConverted: 'Dikonversi ke teks',
+  refNeedsOcr: 'Perlu OCR',
+  refNeedsOcrHint:
+    'File ini tidak memiliki lapisan teks, jadi tidak ada isinya yang dikirim. Untuk memakainya, tambahkan sebagai dokumen yang akan diterjemahkan, baca dengan OCR, lalu tambahkan dokumen Word hasilnya di sini.',
+  refFailed: 'Tidak dapat dibaca',
+  refUnsupported: 'Bukan format teks',
+  refChecking: 'Memeriksa…',
+  viewConverted: 'Lihat teks hasil konversi',
+  convertedTitle: 'Teks hasil konversi: {name}',
+  convertedReadOnly:
+    'Hanya baca. Bagian dari teks ini dapat dikirim ke AI bersama permintaan; file itu sendiri tidak pernah diubah.',
+  convertedTruncated: 'Teksnya panjang; hanya bagian awalnya yang ditampilkan.',
 } satisfies Record<keyof typeof zh, string>

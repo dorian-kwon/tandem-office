@@ -134,7 +134,7 @@ export const ja = {
   trConfirmNothing: 'すべて翻訳済みです。何も送信されません。保存済みの翻訳からPDFを書き出します。',
   trConfirmProvider: '使用するAI: {provider}',
   trConfirmSends:
-    '文書のテキストが、翻訳プロンプト、用語集（少ない場合は全件、多い場合は本文に出てくる語の項目のみ）、参考ファイルの名前（内容は送りません）とともに、このAIに送信されます。',
+    '文書のテキストが、翻訳プロンプト、用語集（少ない場合は全件、多い場合は本文に出てくる語の項目のみ）、参考ファイルの名前、そして依頼ごとにその依頼に最も合う参考資料の一部（最大 6,000 文字）とともに、このAIに送信されます。',
   trConfirmPaid: '{provider}では、これに料金がかかります',
   trProviderChange: '前半は{before}で翻訳され、残りは{after}を使います。',
   trBilingual: '対訳: 原文の各ページの横に訳文を表示',
@@ -185,5 +185,18 @@ export const ja = {
   ctxGlossaryPerBlock:
     '用語集: {count} 項目。{limit} 項目を超えるため、各リクエストにはそのテキストブロックに出てくる用語の項目だけを付けます',
   ctxReferencesNone: '参考資料: なし',
-  ctxReferences: '参考資料のファイル名 {count} 件（名前のみで、内容は送りません）: {names}',
+  ctxReferences:
+    '参考資料のファイル {count} 件: {names}。依頼ごとに、変換したテキストのうちその依頼に最も合う部分（最大 6,000 文字）も送信されます。',
+  refConverted: 'テキストに変換済み',
+  refNeedsOcr: 'OCR が必要',
+  refNeedsOcrHint:
+    'このファイルにはテキスト層がないため、何も送信されません。使うには、翻訳する文書として追加して OCR で読み取り、できた Word 文書をここに追加してください。',
+  refFailed: '読み取れません',
+  refUnsupported: 'テキスト形式ではありません',
+  refChecking: '確認中…',
+  viewConverted: '変換したテキストを見る',
+  convertedTitle: '変換したテキスト: {name}',
+  convertedReadOnly:
+    '読み取り専用です。このテキストの一部が依頼とともに AI に送信されることがあります。ファイル自体は変更されません。',
+  convertedTruncated: 'テキストが長いため、先頭部分のみ表示しています。',
 } satisfies Record<keyof typeof zh, string>

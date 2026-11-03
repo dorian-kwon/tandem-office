@@ -790,3 +790,73 @@ describe('translation view handlers', () => {
     await expect(ok.h.setPaneHidden({ side: 'right', hidden: true })).resolves.toBeUndefined()
   })
 })
+
+describe('reference conversion', () => {
+  it('converts a reference on add and reports its status and read-only text', async () => {
+    const h = handlers()
+    const { dir } = await createIn(h, { name: 'Refs', sourceLang: 'en', targetLang: 'ko' })
+    const ref = join(root, 'notes.md')
+    writeFileSync(ref, '# Terms\n\nengine means 엔진')
+    await addPicked(h, dir, 'reference', ref)
+    expect(await h.referenceStatus(dir)).toEqual({ 'notes.md': 'converted' })
+    expect(await h.referenceText({ dir, file: 'notes.md' })).toEqual({
+      text: '# Terms\n\nengine means 엔진',
+      truncated: false,
+    })
+    // the reference itself is untouched
+    expect(readFileSync(join(dir, 'references', 'notes.md'), 'utf8')).toBe(
+      '# Terms\n\nengine means 엔진',
+    )
+    const got = await h.instructionsFor({ dir, text: 'engine' })
+    expect(got.references).toBe('[notes.md — Terms]\n# Terms\n\nengine means 엔진')
+  })
+
+  it('a failed conversion never fails the add, and is reported per file', async () => {
+    const h = handlers({
+      convertReference: async () => {
+        throw new Error('parser crashed')
+      },
+    })
+    const { dir } = await createIn(h, { name: 'Bad', sourceLang: 'en', targetLang: 'ko' })
+    const ref = join(root, 'broken.docx')
+    writeFileSync(ref, 'x')
+    const project = await addPicked(h, dir, 'reference', ref)
+    expect(project.references).toEqual(['broken.docx'])
+    expect(await h.referenceStatus(dir)).toEqual({ 'broken.docx': 'failed' })
+    await expect(h.referenceText({ dir, file: 'broken.docx' })).rejects.toMatchObject({
+      code: 'NOT_LISTED',
+    })
+  })
+
+  it('a scan needs OCR', async () => {
+    const h = handlers()
+    const { dir } = await createIn(h, { name: 'Scan', sourceLang: 'en', targetLang: 'ko' })
+    const ref = join(root, 'page.png')
+    writeFileSync(ref, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+    await addPicked(h, dir, 'reference', ref)
+    expect(await h.referenceStatus(dir)).toEqual({ 'page.png': 'needs-ocr' })
+  })
+
+  it('the status converts references the index does not know yet', async () => {
+    const h = handlers({ convertReference: async () => ({ ok: true, md: 'late text' }) })
+    const { dir } = await createIn(h, { name: 'Late', sourceLang: 'en', targetLang: 'ko' })
+    writeFileSync(join(dir, 'references', 'old.txt'), 'old')
+    const project = JSON.parse(readFileSync(join(dir, '.tandem', 'project.json'), 'utf8'))
+    writeFileSync(
+      join(dir, '.tandem', 'project.json'),
+      JSON.stringify({ ...project, references: ['old.txt'] }),
+    )
+    expect(await h.referenceStatus(dir)).toEqual({ 'old.txt': 'converted' })
+  })
+
+  it('reads only a listed reference of a registered project', async () => {
+    const h = handlers()
+    const { dir } = await createIn(h, { name: 'Guard', sourceLang: 'en', targetLang: 'ko' })
+    await expect(h.referenceText({ dir, file: '../project.json' })).rejects.toMatchObject({
+      code: 'NOT_LISTED',
+    })
+    await expect(h.referenceStatus(join(root, 'elsewhere'))).rejects.toMatchObject({
+      code: 'NOT_REGISTERED',
+    })
+  })
+})

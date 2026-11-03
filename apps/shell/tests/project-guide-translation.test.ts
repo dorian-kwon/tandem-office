@@ -37,6 +37,7 @@ const answer = (value: ProjectTrustAnswer) => vi.fn(async () => value)
 const TRANSLATION = {
   prompts: 'GLOBAL\n\n번역: en → ko',
   material: '단어집:\nengine → 엔진',
+  references: '[style.md — Terms]\nengine means 엔진',
   cut: false,
   items: [
     { kind: 'system' as const, included: true },
@@ -92,6 +93,7 @@ describe('ProjectGuide.readContext with a translation hook', () => {
     expect(context.translation).toEqual({
       prompts: TRANSLATION.prompts,
       material: TRANSLATION.material,
+      references: TRANSLATION.references,
     })
     expect(context.notices).toContainEqual({
       kind: 'translation-context',

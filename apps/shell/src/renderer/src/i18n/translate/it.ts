@@ -139,7 +139,7 @@ export const it = {
     'Tutto è già tradotto. Non viene inviato nulla; il PDF viene creato dalla traduzione salvata.',
   trConfirmProvider: 'IA utilizzata: {provider}',
   trConfirmSends:
-    'Il testo del documento viene inviato a questa IA, insieme ai tuoi prompt di traduzione, al glossario (intero se è piccolo, altrimenti le voci i cui termini compaiono nel testo) e ai nomi dei file di riferimento (non al loro contenuto).',
+    'Il testo del documento viene inviato a questa IA, insieme ai tuoi prompt di traduzione, al glossario (intero se è piccolo, altrimenti le voci i cui termini compaiono nel testo), ai nomi dei file di riferimento e alle parti del loro testo più pertinenti a ogni richiesta (fino a 6.000 caratteri).',
   trConfirmPaid: '{provider} addebiterà questa operazione',
   trProviderChange: 'La parte precedente è stata tradotta con {before}; il resto usa {after}.',
   trBilingual: 'Bilingue: la traduzione accanto a ogni pagina originale',
@@ -191,5 +191,18 @@ export const it = {
   ctxGlossaryPerBlock:
     'Glossario: {count} voci, più di {limit}, quindi ogni richiesta porta solo le voci i cui termini compaiono nei suoi blocchi di testo',
   ctxReferencesNone: 'File di riferimento: nessuno',
-  ctxReferences: 'Nomi dei file di riferimento ({count}, solo i nomi, mai il contenuto): {names}',
+  ctxReferences:
+    'File di riferimento ({count}): {names}. Ogni richiesta porta anche le parti del loro testo convertito più pertinenti (fino a 6.000 caratteri).',
+  refConverted: 'Convertito in testo',
+  refNeedsOcr: 'Serve l’OCR',
+  refNeedsOcrHint:
+    'Questo file non ha un livello di testo, quindi non ne viene inviato nulla. Per usarlo, aggiungilo come documento da tradurre, leggilo con l’OCR e aggiungi qui il documento Word ottenuto.',
+  refFailed: 'Impossibile leggerlo',
+  refUnsupported: 'Non è un formato di testo',
+  refChecking: 'Verifica in corso…',
+  viewConverted: 'Vedi il testo convertito',
+  convertedTitle: 'Testo convertito: {name}',
+  convertedReadOnly:
+    'Sola lettura. Parti di questo testo possono essere inviate all’IA con le richieste; il file stesso non viene mai modificato.',
+  convertedTruncated: 'Il testo è lungo; ne viene mostrato solo l’inizio.',
 } satisfies Record<keyof typeof zh, string>

@@ -137,7 +137,7 @@ export const es = {
     'Todo está ya traducido. No se envía nada; el PDF se genera a partir de la traducción guardada.',
   trConfirmProvider: 'IA utilizada: {provider}',
   trConfirmSends:
-    'El texto del documento se envía a esta IA junto con tus prompts de traducción, el glosario (completo si es pequeño; si no, las entradas cuyos términos aparecen en el texto) y los nombres de los archivos de referencia (no su contenido).',
+    'El texto del documento se envía a esta IA junto con tus prompts de traducción, el glosario (completo si es pequeño; si no, las entradas cuyos términos aparecen en el texto), los nombres de los archivos de referencia y las partes de su texto que mejor encajan con cada solicitud (hasta 6.000 caracteres).',
   trConfirmPaid: '{provider} cobrará por esto',
   trProviderChange: 'La parte anterior se tradujo con {before}; el resto usa {after}.',
   trBilingual: 'Bilingüe: la traducción junto a cada página original',
@@ -190,5 +190,17 @@ export const es = {
     'Glosario: {count} entradas, más de {limit}, así que cada solicitud lleva solo las entradas cuyos términos aparecen en sus bloques de texto',
   ctxReferencesNone: 'Archivos de referencia: ninguno',
   ctxReferences:
-    'Nombres de los archivos de referencia ({count}, solo nombres, nunca su contenido): {names}',
+    'Archivos de referencia ({count}): {names}. Cada solicitud lleva además las partes de su texto convertido que mejor encajan con ella (hasta 6.000 caracteres).',
+  refConverted: 'Convertido a texto',
+  refNeedsOcr: 'Necesita OCR',
+  refNeedsOcrHint:
+    'Este archivo no tiene capa de texto, así que no se envía nada de él. Para usarlo, añádelo como documento para traducir, léelo con OCR y añade aquí el documento de Word resultante.',
+  refFailed: 'No se pudo leer',
+  refUnsupported: 'No es un formato de texto',
+  refChecking: 'Comprobando…',
+  viewConverted: 'Ver el texto convertido',
+  convertedTitle: 'Texto convertido: {name}',
+  convertedReadOnly:
+    'Solo lectura. Partes de este texto pueden enviarse a la IA con las solicitudes; el archivo en sí nunca se modifica.',
+  convertedTruncated: 'El texto es largo; solo se muestra el principio.',
 } satisfies Record<keyof typeof zh, string>

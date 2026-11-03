@@ -133,7 +133,7 @@ export const cs = {
   trConfirmNothing: 'Vše je už přeloženo. Nic se neposílá; PDF se vytvoří z uloženého překladu.',
   trConfirmProvider: 'Použitá AI: {provider}',
   trConfirmSends:
-    'Text dokumentu se posílá této AI spolu s vašimi překladovými prompty, glosářem (celým, pokud je malý, jinak položkami, jejichž termíny se v textu vyskytují) a názvy referenčních souborů (bez jejich obsahu).',
+    'Text dokumentu se posílá této AI spolu s vašimi překladovými prompty, glosářem (celým, pokud je malý, jinak položkami, jejichž termíny se v textu vyskytují), názvy referenčních souborů a částmi jejich textu, které nejlépe odpovídají každému požadavku (nejvýše 6 000 znaků).',
   trConfirmPaid: '{provider} si za to účtuje poplatek',
   trProviderChange: 'Dřívější část byla přeložena pomocí {before}; zbytek používá {after}.',
   trBilingual: 'Dvojjazyčně: překlad vedle každé původní stránky',
@@ -185,5 +185,18 @@ export const cs = {
   ctxGlossaryPerBlock:
     'Glosář: {count} položek, více než {limit}, takže každý požadavek nese jen položky, jejichž termíny se objevují v jeho textových blocích',
   ctxReferencesNone: 'Referenční soubory: žádné',
-  ctxReferences: 'Názvy referenčních souborů ({count}, jen názvy, nikdy obsah): {names}',
+  ctxReferences:
+    'Referenční soubory ({count}): {names}. Každý požadavek nese také části jejich převedeného textu, které mu nejlépe odpovídají (nejvýše 6 000 znaků).',
+  refConverted: 'Převedeno na text',
+  refNeedsOcr: 'Potřebuje OCR',
+  refNeedsOcrHint:
+    'Tento soubor nemá textovou vrstvu, takže se z něj nic neposílá. Chcete-li jej použít, přidejte jej jako dokument k překladu, přečtěte jej pomocí OCR a výsledný dokument Word přidejte sem.',
+  refFailed: 'Nelze přečíst',
+  refUnsupported: 'Není textový formát',
+  refChecking: 'Kontroluje se…',
+  viewConverted: 'Zobrazit převedený text',
+  convertedTitle: 'Převedený text: {name}',
+  convertedReadOnly:
+    'Jen pro čtení. Části tohoto textu mohou být s požadavky odeslány AI; samotný soubor se nikdy nemění.',
+  convertedTruncated: 'Text je dlouhý; zobrazuje se jen jeho začátek.',
 } satisfies Record<keyof typeof zh, string>

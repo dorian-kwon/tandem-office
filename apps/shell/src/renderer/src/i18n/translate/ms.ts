@@ -136,7 +136,7 @@ export const ms = {
     'Semuanya sudah diterjemah. Tiada apa-apa dihantar; PDF ditulis daripada terjemahan yang disimpan.',
   trConfirmProvider: 'AI yang digunakan: {provider}',
   trConfirmSends:
-    'Teks dokumen dihantar kepada AI ini bersama prompt terjemahan anda, glosari (keseluruhan jika kecil, jika tidak entri yang istilahnya muncul dalam teks) dan nama fail rujukan (bukan kandungannya).',
+    'Teks dokumen dihantar kepada AI ini bersama prompt terjemahan anda, glosari (keseluruhan jika kecil, jika tidak entri yang istilahnya muncul dalam teks), nama fail rujukan dan bahagian teks rujukan yang paling sepadan dengan setiap permintaan (sehingga 6,000 aksara).',
   trConfirmPaid: '{provider} akan mengenakan bayaran untuk ini',
   trProviderChange:
     'Bahagian terdahulu diterjemah dengan {before}; selebihnya menggunakan {after}.',
@@ -190,5 +190,17 @@ export const ms = {
     'Glosari: {count} entri, melebihi {limit}, jadi setiap permintaan hanya membawa entri yang istilahnya muncul dalam blok teksnya',
   ctxReferencesNone: 'Fail rujukan: tiada',
   ctxReferences:
-    'Nama fail rujukan ({count}, nama sahaja, kandungan tidak sekali-kali dihantar): {names}',
+    'Fail rujukan ({count}): {names}. Setiap permintaan juga membawa bahagian teks tukarannya yang paling sepadan dengannya (sehingga 6,000 aksara).',
+  refConverted: 'Ditukar kepada teks',
+  refNeedsOcr: 'Perlu OCR',
+  refNeedsOcrHint:
+    'Fail ini tiada lapisan teks, jadi tiada apa-apa daripadanya dihantar. Untuk menggunakannya, tambahkan sebagai dokumen untuk diterjemah, baca dengan OCR, kemudian tambahkan dokumen Word yang terhasil di sini.',
+  refFailed: 'Tidak dapat dibaca',
+  refUnsupported: 'Bukan format teks',
+  refChecking: 'Menyemak…',
+  viewConverted: 'Lihat teks tukaran',
+  convertedTitle: 'Teks tukaran: {name}',
+  convertedReadOnly:
+    'Baca sahaja. Bahagian teks ini mungkin dihantar kepada AI bersama permintaan; fail itu sendiri tidak pernah diubah.',
+  convertedTruncated: 'Teks ini panjang; hanya bahagian awalnya ditunjukkan.',
 } satisfies Record<keyof typeof zh, string>

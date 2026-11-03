@@ -731,6 +731,8 @@ const translateApi: TranslateApi = {
   setSourceKind: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.setSourceKind, args),
   pickExisting: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.pickExisting),
   relocate: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.relocate, args),
+  referenceStatus: (dir) => ipcRenderer.invoke(TRANSLATE_CHANNELS.referenceStatus, dir),
+  referenceText: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.referenceText, args),
 }
 contextBridge.exposeInMainWorld('translateApi', translateApi)
 

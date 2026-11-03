@@ -132,7 +132,7 @@ export const en = {
     'Everything is already translated. Nothing is sent; the PDF is written from the stored translation.',
   trConfirmProvider: 'AI used: {provider}',
   trConfirmSends:
-    "The document's text is sent to this AI, with your translation prompts, the glossary (whole when it is small, otherwise the entries whose terms appear in the text) and the names of the reference files (not their contents).",
+    "The document's text is sent to this AI, with your translation prompts, the glossary (whole when it is small, otherwise the entries whose terms appear in the text), the names of the reference files and the parts of their text that best match each request (up to 6,000 characters).",
   trConfirmPaid: '{provider} will charge for this',
   trProviderChange: 'The earlier part was translated with {before}; the rest uses {after}.',
   trBilingual: 'Bilingual: the translation beside each original page',
@@ -184,5 +184,18 @@ export const en = {
   ctxGlossaryPerBlock:
     'Glossary: {count} entries, more than {limit}, so each request carries only the entries whose terms appear in its text blocks',
   ctxReferencesNone: 'Reference files: none',
-  ctxReferences: 'Reference file names ({count}, names only, never their contents): {names}',
+  ctxReferences:
+    'Reference files ({count}): {names}. Each request also carries the parts of their converted text that best match it (up to 6,000 characters).',
+  refConverted: 'Converted to text',
+  refNeedsOcr: 'Needs OCR',
+  refNeedsOcrHint:
+    'This file has no text layer, so nothing of it is sent. To use it, add it as a document to translate, read it with OCR, and add the resulting Word document here.',
+  refFailed: 'Could not be read',
+  refUnsupported: 'Not a text format',
+  refChecking: 'Checking…',
+  viewConverted: 'View converted text',
+  convertedTitle: 'Converted text: {name}',
+  convertedReadOnly:
+    'Read-only. Parts of this text may be sent to the AI with requests; the file itself is never changed.',
+  convertedTruncated: 'The text is long; only its beginning is shown.',
 } satisfies Record<keyof typeof zh, string>

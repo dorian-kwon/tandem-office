@@ -127,7 +127,7 @@ export const ko = {
   trConfirmNothing: '이미 모두 번역되었습니다. 아무것도 보내지 않고 보관된 번역으로 PDF를 씁니다.',
   trConfirmProvider: '쓰일 AI: {provider}',
   trConfirmSends:
-    '문서의 글이 이 AI로 보내집니다. 번역 프롬프트, 단어집(작으면 전부, 크면 글에 나오는 용어의 항목만), 참고자료의 파일 이름(내용은 아님)이 함께 갑니다.',
+    '문서의 글이 이 AI로 보내집니다. 번역 프롬프트, 단어집(작으면 전부, 크면 글에 나오는 용어의 항목만), 참고자료의 파일 이름, 그리고 요청마다 그 요청과 가장 잘 맞는 참고자료의 글 일부(최대 6,000자)가 함께 갑니다.',
   trConfirmPaid: '{provider} 요금이 부과됩니다',
   trProviderChange: '앞부분은 {before}(으)로 번역했고, 나머지는 {after}(으)로 번역합니다.',
   trBilingual: '대역: 원문 쪽 옆에 번역',
@@ -174,5 +174,18 @@ export const ko = {
   ctxGlossaryPerBlock:
     '단어집: 항목 {count}개. {limit}개를 넘어, 요청마다 그 글 블록에 나오는 용어의 항목만 보냄',
   ctxReferencesNone: '참고자료: 없음',
-  ctxReferences: '참고자료 파일 이름 {count}개(이름만 보내고 내용은 보내지 않음): {names}',
+  ctxReferences:
+    '참고자료 파일 {count}개: {names}. 요청마다 변환한 글 가운데 그 요청과 가장 잘 맞는 부분(최대 6,000자)도 함께 갑니다.',
+  refConverted: '글로 변환됨',
+  refNeedsOcr: 'OCR 필요',
+  refNeedsOcrHint:
+    '이 파일에는 글자 층이 없어 아무것도 보내지 않습니다. 쓰려면 번역할 문서로 더해 OCR로 읽은 뒤, 그 결과인 Word 문서를 여기에 더하세요.',
+  refFailed: '읽지 못함',
+  refUnsupported: '글 형식이 아님',
+  refChecking: '확인하는 중…',
+  viewConverted: '변환한 글 보기',
+  convertedTitle: '변환한 글: {name}',
+  convertedReadOnly:
+    '읽기 전용입니다. 이 글의 일부가 요청과 함께 AI로 보내질 수 있으며, 파일 자체는 바뀌지 않습니다.',
+  convertedTruncated: '글이 길어 앞부분만 보여 줍니다.',
 } satisfies Record<keyof typeof zh, string>

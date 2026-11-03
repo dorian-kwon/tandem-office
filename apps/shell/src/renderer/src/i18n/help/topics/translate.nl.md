@@ -24,7 +24,8 @@ Een vertaalproject houdt de documenten die je wilt vertalen, je referentiemateri
 
 ## Referentiebestanden
 
-- Bij een vertaalaanvraag worden alleen de namen van de referentiebestanden verstuurd, niet hun inhoud.
+- Als je een referentiebestand toevoegt, zet de app het om naar tekst (bewaard in `references/.md/`; het bestand zelf wordt nooit gewijzigd) en indexeert de woorden. Elk vertaalverzoek bevat de delen die het best passen bij de tekst die je vertaalt, tot 6.000 tekens, samen met de bestandsnamen. Is alle referentietekst samen niet langer, dan gaat die helemaal mee.
+- In de projectdetails toont elk referentiebestand zijn status: **Omgezet naar tekst** (open het met **Omgezette tekst bekijken**, alleen-lezen), **OCR nodig** (een scan of afbeelding: er wordt niets van verstuurd; voeg het toe als te vertalen document, lees het met OCR en voeg het resulterende Word-document toe als referentie) of **Kan niet worden gelezen**.
 - Als dat nodig is, kan de AI een referentiebestand lezen via de projecthulpmiddelen.
 
 ## Gescande pdf’s en afbeeldingen (OCR)

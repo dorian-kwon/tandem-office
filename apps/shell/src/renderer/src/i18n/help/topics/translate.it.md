@@ -24,7 +24,8 @@ Un progetto di traduzione raccoglie in un’unica cartella i documenti da tradur
 
 ## File di riferimento
 
-- Con una richiesta di traduzione vengono inviati solo i nomi dei file di riferimento, non il loro contenuto.
+- Quando aggiungi un file di riferimento, l’app lo converte in testo (conservato in `references/.md/`; il file stesso non viene mai modificato) e ne indicizza le parole. Ogni richiesta di traduzione porta le parti più pertinenti al testo da tradurre, fino a 6.000 caratteri, insieme ai nomi dei file. Se tutto il testo di riferimento non supera questo limite, viene inviato per intero.
+- Nel dettaglio del progetto ogni riferimento mostra il suo stato: **Convertito in testo** (aprilo con **Vedi il testo convertito**, in sola lettura), **Serve l’OCR** (una scansione o un’immagine: non ne viene inviato nulla; aggiungilo come documento da tradurre, leggilo con l’OCR e aggiungi il documento Word ottenuto come riferimento) oppure **Impossibile leggerlo**.
 - Quando ne ha bisogno, l’IA può leggere un file di riferimento tramite gli strumenti del progetto.
 
 ## PDF scansionati e immagini (OCR)

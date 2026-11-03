@@ -139,7 +139,7 @@ export const fr = {
     'Tout est déjà traduit. Rien n’est envoyé ; le PDF est généré à partir de la traduction enregistrée.',
   trConfirmProvider: 'IA utilisée : {provider}',
   trConfirmSends:
-    'Le texte du document est envoyé à cette IA, avec vos prompts de traduction, le glossaire (en entier s’il est petit, sinon les entrées dont les termes apparaissent dans le texte) et les noms des fichiers de référence (pas leur contenu).',
+    'Le texte du document est envoyé à cette IA, avec vos prompts de traduction, le glossaire (en entier s’il est petit, sinon les entrées dont les termes apparaissent dans le texte), les noms des fichiers de référence et les passages de leur texte qui correspondent le mieux à chaque requête (6 000 caractères au plus).',
   trConfirmPaid: '{provider} facturera cette opération',
   trProviderChange: 'La première partie a été traduite avec {before} ; la suite utilise {after}.',
   trBilingual: 'Bilingue : la traduction à côté de chaque page d’origine',
@@ -192,5 +192,17 @@ export const fr = {
     'Glossaire : {count} entrées, plus de {limit}, donc chaque requête ne contient que les entrées dont les termes figurent dans ses blocs de texte',
   ctxReferencesNone: 'Fichiers de référence : aucun',
   ctxReferences:
-    'Noms des fichiers de référence ({count}, noms seulement, jamais leur contenu) : {names}',
+    'Fichiers de référence ({count}) : {names}. Chaque requête emporte aussi les passages de leur texte converti qui lui correspondent le mieux (6 000 caractères au plus).',
+  refConverted: 'Converti en texte',
+  refNeedsOcr: 'OCR nécessaire',
+  refNeedsOcrHint:
+    'Ce fichier n’a pas de couche de texte : rien n’en est envoyé. Pour l’utiliser, ajoutez-le comme document à traduire, lisez-le par OCR, puis ajoutez ici le document Word obtenu.',
+  refFailed: 'Lecture impossible',
+  refUnsupported: 'Pas un format texte',
+  refChecking: 'Vérification…',
+  viewConverted: 'Voir le texte converti',
+  convertedTitle: 'Texte converti : {name}',
+  convertedReadOnly:
+    'Lecture seule. Des passages de ce texte peuvent être envoyés à l’IA avec les requêtes ; le fichier lui-même n’est jamais modifié.',
+  convertedTruncated: 'Le texte est long ; seul son début est affiché.',
 } satisfies Record<keyof typeof zh, string>
