@@ -1,5 +1,13 @@
 # 풀리지 않은 문제
 
+## docx 저장: 한/영 너비 맞춤 문서에서 고친 문단의 글자 간격이 소수로 저장된다
+
+- **증상.** `settings.xml`에 `w:balanceSingleByteDoubleByteWidth`가 있는 문서(한글에서 내보낸 docx에 흔하다)에서 `w:spacing w:val="-2"`인 한글 런이 든 문단을 고치고 저장하면, 그 런의 값이 `-3.5`, `-3.3`처럼 바뀌어 저장된다. 한 글자만 쳐도 같다. 번역 도구(`translate_blocks`) 확인 중 사용자 견본 문서의 제목 문단 두 개에서 보았다(`apps/docs/tests/translate-runs-roundtrip.test.ts`, `TRANSLATE_RUNS_SAMPLE`).
+- **원인(추정).** 엔진의 `applyBalancedDbcsSpacing`(`packages/docx-engine/src/parse-block-passes.ts`)이 화면용으로 `charSpacingTwips`를 늘리고, 문단을 다시 쓸 때 `generate.ts`가 원래 rPr 값과 다르다고 보고 늘린 값을 `w:spacing`에 쓴다.
+- **영향.** 고친 문단의 글자 간격이 원본과 달라지고, `w:spacing`은 정수여야 하므로 Word가 파일을 고치자고 할 수 있다. 고치지 않은 문단은 바이트 그대로다.
+- **지금 못 푸는 이유.** 문서 엔진 패키지의 동작이라 사람의 확인 없이 고치지 않는다(문서 엔진 규칙).
+- **가능한 길.** 화면용 값을 `charSpacingTwips`와 따로 두거나, 저장할 때 rawRPr의 `w:spacing`과 비교하는 값을 늘리기 전 값으로 한다.
+
 ## 사용자 MCP: Codex 에이전트 세션의 같은 이름 서버 덮기를 실제 Codex로 확인하지 않았다
 
 - **증상.** 결정 0100. 에이전트 창이 Codex로 세션을 열 때, 사용자의 Codex 설정에 등록 서버와 같은 이름의 MCP 서버가 있으면 앱은 그 이름의 항목을 중계 서버 설정(주소, 세션 토큰, `default_tools_approval_mode: 'approve'`)으로 대화 설정에 덮어 넣는다. 가짜 프로그램 시험에서만 확인했다.

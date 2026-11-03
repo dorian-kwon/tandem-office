@@ -84,6 +84,13 @@ import {
   type NumIds,
   type SelectionScope,
 } from './protocol'
+import {
+  applyRunTranslations,
+  readRunGroups,
+  type RunParagraph,
+  type RunTranslationItem,
+  type RunTranslationReport,
+} from './translate-runs'
 
 /**
  * Local agent tools: a document-context reader plus a script-style execution
@@ -170,7 +177,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
   {
     name: 'replace_blocks',
     description:
-      "Replace a block range with new content (restricted HTML). For rewriting/translating/condensing/expanding existing content; the new block count may differ from the old. New blocks inherit the replaced blocks' paragraph and text formatting (font, size, color, indent, spacing, alignment) automatically, and a rewritten <table> keeps the old table's column widths, borders, shading and cell formatting (unchanged cells keep their content); never try to restore formatting afterwards.",
+      "Replace a block range with new content (restricted HTML). For rewriting/condensing/expanding existing content — not for translation, which goes through read_runs and translate_blocks so every run keeps its formatting; the new block count may differ from the old. New blocks inherit the replaced blocks' paragraph and text formatting (font, size, color, indent, spacing, alignment) automatically, and a rewritten <table> keeps the old table's column widths, borders, shading and cell formatting (unchanged cells keep their content); never try to restore formatting afterwards.",
     inputSchema: {
       type: 'object',
       properties: {
@@ -182,9 +189,55 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     },
   },
   {
+    name: 'read_runs',
+    description:
+      'Read a block range for TRANSLATION: one JSON line per paragraph with its text as numbered segments, one segment per run of equal formatting (footnote references, tabs, breaks and other inline objects sit between segments and are not shown). Table blocks list each cell paragraph with its "paragraph" number. Empty paragraphs are listed as "empty":true; leave them alone. ' +
+      'Long ranges are paged: a truncated result says which startBlockIndex to continue from.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        startBlockIndex: { type: 'integer', description: 'start block index (0-based, inclusive)' },
+        endBlockIndex: { type: 'integer', description: 'end block index (inclusive)' },
+      },
+      required: ['startBlockIndex', 'endBlockIndex'],
+    },
+  },
+  {
+    name: 'translate_blocks',
+    description:
+      'The way to translate existing document text (never use replace_blocks or write_document to translate). Read the paragraphs with read_runs first, then pass for each paragraph the translations of its segments, in the same order and the same number: segments[i] replaces the text of segment i, which keeps its own formatting (font, italics, color, raw run properties); footnote references, tabs, breaks, paragraph styles and empty paragraphs stay exactly as they are. ' +
+      'Word order may move text between segments of one paragraph, but give every segment a translation; use an empty string only for a piece with no counterpart in the translation. Fewer segments leave the remaining segments untranslated (reported); extra segments are appended to the last one. Block indexes do not change.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        blocks: {
+          type: 'array',
+          description: 'one entry per translated paragraph',
+          items: {
+            type: 'object',
+            properties: {
+              index: { type: 'integer', description: 'block index from read_runs' },
+              paragraph: {
+                type: 'integer',
+                description: 'for a table block: the "paragraph" number from read_runs',
+              },
+              segments: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'the translated text of each segment, in read_runs order',
+              },
+            },
+            required: ['index', 'segments'],
+          },
+        },
+      },
+      required: ['blocks'],
+    },
+  },
+  {
     name: 'replace_selection',
     description:
-      "Replace exactly the user's selected text (the <sel>…</sel> span in the context) with new inline content, leaving the rest of the block untouched. For rewording/translating/correcting a selected phrase or sentence inside a paragraph. The new text inherits the selection's formatting unless the fragment styles it. Requires a range selection inside one paragraph/heading/list item; for whole blocks or several blocks use replace_blocks.",
+      "Replace exactly the user's selected text (the <sel>…</sel> span in the context) with new inline content, leaving the rest of the block untouched. For rewording/translating/correcting a selected phrase or sentence inside a paragraph. The new text inherits the selection's formatting unless the fragment styles it. Requires a range selection inside one paragraph/heading/list item; for whole blocks or several blocks use replace_blocks (or translate_blocks to translate them).",
     inputSchema: {
       type: 'object',
       properties: {
@@ -855,6 +908,7 @@ const INDEX_WRITE_SUMMARIES: Record<string, () => string> = {
   insert_content: () => t('aiSumInsertContent'),
   write_document: () => t('aiSumWriteDocument'),
   replace_blocks: () => t('aiSumReplaceContent'),
+  translate_blocks: () => t('aiSumTranslateBlocks'),
   replace_selection: () => t('aiSumReplaceSelection'),
   apply_ops: () => t('aiSumApplyCommands'),
   insert_chart: () => t('aiSumInsertChart'),
@@ -1364,7 +1418,10 @@ function executeToolUnguarded(
   const staleSummary = staleSummaryOf(call)
   if (staleSummary && editedExternally(editor)) return fail(staleSummary(), STALE_DOC_ERROR)
   const settle = (exec: ToolExecution): ToolExecution => {
-    const readsDoc = call.name === 'get_document_context' || call.name === 'read_blocks'
+    const readsDoc =
+      call.name === 'get_document_context' ||
+      call.name === 'read_blocks' ||
+      call.name === 'read_runs'
     if (exec.mutated || (readsDoc && !exec.isError)) markDocSeen(editor)
     return exec
   }
@@ -1616,6 +1673,108 @@ function executeSyncTool(
         output: `Replaced blocks ${range.start}-${range.end} with ${nodes.length} block(s); the new blocks kept the replaced blocks' formatting. Block indexes have changed; use get_document_context if needed.`,
         mutated: true,
         summary: t('aiSumReplacedBlocks', { start: range.start, end: range.end }),
+      }
+    }
+
+    case 'read_runs': {
+      const range = validRange(editor, call.input.startBlockIndex, call.input.endBlockIndex)
+      if (!range) return fail(t('aiSumReadRuns', { start: 0, end: 0 }), rangeError(editor))
+      const lines: string[] = []
+      let size = 0
+      let next: number | null = null
+      for (const entry of readRunGroups(editor, range.start, range.end)) {
+        const line = JSON.stringify(entry)
+        // pages end on a block boundary so a block's paragraphs are never split across reads
+        if (size + line.length > READ_MAX_CHARS && lines.length > 0) {
+          const lastIndex = (JSON.parse(lines[lines.length - 1]) as RunParagraph).index
+          if (entry.index !== lastIndex) {
+            next = entry.index
+            break
+          }
+        }
+        lines.push(line)
+        size += line.length + 1
+      }
+      const note =
+        next === null
+          ? ''
+          : `\n…(truncated: call read_runs again with startBlockIndex=${next} to continue)`
+      return {
+        output: lines.length > 0 ? lines.join('\n') + note : '(range is empty)',
+        mutated: false,
+        summary: t('aiSumReadRuns', {
+          start: range.start,
+          end: next === null ? range.end : next - 1,
+        }),
+      }
+    }
+
+    case 'translate_blocks': {
+      const summary = t('aiSumTranslateBlocks')
+      const raw = call.input.blocks
+      if (!Array.isArray(raw) || raw.length === 0)
+        return fail(summary, 'blocks must be a non-empty array of { index, segments }')
+      const items: RunTranslationItem[] = []
+      for (const entry of raw as unknown[]) {
+        const e = (entry ?? {}) as { index?: unknown; paragraph?: unknown; segments?: unknown }
+        if (!Number.isInteger(e.index))
+          return fail(summary, 'every entry needs an integer index from read_runs')
+        if (e.paragraph !== undefined && e.paragraph !== null && !Number.isInteger(e.paragraph))
+          return fail(summary, `block ${String(e.index)}: paragraph must be an integer`)
+        const segments = e.segments as string[]
+        const joined = Array.isArray(segments) ? segments.join('\n') : ''
+        const echo = toolEchoError(joined) ?? contextMarkerError(joined)
+        if (echo)
+          return fail(summary, `block ${String(e.index)}: ${echo.replace(/^html/, 'a segment')}`)
+        items.push({
+          index: Number(e.index),
+          segments,
+          ...(e.paragraph === undefined || e.paragraph === null
+            ? {}
+            : { paragraph: Number(e.paragraph) }),
+        })
+      }
+      const outcome = applyRunTranslations(editor, items, track)
+      if (!outcome.ok) {
+        return fail(
+          summary,
+          `Nothing was changed: ${outcome.errors.join('; ')}. Call read_runs for the current blocks, then retry.`,
+        )
+      }
+      const label = (r: RunTranslationReport) =>
+        r.paragraph === undefined ? `block ${r.index}` : `block ${r.index} paragraph ${r.paragraph}`
+      const translated = outcome.reports.filter((r) => r.changed > 0)
+      const notes: string[] = []
+      const incomplete = outcome.reports.filter((r) => r.incomplete)
+      if (incomplete.length > 0) {
+        notes.push(
+          'INCOMPLETE — these paragraphs got fewer segments than they have, so their remaining segments keep the original text: ' +
+            incomplete
+              .map(
+                (r) => `${label(r)} (${r.incomplete!.given} of ${r.incomplete!.groups} segments)`,
+              )
+              .join(', ') +
+            '. Call translate_blocks again for them with every segment.',
+        )
+      }
+      const extra = outcome.reports.filter((r) => r.extra)
+      if (extra.length > 0) {
+        notes.push(
+          'Extra segments were appended to the last segment of: ' +
+            extra.map((r) => `${label(r)} (+${r.extra})`).join(', ') +
+            '.',
+        )
+      }
+      const empty = outcome.reports.filter((r) => r.empty)
+      if (empty.length > 0)
+        notes.push(`Ignored (empty paragraphs, left as they are): ${empty.map(label).join(', ')}.`)
+      return {
+        output: [
+          `Translated ${translated.length} paragraph(s) in place; run formatting, footnote references, paragraph styles and empty paragraphs were kept. Block indexes are unchanged.`,
+          ...notes,
+        ].join('\n'),
+        mutated: translated.length > 0,
+        summary: t('aiSumTranslatedBlocks', { count: translated.length }),
       }
     }
 

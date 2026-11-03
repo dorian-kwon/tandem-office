@@ -165,6 +165,22 @@ export interface TranslationFolderContext {
   cut: boolean
 }
 
+/**
+ * How to translate an open document without losing its structure, appended
+ * after the person's prompts in the panel context. The Word editor's
+ * replace_blocks rebuilds whole paragraphs from model HTML, which merged runs
+ * of different formats, restyled or dropped empty paragraphs and lost
+ * footnote references; read_runs / translate_blocks swap text inside the
+ * existing runs instead. Other editors do not offer those tools, so the rule
+ * names the Word editor.
+ */
+export const TRANSLATION_EDITING_RULES = [
+  'How to translate in the editors of this app:',
+  '- In a Word document, translate with read_runs then translate_blocks: one translated string per segment, in order. Never translate with replace_blocks or write_document; they rebuild the paragraphs and lose run formatting.',
+  '- Never delete, fill or restyle empty paragraphs; leave them as they are.',
+  '- Never move, delete or retype a footnote reference mark. Translate footnote and endnote text with the note tools (read_notes, then edit_note).',
+].join('\n')
+
 /** The registered translation project at `root` (any spelling of the path), or undefined */
 function registeredDir(root: string, options: TranslationContextOptions): string | undefined {
   const platform = options.platform ?? process.platform
@@ -189,8 +205,13 @@ export async function translationContextForFolder(
   if (dir === undefined) return null
   if ((await projectStatus(dir)) !== 'ok') return null
   let built: TranslationInstructions
+  // the rules ride after the prompts, so the person's material makes room for them
+  const limit = Math.max(
+    0,
+    (options.limitChars ?? INSTRUCTIONS_LIMIT_CHARS) - TRANSLATION_EDITING_RULES.length - 2,
+  )
   try {
-    built = await buildTranslationInstructions(dir, query ?? '', options)
+    built = await buildTranslationInstructions(dir, query ?? '', { ...options, limitChars: limit })
   } catch {
     // a broken glossary or project file sends nothing of the translation tool
     return null
@@ -198,7 +219,7 @@ export async function translationContextForFolder(
   const included = (kind: ProjectTranslationItem['kind']) =>
     built.items.find((item) => item.kind === kind)?.included ?? false
   return {
-    prompts: built.promptText,
+    prompts: `${built.promptText}\n\n${TRANSLATION_EDITING_RULES}`,
     material: built.materialText,
     cut: built.cut,
     items: [

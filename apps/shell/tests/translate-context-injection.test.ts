@@ -200,6 +200,31 @@ describe('translationContextForFolder', () => {
     expect(context?.cut).toBe(false)
   })
 
+  it('tells the AI how to translate a Word document without losing its formatting', async () => {
+    writeTranslationProjects(settingsPath, [{ dir, lastOpened: 1 }])
+    writeTranslationSystemPrompt(settingsPath, 'GLOBAL')
+    const context = await translationContextForFolder(dir, { settingsPath })
+    const prompts = context?.prompts ?? ''
+    // the person's prompts come first, the editing rules after them
+    expect(prompts.indexOf('GLOBAL')).toBeLessThan(prompts.indexOf('read_runs'))
+    expect(prompts).toMatch(/read_runs[^\n]*then[^\n]*translate_blocks/)
+    expect(prompts).toMatch(/never[^\n]*replace_blocks/i)
+    expect(prompts).toMatch(/empty paragraphs/i)
+    expect(prompts).toMatch(/footnote reference/i)
+    expect(prompts).toMatch(/edit_note/)
+  })
+
+  it('keeps the whole text within the limit with the editing rules added', async () => {
+    writeTranslationProjects(settingsPath, [{ dir, lastOpened: 1 }])
+    writeTranslationSystemPrompt(settingsPath, 'x'.repeat(5000))
+    const context = await translationContextForFolder(dir, { settingsPath, limitChars: 2000 })
+    expect((context?.prompts.length ?? 0) + (context?.material.length ?? 0)).toBeLessThanOrEqual(
+      2000,
+    )
+    expect(context?.prompts).toContain('translate_blocks')
+    expect(context?.cut).toBe(true)
+  })
+
   it('uses the request text it is given to pick entries of a large glossary', async () => {
     writeTranslationProjects(settingsPath, [{ dir, lastOpened: 1 }])
     await addGlossaryRows(rows(300))
