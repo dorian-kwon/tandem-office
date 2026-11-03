@@ -106,7 +106,11 @@ test('translation project: create, upload, split view, read-only source, remove'
 
     // copies landed in the project, the original is untouched
     expect(await readdir(join(projectDir, 'source'))).toEqual(['contract.md'])
-    expect(await readdir(join(projectDir, 'references'))).toEqual(['style.txt'])
+    // the reference copy sits beside a hidden folder holding its converted markdown
+    expect((await readdir(join(projectDir, 'references'))).sort()).toEqual(['.md', 'style.txt'])
+    await expect
+      .poll(() => existsSync(join(projectDir, 'references', '.md', 'style.txt.md')))
+      .toBe(true)
     expect(await readdir(join(projectDir, 'glossary'))).toEqual(['terms.csv'])
     const merged = JSON.parse(await readFile(join(projectDir, '.tandem', 'glossary.json'), 'utf8'))
     expect(JSON.stringify(merged)).toContain('supplier')
