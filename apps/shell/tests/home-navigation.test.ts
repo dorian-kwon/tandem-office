@@ -8,6 +8,9 @@ import { LocaleProvider } from '../src/renderer/src/locale'
 import type { SubscriptionConnection } from '../src/renderer/src/subscription-client'
 import type { RecentEntry } from '../src/shared/home-api'
 
+// these tests cover the full sidebar, which the translation-only build hides
+vi.mock('../src/renderer/src/translation-only', () => ({ TRANSLATION_ONLY: false }))
+
 let root: Root
 let container: HTMLDivElement
 const files: RecentEntry[] = [

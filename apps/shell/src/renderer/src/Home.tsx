@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { TRANSLATION_ONLY } from './translation-only'
 import type {
   DragEvent as ReactDragEvent,
   PointerEvent as ReactPointerEvent,
@@ -1101,7 +1102,7 @@ export function Home({
   const driveOffered = driveState !== null && driveState.state !== 'unavailable'
   // the project screen (decision 0088) takes over the content area the same way
   const [projectsMode, setProjectsMode] = useState(false)
-  const [translateMode, setTranslateMode] = useState(false)
+  const [translateMode, setTranslateMode] = useState(TRANSLATION_ONLY)
   const [projectRequest, setProjectRequest] = useState<ProjectScreenRequest | null>(null)
   // the project screen asked for the first-connection notice ("[tidy up]" waits behind it)
   const [projectsNoticeAsked, setProjectsNoticeAsked] = useState(false)
@@ -3349,99 +3350,103 @@ export function Home({
           )}
         </div>
         <nav className="sidebar-nav">
-          <button
-            className={`nav-item${activeNav === 'recent' ? ' active' : ''}`}
-            aria-current={activeNav === 'recent' ? 'page' : undefined}
-            onClick={() => changeView('recent')}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <circle cx="8" cy="8" r="6.2" stroke="currentColor" strokeWidth="1.3" />
-              <path
-                d="M8 4.8V8l2.2 1.6"
-                stroke="currentColor"
-                strokeWidth="1.3"
-                strokeLinecap="round"
-              />
-            </svg>
-            <span className="nav-label">{t('navRecent')}</span>
-            <span className="nav-count">{navCounts.recent}</span>
-          </button>
-          <button
-            className={`nav-item${activeNav === 'starred' ? ' active' : ''}`}
-            aria-current={activeNav === 'starred' ? 'page' : undefined}
-            onClick={() => changeView('starred')}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path
-                d="M8 1.9l1.9 3.85 4.25.62-3.07 3 .72 4.23L8 11.6l-3.8 2 .72-4.23-3.07-3 4.25-.62z"
-                stroke="currentColor"
-                strokeWidth="1.3"
-                strokeLinejoin="round"
-              />
-            </svg>
-            <span className="nav-label">{t('navStarred')}</span>
-            <span className="nav-count">{navCounts.starred}</span>
-          </button>
-          <button
-            className={`nav-item${activeNav === 'ask' ? ' active' : ''}`}
-            aria-current={activeNav === 'ask' ? 'page' : undefined}
-            onClick={() => {
-              setAskMode(true)
-              setDriveMode(false)
-              setProjectsMode(false)
-              setTranslateMode(false)
-              setSelectedFolder(null)
-              setSelected(new Set())
-              setRowMenu(null)
-            }}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path
-                d="M14 10.5c0 .9-.7 1.6-1.6 1.6H5.4L2 14.5V3.6C2 2.7 2.7 2 3.6 2h8.8c.9 0 1.6.7 1.6 1.6z"
-                stroke="currentColor"
-                strokeWidth="1.3"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M5 6.2h6M5 8.6h4"
-                stroke="currentColor"
-                strokeWidth="1.3"
-                strokeLinecap="round"
-              />
-            </svg>
-            <span className="nav-label">{t('navAsk')}</span>
-          </button>
-          {projectsOffered && (
-            <button
-              className={`nav-item${activeNav === 'projects' ? ' active' : ''}`}
-              aria-current={activeNav === 'projects' ? 'page' : undefined}
-              data-testid="home-projects-nav"
-              onClick={() => {
-                setProjectsMode(true)
-                setTranslateMode(false)
-                setAskMode(false)
-                setDriveMode(false)
-                setSelectedFolder(null)
-                setSelected(new Set())
-                setRowMenu(null)
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path
-                  d="M1.9 4.3c0-.7.6-1.3 1.3-1.3h2.9l1.4 1.5h5.3c.7 0 1.3.6 1.3 1.3v6.3c0 .7-.6 1.3-1.3 1.3H3.2c-.7 0-1.3-.6-1.3-1.3z"
-                  stroke="currentColor"
-                  strokeWidth="1.3"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M5 8.4h6M5 10.6h3.6"
-                  stroke="currentColor"
-                  strokeWidth="1.3"
-                  strokeLinecap="round"
-                />
-              </svg>
-              <span className="nav-label">{projectsText(lang, 'navProjects')}</span>
-            </button>
+          {!TRANSLATION_ONLY && (
+            <>
+              <button
+                className={`nav-item${activeNav === 'recent' ? ' active' : ''}`}
+                aria-current={activeNav === 'recent' ? 'page' : undefined}
+                onClick={() => changeView('recent')}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <circle cx="8" cy="8" r="6.2" stroke="currentColor" strokeWidth="1.3" />
+                  <path
+                    d="M8 4.8V8l2.2 1.6"
+                    stroke="currentColor"
+                    strokeWidth="1.3"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <span className="nav-label">{t('navRecent')}</span>
+                <span className="nav-count">{navCounts.recent}</span>
+              </button>
+              <button
+                className={`nav-item${activeNav === 'starred' ? ' active' : ''}`}
+                aria-current={activeNav === 'starred' ? 'page' : undefined}
+                onClick={() => changeView('starred')}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path
+                    d="M8 1.9l1.9 3.85 4.25.62-3.07 3 .72 4.23L8 11.6l-3.8 2 .72-4.23-3.07-3 4.25-.62z"
+                    stroke="currentColor"
+                    strokeWidth="1.3"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                <span className="nav-label">{t('navStarred')}</span>
+                <span className="nav-count">{navCounts.starred}</span>
+              </button>
+              <button
+                className={`nav-item${activeNav === 'ask' ? ' active' : ''}`}
+                aria-current={activeNav === 'ask' ? 'page' : undefined}
+                onClick={() => {
+                  setAskMode(true)
+                  setDriveMode(false)
+                  setProjectsMode(false)
+                  setTranslateMode(false)
+                  setSelectedFolder(null)
+                  setSelected(new Set())
+                  setRowMenu(null)
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path
+                    d="M14 10.5c0 .9-.7 1.6-1.6 1.6H5.4L2 14.5V3.6C2 2.7 2.7 2 3.6 2h8.8c.9 0 1.6.7 1.6 1.6z"
+                    stroke="currentColor"
+                    strokeWidth="1.3"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M5 6.2h6M5 8.6h4"
+                    stroke="currentColor"
+                    strokeWidth="1.3"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <span className="nav-label">{t('navAsk')}</span>
+              </button>
+              {projectsOffered && (
+                <button
+                  className={`nav-item${activeNav === 'projects' ? ' active' : ''}`}
+                  aria-current={activeNav === 'projects' ? 'page' : undefined}
+                  data-testid="home-projects-nav"
+                  onClick={() => {
+                    setProjectsMode(true)
+                    setTranslateMode(false)
+                    setAskMode(false)
+                    setDriveMode(false)
+                    setSelectedFolder(null)
+                    setSelected(new Set())
+                    setRowMenu(null)
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path
+                      d="M1.9 4.3c0-.7.6-1.3 1.3-1.3h2.9l1.4 1.5h5.3c.7 0 1.3.6 1.3 1.3v6.3c0 .7-.6 1.3-1.3 1.3H3.2c-.7 0-1.3-.6-1.3-1.3z"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M5 8.4h6M5 10.6h3.6"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  <span className="nav-label">{projectsText(lang, 'navProjects')}</span>
+                </button>
+              )}
+            </>
           )}
           {translateOffered && (
             <button
@@ -3477,60 +3482,64 @@ export function Home({
               <span className="nav-label">{translateText(lang, 'navTranslate')}</span>
             </button>
           )}
-          {/* decision 0032: the agent opens a window of its own, hence the mark on the right */}
-          {window.aiOfficeAgent ? (
-            <button
-              className="nav-item"
-              title={agentText(lang, 'homeCardSub')}
-              onClick={() => void window.aiOfficeAgent?.open()}
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path
-                  d="M1.9 4.3c0-.7.6-1.3 1.3-1.3h2.9l1.4 1.5h5.3c.7 0 1.3.6 1.3 1.3v6.3c0 .7-.6 1.3-1.3 1.3H3.2c-.7 0-1.3-.6-1.3-1.3z"
-                  stroke="currentColor"
-                  strokeWidth="1.3"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M8 6.6l.6 1.6 1.6.6-1.6.6L8 11l-.6-1.6-1.6-.6 1.6-.6z"
-                  fill="currentColor"
-                />
-              </svg>
-              <span className="nav-label">{agentText(lang, 'windowTitle')}</span>
-              <span className="nav-count nav-external">
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                  <path
-                    d="M4.5 2.5h5v5M9.5 2.5L3 9"
-                    stroke="currentColor"
-                    strokeWidth="1.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </span>
-            </button>
-          ) : null}
-          {driveOffered && (
-            <button
-              className={`nav-item${driveMode && !selectedFolder ? ' active' : ''}`}
-              data-testid="home-drive-nav"
-              onClick={() => {
-                setDriveMode(true)
-                setAskMode(false)
-                setProjectsMode(false)
-                setTranslateMode(false)
-                setSelectedFolder(null)
-                setSelected(new Set())
-                setRowMenu(null)
-              }}
-            >
-              <DriveNavIcon />
-              <span className="nav-label">{driveUiText(lang, 'driveNav')}</span>
-            </button>
+          {!TRANSLATION_ONLY && (
+            <>
+              {/* decision 0032: the agent opens a window of its own, hence the mark on the right */}
+              {window.aiOfficeAgent ? (
+                <button
+                  className="nav-item"
+                  title={agentText(lang, 'homeCardSub')}
+                  onClick={() => void window.aiOfficeAgent?.open()}
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path
+                      d="M1.9 4.3c0-.7.6-1.3 1.3-1.3h2.9l1.4 1.5h5.3c.7 0 1.3.6 1.3 1.3v6.3c0 .7-.6 1.3-1.3 1.3H3.2c-.7 0-1.3-.6-1.3-1.3z"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M8 6.6l.6 1.6 1.6.6-1.6.6L8 11l-.6-1.6-1.6-.6 1.6-.6z"
+                      fill="currentColor"
+                    />
+                  </svg>
+                  <span className="nav-label">{agentText(lang, 'windowTitle')}</span>
+                  <span className="nav-count nav-external">
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                      <path
+                        d="M4.5 2.5h5v5M9.5 2.5L3 9"
+                        stroke="currentColor"
+                        strokeWidth="1.2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </span>
+                </button>
+              ) : null}
+              {driveOffered && (
+                <button
+                  className={`nav-item${driveMode && !selectedFolder ? ' active' : ''}`}
+                  data-testid="home-drive-nav"
+                  onClick={() => {
+                    setDriveMode(true)
+                    setAskMode(false)
+                    setProjectsMode(false)
+                    setTranslateMode(false)
+                    setSelectedFolder(null)
+                    setSelected(new Set())
+                    setRowMenu(null)
+                  }}
+                >
+                  <DriveNavIcon />
+                  <span className="nav-label">{driveUiText(lang, 'driveNav')}</span>
+                </button>
+              )}
+            </>
           )}
         </nav>
-        <div className="sidebar-divider" />
-        {renderFolderPanel()}
+        {!TRANSLATION_ONLY && <div className="sidebar-divider" />}
+        {!TRANSLATION_ONLY && renderFolderPanel()}
         <AccountEntry
           connection={connection}
           onOpenChange={handleSettingsOpenChange}

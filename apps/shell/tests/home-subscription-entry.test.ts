@@ -18,6 +18,9 @@ import { Home } from '../src/renderer/src/Home'
 import { LocaleProvider } from '../src/renderer/src/locale'
 import type { SubscriptionConnection } from '../src/renderer/src/subscription-client'
 
+// these tests cover the full sidebar, which the translation-only build hides
+vi.mock('../src/renderer/src/translation-only', () => ({ TRANSLATION_ONLY: false }))
+
 const actEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean
 }
