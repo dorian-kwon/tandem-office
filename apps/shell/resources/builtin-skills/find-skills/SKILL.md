@@ -140,9 +140,9 @@ If this is something you do often, you could create your own skill:
 npx skills init my-xyz-skill
 ```
 
-## In IeumOffice
+## In tandem office
 
-This section was added by IeumOffice to the original skill.
+This section was added to the original skill by IeumOffice, the project tandem office is forked from.
 
 - Do not install skills with `npx skills add` (or any other install command).
 - Instead, call the app tool `propose_skill_install` with one of:

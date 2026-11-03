@@ -1,4 +1,4 @@
-# Contributing to IeumOffice
+# Contributing to tandem office
 
 Thanks for your interest in contributing. This document covers the local
 setup, the checks a change must pass, and the conventions used in this
@@ -10,7 +10,7 @@ Development happens in this repository,
 [pblsketch/openoffice](https://github.com/pblsketch/openoffice). Pull requests,
 issues and feature requests are all handled here.
 
-IeumOffice is a modified version of GenOffice (see
+tandem office is a fork of IeumOffice, a modified version of GenOffice (see
 [License and acknowledgement](README.en.md#license-and-acknowledgement)) and
 keeps taking engine fixes from it, which shapes two rules:
 

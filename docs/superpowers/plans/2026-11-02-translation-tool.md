@@ -1,4 +1,4 @@
-# 번역툴(tandem) Implementation Plan
+# 번역툴(tandem office) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -26,7 +26,7 @@
 - 번역할 문서를 지워도 `output/`의 번역본은 지우지 않는다. 번역본은 따로 확인을 받고 지운다.
 - PDF·스캔·이미지의 결과 형식: 일반 PDF는 기존 번역 엔진의 번역 PDF(선택 시 대역본), 스캔 PDF와 이미지는 OCR 결과를 Word 문서로 만들어 그 문서에서 번역한다.
 - 화면 문구는 21개 언어를 모두 채운다는 원본 규칙을 따른다(시점은 Task 12).
-- 제품 이름은 가칭 tandem이다. 이음오피스 이름과 브랜드를 그대로 쓰지 않는다.
+- 제품 이름은 `tandem office`다. 이음오피스 이름과 브랜드를 그대로 쓰지 않는다.
 
 ## Review Focus
 
@@ -588,7 +588,7 @@ Expected: FAIL (새 문구 키가 일부 언어에 없음)
 
 - [ ] **Step 2: 21개 언어를 모두 채운다**
 
-한국어와 영어를 먼저 쓰고 나머지 언어는 같은 키로 번역한다. 제품 이름 정의 위치(`packages/i18n`)에서 가칭 tandem을 한 곳에서만 정의한다.
+한국어와 영어를 먼저 쓰고 나머지 언어는 같은 키로 번역한다. 제품 이름 정의 위치(`packages/i18n`)에서 `tandem office`를 한 곳에서만 정의한다.
 
 - [ ] **Step 3: 전체 검사 실행**
 

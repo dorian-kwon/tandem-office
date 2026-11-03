@@ -1,23 +1,24 @@
-# 이음오피스 (IeumOffice)
+# tandem office
 
 **한국어** · [English](README.en.md)
 
 [![누적 다운로드](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fpblsketch%2Fopenoffice%2Fmain%2Fdocs%2Ftracking%2Fgrowth-latest.json&query=%24.totalDownloads&label=%EB%88%84%EC%A0%81%20%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C)](https://github.com/pblsketch/openoffice/releases)
 [![별](https://img.shields.io/github/stars/pblsketch/openoffice?style=social)](https://github.com/pblsketch/openoffice/stargazers)
 
-이음오피스가 도움이 된다면 위의 **별**을 눌러 주세요. 별 하나가 이 프로그램을
+tandem office가 도움이 된다면 위의 **별**을 눌러 주세요. 별 하나가 이 프로그램을
 더 많은 사람에게 알리는 힘이 됩니다.
 
-이음오피스는 누구나 무료로 쓸 수 있는 오픈소스 데스크톱 오피스 프로그램입니다.
+tandem office는 누구나 무료로 쓸 수 있는 오픈소스 데스크톱 오피스 프로그램입니다.
 워드, 엑셀, 파워포인트, PDF, 마크다운, HTML 문서와 마인드맵을 한 창에서 열고
 고칩니다.
 AI는 옆에서 답만 하는 것이 아니라 문서 자체를 고칩니다.
 
 AI는 **이미 쓰고 있는 Claude 구독이나 ChatGPT 요금제**로 돌아갑니다. API 키를
-발급받을 필요가 없고, 이음오피스에 내는 돈도 없습니다. 구독이 없으면
+발급받을 필요가 없고, tandem office에 내는 돈도 없습니다. 구독이 없으면
 **무료 AI**(OpenRouter, Google Gemini)를 연결해 쓸 수 있습니다.
 
-이음오피스는 오픈소스 프로젝트
+tandem office는 [이음오피스(IeumOffice)](https://github.com/pblsketch/openoffice)를
+포크해 만든 프로그램이고, 이음오피스는 오픈소스 프로젝트
 [GenOffice](https://github.com/genspark-ai/genoffice)를 바탕으로 고쳐 만든
 프로그램입니다([라이선스와 출처](#라이선스와-출처) 참고).
 
@@ -42,8 +43,8 @@ AI는 **이미 쓰고 있는 Claude 구독이나 ChatGPT 요금제**로 돌아�
 
 ## 만든 이유
 
-이음오피스는 고등학교 국어 교사가 자기가 읽고 쓰는 일에 쓰려고 만들기 시작한
-프로그램입니다. 생각을 마인드맵으로 정리하고, 그 내용을 AI에게 넘기고, AI가 만든
+tandem office의 바탕인 이음오피스는 고등학교 국어 교사가 자기가 읽고 쓰는
+일에 쓰려고 만들기 시작한 프로그램입니다. 생각을 마인드맵으로 정리하고, 그 내용을 AI에게 넘기고, AI가 만든
 결과물을 다시 한글이나 파워포인트로 옮겨 고치는 일이 여러 프로그램에 흩어져
 있었습니다. 그 사이를 한 창에서 잇고, AI가 만든 결과물을 사람이 직접 고칠 수
 있게 하려는 것이 출발점입니다.
@@ -57,7 +58,7 @@ AI는 **이미 쓰고 있는 Claude 구독이나 ChatGPT 요금제**로 돌아�
   오픈소스와 한글과컴퓨터가 공개한 HWP 형식 문서를 바탕으로 만들었습니다
   ([라이선스와 출처](#라이선스와-출처) 참고).
 
-만든 사람이 직접 쓴 이야기는 [이음오피스를 만든 이유](https://ieumoffice.com/story)에
+이음오피스를 만든 사람이 직접 쓴 이야기는 [이음오피스를 만든 이유](https://ieumoffice.com/story)에
 있습니다.
 
 ## 지금 되는 것
@@ -93,10 +94,10 @@ AI는 **이미 쓰고 있는 Claude 구독이나 ChatGPT 요금제**로 돌아�
 
 ## 구독 연결하기
 
-이음오피스는 어디에도 대신 로그인하지 않습니다. 필요한 것은 둘 가운데 하나입니다.
+tandem office는 어디에도 대신 로그인하지 않습니다. 필요한 것은 둘 가운데 하나입니다.
 
 1. 본인의 Claude 구독, 그리고 PC에 설치되어 있고 로그인된 **Claude Code**.
-   이음오피스는 그 프로그램을 실행해서 요청을 넘기고 답을 받아 옵니다.
+   tandem office는 그 프로그램을 실행해서 요청을 넘기고 답을 받아 옵니다.
 2. 본인의 ChatGPT 요금제. 설치할 프로그램이 없습니다. ChatGPT 카드의
    **ChatGPT로 계속**을 누르면 브라우저에 OpenAI의 ChatGPT 로그인 화면이 열리고,
    로그인한 뒤 이 앱이 ChatGPT 요금제를 쓰도록 허용하면 연결됩니다. 요청은 PC에서
@@ -161,7 +162,7 @@ Claude Code는 2.1.248 이상이어야 하고, 그보다 낮으면 "업데이트
 
 ## 비용
 
-이음오피스 자체는 무료입니다. AI에 드는 돈은 어떤 연결을 쓰느냐에 따라
+tandem office 자체는 무료입니다. AI에 드는 돈은 어떤 연결을 쓰느냐에 따라
 다릅니다.
 
 | 연결                                                                               | 비용                                                           | 언제 쓰이나                                         |
@@ -233,14 +234,14 @@ MCP 도구 호출은 화면을 보는 사람이 아니라 프로그램이 보내
 않고, Claude Code나 Codex를 씁니다. 지금 무엇이 어떤 경로로 되는지는
 `ieumoffice capabilities --json`으로 볼 수 있습니다.
 
-이음오피스는 GenOffice와 한 PC에 함께 설치할 수 있습니다. 자기 이름
-(`ieumoffice`, `~/.ieumoffice`)만 등록하고, GenOffice가 등록한 것은 읽거나
+tandem office는 GenOffice와 한 PC에 함께 설치할 수 있습니다. 명령어 이름
+(`ieumoffice`, `~/.ieumoffice`)은 바탕이 된 이음오피스의 것을 그대로 쓰고, GenOffice가 등록한 것은 읽거나
 고치지 않습니다.
 
 ## 내려받기와 설치
 
 설치 파일은 [릴리스 페이지](https://github.com/pblsketch/openoffice/releases)에
-`IeumOffice-Setup-<버전>.exe`라는 이름으로 올라옵니다. 64비트 Windows 10과
+`tandem-office-Setup-<버전>.exe`라는 이름으로 올라옵니다. 64비트 Windows 10과
 11용입니다. 그 페이지가 아직 비어 있다면 공개된 버전이 없는 것이니, 아래
 방법으로 직접 빌드하세요.
 
@@ -253,8 +254,8 @@ MCP 도구 호출은 화면을 보는 사람이 아니라 프로그램이 보내
 
 같은 릴리스 페이지에 두 가지로 올라옵니다. 둘 다 macOS 12 이상용입니다.
 
-- Apple Silicon Mac(M1 이후): `IeumOffice-<버전>-arm64.dmg`
-- Intel Mac: `IeumOffice-<버전>-x64.dmg`
+- Apple Silicon Mac(M1 이후): `tandem-office-<버전>-arm64.dmg`
+- Intel Mac: `tandem-office-<버전>-x64.dmg`
 
 내 Mac이 어느 쪽인지는 Apple 메뉴 → **이 Mac에 관하여**의 "칩"(Apple M…) 또는
 "프로세서"(Intel …) 칸에서 봅니다.
@@ -262,9 +263,9 @@ MCP 도구 호출은 화면을 보는 사람이 아니라 프로그램이 보내
 Mac판에는 Apple 개발자 서명이 없어서 처음 열 때 macOS가 "확인할 수 없다"고
 경고합니다. 처음 한 번만 아래처럼 허용하면 됩니다.
 
-1. dmg를 열고 **IeumOffice**를 **응용 프로그램** 폴더로 끌어다 놓습니다.
-2. 응용 프로그램 폴더에서 IeumOffice를 엽니다. 경고 창이 뜨면 **완료**를 누릅니다.
-3. **시스템 설정 → 개인정보 보호 및 보안**을 열고 아래쪽의 "IeumOffice이(가)
+1. dmg를 열고 **tandem office**를 **응용 프로그램** 폴더로 끌어다 놓습니다.
+2. 응용 프로그램 폴더에서 tandem office를 엽니다. 경고 창이 뜨면 **완료**를 누릅니다.
+3. **시스템 설정 → 개인정보 보호 및 보안**을 열고 아래쪽의 "tandem office이(가)
    차단되었습니다" 옆 **그래도 열기**를 누른 뒤 Mac 암호를 넣습니다.
 4. 다시 뜨는 창에서 **열기**를 누릅니다. 이후로는 경고 없이 열립니다.
 
@@ -272,7 +273,7 @@ Mac판에는 Apple 개발자 서명이 없어서 처음 열 때 macOS가 "확인
 아래 한 줄을 실행한 뒤 다시 엽니다(인터넷에서 받은 파일에 붙는 표시를 지웁니다).
 
 ```sh
-xattr -dr com.apple.quarantine /Applications/IeumOffice.app
+xattr -dr com.apple.quarantine "/Applications/tandem office.app"
 ```
 
 Mac판에서 다른 점:
@@ -288,12 +289,12 @@ Mac판에서 다른 점:
 
 같은 릴리스 페이지에 64비트(x86_64) Linux용 파일 세 가지가 올라옵니다.
 
-- `IeumOffice-<버전>.AppImage`: 실행 권한(`chmod +x`)을 주어 바로 실행하는 단일
+- `tandem-office-<버전>.AppImage`: 실행 권한(`chmod +x`)을 주어 바로 실행하는 단일
   파일입니다.
-- `ieumoffice_<버전>_amd64.deb`: Ubuntu·Debian 계열용 패키지입니다(`sudo apt install ./ieumoffice_<버전>_amd64.deb`).
-- `ieumoffice-<버전>.x86_64.rpm`: Fedora·RHEL·openSUSE 계열용 패키지입니다(`sudo dnf install ./ieumoffice-<버전>.x86_64.rpm`).
+- `tandem-office_<버전>_amd64.deb`: Ubuntu·Debian 계열용 패키지입니다(`sudo apt install ./tandem-office_<버전>_amd64.deb`).
+- `tandem-office-<버전>.x86_64.rpm`: Fedora·RHEL·openSUSE 계열용 패키지입니다(`sudo dnf install ./tandem-office-<버전>.x86_64.rpm`).
 
-`deb`와 `rpm` 패키지는 `/opt/IeumOffice`에 설치되고 `/usr/bin/ieumoffice`에
+`deb`와 `rpm` 패키지는 `/opt/tandem office`에 설치되고 `/usr/bin/ieumoffice`에
 터미널 명령어를 연결합니다.
 
 Linux판에서 다른 점:
@@ -413,7 +414,7 @@ Actions에서 "macOS build"를, Linux 패키지는 "Linux build"를 실행해 �
 
 ## 개인정보
 
-이음오피스에는 자체 서버가 없고, 사용 통계도 보내지 않습니다. 문서는 내 PC에
+tandem office에는 자체 서버가 없고, 사용 통계도 보내지 않습니다. 문서는 내 PC에
 남습니다. AI를 쓰면 문서 내용과 대화가 사용자 본인 계정으로 Anthropic 또는
 OpenAI에 전송됩니다(API 키를 넣었다면 그 회사로). 그 내용이 AI 학습에
 쓰이는지는 그 회사에 있는 내 계정 설정이 정합니다. 검색어는 기본적으로
@@ -447,13 +448,15 @@ Parallel과 DuckDuckGo로, 업데이트 확인은 GitHub로 갑니다. 편집기
 
 ## 라이선스와 출처
 
-이음오피스는 [Apache License 2.0](LICENSE)으로 배포합니다.
+tandem office는 [Apache License 2.0](LICENSE)으로 배포합니다.
 
-**이음오피스는 [GenOffice](https://github.com/genspark-ai/genoffice)를 바탕으로
+**tandem office는 [이음오피스(IeumOffice)](https://github.com/pblsketch/openoffice)를
+포크해 만들었고, 이음오피스는 [GenOffice](https://github.com/genspark-ai/genoffice)를 바탕으로
 만들었습니다.** GenOffice는 Genspark(Mainfunc, Inc.)가 만든 오픈소스 오피스
 프로그램이고, 역시 Apache-2.0 라이선스입니다. 문서 엔진과 편집기는 그
 프로젝트에서 왔습니다. 이음오피스는 AI를 연결하는 방식을 바꾸고, Genspark
-서비스에 묶인 부분을 걷어내고, 제품 이름을 바꿨습니다. 원래의 저작권 고지는
+서비스에 묶인 부분을 걷어내고, 제품 이름을 바꿨습니다. tandem office는 그 위에
+번역 프로젝트 같은 기능을 더하고 제품 이름을 다시 바꿨습니다. 원래의 저작권 고지는
 그대로 두었고, 출처와 "고쳐 만든 버전"이라는 사실은 [NOTICE](NOTICE)에 적어
 두었습니다.
 
@@ -470,7 +473,7 @@ License 1.1입니다. 고지와 글꼴 목록은 [NOTICE](NOTICE)에 있습니�
 > 본 제품은 한글과컴퓨터의 한글 문서 파일(.hwp) 공개 문서를 참고하여
 > 개발하였습니다.
 
-이음오피스는 독립된 프로젝트입니다. Genspark / Mainfunc, Inc., Anthropic,
+tandem office는 독립된 프로젝트입니다. Genspark / Mainfunc, Inc., Anthropic,
 OpenAI, Microsoft, 한글과컴퓨터, Adobe, XMind, Google과 제휴하거나
 후원·보증을 받은 관계가 아닙니다. "GenOffice"와 "Genspark"라는 이름과 로고는
 각 소유자의 상표이고, "Claude", "Codex", "ChatGPT"도 그렇습니다.
@@ -484,7 +487,7 @@ Google LLC의 상표입니다. 그 밖에 이 글에 나오는 제품 이름도 
 
 ### 공식 배포처와 다시 배포할 때
 
-이음오피스는 무료입니다. 공식 배포처는
+tandem office는 무료입니다. 공식 배포처는
 [GitHub 릴리스](https://github.com/pblsketch/openoffice/releases)와
 [ieumoffice.com](https://ieumoffice.com) 두 곳뿐이고, 돈을 받고 파는 곳이
 있다면 공식 배포가 아닙니다.
@@ -492,14 +495,14 @@ Google LLC의 상표입니다. 그 밖에 이 글에 나오는 제품 이름도 
 Apache License 2.0은 누구나 고쳐서 다시 배포하는 것을 허락합니다. 다만 다시
 배포할 때는 [LICENSE](LICENSE)와 [NOTICE](NOTICE)를 함께 넣고, 고친 파일에는
 고쳤다는 사실을 밝혀야 합니다. 이 라이선스는 상표를 쓸 권리를 주지 않으므로
-(4조, 6조), "이음오피스"·"IeumOffice"와 "GenOffice"의 이름과 로고를 자기
-제품 이름처럼 쓸 수 없습니다. 이음오피스가 바탕으로 삼은 GenOffice, rhwp와
+(4조, 6조), "tandem office", "이음오피스"·"IeumOffice"와 "GenOffice"의 이름과 로고를 자기
+제품 이름처럼 쓸 수 없습니다. tandem office와 이음오피스가 바탕으로 삼은 GenOffice, rhwp와
 여러 오픈소스 프로젝트도 각자의 라이선스 조건을 지켜야 합니다. 목록은
 [NOTICE](NOTICE)와 설치 폴더의 `THIRD-PARTY-NOTICES.txt`에 있습니다.
 
 ### 보증하지 않음
 
-이음오피스는 Apache License 2.0의 7조, 8조에 따라 있는 그대로 제공하며, 어떤
+tandem office는 Apache License 2.0의 7조, 8조에 따라 있는 그대로 제공하며, 어떤
 보증도 하지 않습니다. AI가 만든 내용은 틀릴 수 있으니 확인한 뒤 쓰세요. 그
 내용을 쓸 권리가 있는지 확인하는 일은 쓰는 사람의 몫입니다.
 

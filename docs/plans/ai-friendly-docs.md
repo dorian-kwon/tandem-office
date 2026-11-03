@@ -24,7 +24,7 @@
 ### 왜 우리에게 맞는가
 
 - 이 기준의 세 원칙 중 둘(글꼴, 표 구조)은 **문서 XML만 보면 정답이 나오는 검사**다. AI 추측이 필요 없다.
-- 이음오피스는 HWPX(rhwp)와 docx(docx-engine) 문서 모델을 이미 갖고 있고, 문단·표·글자 모양·개체를 번호로 짚는 통로도 이미 있다(`apps/hwp/studio-plugin/agent-plugin.mjs`).
+- tandem office는 HWPX(rhwp)와 docx(docx-engine) 문서 모델을 이미 갖고 있고, 문단·표·글자 모양·개체를 번호로 짚는 통로도 이미 있다(`apps/hwp/studio-plugin/agent-plugin.mjs`).
 - 검사는 AI를 부르지 않으므로 무료이고, **기관용 배포 모드에서 AI를 꺼도 동작한다**. 보안성 검토에서 AI를 막아 둔 기관에도 넣을 수 있는 몇 안 되는 기능이다.
 
 ### 지금 없는 것

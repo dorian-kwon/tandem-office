@@ -4,13 +4,13 @@
 
 Please report suspected vulnerabilities privately via GitHub's
 [private vulnerability reporting](https://github.com/pblsketch/openoffice/security/advisories/new)
-on this repository. Do not open public issues for security reports. IeumOffice
+on this repository. Do not open public issues for security reports. tandem office
 is maintained by volunteers, so reports are handled on a best-effort basis.
 
-IeumOffice is a modified version of GenOffice (see
+tandem office is a fork of IeumOffice, a modified version of GenOffice (see
 [License and acknowledgement](README.en.md#license-and-acknowledgement)). If a
-problem is in code the two projects share (the document engines, for example),
-please consider reporting it to the upstream project as well.
+problem is in code the projects share (the document engines, for example),
+please consider reporting it to the upstream projects as well.
 
 ## Verifying a Download
 
@@ -20,7 +20,7 @@ build provenance attestation, so you can check that it was made from this
 repository's source by its own workflow:
 
 ```
-gh attestation verify IeumOffice-Setup-<version>.exe --repo pblsketch/openoffice
+gh attestation verify tandem-office-Setup-<version>.exe --repo pblsketch/openoffice
 ```
 
 The installer is not code-signed, so Windows shows an "unknown publisher"

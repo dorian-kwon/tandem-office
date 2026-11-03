@@ -1,24 +1,25 @@
-# IeumOffice
+# tandem office
 
 [한국어](README.md) · **English**
 
 [![Total downloads](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fpblsketch%2Fopenoffice%2Fmain%2Fdocs%2Ftracking%2Fgrowth-latest.json&query=%24.totalDownloads&label=total%20downloads)](https://github.com/pblsketch/openoffice/releases)
 [![Stars](https://img.shields.io/github/stars/pblsketch/openoffice?style=social)](https://github.com/pblsketch/openoffice/stargazers)
 
-If IeumOffice helps you, please tap the **star** above. Every star makes it
+If tandem office helps you, please tap the **star** above. Every star makes it
 easier for the next person to find this program.
 
-IeumOffice (이음오피스) is a free, open-source desktop office suite. It opens
+tandem office is a free, open-source desktop office suite. It opens
 and edits Word, Excel, PowerPoint, PDF, Markdown and HTML documents and mind
 maps in one window, and its AI works on the document itself instead of
 answering in a chat box beside it.
 
 The AI runs on **the Claude subscription or ChatGPT plan you already pay
-for**. You do not create an API key and you do not pay IeumOffice anything.
+for**. You do not create an API key and you do not pay tandem office anything.
 Without a subscription you can connect a **free AI** (OpenRouter or Google
 Gemini).
 
-IeumOffice is a modified version of the open-source project
+tandem office is a fork of [IeumOffice](https://github.com/pblsketch/openoffice), which is
+a modified version of the open-source project
 [GenOffice](https://github.com/genspark-ai/genoffice) (see
 [License and acknowledgement](#license-and-acknowledgement)).
 
@@ -43,7 +44,7 @@ IeumOffice is a modified version of the open-source project
 
 ## Why it was made
 
-IeumOffice began as a tool a Korean high-school teacher built for their own
+tandem office builds on IeumOffice, which began as a tool a Korean high-school teacher built for their own
 reading and writing. Sorting out ideas in a mind map, handing them to an AI,
 then moving what the AI produced into Hangul (HWP) or PowerPoint to fix it
 meant hopping between several programs. The starting point was to join those
@@ -59,7 +60,7 @@ steps in one window and let people edit what the AI made with their own hands.
   documentation Hancom has published (see
   [License and acknowledgement](#license-and-acknowledgement)).
 
-The author's own account, in Korean, is at
+The IeumOffice author's own account, in Korean, is at
 [이음오피스를 만든 이유](https://ieumoffice.com/story).
 
 ## What works today
@@ -98,10 +99,10 @@ Mac or Linux builds on those machines; please report problems as
 
 ## Connecting your subscription
 
-IeumOffice does not sign you in to anything. You need one of these:
+tandem office does not sign you in to anything. You need one of these:
 
 1. A Claude subscription of your own, and **Claude Code** installed on the PC
-   and signed in. IeumOffice starts that program, hands it your request, and
+   and signed in. tandem office starts that program, hands it your request, and
    reads the answer.
 2. A ChatGPT plan of your own. There is no program to install. Press
    **Continue with ChatGPT** on the ChatGPT card: OpenAI's ChatGPT sign-in page
@@ -170,7 +171,7 @@ refused if the program reports that any tool is still available.
 
 ## What it costs
 
-IeumOffice itself is free. What the AI costs depends on the connection:
+tandem office itself is free. What the AI costs depends on the connection:
 
 | Connection                                                                                     | Cost                                                                     | When it is used                                                 |
 | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------- |
@@ -245,14 +246,15 @@ While it is on, they run one at a time, with no hourly limit. Even then they
 use Claude Code or Codex, never ChatGPT connected directly in the app.
 `ieumoffice capabilities --json` reports what is available and by which route.
 
-IeumOffice can be installed next to GenOffice. It registers only its own names
-(`ieumoffice`, `~/.ieumoffice`) and does not read or change GenOffice's.
+tandem office can be installed next to GenOffice. Its command-line names
+(`ieumoffice`, `~/.ieumoffice`) are the ones it inherits from IeumOffice, and it
+does not read or change GenOffice's.
 
 ## Download and install
 
 Installers are published on the
 [Releases page](https://github.com/pblsketch/openoffice/releases) as
-`IeumOffice-Setup-<version>.exe`, for 64-bit Windows 10 and 11. If that page
+`tandem-office-Setup-<version>.exe`, for 64-bit Windows 10 and 11. If that page
 is still empty, no release has been published yet; build from source instead.
 
 **The installer is not code-signed.** Windows will warn that the publisher is
@@ -265,8 +267,8 @@ repository.
 
 The same Releases page carries two disk images, both for macOS 12 or newer:
 
-- Apple Silicon Macs (M1 and later): `IeumOffice-<version>-arm64.dmg`
-- Intel Macs: `IeumOffice-<version>-x64.dmg`
+- Apple Silicon Macs (M1 and later): `tandem-office-<version>-arm64.dmg`
+- Intel Macs: `tandem-office-<version>-x64.dmg`
 
 **About This Mac** in the Apple menu shows which one yours is: a "Chip" line
 (Apple M…) or a "Processor" line (Intel …).
@@ -274,9 +276,9 @@ The same Releases page carries two disk images, both for macOS 12 or newer:
 The Mac build has no Apple Developer signature, so macOS warns that it cannot
 verify the app the first time you open it. Allow it once:
 
-1. Open the dmg and drag **IeumOffice** to **Applications**.
-2. Open IeumOffice from Applications. When the warning appears, choose **Done**.
-3. Open **System Settings → Privacy & Security**, find "IeumOffice was blocked"
+1. Open the dmg and drag **tandem office** to **Applications**.
+2. Open tandem office from Applications. When the warning appears, choose **Done**.
+3. Open **System Settings → Privacy & Security**, find "tandem office was blocked"
    near the bottom, choose **Open Anyway** and enter your Mac password.
 4. Choose **Open** in the window that follows. From then on it opens normally.
 
@@ -285,7 +287,7 @@ Trash; run this in Terminal and open it again (it removes the mark macOS puts
 on downloaded files):
 
 ```sh
-xattr -dr com.apple.quarantine /Applications/IeumOffice.app
+xattr -dr com.apple.quarantine "/Applications/tandem office.app"
 ```
 
 What differs on a Mac:
@@ -301,14 +303,14 @@ What differs on a Mac:
 
 The same Releases page carries three 64-bit (x86_64) Linux packages:
 
-- `IeumOffice-<version>.AppImage`: a single-file bundle you can make executable
+- `tandem-office-<version>.AppImage`: a single-file bundle you can make executable
   (`chmod +x`) and run directly.
-- `ieumoffice_<version>_amd64.deb`: for Ubuntu and Debian distributions
-  (`sudo apt install ./ieumoffice_<version>_amd64.deb`).
-- `ieumoffice-<version>.x86_64.rpm`: for Fedora, RHEL and openSUSE distributions
-  (`sudo dnf install ./ieumoffice-<version>.x86_64.rpm`).
+- `tandem-office_<version>_amd64.deb`: for Ubuntu and Debian distributions
+  (`sudo apt install ./tandem-office_<version>_amd64.deb`).
+- `tandem-office-<version>.x86_64.rpm`: for Fedora, RHEL and openSUSE distributions
+  (`sudo dnf install ./tandem-office-<version>.x86_64.rpm`).
 
-The `deb` and `rpm` packages install under `/opt/IeumOffice` and link the
+The `deb` and `rpm` packages install under `/opt/tandem office` and link the
 terminal command at `/usr/bin/ieumoffice`.
 
 What differs on Linux:
@@ -437,7 +439,7 @@ These belong to a later stage and are **not in the app today**:
 
 ## Privacy
 
-IeumOffice has no server of its own and no usage analytics. Your documents
+tandem office has no server of its own and no usage analytics. Your documents
 stay on your PC. When you use AI, the document content and the conversation go
 to Anthropic or OpenAI under your own account (or to the company whose API key
 you entered), and whether they are used for training is decided by your
@@ -462,8 +464,8 @@ anywhere. The full list is in [PRIVACY.md](PRIVACY.md).
 
 ### Contributors
 
-IeumOffice is built with help from many people. See
-[CONTRIBUTORS.md](CONTRIBUTORS.md) for the full list.
+tandem office builds on the work of the many people who contributed to
+IeumOffice. See [CONTRIBUTORS.md](CONTRIBUTORS.md) for the full list.
 
 - [@CauchyRiemannEquations](https://github.com/CauchyRiemannEquations) — math editing in the HTML editor
 - [@dossamlab](https://github.com/dossamlab) — spreadsheet PDF export
@@ -476,13 +478,14 @@ IeumOffice is built with help from many people. See
 
 ## License and acknowledgement
 
-IeumOffice is licensed under the [Apache License 2.0](LICENSE).
+tandem office is licensed under the [Apache License 2.0](LICENSE).
 
-**IeumOffice is based on [GenOffice](https://github.com/genspark-ai/genoffice)**,
+**tandem office is a fork of [IeumOffice](https://github.com/pblsketch/openoffice), which is based on [GenOffice](https://github.com/genspark-ai/genoffice)**,
 the open-source office suite by Genspark (Mainfunc, Inc.), which is also
 licensed under Apache-2.0. The document engines and editors come from that
 project; IeumOffice changes how the AI is connected, removes the parts tied to
-Genspark's services and renames the product. The original copyright notices
+Genspark's services and renames the product, and tandem office adds features
+such as translation projects on top and renames it again. The original copyright notices
 are kept, and [NOTICE](NOTICE) records the attribution and the fact that this
 is a modified version.
 
@@ -502,7 +505,7 @@ software made with its published HWP format document, we state:
 > (This product was developed with reference to Hancom's published document
 > on the Hangul document file format (.hwp).)
 
-IeumOffice is an independent project. It is not affiliated with, sponsored by
+tandem office is an independent project. It is not affiliated with, sponsored by
 or endorsed by Genspark / Mainfunc, Inc., Anthropic, OpenAI, Microsoft, Hancom,
 Adobe, XMind Ltd. or Google. "GenOffice" and "Genspark", and their logos, are trademarks of
 their owners; so are "Claude", "Codex" and "ChatGPT". "Microsoft", "Windows",
@@ -515,7 +518,7 @@ it works with and which files it opens.
 
 ### Official downloads and redistribution
 
-IeumOffice is free. Its only official downloads are the
+tandem office is free. Its only official downloads are the
 [GitHub releases](https://github.com/pblsketch/openoffice/releases) and
 [ieumoffice.com](https://ieumoffice.com); a copy sold for money is not an
 official release.
@@ -523,14 +526,14 @@ official release.
 The Apache License 2.0 lets anyone modify and redistribute the software. A
 redistribution must include [LICENSE](LICENSE) and [NOTICE](NOTICE) and state
 which files were changed. The license grants no trademark rights (sections 4
-and 6): the names and logos "IeumOffice", "이음오피스" and "GenOffice" may not
-be used as the name of another product. The projects IeumOffice builds on,
+and 6): the names and logos "tandem office", "IeumOffice", "이음오피스" and "GenOffice" may not
+be used as the name of another product. The projects tandem office builds on,
 GenOffice, rhwp and the others listed in [NOTICE](NOTICE) and in the installed
 `THIRD-PARTY-NOTICES.txt`, keep their own license terms.
 
 ### No warranty
 
-IeumOffice is provided as is, without warranties of any kind, under sections 7
+tandem office is provided as is, without warranties of any kind, under sections 7
 and 8 of the Apache License 2.0. AI-generated content can be wrong: check it
 before you use it. Making sure you have the right to use it is up to you.
 
