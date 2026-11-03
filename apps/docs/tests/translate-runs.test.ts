@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { Editor } from '@tiptap/core'
 import { BLANK_BULLET_NUM_ID, BLANK_ORDERED_NUM_ID } from '@genoffice/docx-engine'
 import type { PmNode } from '../src/renderer/editor/convert'
-import { applyRunTranslation, readRunGroups } from '../src/renderer/ai/translate-runs'
+import {
+  applyRunTranslation,
+  readRunGroups,
+  runFingerprint,
+} from '../src/renderer/ai/translate-runs'
 import { executeTool } from '../src/renderer/ai/tools'
 
 /**
@@ -49,6 +53,8 @@ const mixedParagraph: PmNode = {
     text(' 빨간 끝.', STYLE_C),
   ],
 }
+const MIXED = ['첫째 문장 ', '기울임', ' 빨간 끝.']
+const FP = runFingerprint(MIXED)
 const emptyParagraph: PmNode = {
   type: 'docParagraph',
   attrs: { styleId: 'BlankLine', docxIndex: 4 },
@@ -97,7 +103,7 @@ describe('readRunGroups', () => {
   it('lists one segment per run of equal formatting; atoms split groups; empty paragraphs flagged', async () => {
     const editor = await createEditor([mixedParagraph, emptyParagraph])
     expect(readRunGroups(editor, 0, 1)).toEqual([
-      { index: 0, segments: ['첫째 문장 ', '기울임', ' 빨간 끝.'] },
+      { index: 0, fp: runFingerprint(MIXED), segments: MIXED },
       { index: 1, empty: true },
     ])
   })
@@ -116,7 +122,11 @@ describe('readRunGroups', () => {
       },
     ])
     expect(readRunGroups(editor, 0, 0)).toEqual([
-      { index: 0, segments: ['살아 있는 글', '뒤의 글'] },
+      {
+        index: 0,
+        fp: runFingerprint(['살아 있는 글', '뒤의 글']),
+        segments: ['살아 있는 글', '뒤의 글'],
+      },
     ])
   })
 
@@ -132,8 +142,8 @@ describe('readRunGroups', () => {
       },
     ])
     expect(readRunGroups(editor, 0, 0)).toEqual([
-      { index: 0, paragraph: 0, segments: ['칸 하나'] },
-      { index: 0, paragraph: 1, segments: ['칸 둘'] },
+      { index: 0, paragraph: 0, fp: runFingerprint(['칸 하나']), segments: ['칸 하나'] },
+      { index: 0, paragraph: 1, fp: runFingerprint(['칸 둘']), segments: ['칸 둘'] },
     ])
   })
 })
@@ -250,8 +260,8 @@ describe('read_runs / translate_blocks tools', () => {
         name: 'translate_blocks',
         input: {
           blocks: [
-            { index: 0, segments: ['A', 'B', 'C'] },
-            { index: 2, segments: ['only one'] },
+            { index: 0, fp: FP, segments: ['A', 'B', 'C'] },
+            { index: 2, fp: FP, segments: ['only one'] },
           ],
         },
       },
@@ -271,10 +281,132 @@ describe('read_runs / translate_blocks tools', () => {
     const before = editor.state.doc
     const exec = await executeTool(
       editor,
-      { id: 't', name: 'translate_blocks', input: { blocks: [{ index: 9, segments: ['x'] }] } },
+      {
+        id: 't',
+        name: 'translate_blocks',
+        input: { blocks: [{ index: 9, fp: FP, segments: ['x'] }] },
+      },
       NUM_IDS,
     )
     expect(exec.isError).toBe(true)
     expect(editor.state.doc).toBe(before)
+  })
+})
+
+describe('translate_blocks refuses unsafe input (review fixes)', () => {
+  const call = (blocks: unknown[]) => ({ id: 't', name: 'translate_blocks', input: { blocks } })
+
+  async function refused(editor: Editor, blocks: unknown[], message: RegExp) {
+    const before = editor.state.doc
+    const exec = await executeTool(editor, call(blocks), NUM_IDS)
+    expect(exec.isError).toBe(true)
+    expect(exec.output).toMatch(message)
+    expect(editor.state.doc).toBe(before)
+  }
+
+  it('an all-empty segment list never deletes a paragraph; one empty piece among others is allowed', async () => {
+    const editor = await createEditor([mixedParagraph, mixedParagraph])
+    await refused(editor, [{ index: 0, fp: FP, segments: [''] }], /every segment is empty/)
+    await refused(editor, [{ index: 0, fp: FP, segments: [' ', '', ''] }], /every segment is empty/)
+    // the bad item refuses the whole call, the good one included
+    await refused(
+      editor,
+      [
+        { index: 1, fp: FP, segments: ['A', 'B', 'C'] },
+        { index: 0, fp: FP, segments: [''] },
+      ],
+      /every segment is empty/,
+    )
+    expect(applyRunTranslation(editor, 0, [''], {}).ok).toBe(false)
+    const exec = await executeTool(
+      editor,
+      call([{ index: 0, fp: FP, segments: ['A', '', 'C'] }]),
+      NUM_IDS,
+    )
+    expect(exec.isError).toBeFalsy()
+    expect(texts(blockJson(editor, 0))).toEqual(['A ', ' C'])
+  })
+
+  it('a table entry without paragraph is refused when the table has several cell paragraphs', async () => {
+    const cell = (t: string) => ({
+      type: 'docTableCell',
+      content: [{ type: 'docParagraph', content: [text(t, STYLE_A)] }],
+    })
+    const editor = await createEditor([
+      {
+        type: 'docTable',
+        content: [{ type: 'docTableRow', content: [cell('칸 하나'), cell('칸 둘')] }],
+      },
+    ])
+    await refused(
+      editor,
+      [{ index: 0, fp: runFingerprint(['칸 하나']), segments: ['one'] }],
+      /needs "paragraph"/,
+    )
+    const exec = await executeTool(
+      editor,
+      call([{ index: 0, paragraph: 1, fp: runFingerprint(['칸 둘']), segments: ['two'] }]),
+      NUM_IDS,
+    )
+    expect(exec.isError).toBeFalsy()
+  })
+
+  it('a missing or stale fingerprint is refused, so a shifted index cannot hit the wrong paragraph', async () => {
+    const other: PmNode = { type: 'docParagraph', attrs: {}, content: [text('다른 문단', STYLE_A)] }
+    const editor = await createEditor([mixedParagraph, other])
+    await refused(editor, [{ index: 0, segments: ['A', 'B', 'C'] }], /fp is missing/)
+    // the model read block 0, then the paragraphs shifted: block 0 is now another paragraph
+    editor.view.dispatch(editor.state.tr.insert(0, editor.schema.nodeFromJSON(other)))
+    await refused(
+      editor,
+      [{ index: 0, fp: FP, segments: ['A', 'B', 'C'] }],
+      /block 0 changed since read_runs/,
+    )
+    const fresh = readRunGroups(editor, 1, 1)[0]
+    const exec = await executeTool(
+      editor,
+      call([{ index: 1, fp: fresh.fp, segments: ['A', 'B', 'C'] }]),
+      NUM_IDS,
+    )
+    expect(exec.isError).toBeFalsy()
+  })
+
+  it('segments with a line break or HTML-like tags are refused', async () => {
+    const editor = await createEditor([mixedParagraph])
+    await refused(editor, [{ index: 0, fp: FP, segments: ['A\nB', 'B', 'C'] }], /line break/)
+    await refused(
+      editor,
+      [{ index: 0, fp: FP, segments: ['<em>A</em>', 'B', 'C'] }],
+      /HTML-like tags/,
+    )
+    await refused(editor, [{ index: 0, fp: FP, segments: ['A<br/>', 'B', 'C'] }], /HTML-like tags/)
+    // a lone angle bracket in prose is still text
+    const exec = await executeTool(
+      editor,
+      call([{ index: 0, fp: FP, segments: ['1 < 2', 'B', 'C'] }]),
+      NUM_IDS,
+    )
+    expect(exec.isError).toBeFalsy()
+  })
+})
+
+describe('the system prompt and tool descriptions agree on how to translate', () => {
+  it('every mention of translation points at read_runs / translate_blocks, never at replace_blocks', async () => {
+    const { AGENT_SYSTEM_PROMPT } = await import('../src/renderer/ai/protocol')
+    const { AGENT_TOOLS } = await import('../src/renderer/ai/tools')
+    const texts = [
+      ...AGENT_SYSTEM_PROMPT.split('\n'),
+      ...AGENT_TOOLS.map((tool) => `${tool.name}: ${tool.description}`),
+    ]
+    const mentions = texts.filter((line) => /translat/i.test(line))
+    expect(mentions.some((line) => /read_runs[^\n]*translate_blocks/.test(line))).toBe(true)
+    // a line that brings up both translation and replace_blocks must route translation to translate_blocks
+    for (const line of mentions.filter((l) => l.includes('replace_blocks')))
+      expect(line, line).toContain('translate_blocks')
+    // the table rule: table text is translated cell paragraph by cell paragraph
+    const tableRule = texts.find(
+      (line) => line.includes('to change table content') || line.includes('table content'),
+    )
+    expect(tableRule).toMatch(/translate_blocks/)
   })
 })

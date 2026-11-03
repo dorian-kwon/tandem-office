@@ -48,6 +48,8 @@ export interface RunParagraph {
   /** the n-th paragraph inside a table block (document order); absent for a plain paragraph */
   paragraph?: number
   segments?: string[]
+  /** fingerprint of the paragraph's segment texts; translate_blocks checks it */
+  fp?: string
   /** no translatable text: left as it is */
   empty?: true
   /** not translatable by these tools (an image, a protected block, a pending deletion) */
@@ -85,6 +87,22 @@ function groupsOf(block: ProseMirrorNode, pos: number): Group[] {
     }
   })
   return groups
+}
+
+/**
+ * A short fingerprint of a paragraph's translatable text (FNV-1a, base 36).
+ * read_runs hands it out and translate_blocks checks it, so an index that
+ * shifted since the read (an earlier edit in the same turn, a user edit)
+ * cannot write a translation into the wrong paragraph.
+ */
+export function runFingerprint(segments: readonly string[]): string {
+  let hash = 0x811c9dc5
+  const text = segments.join('\u0001')
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(36)
 }
 
 /** the textblocks of a top-level block with their positions (a table: every cell paragraph) */
@@ -140,7 +158,8 @@ export function readRunGroups(editor: Editor, start: number, end: number): RunPa
         if (!inTable) out.push({ index, empty: true })
         return
       }
-      out.push(inTable ? { index, paragraph, segments } : { index, segments })
+      const fp = runFingerprint(segments)
+      out.push(inTable ? { index, paragraph, fp, segments } : { index, fp, segments })
     })
   }
   return out
@@ -150,8 +169,13 @@ export function readRunGroups(editor: Editor, start: number, end: number): RunPa
 export interface RunTranslationItem {
   index: number
   paragraph?: number
+  /** the fingerprint read_runs gave; when present, a mismatch refuses the item */
+  fp?: string
   segments: string[]
 }
+
+/** markup-looking text: segments are plain text, the run formatting stays where it is */
+const TAG_LIKE = /<\/?[a-z][a-z0-9:-]*(\s[^<>]*)?\/?>/i
 
 export interface RunTranslationReport {
   index: number
@@ -235,6 +259,16 @@ function planParagraph(doc: ProseMirrorNode, item: RunTranslationItem): PlanResu
       : `block ${item.index} paragraph ${item.paragraph}`
   if (!Array.isArray(item.segments) || item.segments.some((s) => typeof s !== 'string'))
     return { ok: false, error: `${where}: segments must be an array of strings` }
+  if (item.segments.some((s) => /[\r\n]/.test(s)))
+    return {
+      ok: false,
+      error: `${where}: a segment contains a line break; segments are plain text inside one run (breaks and tabs between segments stay as they are)`,
+    }
+  if (item.segments.some((s) => TAG_LIKE.test(s)))
+    return {
+      ok: false,
+      error: `${where}: a segment contains HTML-like tags; give plain translated text only (each segment keeps its own formatting)`,
+    }
   const top = topLevel(doc, item.index)
   if (!top)
     return {
@@ -246,6 +280,11 @@ function planParagraph(doc: ProseMirrorNode, item: RunTranslationItem): PlanResu
   const blocks = textblocksOf(top.node, top.pos)
   if (!blocks)
     return { ok: false, error: `${where}: a ${top.node.type.name} block has no text to translate` }
+  if (item.paragraph === undefined && top.node.type.name === 'docTable' && blocks.length > 1)
+    return {
+      ok: false,
+      error: `${where}: a table block needs "paragraph" (the cell paragraph number read_runs lists)`,
+    }
   const paragraph = item.paragraph ?? 0
   if (!Number.isInteger(paragraph) || paragraph < 0 || paragraph >= blocks.length) {
     return {
@@ -258,6 +297,17 @@ function planParagraph(doc: ProseMirrorNode, item: RunTranslationItem): PlanResu
   const report: RunTranslationReport = { index: item.index, changed: 0 }
   if (item.paragraph !== undefined) report.paragraph = item.paragraph
   if (groups.length === 0) return { ok: true, edits: [], report: { ...report, empty: true } }
+  if (item.fp !== undefined && item.fp !== runFingerprint(groups.map((g) => g.text)))
+    return {
+      ok: false,
+      error: `${where} changed since read_runs (fingerprint mismatch); read it again`,
+    }
+  // one empty segment is a piece with no counterpart; all of them would delete the paragraph's text
+  if (item.segments.length > 0 && item.segments.every((s) => s.trim() === ''))
+    return {
+      ok: false,
+      error: `${where}: every segment is empty, which would delete the paragraph's text; give the translation`,
+    }
   let segments = item.segments
   if (segments.length > groups.length) {
     report.extra = segments.length - groups.length

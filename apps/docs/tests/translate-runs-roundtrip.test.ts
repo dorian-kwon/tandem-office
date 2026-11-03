@@ -231,6 +231,7 @@ function fakeTranslate(editor: Editor): { blocks: unknown[]; segments: number } 
     .map((e) => ({
       index: e.index,
       ...(e.paragraph === undefined ? {} : { paragraph: e.paragraph }),
+      fp: e.fp,
       segments: e.segments!.map((s, i) => {
         segments++
         return `EN${e.index}.${i}(${s.trim().length})`

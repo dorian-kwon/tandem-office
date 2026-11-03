@@ -85,13 +85,13 @@ export const OPS_GUIDE = [
   'Discipline:',
   '- Read the "document block list" before issuing ops; anything like "paragraph N / a certain section" must be addressed with block indexes from the list — never guess;',
   '- Only give the fields the user explicitly asked to change;',
-  '- Protected blocks such as images cannot be modified with style ops (they are skipped); to change table content, use read_blocks to get the <table> and rewrite it wholesale with replace_blocks (the table keeps its column widths, borders, shading and cell formatting; cells whose text you leave unchanged keep their content untouched).',
+  '- Protected blocks such as images cannot be modified with style ops (they are skipped); to translate table content, use read_runs and translate_blocks (cell paragraph by cell paragraph); to otherwise change it, use read_blocks to get the <table> and rewrite it wholesale with replace_blocks (the table keeps its column widths, borders, shading and cell formatting; cells whose text you leave unchanged keep their content untouched).',
   '',
   'Known error cases (must avoid):',
   'BC-1 Giving fields the user did not ask for, wiping existing formatting by mistake;',
   'BC-2 A "whole document" formatting operation only changed docParagraph and missed docHeading/docListItem;',
   'BC-3 Addressing by word/character position (no such addressing exists); use block indexes, text containment or the selection instead;',
-  'BC-4 Using findReplace sentence by sentence for rewrites such as translation/abbreviation; use replace_blocks (or replace_selection for a selected span) instead;',
+  'BC-4 Using findReplace sentence by sentence for rewrites such as abbreviation; use replace_blocks (or replace_selection for a selected span) instead. Translation is neither: it goes through read_runs then translate_blocks;',
 ].join('\n')
 
 export const HTML_RULES = [
@@ -125,7 +125,7 @@ export const AGENT_SYSTEM_PROMPT = [
   '# Tool usage',
   '- Every user message carries the latest "document block list" (index|type|content preview; previews may be truncated); after modifications, call get_document_context if you need the latest state;',
   '- When a list preview is truncated, read the full content with read_blocks before rewriting; never rewrite based on a truncated preview;',
-  '- Content changes: use insert_content for new content, and replace_blocks to rewrite/replace existing blocks (pass a block index range and the new HTML); replaced blocks pass their paragraph and text formatting (font, size, color, indent, spacing, alignment) on to the new blocks automatically, and a rewritten table keeps its widths, borders, shading and cell formatting, so a rewrite never needs follow-up formatting commands;',
+  '- Content changes: use insert_content for new content, and replace_blocks to rewrite/condense/expand existing blocks or replace them with content that has no counterpart in the old text — not to translate them, which goes through read_runs and translate_blocks (pass a block index range and the new HTML); replaced blocks pass their paragraph and text formatting (font, size, color, indent, spacing, alignment) on to the new blocks automatically, and a rewritten table keeps its widths, borders, shading and cell formatting, so a rewrite never needs follow-up formatting commands;',
   '- Translating existing text (the whole document, a section, some paragraphs or table cells): call read_runs for the range, then translate_blocks with one translated string per segment, in order. Never translate with replace_blocks or write_document: they rebuild the paragraphs and lose the run formatting, footnote references and empty paragraphs. Leave empty paragraphs and footnote reference marks alone; translate footnote and endnote text with read_notes and edit_note. Work through a long document range by range; a selected phrase inside one paragraph may still use replace_selection;',
   '- Long new content (drafting a whole document, a chapter, a full report/article — anything beyond a few paragraphs) goes through write_document: you pass the plan and the reference material, and the system writer streams the text into the document while the user watches; never paste long content into insert_content. When the document is blank and the user asks for content, use write_document;',
   '- Formatting, structure, and batch operations (color/font size/line spacing/alignment/indent/heading level/find & replace/delete/move/list conversion) go through apply_ops — do not rewrite whole blocks with replace_blocks;',

@@ -205,8 +205,8 @@ export const AGENT_TOOLS: AgentToolDef[] = [
   {
     name: 'translate_blocks',
     description:
-      'The way to translate existing document text (never use replace_blocks or write_document to translate). Read the paragraphs with read_runs first, then pass for each paragraph the translations of its segments, in the same order and the same number: segments[i] replaces the text of segment i, which keeps its own formatting (font, italics, color, raw run properties); footnote references, tabs, breaks, paragraph styles and empty paragraphs stay exactly as they are. ' +
-      'Word order may move text between segments of one paragraph, but give every segment a translation; use an empty string only for a piece with no counterpart in the translation. Fewer segments leave the remaining segments untranslated (reported); extra segments are appended to the last one. Block indexes do not change.',
+      'The way to translate existing document text (never use replace_blocks or write_document to translate). Read the paragraphs with read_runs first, then pass for each paragraph its "fp" from read_runs unchanged and the translations of its segments, in the same order and the same number: segments[i] replaces the text of segment i, which keeps its own formatting (font, italics, color, raw run properties); footnote references, tabs, breaks, paragraph styles and empty paragraphs stay exactly as they are. ' +
+      'Word order may move text between segments of one paragraph, but give every segment a translation; use an empty string only for a piece with no counterpart in the translation. Segments are plain text: no line breaks, no HTML. Fewer segments leave the remaining segments untranslated (reported); extra segments are appended to the last one. A table block needs its "paragraph" number. An item whose fp no longer matches (the paragraph changed since read_runs) is refused. Block indexes do not change.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -221,13 +221,17 @@ export const AGENT_TOOLS: AgentToolDef[] = [
                 type: 'integer',
                 description: 'for a table block: the "paragraph" number from read_runs',
               },
+              fp: {
+                type: 'string',
+                description: 'the "fp" read_runs gave for this paragraph, unchanged',
+              },
               segments: {
                 type: 'array',
                 items: { type: 'string' },
                 description: 'the translated text of each segment, in read_runs order',
               },
             },
-            required: ['index', 'segments'],
+            required: ['index', 'fp', 'segments'],
           },
         },
       },
@@ -1716,11 +1720,21 @@ function executeSyncTool(
         return fail(summary, 'blocks must be a non-empty array of { index, segments }')
       const items: RunTranslationItem[] = []
       for (const entry of raw as unknown[]) {
-        const e = (entry ?? {}) as { index?: unknown; paragraph?: unknown; segments?: unknown }
+        const e = (entry ?? {}) as {
+          index?: unknown
+          paragraph?: unknown
+          fp?: unknown
+          segments?: unknown
+        }
         if (!Number.isInteger(e.index))
           return fail(summary, 'every entry needs an integer index from read_runs')
         if (e.paragraph !== undefined && e.paragraph !== null && !Number.isInteger(e.paragraph))
           return fail(summary, `block ${String(e.index)}: paragraph must be an integer`)
+        if (typeof e.fp !== 'string' || e.fp === '')
+          return fail(
+            summary,
+            `block ${String(e.index)}: fp is missing; pass the "fp" read_runs gave for this paragraph (call read_runs if you have none)`,
+          )
         const segments = e.segments as string[]
         const joined = Array.isArray(segments) ? segments.join('\n') : ''
         const echo = toolEchoError(joined) ?? contextMarkerError(joined)
@@ -1728,6 +1742,7 @@ function executeSyncTool(
           return fail(summary, `block ${String(e.index)}: ${echo.replace(/^html/, 'a segment')}`)
         items.push({
           index: Number(e.index),
+          fp: e.fp,
           segments,
           ...(e.paragraph === undefined || e.paragraph === null
             ? {}
