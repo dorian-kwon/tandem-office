@@ -19,7 +19,7 @@ Překladatelský projekt drží dokumenty, které chcete přeložit, vaše refer
 
 - Přidejte soubor `.csv`, `.xlsx` nebo `.txt` (v `.txt` jsou sloupce odděleny tabulátory). Každý řádek je jeden termín.
 - Sloupce jsou zdrojový termín, překlad a volitelně poznámka. První řádek se přeskočí jen tehdy, když pojmenovává první dva sloupce (například source a target nebo term a translation); jakýkoli jiný první řádek se čte jako položka glosáře.
-- Soubory se čtou jako UTF-8, a pokud nejsou platné UTF-8, jako CP949, takže korejské soubory ze starších programů se zobrazí správně.
+- Soubory uložené v UTF-16 (například „Text v kódování Unicode“ z Excelu) se rozpoznají. Ostatní soubory se čtou jako UTF-8, a pokud nejsou platné UTF-8, jako CP949, takže korejské soubory ze starších programů se zobrazí správně.
 - Až 200 položek se posílá celých. Nad 200 se posílají jen položky, jejichž zdrojový termín se vyskytuje v překládaném textu.
 
 ## Referenční soubory

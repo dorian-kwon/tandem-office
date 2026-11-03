@@ -19,7 +19,7 @@ Un proyecto de traducción reúne en una sola carpeta los documentos que quieres
 
 - Añade un archivo `.csv`, `.xlsx` o `.txt` (en `.txt` las columnas se separan con tabuladores). Cada fila es un término.
 - Las columnas son el término de origen, la traducción y, de forma opcional, una nota. La primera fila solo se omite si nombra las dos primeras columnas (por ejemplo source y target, o term y translation); cualquier otra primera fila se lee como una entrada del glosario.
-- Los archivos se leen como UTF-8, y como CP949 cuando no son UTF-8 válido, de modo que los archivos coreanos de programas antiguos se ven bien.
+- Se reconocen los archivos guardados en UTF-16 (por ejemplo, «Texto Unicode» de Excel). Los demás se leen como UTF-8, y como CP949 cuando no son UTF-8 válido, de modo que los archivos coreanos de programas antiguos se ven bien.
 - Hasta 200 entradas se envían completas. Con más de 200, solo se envían las entradas cuyo término de origen aparece en el texto que se traduce.
 
 ## Archivos de referencia

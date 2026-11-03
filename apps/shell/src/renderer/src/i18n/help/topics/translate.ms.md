@@ -19,7 +19,7 @@ Projek terjemahan menyimpan dokumen yang anda mahu terjemah, bahan rujukan dan g
 
 - Tambah fail `.csv`, `.xlsx` atau `.txt` (dalam `.txt` lajur dipisahkan dengan tab). Setiap baris ialah satu istilah.
 - Lajurnya ialah istilah sumber, terjemahan dan, jika ada, nota. Baris pertama hanya dilangkau jika ia menamakan dua lajur pertama (contohnya source dan target, atau term dan translation); baris pertama yang lain dibaca sebagai entri glosari.
-- Fail dibaca sebagai UTF-8, dan sebagai CP949 jika bukan UTF-8 yang sah, supaya fail Korea daripada program lama dipaparkan dengan betul.
+- Fail yang disimpan sebagai UTF-16 (contohnya "Teks Unicode" Excel) dikenali. Fail lain dibaca sebagai UTF-8, dan sebagai CP949 jika bukan UTF-8 yang sah, supaya fail Korea daripada program lama dipaparkan dengan betul.
 - Sehingga 200 entri dihantar penuh. Melebihi 200, hanya entri yang istilah sumbernya muncul dalam teks yang diterjemah dihantar.
 
 ## Fail rujukan

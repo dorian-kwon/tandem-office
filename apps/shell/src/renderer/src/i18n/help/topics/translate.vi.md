@@ -19,7 +19,7 @@ Một dự án dịch thuật gom các tài liệu bạn muốn dịch, tài li�
 
 - Thêm một tệp `.csv`, `.xlsx` hoặc `.txt` (với `.txt`, các cột được ngăn cách bằng tab). Mỗi hàng là một thuật ngữ.
 - Các cột là thuật ngữ nguồn, bản dịch và, tùy chọn, ghi chú. Hàng đầu tiên chỉ bị bỏ qua khi nó đặt tên cho hai cột đầu (ví dụ source và target, hoặc term và translation); mọi hàng đầu tiên khác được đọc như một mục thuật ngữ.
-- Tệp được đọc dưới dạng UTF-8, và dưới dạng CP949 khi không phải UTF-8 hợp lệ, nên các tệp tiếng Hàn từ chương trình cũ hiển thị đúng.
+- Tệp lưu dưới dạng UTF-16 (ví dụ "Văn bản Unicode" của Excel) được nhận ra. Các tệp khác được đọc dưới dạng UTF-8, và dưới dạng CP949 khi không phải UTF-8 hợp lệ, nên các tệp tiếng Hàn từ chương trình cũ hiển thị đúng.
 - Tối đa 200 mục được gửi nguyên vẹn. Trên 200 mục, chỉ những mục có thuật ngữ nguồn xuất hiện trong văn bản đang dịch mới được gửi.
 
 ## Tệp tham khảo

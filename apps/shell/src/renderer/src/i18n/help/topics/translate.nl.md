@@ -19,7 +19,7 @@ Een vertaalproject houdt de documenten die je wilt vertalen, je referentiemateri
 
 - Voeg een `.csv`-, `.xlsx`- of `.txt`-bestand toe (bij `.txt` worden de kolommen door tabs gescheiden). Elke rij is één term.
 - De kolommen zijn de bronterm, de vertaling en eventueel een opmerking. Een eerste rij wordt alleen overgeslagen als die de eerste twee kolommen benoemt (bijvoorbeeld source en target, of term en translation); elke andere eerste rij wordt als glossariumitem gelezen.
-- Bestanden worden als UTF-8 gelezen, en als CP949 wanneer ze geen geldige UTF-8 zijn, zodat Koreaanse bestanden van oudere programma’s goed te zien zijn.
+- Bestanden die als UTF-16 zijn opgeslagen (bijvoorbeeld "Unicode-tekst" uit Excel) worden herkend. Andere bestanden worden als UTF-8 gelezen, en als CP949 wanneer ze geen geldige UTF-8 zijn, zodat Koreaanse bestanden van oudere programma’s goed te zien zijn.
 - Tot 200 items worden volledig verstuurd. Bij meer dan 200 worden alleen de items verstuurd waarvan de bronterm in de te vertalen tekst voorkomt.
 
 ## Referentiebestanden

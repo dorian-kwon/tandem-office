@@ -19,7 +19,7 @@ A translation project keeps the documents you want to translate, your reference 
 
 - Add a `.csv`, `.xlsx` or `.txt` file (`.txt` columns are separated by tabs). Each row is one term.
 - The columns are the source term, the translation and, optionally, a note. A first row is skipped only when it names the first two columns (for example source and translation, or term and translation); any other first row is read as a glossary entry.
-- Files are read as UTF-8, and as CP949 when they are not valid UTF-8, so Korean files from older programs show correctly.
+- Files saved as UTF-16 (for example Excel's "Unicode Text") are recognized. Other files are read as UTF-8, and as CP949 when they are not valid UTF-8, so Korean files from older programs show correctly.
 - Up to 200 entries are sent whole. Above 200, only the entries whose source term appears in the text being translated are sent.
 
 ## Reference files

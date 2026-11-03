@@ -6,9 +6,14 @@ What to look at: natural wording, consistent terms (project, glossary, reference
 
 Files, per language `<lang>`:
 
-- `apps/shell/src/renderer/src/i18n/translate/<lang>.ts` (146 keys: project list, detail, translation view, OCR, PDF translation)
+- `apps/shell/src/renderer/src/i18n/translate/<lang>.ts` (161 keys: project list, detail, translation view, OCR, PDF translation)
 - `packages/ui/src/strings-project-panel/<lang>.ts` (only the `translation*` keys at the end: ja, zh, zh-TW, ar, he, hi, ru and th were drafted earlier; cs, de, es, fr, id, it, ms, nl, pl, pt and vi in this task)
 - `apps/shell/src/renderer/src/i18n/help/topics/translate.<lang>.md` (help topic "Translation projects")
 - the topic title in `apps/shell/src/renderer/src/i18n/help/help-titles.ts` (`translate`)
+
+Added in the final review fix (same files, same 19 drafted languages):
+
+- `apps/shell/src/renderer/src/i18n/translate/<lang>.ts`: new keys `openExisting`, `locateFolder`, `adoptNotLinked`, `errProjectInUse`, `errGlossaryInvalid`, `ctxTitle`, `ctxSystemOn`, `ctxSystemOff`, `ctxProjectOn`, `ctxProjectOff`, `ctxGlossaryNone`, `ctxGlossaryAll`, `ctxGlossaryPerBlock`, `ctxReferencesNone`, `ctxReferences`; `errUnsupportedSource` gained a "Supported types: ..." sentence (the extension list itself is the same in every language).
+- `apps/shell/src/renderer/src/i18n/help/topics/translate.<lang>.md`: the glossary encoding line (UTF-16 such as Excel's "Unicode Text").
 
 Not reviewed here: the product name, which is still open.

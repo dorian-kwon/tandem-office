@@ -19,7 +19,7 @@ Um projeto de tradução reúne numa só pasta os documentos que você quer trad
 
 - Adicione um arquivo `.csv`, `.xlsx` ou `.txt` (em `.txt` as colunas são separadas por tabulações). Cada linha é um termo.
 - As colunas são o termo de origem, a tradução e, opcionalmente, uma observação. A primeira linha só é ignorada se nomear as duas primeiras colunas (por exemplo source e target, ou term e translation); qualquer outra primeira linha é lida como uma entrada do glossário.
-- Os arquivos são lidos como UTF-8, e como CP949 quando não são UTF-8 válido, de modo que arquivos coreanos de programas antigos aparecem corretamente.
+- Arquivos salvos em UTF-16 (por exemplo, "Texto Unicode" do Excel) são reconhecidos. Os demais são lidos como UTF-8, e como CP949 quando não são UTF-8 válido, de modo que arquivos coreanos de programas antigos aparecem corretamente.
 - Até 200 entradas são enviadas inteiras. Acima de 200, só são enviadas as entradas cujo termo de origem aparece no texto que está sendo traduzido.
 
 ## Arquivos de referência

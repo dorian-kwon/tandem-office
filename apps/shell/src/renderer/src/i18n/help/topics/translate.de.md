@@ -19,7 +19,7 @@ Ein Übersetzungsprojekt hält die Dokumente, die Sie übersetzen möchten, Ihr 
 
 - Fügen Sie eine `.csv`-, `.xlsx`- oder `.txt`-Datei hinzu (bei `.txt` sind die Spalten durch Tabulatoren getrennt). Jede Zeile ist ein Begriff.
 - Die Spalten sind der Ausgangsbegriff, die Übersetzung und optional eine Anmerkung. Eine erste Zeile wird nur übersprungen, wenn sie die ersten beiden Spalten benennt (zum Beispiel source und target oder term und translation); jede andere erste Zeile wird als Glossareintrag gelesen.
-- Dateien werden als UTF-8 gelesen, und als CP949, wenn sie kein gültiges UTF-8 sind, sodass koreanische Dateien älterer Programme richtig angezeigt werden.
+- Dateien in UTF-16 (zum Beispiel „Unicode-Text“ aus Excel) werden erkannt. Andere Dateien werden als UTF-8 gelesen, und als CP949, wenn sie kein gültiges UTF-8 sind, sodass koreanische Dateien älterer Programme richtig angezeigt werden.
 - Bis zu 200 Einträge werden vollständig gesendet. Bei mehr als 200 werden nur die Einträge gesendet, deren Ausgangsbegriff im zu übersetzenden Text vorkommt.
 
 ## Referenzdateien

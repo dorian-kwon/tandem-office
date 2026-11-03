@@ -19,7 +19,7 @@ Projekt tłumaczeniowy gromadzi w jednym folderze dokumenty, które chcesz przet
 
 - Dodaj plik `.csv`, `.xlsx` lub `.txt` (w `.txt` kolumny rozdzielone są tabulatorami). Każdy wiersz to jeden termin.
 - Kolumny to termin źródłowy, tłumaczenie i opcjonalnie uwaga. Pierwszy wiersz jest pomijany tylko wtedy, gdy nazywa pierwsze dwie kolumny (na przykład source i target albo term i translation); każdy inny pierwszy wiersz jest czytany jako wpis glosariusza.
-- Pliki są czytane jako UTF-8, a jeśli nie są poprawnym UTF-8, jako CP949, dzięki czemu koreańskie pliki ze starszych programów wyświetlają się poprawnie.
+- Pliki zapisane w UTF-16 (na przykład „Tekst Unicode” z Excela) są rozpoznawane. Pozostałe pliki są czytane jako UTF-8, a jeśli nie są poprawnym UTF-8, jako CP949, dzięki czemu koreańskie pliki ze starszych programów wyświetlają się poprawnie.
 - Do 200 wpisów wysyłanych jest w całości. Powyżej 200 wysyłane są tylko wpisy, których termin źródłowy występuje w tłumaczonym tekście.
 
 ## Pliki referencyjne

@@ -19,7 +19,7 @@ Proyek terjemahan menyimpan dokumen yang ingin Anda terjemahkan, materi acuan, d
 
 - Tambahkan file `.csv`, `.xlsx`, atau `.txt` (pada `.txt` kolom dipisahkan dengan tab). Setiap baris adalah satu istilah.
 - Kolomnya adalah istilah sumber, terjemahan, dan, jika ada, catatan. Baris pertama hanya dilewati jika menamai dua kolom pertama (misalnya source dan target, atau term dan translation); baris pertama lainnya dibaca sebagai entri glosarium.
-- File dibaca sebagai UTF-8, dan sebagai CP949 jika bukan UTF-8 yang valid, sehingga file Korea dari program lama tampil dengan benar.
+- File yang disimpan sebagai UTF-16 (misalnya "Teks Unicode" dari Excel) dikenali. File lain dibaca sebagai UTF-8, dan sebagai CP949 jika bukan UTF-8 yang valid, sehingga file Korea dari program lama tampil dengan benar.
 - Hingga 200 entri dikirim utuh. Di atas 200, hanya entri yang istilah sumbernya muncul dalam teks yang diterjemahkan yang dikirim.
 
 ## File acuan
