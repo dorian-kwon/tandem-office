@@ -347,6 +347,7 @@ describe('translate:ocr-* handlers', () => {
           newToken: () => `t${++tokenSeq}`,
           ocr: ocrDeps,
         },
+        () => true,
       )
       const sender = Object.assign(new EventEmitter(), { id: 7 })
       const call = (channel: string, arg: unknown) =>
