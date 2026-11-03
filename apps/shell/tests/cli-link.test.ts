@@ -26,8 +26,8 @@ describe('genoffice launcher file', () => {
       false,
     )
     expect(statSync(file).mtimeMs).toBe(before)
-    expect(writeLauncherFile(file, 'C:\\Programs\\IeumOffice\\resources\\cli')).toBe(true)
-    expect(readFileSync(file, 'utf-8')).toBe('C:\\Programs\\IeumOffice\\resources\\cli\n')
+    expect(writeLauncherFile(file, 'C:\\Programs\\tandem office\\resources\\cli')).toBe(true)
+    expect(readFileSync(file, 'utf-8')).toBe('C:\\Programs\\tandem office\\resources\\cli\n')
   })
 
   it('treats dmg and AppImage mounts as temporary', () => {

@@ -99,8 +99,8 @@ describe('configuredDefaultSaveDir', () => {
     const app = {
       getPath: (name: 'userData' | 'documents') => (name === 'userData' ? userData : documents),
     }
-    expect(configuredDefaultSaveDir(app)).toBe(join(documents, 'IeumOffice'))
-    expect(existsSync(join(documents, 'IeumOffice'))).toBe(true)
+    expect(configuredDefaultSaveDir(app)).toBe(join(documents, 'tandem office'))
+    expect(existsSync(join(documents, 'tandem office'))).toBe(true)
     // the upstream app's folder is its own: never created or reused here
     expect(existsSync(join(documents, 'GenOffice'))).toBe(false)
   })
@@ -123,20 +123,20 @@ describe('a blocked Documents folder', () => {
     mkdirSync(userData, { recursive: true })
     mkdirSync(documents, { recursive: true })
     // a file where the folder should be: neither creatable nor writable as a folder
-    writeFileSync(join(documents, 'IeumOffice'), 'x')
+    writeFileSync(join(documents, 'tandem office'), 'x')
     expect(configuredDefaultSaveDir(appAt(userData, documents, home))).toBe(
-      join(home, 'IeumOffice'),
+      join(home, 'tandem office'),
     )
     expect(defaultSaveDirFallback()).toEqual({
-      blocked: join(documents, 'IeumOffice'),
-      using: join(home, 'IeumOffice'),
+      blocked: join(documents, 'tandem office'),
+      using: join(home, 'tandem office'),
     })
   })
 
   it('skips the blocked folder for a while instead of retrying on every call, then picks it up', () => {
     vi.useFakeTimers({ toFake: ['Date'] })
-    const blocked = join(root, 'Documents', 'IeumOffice')
-    const next = join(root, 'home', 'IeumOffice')
+    const blocked = join(root, 'Documents', 'tandem office')
+    const next = join(root, 'home', 'tandem office')
     mkdirSync(join(root, 'Documents'))
     writeFileSync(blocked, 'x')
     expect(resolveDefaultSaveDir(null, [blocked, next])).toBe(next)

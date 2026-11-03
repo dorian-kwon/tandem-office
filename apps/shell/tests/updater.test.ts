@@ -252,7 +252,7 @@ function releasesAtom(tags: string[], notes: Record<string, string> = {}): strin
 }
 
 function feedFile(version: string): string {
-  const installer = `IeumOffice-Setup-${version}.exe`
+  const installer = `tandem-office-Setup-${version}.exe`
   return [
     `version: ${version}`,
     'files:',
@@ -529,7 +529,7 @@ describe('initAutoUpdater', () => {
 
   it('keeps the installer silent where no installer window exists (Linux AppImage)', async () => {
     setPlatform('linux')
-    process.env.APPIMAGE = '/tmp/IeumOffice.AppImage'
+    process.env.APPIMAGE = '/tmp/tandem office.AppImage'
     try {
       const { initAutoUpdater } = await loadUpdater()
       initAutoUpdater(() => null)
@@ -982,8 +982,8 @@ describe('manual download fallback', () => {
     const actions = await failTwiceIntoManual({
       version: '0.2.0',
       files: [
-        { url: 'https://attacker.example/IeumOffice-Setup-0.2.0.exe' },
-        { url: 'IeumOffice-Setup-0.2.0.exe' },
+        { url: 'https://attacker.example/tandem-office-Setup-0.2.0.exe' },
+        { url: 'tandem-office-Setup-0.2.0.exe' },
       ],
     })
     actions.onOpenDownload()

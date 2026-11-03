@@ -722,7 +722,7 @@ describe('MCP hub: allowing a command to run (4.5)', () => {
     const shown = await hub.plannedLaunch(id)
     const seen = shown.ok && shown.launch.ok ? shown.launch.fingerprint : ''
     // the PC's Node went away: the app's downloaded one would run instead
-    plan = { ...READY_PLAN, command: 'C:/Users/u/AppData/IeumOffice/mcp-runtimes/node/node.exe' }
+    plan = { ...READY_PLAN, command: 'C:/Users/u/AppData/tandem office/mcp-runtimes/node/node.exe' }
     expect(await hub.approveLaunch(id, seen)).toEqual({ ok: false, problem: 'launch-changed' })
     expect(store.server(id)?.approvedLaunch).toBeNull()
     // a plan that cannot run cannot be approved either
@@ -1103,7 +1103,7 @@ describe('MCP hub: runtimes (5.4, 13)', () => {
       local: (server, appSignal) =>
         createLocalMcpConnection(server, {
           kit,
-          clientInfo: { name: 'IeumOffice', version: '9.9.9' },
+          clientInfo: { name: 'tandem office', version: '9.9.9' },
           registry: null,
           platform: 'linux',
           workRoot: tempDir(),

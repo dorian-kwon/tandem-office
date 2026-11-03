@@ -11,13 +11,14 @@ import { test, expect, type Page } from '@playwright/test'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { PRODUCT_NAME } from '../packages/i18n/src/product'
 import { launchShell, closeAndSaveVideo, waitForPageWithUrl, screenshotPath } from './helpers'
 
 const MODEL = process.env.TRIAL_MODEL ?? ''
 const RUN_TIMEOUT = 240_000
 
 async function storedKey(): Promise<string> {
-  const path = join(process.env.APPDATA ?? '', 'IeumOffice', 'ai-settings.json')
+  const path = join(process.env.APPDATA ?? '', PRODUCT_NAME, 'ai-settings.json')
   const settings = JSON.parse(await readFile(path, 'utf8'))
   return settings.providers.openrouter.apiKey
 }

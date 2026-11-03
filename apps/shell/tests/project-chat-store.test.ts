@@ -46,8 +46,8 @@ function makeGuide(): ProjectGuide {
   return new ProjectGuide({
     settingsPath,
     homeDir: folder('home'),
-    userData: folder('appdata', 'IeumOffice'),
-    defaultParentDir: () => folder('documents', 'IeumOffice'),
+    userData: folder('appdata', 'tandem office'),
+    defaultParentDir: () => folder('documents', 'tandem office'),
     env: {},
     language: () => 'en',
     now: () => new Date(clock),
@@ -151,7 +151,7 @@ function args(
 
 beforeEach(() => {
   base = realpathSync.native(mkdtempSync(join(tmpdir(), 'project-chats-')))
-  settingsPath = join(folder('appdata', 'IeumOffice'), 'app-settings.json')
+  settingsPath = join(folder('appdata', 'tandem office'), 'app-settings.json')
   trashDir = folder('trash')
   clock = Date.UTC(2026, 9, 29, 12, 0, 0)
   guide = makeGuide()

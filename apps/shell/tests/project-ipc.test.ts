@@ -93,7 +93,7 @@ function setup(extra: Partial<ProjectIpcDeps> = {}) {
       identity: 'moved' as const,
       notices: [],
     })),
-    getDefaultParentFolder: vi.fn(() => join(process.cwd(), 'Documents', 'IeumOffice')),
+    getDefaultParentFolder: vi.fn(() => join(process.cwd(), 'Documents', 'tandem office')),
     createProject: vi.fn(
       async (args: { name: string; parentDir?: string; useExisting?: boolean }) =>
         args.useExisting

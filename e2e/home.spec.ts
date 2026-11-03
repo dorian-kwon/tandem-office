@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { PRODUCT_NAME } from '../packages/i18n/src/product'
 import { launchShell, closeAndSaveVideo, screenshotPath, waitForPageWithUrl } from './helpers'
 
 test.describe('home screen', () => {
@@ -28,6 +29,11 @@ test.describe('home screen', () => {
         'Work in a folder with Claude Code or Codex',
       )
       await expect(page.locator('.tab-bar .tab-item.tab-home')).toBeVisible()
+      // the product name: the window title, the Home tab and the sidebar logo
+      expect(PRODUCT_NAME).toBe('tandem office')
+      await expect(page).toHaveTitle(PRODUCT_NAME)
+      await expect(page.locator('.tab-bar .tab-item.tab-home')).toContainText(PRODUCT_NAME)
+      await expect(page.locator('img.logo-lockup')).toHaveAttribute('alt', PRODUCT_NAME)
       await page.screenshot({ path: screenshotPath('home-overview') })
       // clicking it opens the agent window
       await page.locator('.sidebar-nav .nav-item').nth(4).click()

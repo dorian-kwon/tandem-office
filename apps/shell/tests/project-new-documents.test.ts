@@ -60,7 +60,7 @@ function makePlacer(): NewDocumentPlacer {
 
 beforeEach(async () => {
   base = realpathSync.native(mkdtempSync(join(tmpdir(), 'project-new-docs-')))
-  const userData = folder('appdata', 'IeumOffice')
+  const userData = folder('appdata', 'tandem office')
   guide = new ProjectGuide({
     settingsPath: join(userData, 'app-settings.json'),
     homeDir: folder('home'),

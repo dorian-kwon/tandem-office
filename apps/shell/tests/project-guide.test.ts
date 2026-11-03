@@ -86,8 +86,8 @@ async function addOk(guide: ProjectGuide, path: string, ask = answer('use')) {
 beforeEach(() => {
   base = realpathSync.native(mkdtempSync(join(tmpdir(), 'project-guide-')))
   home = folder('home')
-  userData = folder('appdata', 'IeumOffice')
-  saveDir = folder('documents', 'IeumOffice')
+  userData = folder('appdata', 'tandem office')
+  saveDir = folder('documents', 'tandem office')
   settingsPath = join(userData, 'app-settings.json')
   clock = Date.UTC(2026, 9, 29, 12, 0, 0)
   never.mockClear()
@@ -483,7 +483,7 @@ describe('new project (spec 5.1)', () => {
 
   it('does not create over an existing folder and offers to use it', async () => {
     const guide = makeGuide()
-    const existing = folder('documents', 'IeumOffice', 'Taken')
+    const existing = folder('documents', 'tandem office', 'Taken')
     writeFileSync(join(existing, 'keep.txt'), 'x')
     const result = await guide.createProject({ name: 'Taken' }, never)
     expect(result).toEqual({ status: 'exists', folderPath: existing })
