@@ -462,6 +462,33 @@ metadata:
 
 **누가 쓰나.** 앱에서는 껍데기 앱 뒷단의 프로젝트 길잡이만 쓴다. 터미널 명령어와 MCP는 이 폴더를 읽지도 쓰지도 않는다. 에이전트 모드의 프로그램은 프로젝트 폴더에 쓸 수 있으므로 이 파일들을 바꿀 수 있다(`docs/tracking/findings.md`).
 
+## 번역 프로젝트 폴더 (`.tandem/`, 결정 0102)
+
+번역 프로젝트(홈의 "번역")는 PC의 폴더 하나다. 폴더를 옮기거나 복사하면 함께 가고, 다른 곳에서는 "기존 프로젝트 폴더 열기"로 다시 등록한다. 읽고 쓰는 것은 `@genoffice/translate-project`다.
+
+```
+<번역 프로젝트 폴더>/
+├── source/       원본 사본(더할 때 복사, 앱은 다시 쓰지 않는다)
+├── references/   참고자료 사본(AI에는 이름만 간다)
+├── glossary/     단어집 사본(.csv, .txt, .xlsx)
+├── output/       번역 결과(편집할 수 있는 원본의 같은 이름 사본, `<이름>.<언어>.pdf`, `<이름> (OCR).docx`)
+└── .tandem/
+    ├── project.json
+    ├── glossary.json
+    └── source-kinds.json
+```
+
+- 같은 이름의 파일을 더하면 `이름 (2).확장자`처럼 번호를 붙이고, 아무것도 덮어쓰지 않는다. 원본은 `source/`와 `output/` 둘 다에 없는 이름을 받는다(지운 원본의 번역이 `output/`에 남기 때문이다).
+- `.tandem/`의 JSON은 임시 파일에 쓴 뒤 이름을 바꾸고, 같은 폴더의 쓰기는 한 프로세스 안에서 한 줄로 세운다.
+
+**`project.json`** — `version`(1만 받는다), `name`, `sourceLang`, `targetLang`(언어 코드), `projectPrompt`, `ocr`(`{ "kind": "off" }` 또는 `{ "kind": "ai", "provider": "claude" | "chatgpt" }`, 기본은 claude), `sources`(`{ file, sha256, kind }`의 목록. `file`은 `source/` 안의 파일 이름, `sha256`은 더할 때의 해시, `kind`는 `editable`·`pdf`·`scan`·`image`), `references`·`glossaryFiles`(파일 이름 목록). 모르는 키는 읽을 때 버리고, 파일 이름이 아닌 값(경로 구분자, `.`, `..`)이 있으면 파일 전체를 망가진 것으로 본다. 시스템 프롬프트는 여기에 없다.
+
+**`glossary.json`** — `glossary/`의 파일들을 차례대로 읽어 합친 항목 목록 `[{ "source", "target", "note"? }]`. 원어와 번역어가 같은 항목은 한 번만 둔다. 단어집을 더하거나 뺄 때마다 다시 만든다. 없으면 단어집이 없는 것이다. 단어집 파일은 첫 열이 원어, 둘째 열이 번역어, 셋째 열이 메모이고, 첫 줄이 두 열의 이름(source/target, term/translation, 원어/번역어 등)이면 건너뛴다. 글은 UTF-16(바이트 순서 표시가 있거나 0 바이트로 알아볼 때), UTF-8, CP949 순으로 읽는다.
+
+**`source-kinds.json`** — `{ "version": 1, "chosen": { "<source 파일 이름>": { "sha256", "kind" } } }`. 사람이 PDF를 "텍스트 PDF"나 "스캔 PDF"로 고친 선택이다. 해시가 같은 사본에만 적용되고, 고르는 길은 `project.json`의 `kind`가 이긴다. 없거나 망가졌으면 고른 것이 없다.
+
+**이 PC에만 두는 것.** `app-settings.json`의 `translationSystemPrompt`(모든 프로젝트의 시스템 프롬프트)와 `translationProjects`(`{ dir, lastOpened, listed? }`의 목록. `listed`는 프로젝트 폴더 목록에 한 번 올렸다는 표시).
+
 ## Google 드라이브 (결정 0033, 0085)
 
 같은 데이터 폴더에 둘이 있다. 터미널 명령어와 MCP는 둘 다 읽지도 쓰지도 않는다.
