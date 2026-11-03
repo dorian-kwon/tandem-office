@@ -147,3 +147,26 @@ Use a project with target language German (or any of the 21 app languages except
 4. Undo after the run: one Ctrl+Z per translate_blocks call restores the source text with the same formatting. The panel's roll-back button restores the whole document.
 5. With Review > Track Changes on, translate again: each translated run shows the source struck through and the translation inserted with the same formatting; Accept All leaves the same document as with tracking off.
 6. Save, reopen in Word: the document opens without a repair prompt and shows the same formatting. Known engine issue (see findings): in a document with "balance single-byte and double-byte character width" (HWP-exported files) a run with letter spacing in an edited paragraph saves a scaled, fractional w:spacing value; check whether Word complains.
+
+## Translation follow-ups, Task 1: recent documents
+
+1. Open two sources of a translation project in the translation view, go back to Home > Translation: the recent list shows both above the projects, newest first, one row per project and file.
+2. Click a recent row: the split view reopens on that source and its `output/` copy. A PDF, scan or image row opens through the usual PDF/OCR choice dialog; nothing is sent before that dialog's Start.
+3. Remove the source from the project (or delete `source/<file>` by hand): the row shows as unavailable and does not open. Moving the project folder and locating it again makes its rows usable again.
+4. Open more than ten documents: the list keeps the newest ten. Restart the app: the list is still there.
+
+## Translation follow-ups, Task 2: Word engine check
+
+1. Known engine issue (`docs/tracking/findings.md`, fractional `w:spacing`): translate an HWP-exported docx (with "balance single-byte and double-byte character width") whose heading runs have letter spacing, save, open in Word. Note whether Word offers to repair the file and whether the edited paragraphs' letter spacing differs from the source.
+
+## Translation follow-ups, Task 3: reference material
+
+1. Add a `.docx`, a `.pdf` with a text layer and a `.md` as references: each shows "Converted to text", and "View converted text" opens the read-only text.
+2. Add a scanned PDF or an image as a reference: it shows "Needs OCR" and nothing is sent for it.
+3. Copy in a project folder from elsewhere whose `references/` holds a link to a file outside the project: that reference shows its outside state and the app neither reads, writes nor deletes it.
+4. Edit a converted reference's source by hand, then ask the AI panel something: the index is rebuilt (the excerpt reflects the edit).
+5. Ask the AI panel to translate a paragraph that uses a term found in one reference: the translation-context notice counts references, and the answer uses the reference's wording (excerpts reach the AI under `<translation-references>`).
+
+## Translation follow-ups, Task 4: fixed context (decision 0103)
+
+1. Send two requests in one AI panel chat of a translation project: both still carry the full prompts and editing rules (the saving is off; no request shows only `fixed-context: …`). The second request's glossary entries follow its own text.

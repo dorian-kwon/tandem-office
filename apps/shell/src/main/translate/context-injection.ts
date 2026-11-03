@@ -310,6 +310,10 @@ export async function translationContextForFolder(
     built.items.find((item) => item.kind === kind)?.included ?? false
   const fixed = `${built.promptText}\n\n${TRANSLATION_EDITING_RULES}`
   const hash = fixedContextHash(fixed)
+  // Dormant (decision 0103): no panel passes a conversation today. Before turning it on:
+  // (I1) record the hash only after the send is confirmed delivered, forget() on failure;
+  // (I2) key the ledger by provider and model too, decide providerKeepsSystem in main
+  // instead of trusting the renderer, and reset the conversation on history trim/summary.
   const send =
     !options.fixedContext ||
     !conversation ||
