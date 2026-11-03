@@ -35,6 +35,7 @@ import {
   openTranslationResult,
   type TranslationViewDeps,
 } from './open-translation'
+import { listRecentDocuments, recordRecentDocument } from './recent-documents'
 import type { TranslationProjectLink } from './project-link'
 import {
   readTranslationProjects,
@@ -67,6 +68,7 @@ import {
   type TranslatePickedMaterials,
   type TranslatePickedParentDir,
   type TranslateProjectListEntry,
+  type TranslateRecentDocument,
   type TranslateRemoveArgs,
   type TranslateRelocateArgs,
   type TranslateRemoveMaterialArgs,
@@ -160,6 +162,7 @@ export function createTranslateHandlers(deps: TranslateIpcDeps) {
   const raw = createRawHandlers(deps)
   return {
     list: guard(raw.list),
+    recent: guard(raw.recent),
     create: guard(raw.create),
     remove: guard(raw.remove),
     getSystemPrompt: guard(raw.getSystemPrompt),
@@ -322,6 +325,15 @@ function createRawHandlers(deps: TranslateIpcDeps) {
     }
     const dir = existing?.dir ?? picked
     return { dir, name: project.name, contextLinked: await listOnce(dir) }
+  }
+
+  /** remember an opened document; an unwritable settings file must not fail the open */
+  function noteRecent(dir: string, file: string, output: string): void {
+    try {
+      recordRecentDocument(deps.settingsPath(), { dir, file, output }, deps.now())
+    } catch {
+      // the open succeeded; only the recent list misses it
+    }
   }
 
   function touch(dir: string): void {
@@ -540,10 +552,12 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       const { project, entry } = await sourceEntry(dir, file)
       // a project made before listing existed (or whose listing failed) is listed now, once
       await listOnce(dir)
-      return openTranslation(dir, entry, view, {
+      const result = await openTranslation(dir, entry, view, {
         ocr: project.ocr,
         targetLang: project.targetLang,
       })
+      if (result.flow === 'edit') noteRecent(dir, entry.file, entry.file)
+      return result
     },
 
     async openResult(args: TranslateOpenResultArgs): Promise<TranslateOpenResultAnswer> {
@@ -551,7 +565,13 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       const file = requireString(args.file, 'file')
       const view = viewDeps()
       const { project, entry } = await sourceEntry(dir, file)
-      return openTranslationResult(dir, entry, args.output, view, project.targetLang)
+      const answer = await openTranslationResult(dir, entry, args.output, view, project.targetLang)
+      noteRecent(dir, entry.file, args.output as string)
+      return answer
+    },
+
+    async recent(): Promise<TranslateRecentDocument[]> {
+      return listRecentDocuments(deps.settingsPath())
     },
 
     async setSourceKind(args: TranslateSetSourceKindArgs): Promise<ProjectFile> {
@@ -712,6 +732,7 @@ export function registerTranslateIpc(
     return id
   }
   handle(TRANSLATE_CHANNELS.list, () => h.list())
+  handle(TRANSLATE_CHANNELS.recent, () => h.recent())
   handle(TRANSLATE_CHANNELS.create, (_e, args: TranslateCreateArgs) => h.create(args))
   handle(TRANSLATE_CHANNELS.remove, (_e, args: TranslateRemoveArgs) => h.remove(args))
   handle(TRANSLATE_CHANNELS.getSystemPrompt, () => h.getSystemPrompt())

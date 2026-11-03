@@ -28,6 +28,8 @@ export const ru = {
   deleteFolderConfirm:
     'Папка и всё её содержимое будут удалены без возможности восстановления: {dir}',
   deleteFolderConfirmButton: 'Удалить папку без возможности восстановления',
+  recentTitle: 'Недавние документы',
+  recentUnavailable: 'Папка или файл не найдены',
   backToList: 'Все проекты',
   loading: 'Загрузка…',
   sourcesTitle: 'Документы для перевода',

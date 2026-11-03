@@ -26,6 +26,8 @@ export const zhTW = {
   deleteListAndFolder: '從清單中移除並刪除資料夾',
   deleteFolderConfirm: '這會永久刪除該資料夾及其中的所有內容：{dir}',
   deleteFolderConfirmButton: '永久刪除資料夾',
+  recentTitle: '最近的文件',
+  recentUnavailable: '資料夾或檔案已不存在',
   backToList: '所有專案',
   loading: '載入中…',
   sourcesTitle: '待翻譯的文件',

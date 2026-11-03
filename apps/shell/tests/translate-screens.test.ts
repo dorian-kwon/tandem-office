@@ -62,6 +62,7 @@ beforeEach(() => {
   root = createRoot(host)
   api = {
     list: vi.fn().mockResolvedValue([]),
+    recent: vi.fn().mockResolvedValue([]),
     create: vi.fn().mockResolvedValue({ dir: '/p/new' }),
     remove: vi.fn().mockResolvedValue(undefined),
     getSystemPrompt: vi.fn().mockResolvedValue('global'),

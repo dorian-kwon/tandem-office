@@ -28,6 +28,8 @@ export const fr = {
   deleteListAndFolder: 'Retirer de la liste et supprimer le dossier',
   deleteFolderConfirm: 'Cela supprime définitivement le dossier et tout son contenu : {dir}',
   deleteFolderConfirmButton: 'Supprimer définitivement le dossier',
+  recentTitle: 'Documents récents',
+  recentUnavailable: 'Dossier ou fichier introuvable',
   backToList: 'Tous les projets',
   loading: 'Chargement…',
   sourcesTitle: 'Documents à traduire',

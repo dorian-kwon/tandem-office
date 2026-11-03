@@ -25,6 +25,8 @@ export const zh = {
   deleteListAndFolder: '从列表中移除并删除文件夹',
   deleteFolderConfirm: '这会永久删除该文件夹及其中的所有内容：{dir}',
   deleteFolderConfirmButton: '永久删除文件夹',
+  recentTitle: '最近的文档',
+  recentUnavailable: '文件夹或文件已不存在',
   backToList: '所有项目',
   loading: '正在加载…',
   sourcesTitle: '待翻译的文档',

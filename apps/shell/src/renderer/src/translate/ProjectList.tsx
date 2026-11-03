@@ -4,6 +4,7 @@ import type {
   TranslateAdoptedProject,
   TranslatePickedParentDir,
   TranslateProjectListEntry,
+  TranslateRecentDocument,
 } from '../../../shared/translate-api'
 import { useI18n } from '../locale'
 import { languageName, makeText, translateErrorText } from './shared'
@@ -14,16 +15,37 @@ import './translate-global'
 export interface ProjectListProps {
   /** open a project's detail screen */
   onOpen: (dir: string) => void
+  /** reopen a recent document: its project and source file name */
+  onOpenRecent?: (dir: string, file: string) => void
+}
+
+/** "3 minutes ago" in the screen language */
+function relativeTime(lang: string, at: number, now: number): string {
+  const seconds = Math.round((at - now) / 1000)
+  const units: [Intl.RelativeTimeFormatUnit, number][] = [
+    ['day', 86400],
+    ['hour', 3600],
+    ['minute', 60],
+  ]
+  try {
+    const fmt = new Intl.RelativeTimeFormat(lang, { numeric: 'auto' })
+    for (const [unit, size] of units)
+      if (Math.abs(seconds) >= size) return fmt.format(Math.round(seconds / size), unit)
+    return fmt.format(0, 'second')
+  } catch {
+    return new Date(at).toLocaleString()
+  }
 }
 
 type Deleting = { entry: TranslateProjectListEntry; step: 'choose' | 'confirm-folder' }
 
 /** The translation tool's home: global system prompt, create dialog and the project list. */
-export function ProjectList({ onOpen }: ProjectListProps) {
+export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
   const { lang } = useI18n()
   const s = makeText(lang)
   const api = window.translateApi
   const [projects, setProjects] = useState<TranslateProjectListEntry[] | null>(null)
+  const [recent, setRecent] = useState<TranslateRecentDocument[]>([])
   const [systemPrompt, setSystemPrompt] = useState('')
   const [promptLoaded, setPromptLoaded] = useState(false)
   const [promptSaved, setPromptSaved] = useState(false)
@@ -52,6 +74,7 @@ export function ProjectList({ onOpen }: ProjectListProps) {
   useEffect(() => {
     if (!api) return
     void reload()
+    api.recent().then(setRecent, () => setRecent([]))
     api.getSystemPrompt().then(
       (text) => {
         setSystemPrompt(text)
@@ -367,6 +390,42 @@ export function ProjectList({ onOpen }: ProjectListProps) {
               </>
             )}
           </div>
+        )}
+
+        {recent.length > 0 && (
+          <section className="translate-recent" data-recent-list>
+            <h3 className="projects-field-label">{s('recentTitle')}</h3>
+            <ul className="projects-list">
+              {recent.map((doc) => (
+                <li
+                  key={`${doc.dir}\n${doc.file}`}
+                  className="projects-row"
+                  data-recent-file={doc.file}
+                >
+                  {doc.available ? (
+                    <button
+                      type="button"
+                      className="translate-open"
+                      onClick={() => onOpenRecent?.(doc.dir, doc.file)}
+                    >
+                      <span className="projects-row-name">{doc.file}</span>
+                      <span className="projects-row-path">
+                        {doc.projectName} · {languageName(lang, doc.sourceLang)} {'->'}{' '}
+                        {languageName(lang, doc.targetLang)} ·{' '}
+                        {relativeTime(lang, doc.openedAt, Date.now())}
+                      </span>
+                    </button>
+                  ) : (
+                    <div className="translate-row-main is-disabled" aria-disabled="true">
+                      <span className="projects-row-name">{doc.file}</span>
+                      <span className="projects-row-path">{doc.projectName}</span>
+                      <span className="projects-mark is-warning">{s('recentUnavailable')}</span>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
 
         {projects !== null && projects.length === 0 && (

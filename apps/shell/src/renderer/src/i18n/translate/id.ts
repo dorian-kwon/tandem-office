@@ -28,6 +28,8 @@ export const id = {
   deleteListAndFolder: 'Hapus dari daftar dan hapus folder',
   deleteFolderConfirm: 'Ini menghapus folder beserta seluruh isinya secara permanen: {dir}',
   deleteFolderConfirmButton: 'Hapus folder secara permanen',
+  recentTitle: 'Dokumen terbaru',
+  recentUnavailable: 'Folder atau berkas tidak ditemukan',
   backToList: 'Semua proyek',
   loading: 'Memuat…',
   sourcesTitle: 'Dokumen yang akan diterjemahkan',

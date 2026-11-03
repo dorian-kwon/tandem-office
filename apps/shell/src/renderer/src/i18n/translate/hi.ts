@@ -27,6 +27,8 @@ export const hi = {
   deleteListAndFolder: 'सूची से हटाएँ और फ़ोल्डर हटाएँ',
   deleteFolderConfirm: 'इससे फ़ोल्डर और उसकी सारी सामग्री हमेशा के लिए हट जाएगी: {dir}',
   deleteFolderConfirmButton: 'फ़ोल्डर हमेशा के लिए हटाएँ',
+  recentTitle: 'हाल के दस्तावेज़',
+  recentUnavailable: 'फ़ोल्डर या फ़ाइल नहीं मिली',
   backToList: 'सभी प्रोजेक्ट',
   loading: 'लोड हो रहा है…',
   sourcesTitle: 'अनुवाद किए जाने वाले दस्तावेज़',

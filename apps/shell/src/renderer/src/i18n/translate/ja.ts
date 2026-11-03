@@ -26,6 +26,8 @@ export const ja = {
   deleteListAndFolder: '一覧から削除してフォルダーも削除',
   deleteFolderConfirm: 'フォルダーとその中のすべてが完全に削除されます: {dir}',
   deleteFolderConfirmButton: 'フォルダーを完全に削除',
+  recentTitle: '最近の文書',
+  recentUnavailable: 'フォルダーまたはファイルが見つかりません',
   backToList: 'すべてのプロジェクト',
   loading: '読み込み中…',
   sourcesTitle: '翻訳する文書',

@@ -27,6 +27,8 @@ export const en = {
   deleteListAndFolder: 'Remove from list and delete folder',
   deleteFolderConfirm: 'This permanently deletes the folder and everything in it: {dir}',
   deleteFolderConfirmButton: 'Delete folder permanently',
+  recentTitle: 'Recent documents',
+  recentUnavailable: 'Folder or file is missing',
   backToList: 'All projects',
   loading: 'Loading...',
   sourcesTitle: 'Documents to translate',

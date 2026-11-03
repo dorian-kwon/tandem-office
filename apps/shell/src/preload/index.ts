@@ -704,6 +704,7 @@ contextBridge.exposeInMainWorld('aiOfficeResultStore', resultStoreApi)
 // Main only accepts folders from its registered list, so paths here are requests, not access.
 const translateApi: TranslateApi = {
   list: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.list),
+  recent: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.recent),
   create: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.create, args),
   remove: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.remove, args),
   getSystemPrompt: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.getSystemPrompt),

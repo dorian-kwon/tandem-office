@@ -28,6 +28,8 @@ export const de = {
   deleteListAndFolder: 'Aus der Liste entfernen und Ordner löschen',
   deleteFolderConfirm: 'Dadurch werden der Ordner und alles darin endgültig gelöscht: {dir}',
   deleteFolderConfirmButton: 'Ordner endgültig löschen',
+  recentTitle: 'Zuletzt geöffnete Dokumente',
+  recentUnavailable: 'Ordner oder Datei fehlt',
   backToList: 'Alle Projekte',
   loading: 'Wird geladen …',
   sourcesTitle: 'Zu übersetzende Dokumente',

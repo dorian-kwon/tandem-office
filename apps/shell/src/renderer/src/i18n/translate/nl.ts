@@ -27,6 +27,8 @@ export const nl = {
   deleteListAndFolder: 'Uit de lijst verwijderen en map verwijderen',
   deleteFolderConfirm: 'Hiermee worden de map en alles erin definitief verwijderd: {dir}',
   deleteFolderConfirmButton: 'Map definitief verwijderen',
+  recentTitle: 'Recente documenten',
+  recentUnavailable: 'Map of bestand ontbreekt',
   backToList: 'Alle projecten',
   loading: 'Laden…',
   sourcesTitle: 'Te vertalen documenten',

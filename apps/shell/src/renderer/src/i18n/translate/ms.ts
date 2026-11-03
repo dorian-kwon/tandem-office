@@ -28,6 +28,8 @@ export const ms = {
   deleteListAndFolder: 'Alih keluar daripada senarai dan padam folder',
   deleteFolderConfirm: 'Ini memadam folder dan semua kandungannya secara kekal: {dir}',
   deleteFolderConfirmButton: 'Padam folder secara kekal',
+  recentTitle: 'Dokumen terkini',
+  recentUnavailable: 'Folder atau fail tidak ditemui',
   backToList: 'Semua projek',
   loading: 'Memuatkan…',
   sourcesTitle: 'Dokumen untuk diterjemah',

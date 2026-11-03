@@ -3,6 +3,7 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
+  readFileSync,
   mkdtempSync,
   renameSync,
   rmSync,
@@ -711,6 +712,30 @@ describe('translation view handlers', () => {
     expect(view.opened).toEqual([join(dir, 'source', 'doc.md'), join(dir, 'output', 'doc.md')])
     // the original itself is never opened
     expect(view.opened).not.toContain(original)
+  })
+
+  it('open-translation records the document in the recent list (settings file only)', async () => {
+    const { h } = viewHandlers()
+    const { dir } = await createIn(h, { name: 'R', sourceLang: 'en', targetLang: 'ko' })
+    const original = join(root, 'doc.md')
+    writeFileSync(original, '# hi')
+    await addPicked(h, dir, 'source', original)
+    expect(await h.recent()).toEqual([])
+    clock = 5000
+    await h.openTranslation({ dir, file: 'doc.md' })
+    expect(await h.recent()).toEqual([
+      {
+        dir,
+        projectName: 'R',
+        file: 'doc.md',
+        sourceLang: 'en',
+        targetLang: 'ko',
+        openedAt: 5000,
+        available: true,
+      },
+    ])
+    expect(JSON.stringify(readAppSettings(settingsPath))).toContain('translationRecentDocuments')
+    expect(readFileSync(join(dir, '.tandem', 'project.json'), 'utf8')).not.toContain('recent')
   })
 
   it('open-translation rejects unregistered folders and files not in the project', async () => {

@@ -26,6 +26,8 @@ export const ar = {
   deleteListAndFolder: 'إزالة من القائمة وحذف المجلد',
   deleteFolderConfirm: 'سيؤدي هذا إلى حذف المجلد وكل ما فيه نهائيًا: {dir}',
   deleteFolderConfirmButton: 'حذف المجلد نهائيًا',
+  recentTitle: 'المستندات الأخيرة',
+  recentUnavailable: 'المجلد أو الملف غير موجود',
   backToList: 'كل المشاريع',
   loading: 'جارٍ التحميل…',
   sourcesTitle: 'مستندات للترجمة',

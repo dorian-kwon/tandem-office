@@ -27,6 +27,8 @@ export const pl = {
   deleteListAndFolder: 'Usuń z listy i usuń folder',
   deleteFolderConfirm: 'To trwale usunie folder i wszystko, co w nim jest: {dir}',
   deleteFolderConfirmButton: 'Usuń folder trwale',
+  recentTitle: 'Ostatnie dokumenty',
+  recentUnavailable: 'Brak folderu lub pliku',
   backToList: 'Wszystkie projekty',
   loading: 'Ładowanie…',
   sourcesTitle: 'Dokumenty do przetłumaczenia',

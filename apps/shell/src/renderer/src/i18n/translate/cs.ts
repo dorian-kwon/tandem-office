@@ -27,6 +27,8 @@ export const cs = {
   deleteListAndFolder: 'Odebrat ze seznamu a smazat složku',
   deleteFolderConfirm: 'Tím se složka i vše v ní trvale smaže: {dir}',
   deleteFolderConfirmButton: 'Trvale smazat složku',
+  recentTitle: 'Nedávné dokumenty',
+  recentUnavailable: 'Složka nebo soubor chybí',
   backToList: 'Všechny projekty',
   loading: 'Načítání…',
   sourcesTitle: 'Dokumenty k překladu',

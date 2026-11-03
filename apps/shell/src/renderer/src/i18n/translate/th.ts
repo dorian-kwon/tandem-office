@@ -26,6 +26,8 @@ export const th = {
   deleteListAndFolder: 'นำออกจากรายการและลบโฟลเดอร์',
   deleteFolderConfirm: 'การดำเนินการนี้จะลบโฟลเดอร์และทุกอย่างในนั้นอย่างถาวร: {dir}',
   deleteFolderConfirmButton: 'ลบโฟลเดอร์อย่างถาวร',
+  recentTitle: 'เอกสารล่าสุด',
+  recentUnavailable: 'ไม่พบโฟลเดอร์หรือไฟล์',
   backToList: 'โปรเจกต์ทั้งหมด',
   loading: 'กำลังโหลด…',
   sourcesTitle: 'เอกสารที่จะแปล',

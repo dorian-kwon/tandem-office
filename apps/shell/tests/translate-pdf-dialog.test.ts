@@ -548,6 +548,7 @@ describe('TranslationPanel mounting', () => {
   async function renderPanel(props: Record<string, unknown> = {}) {
     ;(window as unknown as { translateApi: unknown }).translateApi = {
       ...api,
+      recent: vi.fn(async () => []),
       list: vi.fn(async () => [
         {
           dir: '/p/a',

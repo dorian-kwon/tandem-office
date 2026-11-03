@@ -27,6 +27,8 @@ export const pt = {
   deleteListAndFolder: 'Remover da lista e excluir a pasta',
   deleteFolderConfirm: 'Isso exclui permanentemente a pasta e tudo o que há nela: {dir}',
   deleteFolderConfirmButton: 'Excluir a pasta permanentemente',
+  recentTitle: 'Documentos recentes',
+  recentUnavailable: 'Pasta ou arquivo não encontrado',
   backToList: 'Todos os projetos',
   loading: 'Carregando…',
   sourcesTitle: 'Documentos a traduzir',

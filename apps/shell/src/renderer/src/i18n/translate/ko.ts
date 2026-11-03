@@ -26,6 +26,8 @@ export const ko = {
   deleteListAndFolder: '목록에서 지우고 폴더도 삭제',
   deleteFolderConfirm: '폴더와 그 안의 모든 파일이 완전히 삭제됩니다: {dir}',
   deleteFolderConfirmButton: '폴더 완전히 삭제',
+  recentTitle: '최근 문서',
+  recentUnavailable: '폴더나 파일이 없습니다',
   backToList: '모든 프로젝트',
   loading: '불러오는 중...',
   sourcesTitle: '번역할 문서',

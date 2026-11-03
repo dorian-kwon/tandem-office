@@ -127,7 +127,17 @@ export function TranslationPanel(props: TranslationPanelProps = {}) {
   const aiSettings = props.aiSettings ?? null
   const openAiSettings = props.onOpenAiSettings ?? (() => undefined)
 
-  if (openDir === null) return <ProjectList onOpen={setOpenDir} />
+  if (openDir === null)
+    return (
+      <ProjectList
+        onOpen={setOpenDir}
+        onOpenRecent={(dir, file) => {
+          current.current = dir
+          setOpenDir(dir)
+          void startTranslation(dir, file)
+        }}
+      />
+    )
   return (
     <>
       <ProjectDetail

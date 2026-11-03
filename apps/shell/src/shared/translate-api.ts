@@ -41,6 +41,7 @@ export const TRANSLATE_CHANNELS = {
   setSourceKind: 'translate:set-source-kind',
   pickExisting: 'translate:pick-existing',
   relocate: 'translate:relocate',
+  recent: 'translate:recent',
 } as const
 
 export type TranslateMaterialKind = 'source' | 'reference' | 'glossary'
@@ -55,6 +56,20 @@ export interface TranslateProjectListEntry {
   targetLang: string
   /** epoch milliseconds, kept in the settings list only (never in project.json) */
   lastOpened: number
+}
+
+/** one document opened lately in the translation view (kept in the app settings file) */
+export interface TranslateRecentDocument {
+  dir: string
+  projectName: string
+  /** the project's source file name; opening it goes through the usual open path */
+  file: string
+  sourceLang: string
+  targetLang: string
+  /** epoch milliseconds */
+  openedAt: number
+  /** false when the project folder or the output file is gone */
+  available: boolean
 }
 
 export interface TranslateCreateArgs {
@@ -267,6 +282,8 @@ export interface TranslateOcrWriteArgs {
 
 export interface TranslateApi {
   list(): Promise<TranslateProjectListEntry[]>
+  /** documents opened lately, newest first, at most 10 */
+  recent(): Promise<TranslateRecentDocument[]>
   create(args: TranslateCreateArgs): Promise<{ dir: string }>
   remove(args: TranslateRemoveArgs): Promise<void>
   getSystemPrompt(): Promise<string>

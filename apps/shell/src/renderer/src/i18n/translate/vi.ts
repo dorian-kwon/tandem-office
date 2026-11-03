@@ -27,6 +27,8 @@ export const vi = {
   deleteListAndFolder: 'Xóa khỏi danh sách và xóa thư mục',
   deleteFolderConfirm: 'Thao tác này xóa vĩnh viễn thư mục và mọi thứ trong đó: {dir}',
   deleteFolderConfirmButton: 'Xóa thư mục vĩnh viễn',
+  recentTitle: 'Tài liệu gần đây',
+  recentUnavailable: 'Không tìm thấy thư mục hoặc tệp',
   backToList: 'Tất cả dự án',
   loading: 'Đang tải…',
   sourcesTitle: 'Tài liệu cần dịch',

@@ -27,6 +27,8 @@ export const it = {
   deleteListAndFolder: 'Rimuovi dall’elenco ed elimina la cartella',
   deleteFolderConfirm: 'Questo elimina definitivamente la cartella e tutto il suo contenuto: {dir}',
   deleteFolderConfirmButton: 'Elimina definitivamente la cartella',
+  recentTitle: 'Documenti recenti',
+  recentUnavailable: 'Cartella o file mancante',
   backToList: 'Tutti i progetti',
   loading: 'Caricamento…',
   sourcesTitle: 'Documenti da tradurre',

@@ -26,6 +26,8 @@ export const he = {
   deleteListAndFolder: 'הסרה מהרשימה ומחיקת התיקייה',
   deleteFolderConfirm: 'פעולה זו מוחקת לצמיתות את התיקייה ואת כל מה שבתוכה: {dir}',
   deleteFolderConfirmButton: 'מחיקת התיקייה לצמיתות',
+  recentTitle: 'מסמכים אחרונים',
+  recentUnavailable: 'התיקייה או הקובץ חסרים',
   backToList: 'כל הפרויקטים',
   loading: 'טוען…',
   sourcesTitle: 'מסמכים לתרגום',

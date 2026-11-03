@@ -138,9 +138,8 @@ test('translation project: create, upload, split view, read-only source, remove'
           page.evaluate(
             async () =>
               (
-                (window as unknown as { aiOfficeTabs: { getSplit(): Promise<unknown> } })
-                  .aiOfficeTabs
-              ).getSplit() !== null,
+                window as unknown as { aiOfficeTabs: { getSplit(): Promise<unknown> } }
+              ).aiOfficeTabs.getSplit() !== null,
           ),
         { timeout: 30_000 },
       )
@@ -210,6 +209,25 @@ test('translation project: create, upload, split view, read-only source, remove'
     await page.getByRole('button', { name: 'Hide source' }).click()
     await expect(page.getByRole('button', { name: 'Show source' })).toBeVisible()
     await page.getByRole('button', { name: 'Show source' }).click()
+    await expect(page.getByRole('button', { name: 'Hide source' })).toBeVisible()
+
+    // back on the project list the document shows under "Recent documents";
+    // clicking it reopens the split view
+    const splitShown = () =>
+      page.evaluate(
+        async () =>
+          (
+            window as unknown as { aiOfficeTabs: { getSplit(): Promise<unknown> } }
+          ).aiOfficeTabs.getSplit() !== null,
+      )
+    await page.locator('.tab-bar .tab-item.tab-home').click()
+    await page.getByRole('button', { name: 'Translation', exact: true }).first().click()
+    await page.getByRole('button', { name: 'All projects' }).click()
+    const recentRow = page.locator('[data-recent-list] [data-recent-file="contract.md"]')
+    await expect(page.getByText('Recent documents')).toBeVisible()
+    await expect(recentRow).toContainText('Demo contract')
+    await recentRow.getByRole('button').click()
+    await expect.poll(splitShown, { timeout: 30_000 }).toBe(true)
     await expect(page.getByRole('button', { name: 'Hide source' })).toBeVisible()
 
     // source copy on disk never changed during all of this
