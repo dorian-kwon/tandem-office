@@ -204,4 +204,9 @@ export const pt = {
   convertedReadOnly:
     'Somente leitura. Trechos deste texto podem ser enviados à IA com os pedidos; o arquivo em si nunca é alterado.',
   convertedTruncated: 'O texto é longo; só o início é mostrado.',
+  refOutside: 'Não usado: um link para fora do projeto',
+  ctxReferencesNamesOnly:
+    'Arquivos de referência ({count}): {names}. Nenhum tem texto utilizável, então só os nomes são enviados.',
+  trConfirmSendsNamesOnly:
+    'O texto do documento é enviado a esta IA, com seus prompts de tradução, o glossário (inteiro se for pequeno; caso contrário, as entradas cujos termos aparecem no texto) e os nomes dos arquivos de referência (não o conteúdo deles).',
 } satisfies Record<keyof typeof zh, string>

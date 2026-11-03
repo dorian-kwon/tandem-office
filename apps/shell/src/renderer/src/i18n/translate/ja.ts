@@ -199,4 +199,9 @@ export const ja = {
   convertedReadOnly:
     '読み取り専用です。このテキストの一部が依頼とともに AI に送信されることがあります。ファイル自体は変更されません。',
   convertedTruncated: 'テキストが長いため、先頭部分のみ表示しています。',
+  refOutside: '使用しません: プロジェクト外へのリンク',
+  ctxReferencesNamesOnly:
+    '参考資料のファイル {count} 件: {names}。使えるテキストがないため、名前だけを送信します。',
+  trConfirmSendsNamesOnly:
+    '文書のテキストが、翻訳プロンプト、用語集（少ない場合は全件、多い場合は本文に出てくる語の項目のみ）、参考ファイルの名前（内容は送りません）とともに、このAIに送信されます。',
 } satisfies Record<keyof typeof zh, string>

@@ -205,4 +205,9 @@ export const nl = {
   convertedReadOnly:
     'Alleen-lezen. Delen van deze tekst kunnen met verzoeken naar de AI gaan; het bestand zelf wordt nooit gewijzigd.',
   convertedTruncated: 'De tekst is lang; alleen het begin wordt getoond.',
+  refOutside: 'Niet gebruikt: een koppeling buiten het project',
+  ctxReferencesNamesOnly:
+    'Referentiebestanden ({count}): {names}. Geen ervan heeft bruikbare tekst, dus alleen de namen worden verstuurd.',
+  trConfirmSendsNamesOnly:
+    'De tekst van het document wordt naar deze AI gestuurd, samen met je vertaalprompts, de woordenlijst (helemaal als die klein is, anders de items waarvan de termen in de tekst voorkomen) en de namen van de referentiebestanden (niet hun inhoud).',
 } satisfies Record<keyof typeof zh, string>

@@ -338,6 +338,7 @@ export function PdfTranslateDialog(props: PdfTranslateDialogProps): ReactElement
             onOpenAiSettings={props.onOpenAiSettings}
             onCancel={cancel}
             onStart={start}
+            excerpts={(context?.referenceConverted ?? 0) > 0}
           />
         )}
         {step.kind === 'running' && (
@@ -571,7 +572,12 @@ function ContextSummary(props: { summary: TranslateContextSummary; lang: Lang })
         <li data-context-references={references.length}>
           {references.length === 0
             ? s('ctxReferencesNone')
-            : s('ctxReferences', { count: references.length, names: references.join(', ') })}
+            : summary.referenceConverted > 0
+              ? s('ctxReferences', { count: references.length, names: references.join(', ') })
+              : s('ctxReferencesNamesOnly', {
+                  count: references.length,
+                  names: references.join(', '),
+                })}
         </li>
       </ul>
     </div>
@@ -597,6 +603,8 @@ function PdfConfirm(props: {
   onOpenAiSettings: () => void
   onCancel: () => void
   onStart: () => void
+  /** at least one reference has converted text, so excerpts may go with requests */
+  excerpts: boolean
 }): ReactElement {
   const { estimate, route, connection, lang } = props
   const s = makeText(lang)
@@ -633,7 +641,9 @@ function PdfConfirm(props: {
             <li data-route="ready" data-provider={ready.provider}>
               {s('trConfirmProvider', { provider: routeLabel(ready, connection.statuses) })}
             </li>
-            <li>{s('trConfirmSends')}</li>
+            <li data-sends-excerpts={props.excerpts}>
+              {props.excerpts ? s('trConfirmSends') : s('trConfirmSendsNamesOnly')}
+            </li>
             <li data-hint="app-ai">{s('trConfirmAppAi')}</li>
             {ready.paid && (
               <li className="translate-ocr-paid" data-paid>

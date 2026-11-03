@@ -211,4 +211,9 @@ export const de = {
   convertedReadOnly:
     'Nur lesen. Teile dieses Texts können mit Anfragen an die KI gesendet werden; die Datei selbst wird nie geändert.',
   convertedTruncated: 'Der Text ist lang; nur sein Anfang wird gezeigt.',
+  refOutside: 'Nicht verwendet: ein Link aus dem Projekt hinaus',
+  ctxReferencesNamesOnly:
+    'Referenzdateien ({count}): {names}. Keine hat verwendbaren Text, daher werden nur ihre Namen gesendet.',
+  trConfirmSendsNamesOnly:
+    'Der Text des Dokuments wird an diese KI gesendet, zusammen mit Ihren Übersetzungs-Prompts, dem Glossar (vollständig, wenn es klein ist, sonst die Einträge, deren Begriffe im Text vorkommen) und den Namen der Referenzdateien (nicht deren Inhalt).',
 } satisfies Record<keyof typeof zh, string>

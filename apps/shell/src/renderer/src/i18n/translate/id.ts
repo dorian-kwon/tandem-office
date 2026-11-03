@@ -202,4 +202,9 @@ export const id = {
   convertedReadOnly:
     'Hanya baca. Bagian dari teks ini dapat dikirim ke AI bersama permintaan; file itu sendiri tidak pernah diubah.',
   convertedTruncated: 'Teksnya panjang; hanya bagian awalnya yang ditampilkan.',
+  refOutside: 'Tidak dipakai: tautan ke luar proyek',
+  ctxReferencesNamesOnly:
+    'File acuan ({count}): {names}. Tidak ada yang memiliki teks yang dapat dipakai, jadi hanya namanya yang dikirim.',
+  trConfirmSendsNamesOnly:
+    'Teks dokumen dikirim ke AI ini bersama prompt terjemahan Anda, glosarium (utuh jika kecil, jika tidak hanya entri yang istilahnya muncul dalam teks), dan nama file acuan (bukan isinya).',
 } satisfies Record<keyof typeof zh, string>

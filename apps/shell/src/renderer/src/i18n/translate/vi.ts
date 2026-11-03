@@ -195,4 +195,9 @@ export const vi = {
   convertedReadOnly:
     'Chỉ đọc. Một phần văn bản này có thể được gửi cho AI cùng các yêu cầu; bản thân tệp không bao giờ bị thay đổi.',
   convertedTruncated: 'Văn bản dài; chỉ hiển thị phần đầu.',
+  refOutside: 'Không dùng: liên kết ra ngoài dự án',
+  ctxReferencesNamesOnly:
+    'Tệp tham khảo ({count}): {names}. Không tệp nào có văn bản dùng được nên chỉ gửi tên.',
+  trConfirmSendsNamesOnly:
+    'Văn bản của tài liệu được gửi cho AI này cùng với các prompt dịch của bạn, bảng thuật ngữ (toàn bộ nếu nhỏ, nếu không thì các mục có thuật ngữ xuất hiện trong văn bản) và tên các tệp tham khảo (không gửi nội dung).',
 } satisfies Record<keyof typeof zh, string>

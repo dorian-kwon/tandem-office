@@ -11,7 +11,9 @@ import {
   type GlossaryEntry,
   type ProjectFile,
   type ReferenceChunk,
+  type ReferenceConverter,
 } from '@genoffice/translate-project'
+import { convertReference } from './reference-convert'
 import type { ProjectTranslationItem } from '@genoffice/project-store'
 import { readTranslationProjects, readTranslationSystemPrompt } from '../app-settings'
 import { INSTRUCTIONS_LIMIT_CHARS } from '../projects/context'
@@ -35,7 +37,19 @@ export interface TranslationContextOptions {
    */
   limitChars?: number
   platform?: NodeJS.Platform
+  /**
+   * converts a reference again when the index lags the folder (edited in
+   * place, or a project from before the index); default file-parse's reader
+   */
+  convertReference?: ReferenceConverter
 }
+
+/**
+ * Room kept for what wraps the reference excerpts in the system prompt: the
+ * sentence before them and the `<translation-references>` tags
+ * (packages/ui project-skill.ts, shared/translate-pdf.ts write about 230).
+ */
+export const REFERENCE_FENCE_CHARS = 400
 
 export interface TranslationInstructions extends ComposedContext {
   /** the prompts (app-wide, project) and the language pair: the start of `text` */
@@ -109,7 +123,8 @@ export async function buildTranslationInstructions(
     selection = matching.length > 0 ? 'matching' : 'first'
   }
   const built = fitted(systemPrompt, project, candidates, glossary.length, selection, limit)
-  return withReferences(dir, built, systemPrompt, project, paragraph, limit)
+  const convert = options.convertReference ?? convertReference
+  return withReferences(dir, built, systemPrompt, project, paragraph, limit, convert)
 }
 
 /**
@@ -126,13 +141,16 @@ async function withReferences(
   project: ProjectFile,
   paragraph: string,
   limit: number,
+  convert: ReferenceConverter,
 ): Promise<TranslationInstructions> {
   const none = { ...built, referencesText: '', referenceChunks: 0 }
-  const room = limit - built.text.length - 2
+  const room = limit - built.text.length - 2 - REFERENCE_FENCE_CHARS
   if (built.cut || room <= 0 || project.references.length === 0) return none
   let chunks: ReferenceChunk[]
   try {
-    chunks = await queryReferences(dir, paragraph, Math.min(DEFAULT_REFERENCE_CHARS, room))
+    chunks = await queryReferences(dir, paragraph, Math.min(DEFAULT_REFERENCE_CHARS, room), {
+      convert,
+    })
   } catch {
     return none
   }

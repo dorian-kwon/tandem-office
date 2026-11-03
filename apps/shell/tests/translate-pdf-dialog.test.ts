@@ -139,6 +139,7 @@ beforeEach(() => {
         glossaryTotal: 350,
         glossaryLimit: 200,
         referenceNames: ['style.pdf', 'terms.docx'],
+        referenceConverted: 1,
       },
     })),
   }
@@ -226,6 +227,28 @@ describe('PdfTranslateDialog', () => {
     expect(stored).toEqual([])
   })
 
+  it('claims no excerpts when no reference has converted text', async () => {
+    api.instructionsFor.mockResolvedValue({
+      prompts: '',
+      material: '',
+      references: '',
+      summary: {
+        systemPrompt: false,
+        projectPrompt: true,
+        glossaryTotal: 0,
+        glossaryLimit: 200,
+        referenceNames: ['scan.pdf'],
+        referenceConverted: 0,
+      },
+    })
+    await render()
+    const text = host.textContent ?? ''
+    expect(text).toContain('Reference files (1): scan.pdf. None of them has usable text')
+    expect(text).not.toContain('parts of their converted text')
+    expect(text).not.toContain('parts of their text that best match')
+    expect(host.querySelector('[data-sends-excerpts="false"]')).not.toBeNull()
+  })
+
   it('a small glossary goes whole, and no references says none', async () => {
     api.instructionsFor.mockResolvedValue({
       prompts: '',
@@ -236,6 +259,7 @@ describe('PdfTranslateDialog', () => {
         glossaryTotal: 12,
         glossaryLimit: 200,
         referenceNames: [],
+        referenceConverted: 0,
       },
     })
     await render()

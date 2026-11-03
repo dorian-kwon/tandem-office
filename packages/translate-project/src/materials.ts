@@ -5,6 +5,7 @@ import { parseGlossary, type GlossaryEntry } from './glossary'
 import type { ProjectFile } from './project-file'
 import { withProjectLock } from './project-lock'
 import {
+  REFERENCE_MD_DIR,
   syncReferenceIndex,
   type ReferenceConverter,
   type ReferenceStatus,
@@ -87,7 +88,13 @@ export function addReference(
 ): Promise<ProjectFile> {
   return withProjectLock(dir, async () => {
     const project = await loadProject(dir)
-    const name = await copyIntoWithSuffix(join(dir, 'references'), originalPath)
+    const refs = join(dir, 'references')
+    // a file named like the converted-copy folder never takes its place: that name is
+    // kept for the folder, so the file gets a numbered name
+    const avoid = basename(originalPath) === REFERENCE_MD_DIR ? [refs] : []
+    if (avoid.length > 0)
+      await mkdir(join(refs, REFERENCE_MD_DIR), { recursive: true }).catch(() => undefined)
+    const name = await copyIntoWithSuffix(refs, originalPath, avoid)
     const next = { ...project, references: [...project.references, name] }
     try {
       await saveProject(dir, next)

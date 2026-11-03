@@ -183,4 +183,8 @@ export const zh = {
   convertedTitle: '转换后的文字：{name}',
   convertedReadOnly: '只读。这段文字的部分内容可能随请求发送给 AI；文件本身不会被更改。',
   convertedTruncated: '文字较长，只显示开头部分。',
+  refOutside: '未使用：指向项目外的链接',
+  ctxReferencesNamesOnly: '参考资料文件 {count} 个：{names}。其中没有可用的文字，因此只发送名称。',
+  trConfirmSendsNamesOnly:
+    '文档的文字会连同您的翻译提示词、术语表（较少时发送全部，否则只发送其词条出现在文中的部分）以及参考文件的名称（不含内容）一起发送给这个 AI。',
 }

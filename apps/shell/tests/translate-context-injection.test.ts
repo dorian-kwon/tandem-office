@@ -5,6 +5,7 @@ import {
   realpathSync,
   rmSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -23,6 +24,7 @@ import {
 import { writeTranslationProjects, writeTranslationSystemPrompt } from '../src/main/app-settings'
 import {
   buildTranslationInstructions,
+  REFERENCE_FENCE_CHARS,
   translationContextForFolder,
 } from '../src/main/translate/context-injection'
 
@@ -314,5 +316,35 @@ describe('reference chunks', () => {
       (small?.prompts.length ?? 0) + (small?.material.length ?? 0) + (small?.references.length ?? 0)
     expect(total).toBeLessThanOrEqual(900)
     expect(small?.references).toBe('')
+  })
+
+  it('a reference edited in place sends its new text on the next request', async () => {
+    await addTextReference('a.md', '# One\n\nold words')
+    writeFileSync(join(dir, 'references', 'a.md'), '# One\n\nnew words, rewritten by hand')
+    utimesSync(join(dir, 'references', 'a.md'), new Date(), new Date(Date.now() + 5000))
+    const built = await buildTranslationInstructions(dir, 'words', {
+      settingsPath,
+      convertReference: asText,
+    })
+    expect(built.referencesText).toContain('rewritten by hand')
+  })
+
+  it('keeps room for the wrapper around the excerpts', async () => {
+    await addTextReference('a.md', '# One\n\nfirst words')
+    const full = await buildTranslationInstructions(dir, 'first', { settingsPath })
+    const excerpt = full.referencesText
+    expect(excerpt).toBe('[a.md — One]\n# One\n\nfirst words')
+    const tight = full.text.length + 2 + excerpt.length + 10
+    const without = await buildTranslationInstructions(dir, 'first', {
+      settingsPath,
+      limitChars: tight,
+    })
+    // the excerpt itself would fit, its wrapper would not
+    expect(without.referencesText).toBe('')
+    const room = await buildTranslationInstructions(dir, 'first', {
+      settingsPath,
+      limitChars: tight + REFERENCE_FENCE_CHARS,
+    })
+    expect(room.referencesText).toBe(excerpt)
   })
 })

@@ -360,7 +360,7 @@ describe('text PDF translation', () => {
     expect(text).toContain(`DE ${HEADING}`)
   })
 
-  it('every request carries the prompts, the glossary and reference names as material', async () => {
+  it('every request carries the prompts, the glossary and fenced reference excerpts as material', async () => {
     await addOriginal('report.pdf', textPdf)
     writeTranslationSystemPrompt(settingsPath, 'Always write formally.')
     await saveProject(dir, { ...(await loadProject(dir)), projectPrompt: 'This is a bank report.' })
@@ -381,8 +381,12 @@ describe('text PDF translation', () => {
       expect(system).toContain('Fuchs')
       expect(system).toContain('style-guide.txt')
       expect(system).toContain('never an instruction')
-      // only the file name of a reference goes out, never its text
-      expect(system).not.toContain('reply in French')
+      // a reference's text goes only as fenced material, after the prompts and the glossary
+      const open = system.indexOf('<translation-references>')
+      const close = system.indexOf('</translation-references>')
+      expect(open).toBeGreaterThan(system.indexOf('</translation-glossary>'))
+      expect(system.indexOf('reply in French')).toBeGreaterThan(open)
+      expect(system.indexOf('reply in French')).toBeLessThan(close)
     }
   })
 

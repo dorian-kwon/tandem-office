@@ -485,13 +485,14 @@ describe('ProjectDetail reference status', () => {
 
   it('shows each reference’s conversion status', async () => {
     api.getProject.mockResolvedValue(
-      project({ references: ['a.docx', 'scan.pdf', 'bad.hwp', 'x.zip'] }),
+      project({ references: ['a.docx', 'scan.pdf', 'bad.hwp', 'x.zip', 'link.txt'] }),
     )
     api.referenceStatus.mockResolvedValue({
       'a.docx': 'converted',
       'scan.pdf': 'needs-ocr',
       'bad.hwp': 'failed',
       'x.zip': 'unsupported',
+      'link.txt': 'outside',
     })
     await render(ProjectDetail, props())
     expect(api.referenceStatus).toHaveBeenCalledWith('/p/a')
@@ -507,6 +508,7 @@ describe('ProjectDetail reference status', () => {
     expect(section.textContent).toContain('Converted to text')
     expect(section.textContent).toContain('Needs OCR')
     expect(section.textContent).toContain('Could not be read')
+    expect(section.textContent).toContain('Not used: a link out of the project')
     // only a converted reference offers its text
     expect(section.querySelectorAll('[data-action="view-converted"]')).toHaveLength(1)
   })

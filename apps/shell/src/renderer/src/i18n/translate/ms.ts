@@ -203,4 +203,9 @@ export const ms = {
   convertedReadOnly:
     'Baca sahaja. Bahagian teks ini mungkin dihantar kepada AI bersama permintaan; fail itu sendiri tidak pernah diubah.',
   convertedTruncated: 'Teks ini panjang; hanya bahagian awalnya ditunjukkan.',
+  refOutside: 'Tidak digunakan: pautan ke luar projek',
+  ctxReferencesNamesOnly:
+    'Fail rujukan ({count}): {names}. Tiada satu pun mempunyai teks yang boleh digunakan, jadi hanya namanya dihantar.',
+  trConfirmSendsNamesOnly:
+    'Teks dokumen dihantar kepada AI ini bersama prompt terjemahan anda, glosari (keseluruhan jika kecil, jika tidak entri yang istilahnya muncul dalam teks) dan nama fail rujukan (bukan kandungannya).',
 } satisfies Record<keyof typeof zh, string>

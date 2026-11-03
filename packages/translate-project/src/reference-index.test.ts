@@ -1,10 +1,11 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_REFERENCE_CHARS,
   REFERENCE_CHUNK_CHARS,
+  REFERENCE_QUERY_CHARS,
   chunkMarkdown,
   queryReferences,
   readConvertedReference,
@@ -13,7 +14,7 @@ import {
   tokenize,
   type ReferenceConverter,
 } from './reference-index'
-import { createProject } from './project-store'
+import { createProject, loadProject, saveProject } from './project-store'
 
 let root: string
 let dir: string
@@ -252,5 +253,137 @@ describe('queryReferences', () => {
     await syncReferenceIndex(dir, ['a.md'], asText)
     await writeFile(join(dir, 'references', '.md', 'a.md.md'), 'changed', 'utf8')
     expect(await queryReferences(dir, 'first', 1000)).toEqual([])
+  })
+})
+
+describe('links are never followed out of the project', () => {
+  let outside: string
+
+  beforeEach(async () => {
+    outside = join(root, 'outside')
+    await mkdir(outside, { recursive: true })
+  })
+
+  it('a reference that is a link to an outside file is not read, and is recorded as outside', async () => {
+    await writeFile(join(outside, 'secret.txt'), 'outside secret', 'utf8')
+    await symlink(join(outside, 'secret.txt'), join(dir, 'references', 'notes.txt'))
+    const convert = vi.fn(asText)
+    expect(await syncReferenceIndex(dir, ['notes.txt'], convert)).toEqual({
+      'notes.txt': 'outside',
+    })
+    expect(convert).not.toHaveBeenCalled()
+    expect(await exists(join(dir, 'references', '.md', 'notes.txt.md'))).toBe(false)
+    expect(await readConvertedReference(dir, 'notes.txt')).toBeNull()
+    expect(await queryReferences(dir, 'secret', 1000)).toEqual([])
+  })
+
+  it('a converted-copy folder that is a link is never written or deleted through', async () => {
+    await writeFile(join(outside, 'README.md'), 'keep me', 'utf8')
+    await symlink(outside, join(dir, 'references', '.md'))
+    await putReference('a.md', 'alpha')
+    // a crafted index naming a file the project does not list, whose copy lives "in" the link
+    await writeFile(
+      join(dir, '.tandem', 'references-index.json'),
+      JSON.stringify({
+        version: 1,
+        files: [{ file: 'README', sha256: '', status: 'needs-ocr', chunks: [] }],
+      }),
+      'utf8',
+    )
+    expect(await syncReferenceIndex(dir, ['a.md'], asText)).toEqual({ 'a.md': 'outside' })
+    expect(await readFile(join(outside, 'README.md'), 'utf8')).toBe('keep me')
+    expect(await exists(join(outside, 'a.md.md'))).toBe(false)
+  })
+
+  it('a crafted index naming outside paths is ignored', async () => {
+    await writeFile(join(root, 'victim.md'), 'keep me', 'utf8')
+    await writeFile(
+      join(dir, '.tandem', 'references-index.json'),
+      JSON.stringify({
+        version: 1,
+        files: [
+          { file: '../../victim', sha256: '', status: 'failed', chunks: [] },
+          { file: '/etc/passwd', sha256: '', status: 'converted', mdSha256: 'x', chunks: [] },
+        ],
+      }),
+      'utf8',
+    )
+    expect(await referenceStatuses(dir)).toEqual({})
+    await syncReferenceIndex(dir, [], asText)
+    expect(await readFile(join(root, 'victim.md'), 'utf8')).toBe('keep me')
+  })
+
+  it('a converted copy replaced by a link is not read and not deleted through', async () => {
+    await putReference('a.md', 'alpha words')
+    await syncReferenceIndex(dir, ['a.md'], asText)
+    await writeFile(join(outside, 'other.md'), 'alpha words', 'utf8')
+    await rm(join(dir, 'references', '.md', 'a.md.md'))
+    await symlink(join(outside, 'other.md'), join(dir, 'references', '.md', 'a.md.md'))
+    expect(await readConvertedReference(dir, 'a.md')).toBeNull()
+    await syncReferenceIndex(dir, [], asText)
+    expect(await readFile(join(outside, 'other.md'), 'utf8')).toBe('alpha words')
+  })
+
+  it('a .tandem folder that is a link gets no index written through it', async () => {
+    const elsewhere = join(root, 'elsewhere')
+    await mkdir(elsewhere)
+    await rm(join(dir, '.tandem', 'references-index.json'), { force: true })
+    // keep project.json readable for nothing here: the index functions only
+    const state = join(dir, '.tandem')
+    await rm(state, { recursive: true, force: true })
+    await symlink(elsewhere, state)
+    await putReference('a.md', 'alpha')
+    await syncReferenceIndex(dir, ['a.md'], asText)
+    expect(await exists(join(elsewhere, 'references-index.json'))).toBe(false)
+  })
+})
+
+describe('a reference named like the converted-copy folder', () => {
+  it('fails alone and the others still convert', async () => {
+    await putReference('a.md', 'alpha')
+    const statuses = await syncReferenceIndex(dir, ['.md', 'a.md'], asText)
+    expect(statuses).toEqual({ '.md': 'failed', 'a.md': 'converted' })
+  })
+})
+
+describe('the request text and the freshness check', () => {
+  it('ranks by the first REFERENCE_QUERY_CHARS characters only', async () => {
+    const filler = (word: string) => `${word} `.repeat(300).trim()
+    await putReference(
+      'a.md',
+      ['# Early', `early ${filler('x')}`, '# Late', `late ${filler('y')}`].join('\n\n'),
+    )
+    await syncReferenceIndex(dir, ['a.md'], asText)
+    const query = `early ${'z '.repeat(REFERENCE_QUERY_CHARS)} late`
+    const hits = await queryReferences(dir, query, 1000)
+    expect(hits.map((h) => h.heading)).toEqual(['Early'])
+  })
+
+  it('reindexes a reference edited in place before answering', async () => {
+    const filler = (word: string) => `${word} `.repeat(300).trim()
+    const project = await loadProject(dir)
+    await saveProject(dir, { ...project, references: ['a.md'] })
+    await putReference('a.md', `# Old\n\nold ${filler('x')}`)
+    await syncReferenceIndex(dir, ['a.md'], asText)
+    await putReference(
+      'a.md',
+      ['# New', `fresh words ${filler('y')}`, '# Other', filler('w'), filler('v')].join('\n\n'),
+    )
+    await utimes(join(dir, 'references', 'a.md'), new Date(), new Date(Date.now() + 5000))
+    const convert = vi.fn(asText)
+    const hits = await queryReferences(dir, 'fresh', 1000, { convert })
+    expect(convert).toHaveBeenCalledTimes(1)
+    expect(hits.map((h) => h.heading)).toEqual(['New'])
+    // unchanged now: no second conversion
+    await queryReferences(dir, 'fresh', 1000, { convert })
+    expect(convert).toHaveBeenCalledTimes(1)
+  })
+
+  it('indexes a project made before the index on its first request', async () => {
+    const project = await loadProject(dir)
+    await saveProject(dir, { ...project, references: ['old.md'] })
+    await putReference('old.md', '# Old\n\nolder words')
+    const hits = await queryReferences(dir, 'older', 1000, { convert: asText })
+    expect(hits).toEqual([{ file: 'old.md', heading: 'Old', text: '# Old\n\nolder words' }])
   })
 })

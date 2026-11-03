@@ -198,4 +198,9 @@ export const en = {
   convertedReadOnly:
     'Read-only. Parts of this text may be sent to the AI with requests; the file itself is never changed.',
   convertedTruncated: 'The text is long; only its beginning is shown.',
+  refOutside: 'Not used: a link out of the project',
+  ctxReferencesNamesOnly:
+    'Reference files ({count}): {names}. None of them has usable text, so only their names are sent.',
+  trConfirmSendsNamesOnly:
+    "The document's text is sent to this AI, with your translation prompts, the glossary (whole when it is small, otherwise the entries whose terms appear in the text) and the names of the reference files (not their contents).",
 } satisfies Record<keyof typeof zh, string>

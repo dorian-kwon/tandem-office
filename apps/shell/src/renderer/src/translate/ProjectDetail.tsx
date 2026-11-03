@@ -52,6 +52,7 @@ const REFERENCE_STATUS_TEXT: Record<TranslateReferenceStatus, TranslateStringKey
   'needs-ocr': 'refNeedsOcr',
   failed: 'refFailed',
   unsupported: 'refUnsupported',
+  outside: 'refOutside',
 }
 
 function filesOf(project: ProjectFile, kind: TranslateMaterialKind): string[] {

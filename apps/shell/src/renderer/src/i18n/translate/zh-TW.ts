@@ -184,4 +184,8 @@ export const zhTW = {
   convertedTitle: '轉換後的文字：{name}',
   convertedReadOnly: '唯讀。這段文字的部分內容可能隨請求傳送給 AI；檔案本身不會被變更。',
   convertedTruncated: '文字較長，只顯示開頭部分。',
+  refOutside: '未使用：指向專案外的連結',
+  ctxReferencesNamesOnly: '參考資料檔案 {count} 個：{names}。其中沒有可用的文字，因此只傳送名稱。',
+  trConfirmSendsNamesOnly:
+    '文件的文字會連同您的翻譯提示詞、詞彙表（較少時傳送全部，否則只傳送其詞條出現在文中的部分）以及參考檔案的名稱（不含內容）一起傳送給這個 AI。',
 } satisfies Record<keyof typeof zh, string>

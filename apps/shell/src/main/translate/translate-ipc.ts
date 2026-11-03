@@ -15,6 +15,7 @@ import {
   parseProjectFile,
   projectStatus,
   readConvertedReference,
+  referenceStatuses,
   refreshReferences,
   removeGlossary,
   removeProject,
@@ -604,8 +605,12 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       if (typeof text !== 'string' || text.length > INSTRUCTIONS_TEXT_LIMIT)
         throw new TranslateIpcError('INVALID_ARGUMENT', 'the request text is not valid')
       const settingsPath = deps.settingsPath()
-      const built = await buildTranslationInstructions(dir, text, { settingsPath })
+      const built = await buildTranslationInstructions(dir, text, {
+        settingsPath,
+        convertReference: convert,
+      })
       const project = await loadProject(dir)
+      const statuses = await referenceStatuses(dir).catch(() => ({}) as Record<string, string>)
       return {
         prompts: built.promptText,
         material: built.materialText,
@@ -616,6 +621,7 @@ function createRawHandlers(deps: TranslateIpcDeps) {
           glossaryTotal: built.glossaryTotal,
           glossaryLimit: DEFAULT_GLOSSARY_LIMIT,
           referenceNames: [...project.references],
+          referenceConverted: project.references.filter((r) => statuses[r] === 'converted').length,
         },
       }
     },

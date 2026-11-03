@@ -188,4 +188,9 @@ export const ko = {
   convertedReadOnly:
     '읽기 전용입니다. 이 글의 일부가 요청과 함께 AI로 보내질 수 있으며, 파일 자체는 바뀌지 않습니다.',
   convertedTruncated: '글이 길어 앞부분만 보여 줍니다.',
+  refOutside: '쓰지 않음: 프로젝트 밖을 가리키는 링크',
+  ctxReferencesNamesOnly:
+    '참고자료 파일 {count}개: {names}. 쓸 수 있는 글이 있는 파일이 없어 이름만 보냅니다.',
+  trConfirmSendsNamesOnly:
+    '문서의 글이 이 AI로 보내집니다. 번역 프롬프트, 단어집(작으면 전부, 크면 글에 나오는 용어의 항목만), 참고자료의 파일 이름(내용은 아님)이 함께 갑니다.',
 } satisfies Record<keyof typeof zh, string>

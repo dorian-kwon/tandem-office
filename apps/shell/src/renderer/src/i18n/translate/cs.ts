@@ -199,4 +199,9 @@ export const cs = {
   convertedReadOnly:
     'Jen pro čtení. Části tohoto textu mohou být s požadavky odeslány AI; samotný soubor se nikdy nemění.',
   convertedTruncated: 'Text je dlouhý; zobrazuje se jen jeho začátek.',
+  refOutside: 'Nepoužito: odkaz mimo projekt',
+  ctxReferencesNamesOnly:
+    'Referenční soubory ({count}): {names}. Žádný nemá použitelný text, proto se posílají jen jejich názvy.',
+  trConfirmSendsNamesOnly:
+    'Text dokumentu se posílá této AI spolu s vašimi překladovými prompty, glosářem (celým, pokud je malý, jinak položkami, jejichž termíny se v textu vyskytují) a názvy referenčních souborů (bez jejich obsahu).',
 } satisfies Record<keyof typeof zh, string>

@@ -7,6 +7,7 @@ import {
   mkdtempSync,
   renameSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -666,6 +667,7 @@ describe('instructions summary', () => {
       glossaryTotal: 0,
       glossaryLimit: 200,
       referenceNames: ['style.pdf'],
+      referenceConverted: 0,
     })
   })
 })
@@ -858,5 +860,37 @@ describe('reference conversion', () => {
     await expect(h.referenceStatus(join(root, 'elsewhere'))).rejects.toMatchObject({
       code: 'NOT_REGISTERED',
     })
+  })
+})
+
+describe('reference links and the context summary', () => {
+  it('never reads a reference that is a link out of the project', async () => {
+    const h = handlers()
+    const { dir } = await createIn(h, { name: 'Link', sourceLang: 'en', targetLang: 'ko' })
+    const secret = join(root, 'secret.txt')
+    writeFileSync(secret, 'outside secret words')
+    symlinkSync(secret, join(dir, 'references', 'notes.txt'))
+    const project = JSON.parse(readFileSync(join(dir, '.tandem', 'project.json'), 'utf8'))
+    writeFileSync(
+      join(dir, '.tandem', 'project.json'),
+      JSON.stringify({ ...project, references: ['notes.txt'] }),
+    )
+    expect(await h.referenceStatus(dir)).toEqual({ 'notes.txt': 'outside' })
+    await expect(h.referenceText({ dir, file: 'notes.txt' })).rejects.toMatchObject({
+      code: 'NOT_LISTED',
+    })
+    const got = await h.instructionsFor({ dir, text: 'secret' })
+    expect(got.references).toBe('')
+    expect(got.summary.referenceConverted).toBe(0)
+  })
+
+  it('counts the converted references in the summary', async () => {
+    const h = handlers()
+    const { dir } = await createIn(h, { name: 'Count', sourceLang: 'en', targetLang: 'ko' })
+    const ref = join(root, 'notes.md')
+    writeFileSync(ref, '# Terms\n\nengine')
+    await addPicked(h, dir, 'reference', ref)
+    const got = await h.instructionsFor({ dir, text: '' })
+    expect(got.summary.referenceConverted).toBe(1)
   })
 })

@@ -205,4 +205,9 @@ export const fr = {
   convertedReadOnly:
     'Lecture seule. Des passages de ce texte peuvent être envoyés à l’IA avec les requêtes ; le fichier lui-même n’est jamais modifié.',
   convertedTruncated: 'Le texte est long ; seul son début est affiché.',
+  refOutside: 'Non utilisé : un lien hors du projet',
+  ctxReferencesNamesOnly:
+    'Fichiers de référence ({count}) : {names}. Aucun n’a de texte exploitable : seuls leurs noms sont envoyés.',
+  trConfirmSendsNamesOnly:
+    'Le texte du document est envoyé à cette IA, avec vos prompts de traduction, le glossaire (en entier s’il est petit, sinon les entrées dont les termes apparaissent dans le texte) et les noms des fichiers de référence (pas leur contenu).',
 } satisfies Record<keyof typeof zh, string>

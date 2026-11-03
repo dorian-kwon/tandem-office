@@ -223,6 +223,8 @@ export interface TranslateContextSummary {
   glossaryLimit: number
   /** reference file names; excerpts picked by each request's words go with it (`references`) */
   referenceNames: string[]
+  /** references with converted text: only these can send excerpts (0: names only) */
+  referenceConverted: number
 }
 
 /**

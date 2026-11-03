@@ -18,7 +18,7 @@ Added in the final review fix (same files, same 19 drafted languages):
 
 Added with reference material as markdown (2026-11-04, same 19 drafted languages):
 
-- `apps/shell/src/renderer/src/i18n/translate/<lang>.ts`: new keys `refConverted`, `refNeedsOcr`, `refNeedsOcrHint`, `refFailed`, `refUnsupported`, `refChecking`, `viewConverted`, `convertedTitle`, `convertedReadOnly`, `convertedTruncated`; `trConfirmSends` and `ctxReferences` now say that matching reference excerpts (up to 6,000 characters) are sent.
+- `apps/shell/src/renderer/src/i18n/translate/<lang>.ts`: new keys `refConverted`, `refNeedsOcr`, `refNeedsOcrHint`, `refFailed`, `refUnsupported`, `refChecking`, `viewConverted`, `convertedTitle`, `convertedReadOnly`, `convertedTruncated`; `trConfirmSends` and `ctxReferences` now say that matching reference excerpts (up to 6,000 characters) are sent. Review fix: `refOutside`, `ctxReferencesNamesOnly`, and `trConfirmSendsNamesOnly` (the earlier names-only sentence, shown when no reference has converted text).
 - `apps/shell/src/renderer/src/i18n/help/topics/translate.<lang>.md`: the "Reference files" section's first bullet became two (conversion and excerpts sent; per-file status and the read-only view).
 
 Not reviewed here: the product name, which is still open.

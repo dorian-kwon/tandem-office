@@ -13,7 +13,7 @@
 - `project-lock.ts`: 같은 폴더의 읽고-고치고-쓰기를 한 줄로 세우는 프로세스 안 잠금.
 - `compose.ts`: AI 요청에 붙일 번역 맥락 글(프롬프트, 언어 쌍, 단어집, 참고자료 이름)과 그 항목 목록, 그리고 따로 둔 참고자료 조각 글(`referencesText`, 조각마다 `[파일 — 제목]`).
 - `reference-md.ts`: 참고자료를 마크다운 글로(`convertReferenceToMarkdown`). 읽기는 셸이 넘긴 함수(`file-parse`의 `parseFileToText`)가 하고, 여기는 결과를 판정만 한다. 그림과 글자 층 없는 PDF(글자와 숫자 20자 미만)는 `needs-ocr`, 목록 밖 형식은 `unsupported`, 읽기 실패는 `failed`. HTML은 태그를 걷어 낸다.
-- `reference-index.ts`: 변환한 글 `references/.md/<이름>.md`와 색인 `.tandem/references-index.json`(맞추기 `syncReferenceIndex`, 상태 `referenceStatuses`, 읽기 `readConvertedReference`), 요청마다 고르기 `queryReferences`(BM25, k1 1.2, b 0.75, 합이 상한 이하이면 통째로). 조각은 제목에서 끊고 문단을 1,200자(`REFERENCE_CHUNK_CHARS`)까지 묶는다. 요청 상한 기본값은 6,000자(`DEFAULT_REFERENCE_CHARS`).
+- `reference-index.ts`: 변환한 글 `references/.md/<이름>.md`와 색인 `.tandem/references-index.json`(맞추기 `syncReferenceIndex`, 상태 `referenceStatuses`, 읽기 `readConvertedReference`), 요청마다 고르기 `queryReferences`(BM25, k1 1.2, b 0.75, 합이 상한 이하이면 통째로). 조각은 제목에서 끊고 문단을 1,200자(`REFERENCE_CHUNK_CHARS`)까지 묶는다. 요청 상한 기본값은 6,000자(`DEFAULT_REFERENCE_CHARS`), 요청 글은 앞 4,000자(`REFERENCE_QUERY_CHARS`)만 본다. 색인과 변환한 글은 크기·변경 시각으로 메모리에 담아 두고, `convert`를 받으면 참고자료의 크기·변경 시각이 달라진 것을 요청 때 다시 색인한다.
 
 ## 맡지 않는 것 (경계)
 
@@ -29,6 +29,7 @@
 - `ProjectFile`에는 시스템 프롬프트 필드가 없다. 프로젝트 프롬프트(`projectPrompt`)만 사용자가 고치며, 파서는 모르는 키를 버린다. 버전은 1만 받는다. 기본 OCR은 `{ kind: 'ai', provider: 'claude' }`다.
 - 오류는 이름이 있는 클래스로 던진다(`ProjectExistsError`, `InvalidProjectNameError`, `NotAProjectError`, `UnsupportedSourceError`, `NotListedError`, `GlossaryFormatError` 등). 셸은 그 이름으로 오류 코드를 고른다(`src/shared/translate-api.ts`).
 - 맥락 글(`text`)에는 참고자료의 이름만 넣는다. 내용은 요청마다 고른 조각만 `referencesText`로 따로 내고, 호출자가 `<translation-references>`로 감싼다. 참고자료 파일 자체는 읽기만 한다. 변환한 글은 `references/.md/`에만 쓴다.
+- 참고자료 쪽은 링크를 따라가지 않는다(`lstat`, `realpath`). 링크이거나 프로젝트 밖으로 풀리는 것은 읽지도 쓰지도 지우지도 않고 `outside`로 적는다. 지우는 것은 `references/.md/` 바로 안의 보통 파일뿐이다.
 - 이 PC에서 도는 OCR, 모델, 임베딩을 쓰지 않는다. 참고자료 찾기는 낱말(BM25)뿐이다. 한 파일의 실패가 프로젝트를 막지 않는다.
 
 ## 테스트

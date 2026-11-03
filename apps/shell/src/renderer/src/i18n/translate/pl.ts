@@ -202,4 +202,9 @@ export const pl = {
   convertedReadOnly:
     'Tylko do odczytu. Fragmenty tego tekstu mogą być wysyłane do AI wraz z żądaniami; sam plik nigdy nie jest zmieniany.',
   convertedTruncated: 'Tekst jest długi; pokazano tylko jego początek.',
+  refOutside: 'Nieużywany: łącze poza projekt',
+  ctxReferencesNamesOnly:
+    'Pliki referencyjne ({count}): {names}. Żaden nie ma użytecznego tekstu, więc wysyłane są tylko nazwy.',
+  trConfirmSendsNamesOnly:
+    'Tekst dokumentu jest wysyłany do tego AI wraz z Twoimi promptami tłumaczenia, glosariuszem (w całości, gdy jest mały, w przeciwnym razie wpisami, których terminy występują w tekście) i nazwami plików referencyjnych (bez ich zawartości).',
 } satisfies Record<keyof typeof zh, string>
