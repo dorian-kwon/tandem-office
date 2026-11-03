@@ -141,10 +141,9 @@ test('translation project: create, upload, split view, read-only source, remove'
         async () =>
           page.evaluate(
             async () =>
-              (
-                (window as unknown as { aiOfficeTabs: { getSplit(): Promise<unknown> } })
-                  .aiOfficeTabs
-              ).getSplit() !== null,
+              (await (
+                window as unknown as { aiOfficeTabs: { getSplit(): Promise<unknown> } }
+              ).aiOfficeTabs.getSplit()) !== null,
           ),
         { timeout: 30_000 },
       )

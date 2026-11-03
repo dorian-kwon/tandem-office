@@ -6,6 +6,7 @@ import {
   applyRunTranslation,
   readRunGroups,
   runFingerprint,
+  TAG_LIKE,
 } from '../src/renderer/ai/translate-runs'
 import { executeTool } from '../src/renderer/ai/tools'
 
@@ -369,6 +370,47 @@ describe('translate_blocks refuses unsafe input (review fixes)', () => {
       NUM_IDS,
     )
     expect(exec.isError).toBeFalsy()
+  })
+
+  it('angle-bracketed titles and comparisons are prose; real markup is refused', async () => {
+    for (const prose of [
+      '<Clear Bamboo>',
+      '<청죽(晴竹)>',
+      '1 < 2',
+      '<Title of Book>',
+      'a <bamboo> b',
+      'x<y and y>z',
+    ])
+      expect(TAG_LIKE.test(prose), prose).toBe(false)
+    for (const markup of [
+      '<b>x</b>',
+      '<script>',
+      '</p>',
+      '<br/>',
+      '<span class="x">a</span>',
+      '<w:t>a</w:t>',
+      '<em >a',
+    ])
+      expect(TAG_LIKE.test(markup), markup).toBe(true)
+    const editor = await createEditor([mixedParagraph])
+    const exec = await executeTool(
+      editor,
+      call([{ index: 0, fp: FP, segments: ['<Clear Bamboo>', '<청죽(晴竹)>', '1 < 2'] }]),
+      NUM_IDS,
+    )
+    expect(exec.isError).toBeFalsy()
+    expect(texts(blockJson(editor, 0))).toEqual(['<Clear Bamboo> ', '<청죽(晴竹)>', ' 1 < 2'])
+    await refused(
+      editor,
+      [
+        {
+          index: 0,
+          fp: runFingerprint(['<Clear Bamboo> ', '<청죽(晴竹)>', ' 1 < 2']),
+          segments: ['<script>x', 'B', 'C'],
+        },
+      ],
+      /HTML-like tags/,
+    )
   })
 
   it('segments with a line break or HTML-like tags are refused', async () => {

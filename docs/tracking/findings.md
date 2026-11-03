@@ -1,5 +1,12 @@
 # 풀리지 않은 문제
 
+## 번역: 여러 서식에 걸친 각주 글을 edit_note로 바꾸면 런 서식이 사라질 수 있다
+
+- **증상.** 본문은 `translate_blocks`가 런마다 글만 바꿔 서식을 지키지만, 각주·미주 글은 `edit_note`(찾아 바꾸기)로 번역한다. 찾는 글이나 바꿀 글이 서로 다른 서식의 런에 걸치면 `editNoteText`(`apps/docs/src/renderer/ai/note-ops.ts`)가 런 단위로 고칠 수 없어 `richParas`를 버리고 글만 남긴다. 그러면 그 각주 안의 기울임·다른 글꼴 같은 런 서식이 저장에서 빠질 수 있다.
+- **영향.** 책 제목을 기울임으로 쓴 각주처럼 한 각주 안에 서식이 섞인 문서를 번역하면, 각주의 서식이 원본과 달라질 수 있다. 각주 번호와 참조 표시는 그대로다.
+- **지금 못 푸는 이유.** 이번 일은 본문 번역 도구까지였다(최종 검토에서 미룸). 각주 글에 런을 지키는 번역 도구를 따로 만들어야 한다.
+- **가능한 길.** 각주 글에도 `read_runs`/`translate_blocks`와 같은 런 묶음 읽기·바꾸기를 만든다. 그 전까지는 사람 확인(`docs/superpowers/notes/manual-checks.md`, Task 2의 7번)으로 Word에서 각주 서식을 본다.
+
 ## docx 저장: 한/영 너비 맞춤 문서에서 고친 문단의 글자 간격이 소수로 저장된다
 
 - **증상.** `settings.xml`에 `w:balanceSingleByteDoubleByteWidth`가 있는 문서(한글에서 내보낸 docx에 흔하다)에서 `w:spacing w:val="-2"`인 한글 런이 든 문단을 고치고 저장하면, 그 런의 값이 `-3.5`, `-3.3`처럼 바뀌어 저장된다. 한 글자만 쳐도 같다. 번역 도구(`translate_blocks`) 확인 중 사용자 견본 문서의 제목 문단 두 개에서 보았다(`apps/docs/tests/translate-runs-roundtrip.test.ts`, `TRANSLATE_RUNS_SAMPLE`).

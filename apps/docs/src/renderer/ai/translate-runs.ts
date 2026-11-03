@@ -174,8 +174,23 @@ export interface RunTranslationItem {
   segments: string[]
 }
 
-/** markup-looking text: segments are plain text, the run formatting stays where it is */
-const TAG_LIKE = /<\/?[a-z][a-z0-9:-]*(\s[^<>]*)?\/?>/i
+/**
+ * Markup in a segment (segments are plain text; the run formatting stays where it is).
+ * Real markup only: an element name from HTML (or a namespaced OOXML-style
+ * name such as w:t) inside angle brackets, optionally closing, self-closing or
+ * with name=value attributes. Angle-bracketed titles and words (<Clear Bamboo>, Korean
+ * book titles, even ones that start with a tag name such as <Title of Book>)
+ * and comparisons (1 < 2) are prose and pass.
+ */
+const MARKUP_TAG_NAMES =
+  'a|abbr|b|big|blockquote|body|br|caption|center|code|col|colgroup|dd|del|div|dl|dt|em|font|' +
+  'h[1-6]|head|hr|html|i|iframe|img|input|ins|kbd|li|link|mark|meta|ol|p|pre|q|s|samp|script|' +
+  'small|span|strike|strong|style|sub|sup|table|tbody|td|tfoot|th|thead|title|tr|tt|u|ul|var|' +
+  'sel|tool_response'
+export const TAG_LIKE = new RegExp(
+  `<\\/?(?:(?:${MARKUP_TAG_NAMES})|[a-z][a-z0-9]*:[a-z][a-z0-9-]*)(?:\\s+[a-z_:][\\w:.-]*\\s*=\\s*(?:"[^"]*"|'[^']*'|[^\\s<>"']+))*\\s*\\/?>`,
+  'i',
+)
 
 export interface RunTranslationReport {
   index: number

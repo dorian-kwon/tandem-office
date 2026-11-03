@@ -24,7 +24,7 @@ Překladatelský projekt drží dokumenty, které chcete přeložit, vaše refer
 
 ## Referenční soubory
 
-- Když přidáte referenční soubor, aplikace jej převede na text (uložený v `references/.md/`; samotný soubor se nikdy nemění) a zaindexuje jeho slova. Každý požadavek na překlad nese části, které nejlépe odpovídají překládanému textu, nejvýše 6 000 znaků, spolu s názvy souborů. Pokud celý referenční text není delší, odešle se celý.
+- Když přidáte referenční soubor, aplikace jej převede na text (uložený v `references/.md/`; samotný soubor se nikdy nemění) a zaindexuje jeho slova. Části se vybírají podle slov vaší zprávy a vybraného textu (v panelu AI, jednou při odeslání) nebo podle slov překládané dávky (v okně PDF) a odesílají se jen vybrané části, nejvýše 6 000 znaků, spolu s názvy souborů. Pokud celý referenční text není delší, odešle se celý.
 - V podrobnostech projektu ukazuje každý referenční soubor svůj stav: **Převedeno na text** (otevřete jej pomocí **Zobrazit převedený text**, jen pro čtení), **Potřebuje OCR** (sken nebo obrázek: nic se z něj neposílá; přidejte jej jako dokument k překladu, přečtěte jej pomocí OCR a výsledný dokument Word přidejte jako referenční) nebo **Nelze přečíst**.
 - Když to potřebuje, může AI přečíst referenční soubor pomocí nástrojů projektu.
 

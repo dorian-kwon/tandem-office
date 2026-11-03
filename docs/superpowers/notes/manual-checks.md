@@ -147,6 +147,7 @@ Use a project with target language German (or any of the 21 app languages except
 4. Undo after the run: one Ctrl+Z per translate_blocks call restores the source text with the same formatting. The panel's roll-back button restores the whole document.
 5. With Review > Track Changes on, translate again: each translated run shows the source struck through and the translation inserted with the same formatting; Accept All leaves the same document as with tracking off.
 6. Save, reopen in Word: the document opens without a repair prompt and shows the same formatting. Known engine issue (see findings): in a document with "balance single-byte and double-byte character width" (HWP-exported files) a run with letter spacing in an edited paragraph saves a scaled, fractional w:spacing value; check whether Word complains.
+7. Footnote formatting: open the saved file in Word and look at footnotes whose text had more than one format (italic title, a different font). edit_note rewrites a note's text and may not keep run formatting inside it (see findings); note what was lost.
 
 ## Translation follow-ups, Task 1: recent documents
 

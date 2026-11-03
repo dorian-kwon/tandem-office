@@ -24,7 +24,7 @@ Một dự án dịch thuật gom các tài liệu bạn muốn dịch, tài li�
 
 ## Tệp tham khảo
 
-- Khi bạn thêm tệp tham khảo, ứng dụng chuyển nó thành văn bản (lưu trong `references/.md/`; bản thân tệp không bao giờ bị thay đổi) và lập chỉ mục các từ. Mỗi yêu cầu dịch mang theo những phần khớp nhất với văn bản đang dịch, tối đa 6.000 ký tự, cùng tên các tệp. Khi toàn bộ văn bản tham khảo không dài hơn mức đó, nó được gửi nguyên vẹn.
+- Khi bạn thêm tệp tham khảo, ứng dụng chuyển nó thành văn bản (lưu trong `references/.md/`; bản thân tệp không bao giờ bị thay đổi) và lập chỉ mục các từ. Các phần được chọn theo từ ngữ trong tin nhắn của bạn và văn bản đã chọn (trong bảng AI, một lần khi gửi) hoặc của lô văn bản đang dịch (trong cửa sổ PDF), và chỉ các phần đã chọn được gửi, tối đa 6.000 ký tự, cùng tên các tệp. Khi toàn bộ văn bản tham khảo không dài hơn mức đó, nó được gửi nguyên vẹn.
 - Trong chi tiết dự án, mỗi tệp tham khảo hiển thị trạng thái: **Đã chuyển thành văn bản** (mở bằng **Xem văn bản đã chuyển đổi**, chỉ đọc), **Cần OCR** (bản quét hoặc hình ảnh: không gửi gì; hãy thêm nó làm tài liệu cần dịch, đọc bằng OCR rồi thêm tài liệu Word thu được làm tệp tham khảo) hoặc **Không đọc được**.
 - Khi cần, AI có thể đọc tệp tham khảo thông qua các công cụ của dự án.
 

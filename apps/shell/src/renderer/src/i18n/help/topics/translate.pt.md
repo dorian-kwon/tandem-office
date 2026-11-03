@@ -24,7 +24,7 @@ Um projeto de tradução reúne numa só pasta os documentos que você quer trad
 
 ## Arquivos de referência
 
-- Ao adicionar um arquivo de referência, o app o converte em texto (guardado em `references/.md/`; o arquivo em si nunca é alterado) e indexa as palavras dele. Cada pedido de tradução leva os trechos que melhor combinam com o texto traduzido, até 6.000 caracteres, junto com os nomes dos arquivos. Quando todo o texto de referência cabe nesse limite, ele vai inteiro.
+- Ao adicionar um arquivo de referência, o app o converte em texto (guardado em `references/.md/`; o arquivo em si nunca é alterado) e indexa as palavras dele. Os trechos são escolhidos pelas palavras da sua mensagem e do texto selecionado (no painel de IA, uma vez ao enviar) ou do lote em tradução (na janela de PDF), e só os trechos escolhidos são enviados, até 6.000 caracteres, junto com os nomes dos arquivos. Quando todo o texto de referência cabe nesse limite, ele vai inteiro.
 - No detalhe do projeto cada referência mostra seu estado: **Convertido em texto** (abra com **Ver o texto convertido**, somente leitura), **Precisa de OCR** (uma digitalização ou imagem: nada dela é enviado; adicione-a como documento a traduzir, leia com OCR e adicione o documento do Word resultante como referência) ou **Não foi possível ler**.
 - Quando precisa, a IA pode ler um arquivo de referência pelas ferramentas do projeto.
 
