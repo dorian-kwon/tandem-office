@@ -11,7 +11,8 @@ Collected from the task reports (tasks 9 to 11). They are deliberate or accepted
 - Text-PDF translation uses the app-wide "AI to use" from Settings, while OCR uses the project's choice. Paid logins that the project names are labelled paid before anything is sent.
 - A glossary over 200 entries sends only the entries whose terms match the paragraph (or the text); it does not send the whole list.
 - "Translate again" keeps blocks a person edited in the PDF editor's bilingual view; there is no choice to discard them.
-- Unsupported inputs: GIF, BMP, TIFF and WebP images, password-protected PDFs and images over 20 MB. Arabic, Hebrew and Hindi cannot be the target language of a translated PDF.
+- The source pane blocks every typing key, so its find box opens but takes no search word, and its AI panel input cannot be typed into. Use the output pane's find and AI panel.
+- Unsupported inputs: GIF, BMP, TIFF and WebP images and OpenDocument sheets and slides (`.ods`, `.odp`) are refused when added; password-protected PDFs and images over 20 MB fail when opened. Arabic, Hebrew and Hindi cannot be the target language of a translated PDF.
 - Reloading the window while an OCR run is going does not release it; it stays held until it finishes or sits idle for 30 minutes. Closing the window frees it at once.
 - No end-to-end spec was run: the app was never launched in this environment (no `cargo`, so the Rust sheets engine does not build). Every item below is unverified in a running app.
 
@@ -52,7 +53,7 @@ Use a project with a docx source and one with a md source.
 10. Close the left pane after typing attempts: no save prompt appears. Quit the app with the translation view open: no prompt for the left pane.
 11. Quit and relaunch with no file argument: the translation split comes back with the source pane still read-only and the hidden pane still hidden.
 12. The original file you added (outside the project) is never opened or changed in any of the steps above.
-13. Known limits of the source pane's key guard, check they are acceptable: typing is blocked, so a find field opened by the editor inside the source pane (Ctrl/Cmd+F) cannot take a search word; use Find in the right pane or copy text out. On Windows, Alt+letter menu access (e.g. Alt+F) is blocked while the source pane has focus; click the right pane first.
+13. Known limits of the source pane's key guard, check they are acceptable: typing is blocked, so a find field opened by the editor inside the source pane (Ctrl/Cmd+F) cannot take a search word, and the source pane's own AI panel input cannot take text either; use Find and the AI panel in the right pane or copy text out. On Windows, Alt+letter menu access (e.g. Alt+F) is blocked while the source pane has focus; click the right pane first.
 14. Sheets source: open an xlsx source, change cells by mouse (drag-fill, context-menu paste) and use File > Save, the ribbon Save button, and wait with autosave on. Each save is refused with the read-only message and `source/<file>.xlsx` keeps its hash. Same for pptx with File > Save As.
 15. "Source copy changed" in the tab strip: after step 8, the strip shows "Source copy changed" next to the hide/show buttons (hover shows the full sentence); its close button removes it.
 16. Restore: remove `output/<file>` after quitting with the translation view open, relaunch: the source copy opens alone and is still read-only (typing refused, Save refused), and it is not in Recent.
@@ -125,3 +126,15 @@ Use a project with target language German (or any of the 21 app languages except
 20. A stop because of a usage limit or a sign-out names the reason in words (not a code); a sign-out shows the connect card in the stopped window.
 21. Stopped translation, then Continue: start a long PDF and press Stop (or hit a usage limit), choose "Continue later". Press "Open translation" again: the window says how many blocks are already translated and offers "Continue (N blocks left)" as the main button. Its confirmation counts only the blocks left (and says the others are not sent again); after Start only those are sent, with the current prompts and glossary, and the finished PDF has every block translated.
 22. Stopped "Translate again": choose "Translate again", stop it partway, then open it again: "Continue" is offered for the blocks the restart had not done yet; what it finished is kept.
+
+## Final review fixes
+
+1. Move a project folder in the file manager: the row shows "Folder not found" with "Locate folder…". Pick the moved folder: the row is usable again under the new path. Copy a project folder elsewhere and use "Open existing project folder" on the copy: it is added and opens. Pick an ordinary folder: "This folder is not a translation project." shows and nothing is added.
+2. Put an `AGENTS.md` or `.ieumoffice/` memory from elsewhere into a copied project folder, then "Open existing project folder": the project is added with the note that the AI panels do not use its translation context yet; it does not appear in Projects until added there by hand.
+3. Make the app-settings file unwritable, create a project: the error shows and the project folder is not left behind; restore the file and create the same name again: it works (no "already exists").
+4. Add `a.docx`, translate it, remove it from the sources, add the same file again: it is listed as `a (2).docx` and "Open translation" starts a fresh copy in `output/` (the old `output/a.docx` is untouched).
+5. Add sources of each type: `.xls`, `.xlsm`, `.csv`, `.tsv`, `.xmind`, `.json` are accepted and open in their editors; `.ods`, `.odp`, `.gif`, `.webp`, `.bmp`, `.tif` are refused with the message that lists the supported types. The add-source dialog filter offers the same list.
+6. In Excel save a glossary as "Unicode Text (*.txt)" (UTF-16 with a byte-order mark) and add it: the entries read correctly (no garbage). A damaged `.xlsx` glossary shows "The glossary file could not be read…" instead of the generic error.
+7. Text PDF with a system prompt, a project prompt, a glossary over 200 entries and two reference files: the confirmation lists "System prompt…: yes", "Project prompt: yes", the entry count with the per-block note and the two reference names, before Start; the same list stays while it runs. Nothing is sent before Start.
+8. Open a source in the translation view (both panes) and a project document in a detached window, then "Remove from list and delete folder": it is refused with "Documents from this project are open…" and the folder is untouched. Close them and delete again: the folder goes. "Remove from list only" works while they are open.
+9. The user guide tab loads the shell's preload too: in its developer console `await window.translateApi.list()` is refused ("this window cannot use the translation tool"), while the home screen's list works.

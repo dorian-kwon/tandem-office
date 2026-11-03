@@ -8,7 +8,10 @@ import type { WebContents } from 'electron'
  *
  * - Keyboard: `before-input-event` cancels every key that would type, delete,
  *   paste, undo or save, before the page or a menu accelerator sees it. Moving,
- *   selecting, copying, finding and zooming still work.
+ *   selecting, copying and zooming still work. Because the guard cannot tell an
+ *   editor's text from an input box, typing is blocked everywhere in the pane:
+ *   the find box opens but takes no text, and the source pane's AI panel input
+ *   cannot be typed into (use the output pane's AI panel instead).
  * - IPC: handlers on the view's own `webContents.ipc` answer the editors' save
  *   channels with a failure. Electron looks there before `ipcMain`, so the
  *   editor's real handler never runs for this view, and other views are not
