@@ -222,7 +222,8 @@ describe('translationContextForFolder', () => {
     expect(prompts).toMatch(/never[^\n]*replace_blocks/i)
     expect(prompts).toMatch(/empty paragraphs/i)
     expect(prompts).toMatch(/footnote reference/i)
-    expect(prompts).toMatch(/edit_note/)
+    expect(prompts).toMatch(/notes:true/)
+    expect(prompts).toMatch(/not finished[^\n]*checkRemaining/)
   })
 
   it('keeps the whole text within the limit with the editing rules added', async () => {

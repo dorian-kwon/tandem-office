@@ -86,7 +86,12 @@ import {
 } from './protocol'
 import {
   applyRunTranslations,
+  planNoteTranslations,
+  readNoteRuns,
   readRunGroups,
+  recordHandled,
+  remainingUntranslated,
+  type NoteTranslationItem,
   type RunParagraph,
   type RunTranslationItem,
   type RunTranslationReport,
@@ -192,21 +197,33 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     name: 'read_runs',
     description:
       'Read a block range for TRANSLATION: one JSON line per paragraph with its text as numbered segments, one segment per run of equal formatting (footnote references, tabs, breaks and other inline objects sit between segments and are not shown). Table blocks list each cell paragraph with its "paragraph" number. Empty paragraphs are listed as "empty":true; leave them alone. ' +
-      'Long ranges are paged: a truncated result says which startBlockIndex to continue from.',
+      'Long ranges are paged: a truncated result says which startBlockIndex to continue from. ' +
+      'With notes:true it lists every footnote and endnote the same way ({"note","id","fp","segments"}; no block range needed). ' +
+      'With checkRemaining:true (and sourceLanguage) it lists the body paragraphs and notes that still look untranslated; translation is finished only when it reports none.',
     inputSchema: {
       type: 'object',
       properties: {
         startBlockIndex: { type: 'integer', description: 'start block index (0-based, inclusive)' },
         endBlockIndex: { type: 'integer', description: 'end block index (inclusive)' },
+        notes: { type: 'boolean', description: 'list footnotes and endnotes instead of blocks' },
+        checkRemaining: {
+          type: 'boolean',
+          description: 'report what is still untranslated, in the body and in the notes',
+        },
+        sourceLanguage: {
+          type: 'string',
+          description:
+            'with checkRemaining: the language the document was written in, e.g. Korean or ko',
+        },
       },
-      required: ['startBlockIndex', 'endBlockIndex'],
+      required: [],
     },
   },
   {
     name: 'translate_blocks',
     description:
       'The way to translate existing document text (never use replace_blocks or write_document to translate). Read the paragraphs with read_runs first, then pass for each paragraph its "fp" from read_runs unchanged and the translations of its segments, in the same order and the same number: segments[i] replaces the text of segment i, which keeps its own formatting (font, italics, color, raw run properties); footnote references, tabs, breaks, paragraph styles and empty paragraphs stay exactly as they are. ' +
-      'Word order may move text between segments of one paragraph, but give every segment a translation; use an empty string only for a piece with no counterpart in the translation. Segments are plain text: no line breaks, no HTML. Fewer segments leave the remaining segments untranslated (reported); extra segments are appended to the last one. A table block needs its "paragraph" number. An item whose fp no longer matches (the paragraph changed since read_runs) is refused. Block indexes do not change.',
+      'Word order may move text between segments of one paragraph, but give every segment a translation; use an empty string only for a piece with no counterpart in the translation. Segments are plain text: no line breaks, no HTML. Fewer segments leave the remaining segments untranslated (reported); extra segments are appended to the last one. A table block needs its "paragraph" number. An item whose fp no longer matches (the paragraph changed since read_runs) is refused. Block indexes do not change. Footnotes and endnotes go in the same call: an entry with "note" (footnote or endnote) and "id" from read_runs notes:true instead of "index", with the same fp and segments; their run formatting is kept too.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -217,9 +234,16 @@ export const AGENT_TOOLS: AgentToolDef[] = [
             type: 'object',
             properties: {
               index: { type: 'integer', description: 'block index from read_runs' },
+              note: {
+                type: 'string',
+                enum: ['footnote', 'endnote'],
+                description: 'a note entry (instead of index): its kind from read_runs notes:true',
+              },
+              id: { type: 'string', description: 'a note entry: the note id from read_runs' },
               paragraph: {
                 type: 'integer',
-                description: 'for a table block: the "paragraph" number from read_runs',
+                description:
+                  'for a table block or a multi-paragraph note: the "paragraph" number from read_runs',
               },
               fp: {
                 type: 'string',
@@ -231,7 +255,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
                 description: 'the translated text of each segment, in read_runs order',
               },
             },
-            required: ['index', 'fp', 'segments'],
+            required: ['fp', 'segments'],
           },
         },
       },
@@ -1681,6 +1705,65 @@ function executeSyncTool(
     }
 
     case 'read_runs': {
+      if (call.input.checkRemaining === true) {
+        const report = remainingUntranslated(
+          editor,
+          notes,
+          typeof call.input.sourceLanguage === 'string' ? call.input.sourceLanguage : undefined,
+        )
+        const total = report.body.length + report.notes.length
+        const list = (label: string, items: string[]) =>
+          items.length === 0
+            ? ''
+            : `\n${label}: ${items.slice(0, 150).join(', ')}${items.length > 150 ? ` …(+${items.length - 150})` : ''}`
+        return {
+          output:
+            total === 0
+              ? 'Nothing left to translate: every body paragraph and note has been handled.'
+              : `${total} item(s) still look untranslated (names, quotations and terms you deliberately kept may be listed; translate the rest).` +
+                list('Body blocks', report.body) +
+                list('Notes', report.notes),
+          mutated: false,
+          summary: t('aiSumReadRuns', {
+            start: 0,
+            end: Math.max(0, editor.state.doc.childCount - 1),
+          }),
+        }
+      }
+      if (call.input.notes === true) {
+        if (!notes)
+          return fail(
+            t('aiSumReadRuns', { start: 0, end: 0 }),
+            'footnotes and endnotes are not available here',
+          )
+        const entries = readNoteRuns(notes)
+        const lines: string[] = []
+        let size = 0
+        let cut = false
+        for (const entry of entries) {
+          const line = JSON.stringify(entry)
+          if (size + line.length > READ_MAX_CHARS && lines.length > 0) {
+            cut = true
+            break
+          }
+          lines.push(line)
+          size += line.length + 1
+        }
+        return {
+          output:
+            lines.length === 0
+              ? '(no footnotes or endnotes with text)'
+              : lines.join('\n') +
+                (cut
+                  ? `\n…(truncated after ${lines.length} of ${entries.length} note paragraphs: translate these with translate_blocks, then call read_runs with notes:true again for the rest)`
+                  : ''),
+          mutated: false,
+          summary: t('aiSumReadRuns', {
+            start: 0,
+            end: Math.max(0, editor.state.doc.childCount - 1),
+          }),
+        }
+      }
       const range = validRange(editor, call.input.startBlockIndex, call.input.endBlockIndex)
       if (!range) return fail(t('aiSumReadRuns', { start: 0, end: 0 }), rangeError(editor))
       const lines: string[] = []
@@ -1699,9 +1782,13 @@ function executeSyncTool(
         lines.push(line)
         size += line.length + 1
       }
+      const hasNotes =
+        !!notes && (notes.list('footnote').length > 0 || notes.list('endnote').length > 0)
       const note =
         next === null
-          ? ''
+          ? hasNotes && range.end === editor.state.doc.childCount - 1
+            ? '\n(this document has footnotes or endnotes: read them with read_runs notes:true and translate them too)'
+            : ''
           : `\n…(truncated: call read_runs again with startBlockIndex=${next} to continue)`
       return {
         output: lines.length > 0 ? lines.join('\n') + note : '(range is empty)',
@@ -1719,35 +1806,58 @@ function executeSyncTool(
       if (!Array.isArray(raw) || raw.length === 0)
         return fail(summary, 'blocks must be a non-empty array of { index, segments }')
       const items: RunTranslationItem[] = []
+      const noteItems: NoteTranslationItem[] = []
       for (const entry of raw as unknown[]) {
         const e = (entry ?? {}) as {
           index?: unknown
+          note?: unknown
+          id?: unknown
           paragraph?: unknown
           fp?: unknown
           segments?: unknown
         }
-        if (!Number.isInteger(e.index))
+        const isNote = e.note !== undefined && e.note !== null
+        const name = isNote ? `${String(e.note)} ${String(e.id)}` : `block ${String(e.index)}`
+        if (isNote) {
+          if (e.note !== 'footnote' && e.note !== 'endnote')
+            return fail(summary, 'note must be "footnote" or "endnote"')
+          if (typeof e.id !== 'string' || e.id === '')
+            return fail(summary, `${name}: every note entry needs the id from read_runs notes:true`)
+          if (!notes) return fail(summary, 'footnotes and endnotes are not available here')
+        } else if (!Number.isInteger(e.index))
           return fail(summary, 'every entry needs an integer index from read_runs')
         if (e.paragraph !== undefined && e.paragraph !== null && !Number.isInteger(e.paragraph))
-          return fail(summary, `block ${String(e.index)}: paragraph must be an integer`)
+          return fail(summary, `${name}: paragraph must be an integer`)
         if (typeof e.fp !== 'string' || e.fp === '')
           return fail(
             summary,
-            `block ${String(e.index)}: fp is missing; pass the "fp" read_runs gave for this paragraph (call read_runs if you have none)`,
+            `${name}: fp is missing; pass the "fp" read_runs gave for this paragraph (call read_runs if you have none)`,
           )
         const segments = e.segments as string[]
         const joined = Array.isArray(segments) ? segments.join('\n') : ''
         const echo = toolEchoError(joined) ?? contextMarkerError(joined)
-        if (echo)
-          return fail(summary, `block ${String(e.index)}: ${echo.replace(/^html/, 'a segment')}`)
-        items.push({
-          index: Number(e.index),
-          fp: e.fp,
-          segments,
-          ...(e.paragraph === undefined || e.paragraph === null
+        if (echo) return fail(summary, `${name}: ${echo.replace(/^html/, 'a segment')}`)
+        const paragraph =
+          e.paragraph === undefined || e.paragraph === null
             ? {}
-            : { paragraph: Number(e.paragraph) }),
-        })
+            : { paragraph: Number(e.paragraph) }
+        if (isNote)
+          noteItems.push({
+            note: e.note as NoteKind,
+            id: e.id as string,
+            fp: e.fp,
+            segments,
+            ...paragraph,
+          })
+        else items.push({ index: Number(e.index), fp: e.fp, segments, ...paragraph })
+      }
+      // notes are checked first and committed last: a refused item anywhere changes nothing
+      const notePlan = notes && noteItems.length > 0 ? planNoteTranslations(notes, noteItems) : null
+      if (notePlan && !notePlan.ok) {
+        return fail(
+          summary,
+          `Nothing was changed: ${notePlan.errors.join('; ')}. Call read_runs (notes:true for notes) for the current text, then retry.`,
+        )
       }
       const outcome = applyRunTranslations(editor, items, track)
       if (!outcome.ok) {
@@ -1756,40 +1866,63 @@ function executeSyncTool(
           `Nothing was changed: ${outcome.errors.join('; ')}. Call read_runs for the current blocks, then retry.`,
         )
       }
+      if (notePlan?.ok && notes) {
+        for (const { kind, note } of notePlan.next) notes.replace(kind, note.id, note)
+      }
+      const noteReports = notePlan?.ok ? notePlan.reports : []
+      recordHandled(
+        editor,
+        [...outcome.reports, ...noteReports].map((r) => r.fp),
+      )
       const label = (r: RunTranslationReport) =>
         r.paragraph === undefined ? `block ${r.index}` : `block ${r.index} paragraph ${r.paragraph}`
+      const noteLabel = (r: (typeof noteReports)[number]) =>
+        `${r.note} ${r.id}${r.paragraph === undefined ? '' : ` paragraph ${r.paragraph}`}`
       const translated = outcome.reports.filter((r) => r.changed > 0)
-      const notes: string[] = []
-      const incomplete = outcome.reports.filter((r) => r.incomplete)
+      const translatedNotes = noteReports.filter((r) => r.changed > 0)
+      const remarks: string[] = []
+      const incomplete = [
+        ...outcome.reports.filter((r) => r.incomplete).map((r) => ({ name: label(r), r })),
+        ...noteReports.filter((r) => r.incomplete).map((r) => ({ name: noteLabel(r), r })),
+      ]
       if (incomplete.length > 0) {
-        notes.push(
+        remarks.push(
           'INCOMPLETE — these paragraphs got fewer segments than they have, so their remaining segments keep the original text: ' +
             incomplete
               .map(
-                (r) => `${label(r)} (${r.incomplete!.given} of ${r.incomplete!.groups} segments)`,
+                ({ name, r }) =>
+                  `${name} (${r.incomplete!.given} of ${r.incomplete!.groups} segments)`,
               )
               .join(', ') +
             '. Call translate_blocks again for them with every segment.',
         )
       }
-      const extra = outcome.reports.filter((r) => r.extra)
+      const extra = [
+        ...outcome.reports.filter((r) => r.extra).map((r) => ({ name: label(r), r })),
+        ...noteReports.filter((r) => r.extra).map((r) => ({ name: noteLabel(r), r })),
+      ]
       if (extra.length > 0) {
-        notes.push(
+        remarks.push(
           'Extra segments were appended to the last segment of: ' +
-            extra.map((r) => `${label(r)} (+${r.extra})`).join(', ') +
+            extra.map(({ name, r }) => `${name} (+${r.extra})`).join(', ') +
             '.',
         )
       }
-      const empty = outcome.reports.filter((r) => r.empty)
+      const empty = [
+        ...outcome.reports.filter((r) => r.empty).map(label),
+        ...noteReports.filter((r) => r.empty).map(noteLabel),
+      ]
       if (empty.length > 0)
-        notes.push(`Ignored (empty paragraphs, left as they are): ${empty.map(label).join(', ')}.`)
+        remarks.push(`Ignored (empty paragraphs, left as they are): ${empty.join(', ')}.`)
+      const noteCount = translatedNotes.length
       return {
         output: [
-          `Translated ${translated.length} paragraph(s) in place; run formatting, footnote references, paragraph styles and empty paragraphs were kept. Block indexes are unchanged.`,
-          ...notes,
+          `Translated ${translated.length} paragraph(s)${noteCount > 0 ? ` and ${noteCount} note paragraph(s)` : ''} in place; run formatting, footnote references, paragraph styles and empty paragraphs were kept. Block indexes are unchanged.`,
+          ...remarks,
+          'Translation is finished only when read_runs with checkRemaining:true reports nothing left.',
         ].join('\n'),
-        mutated: translated.length > 0,
-        summary: t('aiSumTranslatedBlocks', { count: translated.length }),
+        mutated: translated.length > 0 || noteCount > 0,
+        summary: t('aiSumTranslatedBlocks', { count: translated.length + noteCount }),
       }
     }
 

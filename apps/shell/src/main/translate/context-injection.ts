@@ -261,7 +261,8 @@ export const TRANSLATION_EDITING_RULES = [
   'How to translate in the editors of this app:',
   '- In a Word document, translate with read_runs then translate_blocks: one translated string per segment, in order. Never translate with replace_blocks or write_document; they rebuild the paragraphs and lose run formatting.',
   '- Never delete, fill or restyle empty paragraphs; leave them as they are.',
-  '- Never move, delete or retype a footnote reference mark. Translate footnote and endnote text with the note tools (read_notes, then edit_note).',
+  '- Never move, delete or retype a footnote reference mark. Footnotes and endnotes are translated too: read them with read_runs notes:true and pass them to translate_blocks as entries with "note" and "id".',
+  '- Translation is not finished until the body and every note are translated: call read_runs with checkRemaining:true and sourceLanguage, and keep going until it reports nothing left.',
   '- Pass each paragraph\'s "fp" from read_runs to translate_blocks unchanged; a refused fp means the paragraph changed, so call read_runs again.',
 ].join('\n')
 

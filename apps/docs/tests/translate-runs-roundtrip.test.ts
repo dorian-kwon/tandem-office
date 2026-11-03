@@ -10,7 +10,9 @@ import { buildDocx } from '../../../packages/docx-engine/tests/helpers/build-doc
 import { editorExtensions } from '../src/renderer/editor/extensions'
 import { blocksToPmDoc, pmDocOptions } from '../src/renderer/editor/convert'
 import { executeTool } from '../src/renderer/ai/tools'
-import { readRunGroups } from '../src/renderer/ai/translate-runs'
+import { readNoteRuns, readRunGroups } from '../src/renderer/ai/translate-runs'
+import type { AiNotesAccess, NoteKind } from '../src/renderer/ai/note-ops'
+import type { NoteInfo } from '@genoffice/docx-engine'
 import { noteDocumentSwapped, save, type FileActionContext } from '../src/renderer/file-actions'
 import { EMPTY_HF_VARIANTS } from '../src/renderer/doc-state'
 
@@ -75,7 +77,7 @@ const FOOTNOTES =
   `<w:footnotes xmlns:w="${W}">` +
   '<w:footnote w:type="separator" w:id="-1"><w:p><w:r><w:separator/></w:r></w:p></w:footnote>' +
   '<w:footnote w:type="continuationSeparator" w:id="0"><w:p><w:r><w:continuationSeparator/></w:r></w:p></w:footnote>' +
-  '<w:footnote w:id="1"><w:p><w:r><w:footnoteRef/></w:r><w:r><w:t>첫 각주.</w:t></w:r></w:p></w:footnote>' +
+  '<w:footnote w:id="1"><w:p><w:r><w:footnoteRef/></w:r><w:r><w:t xml:space="preserve"> 첫 </w:t></w:r><w:r><w:rPr><w:i/></w:rPr><w:t>각주</w:t></w:r><w:r><w:t>이다, 그리고</w:t></w:r><w:r><w:t xml:space="preserve"> </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>굵게.</w:t></w:r></w:p></w:footnote>' +
   '<w:footnote w:id="2"><w:p><w:r><w:footnoteRef/></w:r><w:r><w:t>둘째 각주.</w:t></w:r></w:p></w:footnote>' +
   '</w:footnotes>'
 
@@ -200,6 +202,9 @@ async function openCopy(source: Uint8Array) {
     hfLinks: {},
     styleUpserts: {},
     pendingNumbering: { newDefs: [], restartNums: [] },
+    footnotes: parsed.footnotes as NoteInfo[],
+    endnotes: parsed.endnotes as NoteInfo[],
+    notesDirty: false,
   }
   const noop = () => {}
   const ctx = new Proxy(state, {
@@ -208,6 +213,9 @@ async function openCopy(source: Uint8Array) {
         return (updater: (prev: typeof state.doc) => typeof state.doc) => {
           target.doc = updater(target.doc)
         }
+      if (prop === 'setFootnotes') return (next: NoteInfo[]) => void (target.footnotes = next)
+      if (prop === 'setEndnotes') return (next: NoteInfo[]) => void (target.endnotes = next)
+      if (prop === 'setNotesDirty') return (dirty: boolean) => void (target.notesDirty = dirty)
       if (prop in target) return Reflect.get(target, prop)
       if (typeof prop === 'string' && (/^set[A-Z]/.test(prop) || /^on[A-Z]/.test(prop))) return noop
       return undefined
@@ -223,10 +231,13 @@ async function openCopy(source: Uint8Array) {
 }
 
 /** a deterministic stand-in for the model: every segment becomes marked ASCII text */
-function fakeTranslate(editor: Editor): { blocks: unknown[]; segments: number } {
+function fakeTranslate(
+  editor: Editor,
+  access: AiNotesAccess,
+): { blocks: Array<Record<string, unknown>>; segments: number } {
   const entries = readRunGroups(editor, 0, editor.state.doc.childCount - 1)
   let segments = 0
-  const blocks = entries
+  const blocks: Array<Record<string, unknown>> = entries
     .filter((e) => e.segments)
     .map((e) => ({
       index: e.index,
@@ -237,7 +248,67 @@ function fakeTranslate(editor: Editor): { blocks: unknown[]; segments: number } 
         return `EN${e.index}.${i}(${s.trim().length})`
       }),
     }))
+  for (const entry of readNoteRuns(access)) {
+    blocks.push({
+      note: entry.note,
+      id: entry.id,
+      ...(entry.paragraph === undefined ? {} : { paragraph: entry.paragraph }),
+      fp: entry.fp,
+      segments: entry.segments.map((s, i) => {
+        segments++
+        return `NOTE${entry.id}.${i}(${s.trim().length})`
+      }),
+    })
+  }
   return { blocks, segments }
+}
+
+/** footnotes.xml per entry: run property sets, reference marks, text */
+interface NoteMetrics {
+  id: string
+  runProps: string[]
+  /** run property sets of the runs that hold text (an emptied run drops out) */
+  textRunProps: string[]
+  refs: number
+  text: string
+}
+
+function noteMetricsOf(xml: string | null): NoteMetrics[] {
+  if (!xml) return []
+  const dom = new DOMParser().parseFromString(xml, 'application/xml')
+  return Array.from(dom.getElementsByTagNameNS(W, 'footnote'))
+    .filter((f) => !f.getAttributeNS(W, 'type'))
+    .map((f) => {
+      const runs = Array.from(f.getElementsByTagNameNS(W, 'r')).filter(
+        (r) => r.getElementsByTagNameNS(W, 't').length > 0,
+      )
+      const runProps: string[] = []
+      for (const r of runs) {
+        const key = rPrKey(r)
+        if (!runProps.includes(key)) runProps.push(key)
+      }
+      const textRunProps: string[] = []
+      for (const r of runs) {
+        const has = Array.from(r.getElementsByTagNameNS(W, 't')).some(
+          (t) => (t.textContent ?? '') !== '',
+        )
+        const key = rPrKey(r)
+        if (has && !textRunProps.includes(key)) textRunProps.push(key)
+      }
+      return {
+        id: f.getAttributeNS(W, 'id') ?? '',
+        runProps,
+        textRunProps,
+        refs: f.getElementsByTagNameNS(W, 'footnoteRef').length,
+        text: Array.from(f.getElementsByTagNameNS(W, 't'))
+          .map((t) => t.textContent ?? '')
+          .join(''),
+      }
+    })
+}
+
+async function footnotesXml(bytes: Uint8Array): Promise<string | null> {
+  return (await JSZip.loadAsync(bytes)).file('word/footnotes.xml')?.async('string') ?? null
 }
 
 interface RoundTrip {
@@ -245,15 +316,39 @@ interface RoundTrip {
   after: ParagraphMetrics[]
   segments: number
   paragraphs: number
+  notesBefore: NoteMetrics[]
+  notesAfter: NoteMetrics[]
 }
 
 async function roundTrip(source: Uint8Array): Promise<RoundTrip> {
   const { editor, ctx, path } = await openCopy(source)
-  const { blocks, segments } = fakeTranslate(editor)
+  const access: AiNotesAccess = {
+    list: (kind: NoteKind) => (kind === 'footnote' ? ctx.footnotes : ctx.endnotes),
+    add: () => '',
+    remove: () => false,
+    replace: (kind, id, next) => {
+      const list = kind === 'footnote' ? ctx.footnotes : ctx.endnotes
+      const updated = list.map((n) => (n.id === id ? next : n))
+      if (kind === 'footnote') ctx.setFootnotes(updated)
+      else ctx.setEndnotes(updated)
+      ctx.setNotesDirty(true)
+      return true
+    },
+  }
+  const { blocks, segments } = fakeTranslate(editor, access)
   const exec = await executeTool(
     editor,
     { id: 'translate', name: 'translate_blocks', input: { blocks } },
     { bullet: null, ordered: null },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    access,
   )
   expect(exec.isError, exec.output).toBeFalsy()
   expect(exec.output).not.toMatch(/INCOMPLETE/)
@@ -264,6 +359,8 @@ async function roundTrip(source: Uint8Array): Promise<RoundTrip> {
     after: metricsOf(await documentXml(saved)),
     segments,
     paragraphs: blocks.length,
+    notesBefore: noteMetricsOf(await footnotesXml(source)),
+    notesAfter: noteMetricsOf(await footnotesXml(saved)),
   }
 }
 
@@ -309,6 +406,19 @@ describe('translate_blocks round trip through the production open/save path', ()
     // every non-empty paragraph was really translated
     expect(d.textChanged).toBe(d.nonEmpty)
     expect(result.after.every((p) => !/[가-힣]/.test(p.text))).toBe(true)
+    // footnotes: same entries and run property sets, text translated, no stray spaces
+    expect(result.notesAfter.map((n) => n.id)).toEqual(result.notesBefore.map((n) => n.id))
+    expect(result.notesAfter.length).toBe(2)
+    expect(result.notesAfter.map((n) => n.runProps)).toEqual(
+      result.notesBefore.map((n) => n.runProps),
+    )
+    expect(result.notesAfter.map((n) => n.textRunProps)).toEqual(
+      result.notesBefore.map((n) => n.textRunProps),
+    )
+    expect(result.notesAfter.map((n) => n.refs)).toEqual(result.notesBefore.map((n) => n.refs))
+    expect(result.notesAfter.every((n, i) => n.text !== result.notesBefore[i].text)).toBe(true)
+    expect(result.notesAfter.every((n) => !/[가-힣]/.test(n.text))).toBe(true)
+    for (const p of [...result.after, ...result.notesAfter]) expect(p.text).not.toMatch(/ [,.;:)]/)
   })
 
   const sample = process.env.TRANSLATE_RUNS_SAMPLE
@@ -354,5 +464,26 @@ describe('translate_blocks round trip through the production open/save path', ()
     expect(d.footnoteRefs).toEqual([])
     expect(d.empty).toEqual([])
     expect(d.textChanged).toBe(d.nonEmpty)
+    // footnotes: count and run property sets kept, every note's text changed
+    expect(result.notesAfter.length).toBe(result.notesBefore.length)
+    expect(result.notesAfter.map((n) => n.refs)).toEqual(result.notesBefore.map((n) => n.refs))
+    expect(
+      result.notesAfter
+        .map((n, i) => ({ id: n.id, a: n.runProps, b: result.notesBefore[i].runProps }))
+        .filter(({ a, b }) => JSON.stringify(a) !== JSON.stringify(b)),
+    ).toEqual([])
+    // the formatting still sits on the text: no run was emptied into its neighbour
+    expect(
+      result.notesAfter
+        .map((n, i) => ({ id: n.id, a: n.textRunProps, b: result.notesBefore[i].textRunProps }))
+        .filter(({ a, b }) => JSON.stringify(a) !== JSON.stringify(b)),
+    ).toEqual([])
+    expect(
+      result.notesBefore.filter(
+        (n, i) => n.text.trim() !== '' && result.notesAfter[i].text === n.text,
+      ),
+    ).toEqual([])
+    const stray = [...result.after, ...result.notesAfter].filter((p) => / [,.;:)]/.test(p.text))
+    expect(stray.length).toBe(0)
   })
 })

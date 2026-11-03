@@ -143,11 +143,12 @@ Use a project with target language German (or any of the 21 app languages except
 
 1. Translation project with a Word source that has mixed run formats (italic words, a different font inside a sentence, Hanja runs), footnote references between runs and empty paragraphs. "Open translation", then ask the AI panel to translate the whole document. The activity chips show "Read text runs …" and "Translate blocks"/"Translated N paragraph(s)", never "Replace content".
 2. After it finishes: the italic and differently styled words are still styled (the translated words in their place carry the same format), every footnote number is in the same paragraph as before, the empty paragraphs are still there with their old spacing, and no paragraph changed its style (Home > Styles shows the same style per paragraph as the source).
-3. Footnote text: open a footnote; the AI translated it with the note tools (the note id is unchanged and its number still matches).
+3. Footnote text: open a footnote; the AI translated it through `read_runs` (`notes:true`) and `translate_blocks` (entries with `note` and `id`), and the note id is unchanged and its number still matches. Every footnote and endnote is in the target language. The run ends only after the AI called `read_runs` with `checkRemaining:true` and it reported nothing left (the activity list shows that read as the last step).
 4. Undo after the run: one Ctrl+Z per translate_blocks call restores the source text with the same formatting. The panel's roll-back button restores the whole document.
 5. With Review > Track Changes on, translate again: each translated run shows the source struck through and the translation inserted with the same formatting; Accept All leaves the same document as with tracking off.
 6. Save, reopen in Word: the document opens without a repair prompt and shows the same formatting. Known engine issue (see findings): in a document with "balance single-byte and double-byte character width" (HWP-exported files) a run with letter spacing in an edited paragraph saves a scaled, fractional w:spacing value; check whether Word complains.
-7. Footnote formatting: open the saved file in Word and look at footnotes whose text had more than one format (italic title, a different font). edit_note rewrites a note's text and may not keep run formatting inside it (see findings); note what was lost.
+7. Footnote formatting: open the saved file in Word and look at footnotes whose text had more than one format (italic title, a hyperlink, a different font). Each format should still sit on the translated words of its run (the app repairs the engine's per-note text patch at save, `note-run-save.ts`); note any footnote where it collapsed into one format.
+8. Spacing: search the translated file for a space before a comma, period or closing bracket (` ,` ` .` ` )`); there should be none the AI did not write.
 
 ## Translation follow-ups, Task 1: recent documents
 

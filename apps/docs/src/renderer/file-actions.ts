@@ -5,6 +5,7 @@
  * fresh per call (wrapped in useCallback with the original dependency lists)
  * so state never goes stale.
  */
+import { restoreNoteRuns } from './ai/note-run-save'
 import type { Editor } from '@tiptap/core'
 import { history } from '@tiptap/pm/history'
 import {
@@ -931,6 +932,15 @@ export async function buildDocBytes(
     themeFonts: ctx.themeFontsDirty && ctx.themeFonts ? ctx.themeFonts : undefined,
     themeColors: ctx.themeColorsDirty && ctx.themeColors ? ctx.themeColors : undefined,
   })
+  // a translated note keeps its run formatting (the engine patches note text per entry)
+  if (ctx.notesDirty) {
+    return restoreNoteRuns(
+      bytes,
+      doc.parsed.internal.originalBytes,
+      { footnote: doc.parsed.footnotes, endnote: doc.parsed.endnotes },
+      { footnote: ctx.footnotes, endnote: ctx.endnotes },
+    )
+  }
   return bytes
 }
 
