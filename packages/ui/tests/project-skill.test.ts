@@ -248,6 +248,27 @@ describe('panelProjectSkill translation context (translation tool)', () => {
     expect(prompt.match(/<\/translation-references>/g)).toHaveLength(1)
   })
 
+  it('says the fixed part was given earlier when the shell sent only its marker', async () => {
+    const { skill, run } = setup({
+      context: contextBundle({
+        translation: {
+          prompts: 'fixed-context: 0123abcd',
+          material: MATERIAL,
+          references: '[a.md — T]\nx',
+          fixedOmitted: true,
+        },
+      }),
+    })
+    await run.prepare()
+    const prompt = skill.systemPrompt
+    expect(prompt).toContain('fixed-context: 0123abcd')
+    expect(prompt).toMatch(/given earlier in this conversation/)
+    expect(prompt).not.toContain('<translation-context>')
+    expect(prompt).not.toMatch(/Below are their translation prompts/)
+    expect(prompt).toContain(`<translation-glossary>\n${MATERIAL}\n</translation-glossary>`)
+    expect(prompt).toContain('<translation-references>')
+  })
+
   it('leaves the references block out when there are none', async () => {
     const { skill, run } = setup({
       context: contextBundle({

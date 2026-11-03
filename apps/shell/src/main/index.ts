@@ -148,6 +148,7 @@ import type {
 import { ResultStore } from '../../../../packages/pdf-structure/src/store'
 import type { TranslationViewDeps } from './translate/open-translation'
 import { translationContextForFolder } from './translate/context-injection'
+import { FixedContextLedger } from './translate/fixed-context'
 import { translationProjectLink, type TranslationProjectLink } from './translate/project-link'
 import { restoreRememberedSplit } from './split-restore'
 import { FEEDBACK_SURVEY_URL, feedbackDetails, feedbackText, platformLabel } from './feedback'
@@ -5700,6 +5701,8 @@ const projectListCloudOnly = createCachedCloudResolver((paths) => resolveCloudOn
  * a change to the list or a new document in a folder drops the walks.
  */
 const projectFileLister = createCachedFileLister()
+/** Which panel conversations already carry a translation context's fixed part; memory only */
+const translationFixedContext = new FixedContextLedger()
 
 function projectFolderServices(): ProjectFolderRuntime {
   if (projectFolderRuntime) return projectFolderRuntime
@@ -5714,8 +5717,14 @@ function projectFolderServices(): ProjectFolderRuntime {
       list: projectFileLister,
     }),
     // a translation project folder also carries the translation tool's context
-    translationContext: (root, query) =>
-      translationContextForFolder(root, { settingsPath: APP_SETTINGS_PATH() }, query),
+    // the ledger lives in memory only; it is per process, so a restart sends the fixed part again
+    translationContext: (root, query, conversation) =>
+      translationContextForFolder(
+        root,
+        { settingsPath: APP_SETTINGS_PATH(), fixedContext: translationFixedContext },
+        query,
+        conversation,
+      ),
   })
   const chats = new ProjectChatStore({ guide, trash: (path) => shell.trashItem(path) })
   const scopes = new KbRunScopes()

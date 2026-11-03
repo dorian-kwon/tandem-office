@@ -307,6 +307,27 @@ describe('readContext request text', () => {
   })
 })
 
+describe('readContext conversation', () => {
+  it('passes a well-formed conversation on, and drops anything else (the fixed part then goes)', async () => {
+    const conversation = { id: 'chat-1', providerKeepsSystem: true }
+    await t.call('readContext', DOCS, { projectId: 'p1', conversation })
+    expect(t.guide.readContext).toHaveBeenLastCalledWith('p1', { conversation })
+    await t.call('readContext', DOCS, { projectId: 'p1', query: 'q', conversation })
+    expect(t.guide.readContext).toHaveBeenLastCalledWith('p1', { query: 'q', conversation })
+    for (const bad of [
+      'chat-1',
+      { id: '', providerKeepsSystem: true },
+      { id: 'x'.repeat(201), providerKeepsSystem: true },
+      { id: 'bad id\n', providerKeepsSystem: true },
+      { id: 'chat-1', providerKeepsSystem: 'yes' },
+      { id: 'chat-1' },
+    ]) {
+      await t.call('readContext', DOCS, { projectId: 'p1', conversation: bad })
+      expect(t.guide.readContext).toHaveBeenLastCalledWith('p1', {})
+    }
+  })
+})
+
 describe('the asking window decides the document', () => {
   it('judges an editor by its own saved document and picks the chat it opens with', async () => {
     const selection = await t.call('getSelection', DOCS)

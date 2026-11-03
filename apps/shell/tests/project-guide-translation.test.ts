@@ -113,6 +113,41 @@ describe('ProjectGuide.readContext with a translation hook', () => {
     expect(hook).toHaveBeenLastCalledWith(root, 'translate the engine part')
   })
 
+  it('hands the conversation to the hook and marks an omitted fixed part', async () => {
+    const root = folder('conversation')
+    const hook = vi.fn(async () => ({
+      ...TRANSLATION,
+      prompts: 'fixed-context: 0123abcd',
+      fixedOmitted: true,
+    }))
+    const guide = makeGuide({ translationContext: hook })
+    const added = await guide.addFolder(root, answer('use'))
+    if (added.status !== 'added') throw new Error('not added')
+    const conversation = { id: 'chat-1', providerKeepsSystem: true }
+    const read = await guide.readContext(added.project.id, { query: 'q', conversation })
+    expect(hook).toHaveBeenLastCalledWith(root, 'q', conversation)
+    if (read.status !== 'ok') throw new Error('no context')
+    expect(read.context.translation).toEqual({
+      prompts: 'fixed-context: 0123abcd',
+      material: TRANSLATION.material,
+      references: TRANSLATION.references,
+      fixedOmitted: true,
+    })
+  })
+
+  it('keeps the bundle unchanged when the fixed part went whole', async () => {
+    const root = folder('whole')
+    const guide = makeGuide({
+      translationContext: async () => ({ ...TRANSLATION, fixedOmitted: false }),
+    })
+    const context = await contextOf(guide, root)
+    expect(context.translation).toEqual({
+      prompts: TRANSLATION.prompts,
+      material: TRANSLATION.material,
+      references: TRANSLATION.references,
+    })
+  })
+
   it('marks a cut translation context in its notice', async () => {
     const root = folder('long')
     const guide = makeGuide({

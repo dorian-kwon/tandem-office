@@ -359,12 +359,20 @@ export function projectSystemPrompt(context: ProjectContextBundle, canRemember: 
   if (prompts) {
     const material = context.translation?.material.trim() ?? ''
     const references = context.translation?.references?.trim() ?? ''
-    sections.push(
-      '### Translation project set up by the person\n' +
-        'The person set up this folder as a translation project in this app. Below are their ' +
+    // The shell sends only a marker when this conversation's provider already holds the
+    // fixed part (prompts, language pair, editing rules); today no provider does.
+    const fixedPart = context.translation?.fixedOmitted
+      ? 'The person set up this folder as a translation project in this app. Their ' +
+        'translation prompts, the language pair and the editing rules were given earlier in ' +
+        'this conversation and still apply, unless the person says otherwise in the chat.\n' +
+        fenced(prompts.split('\n')[0] ?? '')
+      : 'The person set up this folder as a translation project in this app. Below are their ' +
         'translation prompts (the app-wide one, then this project’s) and the language pair. ' +
         'Follow them when you translate, unless the person says otherwise in the chat.\n' +
-        `<translation-context>\n${fenced(prompts)}\n</translation-context>` +
+        `<translation-context>\n${fenced(prompts)}\n</translation-context>`
+    sections.push(
+      '### Translation project set up by the person\n' +
+        fixedPart +
         (material
           ? '\nGlossary entries (source term → target term) and the names of reference files ' +
             'in the project, from files the person added. Use the glossary’s target terms ' +

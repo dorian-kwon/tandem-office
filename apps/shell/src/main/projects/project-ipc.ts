@@ -5,8 +5,10 @@ import {
   PROJECT_FOLDER_CHANNELS,
   PROJECT_FOLDER_EVENTS,
   READ_CONTEXT_QUERY_MAX_CHARS,
+  READ_CONTEXT_CONVERSATION_ID_MAX_CHARS,
   type AddFolderResult,
   type AppendProjectChatArgs,
+  type ReadContextConversation,
   type CreateProjectResult,
   type LegacyDocumentChat,
   type OpenProjectChatEvent,
@@ -192,6 +194,20 @@ function queryOf(raw: unknown): string | undefined {
   const query = record(raw).query
   if (typeof query !== 'string' || query.trim() === '') return undefined
   return query.slice(0, READ_CONTEXT_QUERY_MAX_CHARS)
+}
+
+/**
+ * `readContext`'s optional conversation: a short id of plain characters and a boolean;
+ * anything else is none, so the translation context's fixed part goes whole
+ */
+function conversationOf(raw: unknown): ReadContextConversation | undefined {
+  const value = record(raw).conversation
+  if (!value || typeof value !== 'object') return undefined
+  const { id, providerKeepsSystem } = value as Record<string, unknown>
+  if (typeof id !== 'string' || typeof providerKeepsSystem !== 'boolean') return undefined
+  if (id.length === 0 || id.length > READ_CONTEXT_CONVERSATION_ID_MAX_CHARS) return undefined
+  if (!/^[A-Za-z0-9._:-]+$/.test(id)) return undefined
+  return { id, providerKeepsSystem }
 }
 
 function chatRefOf(raw: unknown): ProjectChatRef {
@@ -522,7 +538,11 @@ export function registerProjectFolderIpc(deps: ProjectIpcDeps): ProjectIpcContro
     readContext: (_sender, raw) => {
       const id = projectIdOf(raw)
       const query = queryOf(raw)
-      return svc().guide.readContext(id, query === undefined ? {} : { query })
+      const conversation = conversationOf(raw)
+      return svc().guide.readContext(id, {
+        ...(query === undefined ? {} : { query }),
+        ...(conversation === undefined ? {} : { conversation }),
+      })
     },
     openScope: (sender, raw) => svc().tools.openScope(sender, raw),
     closeScope: (sender, raw) => svc().tools.closeScope(sender, raw),

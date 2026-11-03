@@ -18,6 +18,12 @@ import type { ProjectTranslationItem } from '@genoffice/project-store'
 import { readTranslationProjects, readTranslationSystemPrompt } from '../app-settings'
 import { INSTRUCTIONS_LIMIT_CHARS } from '../projects/context'
 import { canonicalPath, samePath } from '../projects/paths'
+import {
+  fixedContextHash,
+  fixedContextMarker,
+  type FixedContextConversation,
+  type FixedContextLedger,
+} from './fixed-context'
 
 /**
  * The translation project's context for the editors' AI panels (spec 6.6). A
@@ -42,6 +48,11 @@ export interface TranslationContextOptions {
    * place, or a project from before the index); default file-parse's reader
    */
   convertReference?: ReferenceConverter
+  /**
+   * which conversations already carry the fixed part (fixed-context.ts);
+   * absent: every request carries it
+   */
+  fixedContext?: FixedContextLedger
 }
 
 /**
@@ -221,7 +232,15 @@ function fitted(
 
 /** What the project guide adds to a translation project's context */
 export interface TranslationFolderContext {
+  /**
+   * the fixed part: the prompts, the language pair and the editing rules; or,
+   * when `fixedOmitted`, the one-line marker `fixed-context: <hash8>` in its place
+   */
   prompts: string
+  /** first 8 hex characters of the fixed part's sha-256 */
+  fixedHash: string
+  /** the fixed part went earlier in this conversation and `prompts` is only its marker */
+  fixedOmitted: boolean
   material: string
   /** the reference chunks picked for the request, labelled ('' when none) */
   references: string
@@ -243,6 +262,7 @@ export const TRANSLATION_EDITING_RULES = [
   '- In a Word document, translate with read_runs then translate_blocks: one translated string per segment, in order. Never translate with replace_blocks or write_document; they rebuild the paragraphs and lose run formatting.',
   '- Never delete, fill or restyle empty paragraphs; leave them as they are.',
   '- Never move, delete or retype a footnote reference mark. Translate footnote and endnote text with the note tools (read_notes, then edit_note).',
+  '- Pass each paragraph\'s "fp" from read_runs to translate_blocks unchanged; a refused fp means the paragraph changed, so call read_runs again.',
 ].join('\n')
 
 /** The registered translation project at `root` (any spelling of the path), or undefined */
@@ -259,11 +279,17 @@ function registeredDir(root: string, options: TranslationContextOptions): string
  * a registered translation project (an ordinary project folder) or its
  * project file cannot be read. `query` is the request text the AI panel
  * passed along (absent: none), used only to pick glossary entries.
+ *
+ * `conversation` (with `options.fixedContext`) lets a later request of the
+ * same conversation send only the marker of the fixed part, when the provider
+ * keeps the earlier system prompt; anything missing sends it whole. The glossary
+ * entries and reference chunks go with every request.
  */
 export async function translationContextForFolder(
   root: string,
   options: TranslationContextOptions,
   query?: string,
+  conversation?: FixedContextConversation,
 ): Promise<TranslationFolderContext | null> {
   const dir = registeredDir(root, options)
   if (dir === undefined) return null
@@ -282,8 +308,21 @@ export async function translationContextForFolder(
   }
   const included = (kind: ProjectTranslationItem['kind']) =>
     built.items.find((item) => item.kind === kind)?.included ?? false
+  const fixed = `${built.promptText}\n\n${TRANSLATION_EDITING_RULES}`
+  const hash = fixedContextHash(fixed)
+  const send =
+    !options.fixedContext ||
+    !conversation ||
+    options.fixedContext.shouldSend(
+      conversation.id,
+      canonicalPath(dir),
+      hash,
+      conversation.providerKeepsSystem === true,
+    )
   return {
-    prompts: `${built.promptText}\n\n${TRANSLATION_EDITING_RULES}`,
+    prompts: send ? fixed : fixedContextMarker(hash),
+    fixedHash: hash.slice(0, 8),
+    fixedOmitted: !send,
     material: built.materialText,
     references: built.referencesText,
     cut: built.cut,

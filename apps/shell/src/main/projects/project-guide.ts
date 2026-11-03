@@ -32,6 +32,7 @@ import {
   type ProjectTrustRecord,
   type ProjectTrustState,
   type ProjectWriteResult,
+  type ReadContextConversation,
   type UndoMemoryConsolidationArgs,
   type UndoMemoryConsolidationResult,
 } from '@genoffice/project-store'
@@ -171,9 +172,15 @@ export interface ProjectGuideDeps {
    * The translation tool's context for a folder (`translate/context-injection.ts`), or null
    * when the folder is not a translation project. `query` is the request text, when the
    * panel passed it. Asked only under trust `use`; absent, null or failing adds nothing,
-   * so an ordinary project's context is unchanged.
+   * so an ordinary project's context is unchanged. `conversation` (the panel's chat and
+   * whether its provider keeps the earlier system prompt) is passed only when the panel
+   * gave one; the hook then may send only the marker of the fixed part.
    */
-  translationContext?: (root: string, query?: string) => Promise<ProjectTranslationContext | null>
+  translationContext?: (
+    root: string,
+    query?: string,
+    conversation?: ReadContextConversation,
+  ) => Promise<ProjectTranslationContext | null>
 }
 
 /** What the translation hook adds to one request's context */
@@ -184,6 +191,8 @@ export interface ProjectTranslationContext {
   references: string
   items: ProjectTranslationItem[]
   cut: boolean
+  /** `prompts` is only the marker of a fixed part sent earlier in this conversation */
+  fixedOmitted?: boolean
 }
 
 /**
@@ -864,11 +873,12 @@ export class ProjectGuide {
    * memory (whole), file names, notices. Under `without` the instructions, memory and
    * root agent files are left out. A file changed outside the app gives one
    * "changed" notice, then its new hash is recorded. `query` (the request text) only
-   * reaches the translation hook; it is not stored.
+   * reaches the translation hook; it is not stored. `conversation` only reaches the
+   * translation hook too.
    */
   async readContext(
     id: ProjectId,
-    options: { query?: string } = {},
+    options: { query?: string; conversation?: ReadContextConversation } = {},
   ): Promise<ProjectContextResult> {
     const settings = this.read()
     const entry = this.entry(id, settings)
@@ -898,7 +908,9 @@ export class ProjectGuide {
     let translation: ProjectTranslationContext | null = null
     if (trust === 'use' && record && this.deps.translationContext) {
       try {
-        translation = await this.deps.translationContext(root, options.query)
+        translation = options.conversation
+          ? await this.deps.translationContext(root, options.query, options.conversation)
+          : await this.deps.translationContext(root, options.query)
       } catch {
         // an unreadable translation project sends nothing of the translation tool
         translation = null
@@ -937,6 +949,7 @@ export class ProjectGuide {
                 prompts: translation.prompts,
                 material: translation.material,
                 references: translation.references,
+                ...(translation.fixedOmitted === true ? { fixedOmitted: true as const } : {}),
               },
             }
           : {}),

@@ -402,6 +402,11 @@ export interface ProjectContextBundle {
      * labelled with its file and heading ('' or absent when there are none)
      */
     references?: string
+    /**
+     * the fixed part (prompts, language pair, editing rules) went earlier in this
+     * conversation: `prompts` holds only its one-line marker `fixed-context: <hash8>`
+     */
+    fixedOmitted?: true
   }
 }
 
@@ -730,7 +735,26 @@ export interface ReadContextArgs extends ProjectIdArgs {
    * never stored. Main cuts it at `READ_CONTEXT_QUERY_MAX_CHARS`.
    */
   query?: string
+  /**
+   * The panel's conversation, for the translation context's fixed part. Absent (or
+   * malformed) sends the fixed part whole, which is always safe.
+   */
+  conversation?: ReadContextConversation
 }
+
+/** The conversation of one `readContext` request */
+export interface ReadContextConversation {
+  /** the panel's chat id; a new or cleared chat has a new one */
+  id: string
+  /**
+   * true only when the provider of the request keeps the conversation's earlier
+   * system prompt; no provider of the app does today, so panels pass false or nothing
+   */
+  providerKeepsSystem: boolean
+}
+
+/** The longest `ReadContextConversation.id` main accepts */
+export const READ_CONTEXT_CONVERSATION_ID_MAX_CHARS = 200
 
 /** The longest `ReadContextArgs.query` main uses; the rest is ignored */
 export const READ_CONTEXT_QUERY_MAX_CHARS = 100_000
