@@ -187,4 +187,8 @@ export const zh = {
   ctxReferencesNamesOnly: '参考资料文件 {count} 个：{names}。其中没有可用的文字，因此只发送名称。',
   trConfirmSendsNamesOnly:
     '文档的文字会连同您的翻译提示词、术语表（较少时发送全部，否则只发送其词条出现在文中的部分）以及参考文件的名称（不含内容）一起发送给这个 AI。',
+  pictureHintSource:
+    '此文档包含图片：{count} 张。图片中的文字不属于文档文字，因此不会被翻译。读取这些文字需要 OCR，但本应用不会自行读取此文件内的图片：请将含图片的页面导出或复制为图片（PNG 或 JPEG）或扫描 PDF，将其添加为待翻译文档，再用 OCR 读取。',
+  pictureHintReference:
+    '此文件包含图片：{count} 张。图片中的文字不在转换后的文字中，因此不会随请求发送。读取这些文字需要 OCR，但本应用不会自行读取此文件内的图片：请将这些页面导出或复制为图片（PNG 或 JPEG）或扫描 PDF，添加为待翻译文档，用 OCR 读取，再把生成的 Word 文档添加到这里。',
 }

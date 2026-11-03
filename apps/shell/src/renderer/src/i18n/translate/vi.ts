@@ -200,4 +200,8 @@ export const vi = {
     'Tệp tham khảo ({count}): {names}. Không tệp nào có văn bản dùng được nên chỉ gửi tên.',
   trConfirmSendsNamesOnly:
     'Văn bản của tài liệu được gửi cho AI này cùng với các prompt dịch của bạn, bảng thuật ngữ (toàn bộ nếu nhỏ, nếu không thì các mục có thuật ngữ xuất hiện trong văn bản) và tên các tệp tham khảo (không gửi nội dung).',
+  pictureHintSource:
+    'Hình ảnh trong tài liệu này: {count}. Chữ bên trong hình ảnh không thuộc văn bản của tài liệu nên sẽ không được dịch. Muốn đọc chữ đó cần OCR, và ứng dụng không tự đọc hình ảnh bên trong tệp này: hãy xuất hoặc sao chép các trang có hình ảnh thành ảnh (PNG hoặc JPEG) hoặc PDF quét, thêm nó làm tài liệu cần dịch rồi đọc bằng OCR.',
+  pictureHintReference:
+    'Hình ảnh trong tệp này: {count}. Chữ bên trong hình ảnh không thuộc văn bản đã chuyển đổi nên không được gửi kèm yêu cầu. Muốn đọc chữ đó cần OCR, và ứng dụng không tự đọc hình ảnh bên trong tệp này: hãy xuất hoặc sao chép các trang đó thành ảnh (PNG hoặc JPEG) hoặc PDF quét, thêm nó làm tài liệu cần dịch, đọc bằng OCR rồi thêm tài liệu Word thu được vào đây.',
 } satisfies Record<keyof typeof zh, string>

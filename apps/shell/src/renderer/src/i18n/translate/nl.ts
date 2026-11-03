@@ -210,4 +210,8 @@ export const nl = {
     'Referentiebestanden ({count}): {names}. Geen ervan heeft bruikbare tekst, dus alleen de namen worden verstuurd.',
   trConfirmSendsNamesOnly:
     'De tekst van het document wordt naar deze AI gestuurd, samen met je vertaalprompts, de woordenlijst (helemaal als die klein is, anders de items waarvan de termen in de tekst voorkomen) en de namen van de referentiebestanden (niet hun inhoud).',
+  pictureHintSource:
+    'Afbeeldingen in dit document: {count}. Tekst in een afbeelding hoort niet bij de tekst van het document en wordt dus niet vertaald. Om die te lezen is OCR nodig, en de app leest afbeeldingen in dit bestand niet uit zichzelf: exporteer of kopieer de pagina’s met afbeeldingen als afbeelding (PNG of JPEG) of als gescande pdf, voeg die toe als te vertalen document en lees die met OCR.',
+  pictureHintReference:
+    'Afbeeldingen in dit bestand: {count}. Tekst in een afbeelding hoort niet bij de omgezette tekst en wordt dus niet met verzoeken meegestuurd. Om die te lezen is OCR nodig, en de app leest afbeeldingen in dit bestand niet uit zichzelf: exporteer of kopieer die pagina’s als afbeelding (PNG of JPEG) of als gescande pdf, voeg die toe als te vertalen document, lees die met OCR en voeg het resulterende Word-document hier toe.',
 } satisfies Record<keyof typeof zh, string>

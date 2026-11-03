@@ -81,6 +81,7 @@ beforeEach(() => {
     relocate: vi.fn().mockResolvedValue(null),
     referenceStatus: vi.fn().mockResolvedValue({}),
     referenceText: vi.fn().mockResolvedValue({ text: '', truncated: false }),
+    pictureInfo: vi.fn().mockResolvedValue([]),
   }
   ;(window as unknown as { translateApi: unknown }).translateApi = api
 })
@@ -541,6 +542,69 @@ describe('ProjectDetail reference status', () => {
     expect(host.querySelector('[data-file="n.md"]')?.getAttribute('data-reference-status')).toBe(
       'converted',
     )
+  })
+})
+
+describe('ProjectDetail picture notice', () => {
+  const props = () => ({ dir: '/p/a', onBack: vi.fn(), onStartTranslation: vi.fn() })
+
+  it('says next to a file that its pictures need OCR and will not be translated', async () => {
+    api.getProject.mockResolvedValue(
+      project({
+        sources: [
+          { file: 'a.docx', sha256: 'x', kind: 'editable' },
+          { file: 'plain.docx', sha256: 'y', kind: 'editable' },
+        ],
+        references: ['r.pptx', 'r.pdf'],
+      }),
+    )
+    api.pictureInfo.mockResolvedValue([
+      { file: 'a.docx', kind: 'source', pictures: 3 },
+      { file: 'plain.docx', kind: 'source', pictures: 0 },
+      { file: 'r.pptx', kind: 'reference', pictures: 2 },
+      { file: 'r.pdf', kind: 'reference', pictures: null },
+    ])
+    await render(ProjectDetail, props())
+    expect(api.pictureInfo).toHaveBeenCalledWith('/p/a')
+    const notice = (kind: string, file: string) =>
+      host.querySelector(
+        `[data-material-kind="${kind}"] [data-picture-notice][data-file="${file}"]`,
+      )
+    const a = notice('source', 'a.docx')!
+    expect(a.getAttribute('data-picture-notice')).toBe('3')
+    expect(a.textContent).toContain('Pictures in this document: 3')
+    expect(a.textContent).toContain('will not be translated')
+    expect(a.textContent).toContain('OCR')
+    // it promises no automatic reading of the pictures inside the file
+    expect(a.textContent).toContain('does not read pictures inside this file')
+    expect(notice('reference', 'r.pptx')?.textContent).toContain('Pictures in this file: 2')
+    // no pictures, or unknown: no notice
+    expect(notice('source', 'plain.docx')).toBeNull()
+    expect(notice('reference', 'r.pdf')).toBeNull()
+  })
+
+  it('no notice when the count fails or the bridge has no such call', async () => {
+    api.getProject.mockResolvedValue(
+      project({ sources: [{ file: 'a.docx', sha256: 'x', kind: 'editable' }] }),
+    )
+    api.pictureInfo.mockRejectedValue(new Error('[UNKNOWN] nope'))
+    await render(ProjectDetail, props())
+    expect(host.querySelector('[data-picture-notice]')).toBeNull()
+    expect(host.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  it('counts again after a file was added', async () => {
+    api.getProject.mockResolvedValue(project())
+    api.pickMaterials.mockResolvedValue({ token: 't', names: ['n.docx'] })
+    api.addMaterial.mockResolvedValue(
+      project({ sources: [{ file: 'n.docx', sha256: 'z', kind: 'editable' }] }),
+    )
+    await render(ProjectDetail, props())
+    api.pictureInfo.mockResolvedValue([{ file: 'n.docx', kind: 'source', pictures: 1 }])
+    const section = host.querySelector('[data-material-kind="source"]')!
+    await click([...section.querySelectorAll('button')].at(-1)!)
+    expect(api.pictureInfo).toHaveBeenCalledTimes(2)
+    expect(host.querySelector('[data-picture-notice][data-file="n.docx"]')).not.toBeNull()
   })
 })
 

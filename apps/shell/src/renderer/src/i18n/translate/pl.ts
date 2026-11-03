@@ -207,4 +207,8 @@ export const pl = {
     'Pliki referencyjne ({count}): {names}. Żaden nie ma użytecznego tekstu, więc wysyłane są tylko nazwy.',
   trConfirmSendsNamesOnly:
     'Tekst dokumentu jest wysyłany do tego AI wraz z Twoimi promptami tłumaczenia, glosariuszem (w całości, gdy jest mały, w przeciwnym razie wpisami, których terminy występują w tekście) i nazwami plików referencyjnych (bez ich zawartości).',
+  pictureHintSource:
+    'Obrazy w tym dokumencie: {count}. Tekst wewnątrz obrazu nie jest częścią tekstu dokumentu, więc nie zostanie przetłumaczony. Aby go odczytać, potrzebny jest OCR, a aplikacja sama nie odczytuje obrazów w tym pliku: wyeksportuj lub skopiuj strony z obrazami jako obraz (PNG lub JPEG) albo zeskanowany PDF, dodaj go jako dokument do tłumaczenia i odczytaj przez OCR.',
+  pictureHintReference:
+    'Obrazy w tym pliku: {count}. Tekst wewnątrz obrazu nie jest częścią przekonwertowanego tekstu, więc nie jest wysyłany z zapytaniami. Aby go odczytać, potrzebny jest OCR, a aplikacja sama nie odczytuje obrazów w tym pliku: wyeksportuj lub skopiuj te strony jako obraz (PNG lub JPEG) albo zeskanowany PDF, dodaj go jako dokument do tłumaczenia, odczytaj przez OCR i dodaj tutaj powstały dokument Word.',
 } satisfies Record<keyof typeof zh, string>

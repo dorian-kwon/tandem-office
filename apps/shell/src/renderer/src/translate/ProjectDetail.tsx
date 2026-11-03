@@ -3,6 +3,7 @@ import { LANGS } from '@genoffice/i18n'
 import type { OcrMode, ProjectFile } from '@genoffice/translate-project'
 import type {
   TranslateMaterialKind,
+  TranslatePictureInfo,
   TranslateReferenceStatus,
   TranslateReferenceText,
   TranslateSettingsPatch,
@@ -55,6 +56,11 @@ const REFERENCE_STATUS_TEXT: Record<TranslateReferenceStatus, TranslateStringKey
   outside: 'refOutside',
 }
 
+/** the key of one file's picture count: kind and name */
+function pictureKey(kind: TranslatePictureInfo['kind'], file: string): string {
+  return `${kind}\u0000${file}`
+}
+
 function filesOf(project: ProjectFile, kind: TranslateMaterialKind): string[] {
   if (kind === 'source') return project.sources.map((e) => e.file)
   return kind === 'reference' ? project.references : project.glossaryFiles
@@ -83,6 +89,27 @@ export function ProjectDetail({
   const [refStatus, setRefStatus] = useState<Record<string, TranslateReferenceStatus> | null>(null)
   const [viewing, setViewing] = useState<({ file: string } & TranslateReferenceText) | null>(null)
   const refStatusAsk = useRef(0)
+  // embedded pictures per source and reference; absent: none, unknown or not asked yet
+  const [pictures, setPictures] = useState<Map<string, number>>(new Map())
+  const picturesAsk = useRef(0)
+
+  /** ask main how many pictures each file embeds; a failure only means no notice */
+  const loadPictures = useCallback(() => {
+    if (typeof api?.pictureInfo !== 'function') return
+    const ask = ++picturesAsk.current
+    api.pictureInfo(dir).then(
+      (list) => {
+        if (ask !== picturesAsk.current) return
+        const next = new Map<string, number>()
+        for (const item of list)
+          if (typeof item.pictures === 'number' && item.pictures > 0)
+            next.set(pictureKey(item.kind, item.file), item.pictures)
+        setPictures(next)
+      },
+      () => undefined,
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- per project
+  }, [dir])
 
   /** ask main for the statuses (it converts what its index does not know yet) */
   const loadRefStatus = useCallback(() => {
@@ -112,6 +139,7 @@ export function ProjectDetail({
       (err: unknown) => setError(translateErrorText(lang, err)),
     )
     loadRefStatus()
+    loadPictures()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per project
   }, [dir])
 
@@ -197,6 +225,7 @@ export function ProjectDetail({
         setError(translateErrorText(lang, err) + detail)
       }
       if (kind === 'reference' && added.length > 0) loadRefStatus()
+      if (kind !== 'glossary' && added.length > 0) loadPictures()
     } catch (err) {
       setError(translateErrorText(lang, err))
     } finally {
@@ -223,6 +252,7 @@ export function ProjectDetail({
     try {
       adoptLists(await api.removeMaterial({ dir, kind, file }))
       if (kind === 'reference') loadRefStatus()
+      if (kind !== 'glossary') loadPictures()
     } catch (err) {
       setError(translateErrorText(lang, err))
     } finally {
@@ -249,6 +279,23 @@ export function ProjectDetail({
         data-file={file}
       >
         {status ? s(REFERENCE_STATUS_TEXT[status]) : s('refChecking')}
+      </span>
+    )
+  }
+
+  /** text inside pictures is not translated: say so, and what the person can do */
+  const pictureNotice = (kind: TranslateMaterialKind, file: string) => {
+    if (kind === 'glossary') return null
+    const count = pictures.get(pictureKey(kind, file))
+    if (!count) return null
+    return (
+      <span
+        className="projects-hint translate-ref-hint translate-picture-hint"
+        role="note"
+        data-picture-notice={count}
+        data-file={file}
+      >
+        {s(kind === 'source' ? 'pictureHintSource' : 'pictureHintReference', { count })}
       </span>
     )
   }
@@ -340,6 +387,7 @@ export function ProjectDetail({
                                 {pdfKindOf(project, file) === 'scan' ? s('kindScan') : s('kindPdf')}
                               </span>
                             )}
+                            {pictureNotice(kind, file)}
                           </div>
                           {kind === 'source' && pdfKindOf(project, file) && (
                             <button

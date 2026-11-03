@@ -188,4 +188,8 @@ export const zhTW = {
   ctxReferencesNamesOnly: '參考資料檔案 {count} 個：{names}。其中沒有可用的文字，因此只傳送名稱。',
   trConfirmSendsNamesOnly:
     '文件的文字會連同您的翻譯提示詞、詞彙表（較少時傳送全部，否則只傳送其詞條出現在文中的部分）以及參考檔案的名稱（不含內容）一起傳送給這個 AI。',
+  pictureHintSource:
+    '此文件包含圖片：{count} 張。圖片中的文字不屬於文件文字，因此不會被翻譯。讀取這些文字需要 OCR，但本應用程式不會自行讀取此檔案內的圖片：請將含圖片的頁面匯出或複製為圖片（PNG 或 JPEG）或掃描 PDF，將其新增為要翻譯的文件，再以 OCR 讀取。',
+  pictureHintReference:
+    '此檔案包含圖片：{count} 張。圖片中的文字不在轉換後的文字中，因此不會隨請求傳送。讀取這些文字需要 OCR，但本應用程式不會自行讀取此檔案內的圖片：請將這些頁面匯出或複製為圖片（PNG 或 JPEG）或掃描 PDF，新增為要翻譯的文件，以 OCR 讀取，再把產生的 Word 文件新增到這裡。',
 } satisfies Record<keyof typeof zh, string>

@@ -27,6 +27,7 @@ import {
   type ReferenceConverter,
 } from '@genoffice/translate-project'
 import { convertReference } from './reference-convert'
+import { createPictureInfo } from './picture-info'
 import { PickAllowlist } from './pick-allowlist'
 import { createOcrService, type OcrService, type OcrServiceDeps } from './ocr'
 import { buildTranslationInstructions } from './context-injection'
@@ -59,6 +60,7 @@ import {
   type TranslateInstructionsForArgs,
   type TranslateMaterialKind,
   type TranslateOcrPageImageArgs,
+  type TranslatePictureInfo,
   type TranslateOcrPrepareArgs,
   type TranslateOcrStartArgs,
   type TranslateOcrWriteArgs,
@@ -208,6 +210,7 @@ export function createTranslateHandlers(deps: TranslateIpcDeps) {
     relocate: guard(raw.relocate),
     referenceStatus: guard(raw.referenceStatus),
     referenceText: guard(raw.referenceText),
+    pictureInfo: guard(raw.pictureInfo),
   }
 }
 
@@ -230,6 +233,8 @@ function createRawHandlers(deps: TranslateIpcDeps) {
   const ocrService: OcrService | null = deps.ocr
     ? createOcrService(deps.ocr, deps.now, newToken)
     : null
+
+  const pictures = createPictureInfo()
 
   const nonEditableService: NonEditableService | null = deps.nonEditable
     ? createNonEditableService(deps.nonEditable, deps.now, newToken)
@@ -644,6 +649,13 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       return { text: truncated ? text.slice(0, REFERENCE_VIEW_MAX_CHARS) : text, truncated }
     },
 
+    /** read-only: picture counts from the zip's central directory, never sent anywhere */
+    async pictureInfo(dirArg: string): Promise<TranslatePictureInfo[]> {
+      const dir = registeredDir(dirArg)
+      const project = await loadProject(dir)
+      return pictures.forProject(dir, project)
+    },
+
     async pickExisting(): Promise<TranslateAdoptedProject | null> {
       const picked = await pickFolder()
       return picked === null ? null : adopt(picked)
@@ -829,4 +841,5 @@ export function registerTranslateIpc(
   handle(TRANSLATE_CHANNELS.referenceText, (_e, args: TranslateReferenceTextArgs) =>
     h.referenceText(args),
   )
+  handle(TRANSLATE_CHANNELS.pictureInfo, (_e, dir: string) => h.pictureInfo(dir))
 }

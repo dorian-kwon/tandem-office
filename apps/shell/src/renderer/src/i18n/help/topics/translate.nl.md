@@ -35,6 +35,7 @@ Een vertaalproject houdt de documenten die je wilt vertalen, je referentiemateri
 - De paginabeelden worden pas naar de AI gestuurd nadat je hebt bevestigd op het controlescherm, dat laat zien hoeveel pagina’s worden verstuurd en welke AI wordt gebruikt. Het kan het tegoed van je abonnement gebruiken, en een betaalde verbinding wordt als betaald aangeduid voordat er iets wordt verstuurd.
 - De gelezen tekst wordt als Word-document in de uitvoermap opgeslagen. Vertaal dat document in de vertaalweergave met het AI-paneel.
 - PNG- en JPEG-afbeeldingen worden ondersteund. GIF-, BMP-, TIFF- en WebP-afbeeldingen, afbeeldingen groter dan 20 MB en pdf’s met wachtwoord niet.
+- Als een document of referentiebestand afbeeldingen bevat (Word, PowerPoint, Excel, OpenDocument, HWPX of EPUB), toont het projectdetail hoeveel naast dat bestand. Tekst in die afbeeldingen hoort niet bij de tekst van het document en wordt dus niet vertaald of verstuurd. Om die te lezen is OCR nodig, maar OCR leest alleen gescande pdf’s en afbeeldingsbestanden, geen afbeeldingen in een ander bestand: exporteer of kopieer de pagina’s met afbeeldingen als PNG- of JPEG-afbeelding of als gescande pdf, voeg die toe als te vertalen document en lees die met OCR. Heel kleine afbeeldingen (onder 2 KB, zoals opsommingstekens) en afbeeldingen in pdf’s worden niet meegeteld.
 
 ## PDF-vertaling
 

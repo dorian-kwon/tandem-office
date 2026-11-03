@@ -44,12 +44,24 @@ export const TRANSLATE_CHANNELS = {
   recent: 'translate:recent',
   referenceStatus: 'translate:reference-status',
   referenceText: 'translate:reference-text',
+  pictureInfo: 'translate:picture-info',
 } as const
 
 export type TranslateMaterialKind = 'source' | 'reference' | 'glossary'
 
 /** how a reference file stands in the keyword index (packages/translate-project reference-index.ts) */
 export type TranslateReferenceStatus = ReferenceStatus
+
+/**
+ * Pictures embedded in one listed file (main/translate/picture-info.ts). `pictures`
+ * is null when it is unknown or not counted for that file type (PDFs, images,
+ * binary formats): no notice is shown then.
+ */
+export interface TranslatePictureInfo {
+  file: string
+  kind: 'source' | 'reference'
+  pictures: number | null
+}
 
 export interface TranslateReferenceTextArgs {
   dir: string
@@ -347,6 +359,11 @@ export interface TranslateApi {
   referenceStatus(dir: string): Promise<Record<string, TranslateReferenceStatus>>
   /** the converted text of a converted reference, read-only (nothing can be written back) */
   referenceText(args: TranslateReferenceTextArgs): Promise<TranslateReferenceText>
+  /**
+   * how many pictures each listed source and reference embeds (read-only, local,
+   * nothing sent); text inside them is not part of the document text
+   */
+  pictureInfo(dir: string): Promise<TranslatePictureInfo[]>
   /** the project's translation context for one request (prompts, glossary picked by `text`) */
   instructionsFor(args: TranslateInstructionsForArgs): Promise<TranslateInstructions>
   /** read a text PDF's document tree under a token for the translation job; sends nothing */

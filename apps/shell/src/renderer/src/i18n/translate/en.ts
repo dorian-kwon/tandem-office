@@ -203,4 +203,8 @@ export const en = {
     'Reference files ({count}): {names}. None of them has usable text, so only their names are sent.',
   trConfirmSendsNamesOnly:
     "The document's text is sent to this AI, with your translation prompts, the glossary (whole when it is small, otherwise the entries whose terms appear in the text) and the names of the reference files (not their contents).",
+  pictureHintSource:
+    'Pictures in this document: {count}. Text inside a picture is not part of the document text, so it will not be translated. Reading it needs OCR, and the app does not read pictures inside this file by itself: export or copy the pages with pictures as an image (PNG or JPEG) or a scanned PDF, add that as a document to translate, and read it with OCR.',
+  pictureHintReference:
+    'Pictures in this file: {count}. Text inside a picture is not part of the converted text, so it is not sent with requests. Reading it needs OCR, and the app does not read pictures inside this file by itself: export or copy those pages as an image (PNG or JPEG) or a scanned PDF, add that as a document to translate, read it with OCR, and add the resulting Word document here.',
 } satisfies Record<keyof typeof zh, string>

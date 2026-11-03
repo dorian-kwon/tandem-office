@@ -207,4 +207,8 @@ export const id = {
     'File acuan ({count}): {names}. Tidak ada yang memiliki teks yang dapat dipakai, jadi hanya namanya yang dikirim.',
   trConfirmSendsNamesOnly:
     'Teks dokumen dikirim ke AI ini bersama prompt terjemahan Anda, glosarium (utuh jika kecil, jika tidak hanya entri yang istilahnya muncul dalam teks), dan nama file acuan (bukan isinya).',
+  pictureHintSource:
+    'Gambar dalam dokumen ini: {count}. Teks di dalam gambar bukan bagian dari teks dokumen, jadi tidak akan diterjemahkan. Untuk membacanya diperlukan OCR, dan aplikasi tidak membaca sendiri gambar di dalam file ini: ekspor atau salin halaman yang bergambar sebagai gambar (PNG atau JPEG) atau PDF pindaian, tambahkan sebagai dokumen yang akan diterjemahkan, lalu baca dengan OCR.',
+  pictureHintReference:
+    'Gambar dalam file ini: {count}. Teks di dalam gambar bukan bagian dari teks hasil konversi, jadi tidak dikirim bersama permintaan. Untuk membacanya diperlukan OCR, dan aplikasi tidak membaca sendiri gambar di dalam file ini: ekspor atau salin halaman tersebut sebagai gambar (PNG atau JPEG) atau PDF pindaian, tambahkan sebagai dokumen yang akan diterjemahkan, baca dengan OCR, lalu tambahkan dokumen Word hasilnya di sini.',
 } satisfies Record<keyof typeof zh, string>

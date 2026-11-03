@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ElectronApplication, Page } from 'playwright-core'
+import JSZip from 'jszip'
 import { closeAndSaveVideo, launchShell } from './helpers'
 
 /**
@@ -262,5 +263,49 @@ test('translation project: create, upload, split view, read-only source, remove'
     expect((await stat(join(projectDir, 'source', 'contract.md'))).isFile()).toBe(true)
   } finally {
     await closeAndSaveVideo(launched, 'translate-projects')
+  }
+})
+
+test('translation project: a document with an embedded picture says OCR is needed', async () => {
+  test.setTimeout(120_000)
+  const work = await mkdtemp(join(tmpdir(), 'tp-pic-e2e-'))
+  const parentDir = join(work, 'projects')
+  await mkdir(parentDir)
+  // a docx whose word/media holds one picture above the 2 KB decoration cutoff
+  const picture = Buffer.alloc(4096)
+  for (let i = 0; i < picture.length; i += 1) picture[i] = (i * 7919) & 0xff
+  const zip = new JSZip()
+  zip.file('[Content_Types].xml', '<Types/>')
+  zip.file('word/document.xml', '<w:document/>')
+  zip.file('word/media/image1.png', picture)
+  const docx = join(work, 'with-picture.docx')
+  const docxBytes = await zip.generateAsync({ type: 'nodebuffer', compression: 'STORE' })
+  await writeFile(docx, docxBytes)
+
+  const launched = await launchShell({ videoDir: 'translate-pictures', onboardingSeen: true })
+  const { app, page } = launched
+  try {
+    await queueDialogPicks(app, [])
+    await openTranslationHome(page)
+    await queueDialogPicks(app, [[parentDir]])
+    await page.getByRole('button', { name: 'New project' }).click()
+    await page.getByLabel('Project name').fill('Pictures')
+    await page.getByRole('button', { name: 'Choose folder' }).click()
+    await page.getByRole('button', { name: 'Create' }).click()
+    await page.getByText('Pictures').first().click()
+    await expect(page.getByText('Documents to translate')).toBeVisible()
+
+    await queueDialogPicks(app, [[docx]])
+    await page.getByRole('button', { name: 'Add files' }).nth(0).click()
+    const notice = page.locator('[data-picture-notice][data-file="with-picture.docx"]')
+    await expect(notice).toBeVisible()
+    await expect(notice).toHaveAttribute('data-picture-notice', '1')
+    await expect(notice).toContainText('Pictures in this document: 1')
+    await expect(notice).toContainText('OCR')
+    await page.screenshot({ path: join(work, 'picture-notice.png') })
+    // the original is only read
+    expect(sha256(await readFile(docx))).toBe(sha256(docxBytes))
+  } finally {
+    await closeAndSaveVideo(launched, 'translate-pictures')
   }
 })

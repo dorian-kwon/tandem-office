@@ -35,6 +35,7 @@ Ein Übersetzungsprojekt hält die Dokumente, die Sie übersetzen möchten, Ihr 
 - Die Seitenbilder werden erst an die KI gesendet, wenn Sie im Prüfbildschirm bestätigen. Er zeigt, wie viele Seiten gesendet werden und welche KI verwendet wird. Dabei kann das Kontingent Ihres Tarifs verbraucht werden, und eine kostenpflichtige Verbindung wird vor dem Senden als kostenpflichtig gekennzeichnet.
 - Der gelesene Text wird als Word-Dokument im Ausgabeordner gespeichert. Übersetzen Sie dieses Dokument in der Übersetzungsansicht mit dem KI-Bereich.
 - PNG- und JPEG-Bilder werden unterstützt. GIF-, BMP-, TIFF- und WebP-Bilder, Bilder über 20 MB und passwortgeschützte PDFs nicht.
+- Enthält ein Dokument oder eine Referenzdatei Bilder (Word, PowerPoint, Excel, OpenDocument, HWPX oder EPUB), zeigt die Projektansicht neben der Datei, wie viele. Text in diesen Bildern gehört nicht zum Text des Dokuments und wird daher weder übersetzt noch gesendet. Zum Lesen ist OCR nötig, aber OCR liest nur gescannte PDFs und Bilddateien, keine Bilder in einer anderen Datei: Exportieren oder kopieren Sie die Seiten mit Bildern als PNG- oder JPEG-Bild oder als gescanntes PDF, fügen Sie es als zu übersetzendes Dokument hinzu und lesen Sie es per OCR. Sehr kleine Bilder (unter 2 KB, etwa Aufzählungszeichen) und Bilder in PDFs werden nicht gezählt.
 
 ## PDF-Übersetzung
 

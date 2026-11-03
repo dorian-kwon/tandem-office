@@ -35,6 +35,7 @@ Un projet de traduction réunit dans un même dossier les documents que vous vou
 - Les images des pages ne sont envoyées à l’IA qu’après votre confirmation sur l’écran de vérification, qui indique combien de pages sont envoyées et quelle IA est utilisée. Cela peut consommer le quota de votre abonnement, et une connexion payante est indiquée comme payante avant tout envoi.
 - Le texte lu est enregistré dans un document Word dans le dossier de sortie. Traduisez ce document dans la vue de traduction avec le panneau IA.
 - Les images PNG et JPEG sont prises en charge. Les images GIF, BMP, TIFF et WebP, les images de plus de 20 Mo et les PDF protégés par mot de passe ne le sont pas.
+- Quand un document ou un fichier de référence contient des images (Word, PowerPoint, Excel, OpenDocument, HWPX ou EPUB), le détail du projet en indique le nombre à côté du fichier. Le texte de ces images ne fait pas partie du texte du document : il n’est ni traduit ni envoyé. Pour le lire, il faut l’OCR, mais l’OCR ne lit que les PDF numérisés et les fichiers image, pas les images contenues dans un autre fichier : exportez ou copiez les pages qui contiennent des images en image PNG ou JPEG ou en PDF numérisé, ajoutez-le comme document à traduire, puis lisez-le par OCR. Les très petites images (moins de 2 Ko, comme les puces) et les images des PDF ne sont pas comptées.
 
 ## Traduction de PDF
 

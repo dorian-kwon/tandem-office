@@ -171,3 +171,7 @@ Use a project with target language German (or any of the 21 app languages except
 ## Translation follow-ups, Task 4: fixed context (decision 0103)
 
 1. Send two requests in one AI panel chat of a translation project: both still carry the full prompts and editing rules (the saving is off; no request shows only `fixed-context: …`). The second request's glossary entries follow its own text.
+
+## Translation follow-ups, Task 5: pictures need OCR
+
+1. Add a `.docx` (and a `.pptx` reference) with a few photos or screenshots: next to each row the detail screen says how many pictures it holds, that their text is not translated, and that OCR is needed (export the pages as PNG/JPEG or a scanned PDF and add that as a document). A document without pictures, a PDF and an image source show no such notice.

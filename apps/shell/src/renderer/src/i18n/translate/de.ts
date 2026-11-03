@@ -216,4 +216,8 @@ export const de = {
     'Referenzdateien ({count}): {names}. Keine hat verwendbaren Text, daher werden nur ihre Namen gesendet.',
   trConfirmSendsNamesOnly:
     'Der Text des Dokuments wird an diese KI gesendet, zusammen mit Ihren Übersetzungs-Prompts, dem Glossar (vollständig, wenn es klein ist, sonst die Einträge, deren Begriffe im Text vorkommen) und den Namen der Referenzdateien (nicht deren Inhalt).',
+  pictureHintSource:
+    'Bilder in diesem Dokument: {count}. Text in einem Bild gehört nicht zum Text des Dokuments und wird daher nicht übersetzt. Zum Lesen ist OCR nötig, und die App liest Bilder in dieser Datei nicht von selbst: Exportieren oder kopieren Sie die Seiten mit Bildern als Bild (PNG oder JPEG) oder als gescanntes PDF, fügen Sie es als zu übersetzendes Dokument hinzu und lesen Sie es per OCR.',
+  pictureHintReference:
+    'Bilder in dieser Datei: {count}. Text in einem Bild gehört nicht zum umgewandelten Text und wird daher nicht mit Anfragen gesendet. Zum Lesen ist OCR nötig, und die App liest Bilder in dieser Datei nicht von selbst: Exportieren oder kopieren Sie diese Seiten als Bild (PNG oder JPEG) oder als gescanntes PDF, fügen Sie es als zu übersetzendes Dokument hinzu, lesen Sie es per OCR und fügen Sie das entstandene Word-Dokument hier hinzu.',
 } satisfies Record<keyof typeof zh, string>

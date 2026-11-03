@@ -35,6 +35,7 @@ Projek terjemahan menyimpan dokumen yang anda mahu terjemah, bahan rujukan dan g
 - Imej halaman hanya dihantar kepada AI selepas anda mengesahkan pada skrin semakan, yang menunjukkan berapa halaman dihantar dan AI yang digunakan. Ini boleh menggunakan kuota pelan anda, dan sambungan berbayar dilabel sebagai berbayar sebelum apa-apa dihantar.
 - Teks yang dibaca disimpan sebagai dokumen Word dalam folder output. Terjemah dokumen itu dalam paparan terjemahan dengan panel AI.
 - Imej PNG dan JPEG disokong. Imej GIF, BMP, TIFF dan WebP, imej melebihi 20 MB serta PDF berkata laluan tidak disokong.
+- Apabila dokumen atau fail rujukan mengandungi gambar (Word, PowerPoint, Excel, OpenDocument, HWPX atau EPUB), butiran projek menunjukkan bilangannya di sebelah fail itu. Teks di dalam gambar tersebut bukan sebahagian daripada teks dokumen, jadi ia tidak diterjemah dan tidak dihantar. Untuk membacanya OCR diperlukan, tetapi OCR hanya membaca PDF imbasan dan fail imej, bukan gambar di dalam fail lain: eksport atau salin halaman yang bergambar sebagai imej PNG atau JPEG atau PDF imbasan, tambahkan sebagai dokumen untuk diterjemah, kemudian baca dengan OCR. Gambar yang sangat kecil (bawah 2 KB, seperti titik senarai) dan gambar dalam PDF tidak dikira.
 
 ## Terjemahan PDF
 

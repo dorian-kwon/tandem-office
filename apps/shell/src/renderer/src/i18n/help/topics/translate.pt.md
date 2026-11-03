@@ -35,6 +35,7 @@ Um projeto de tradução reúne numa só pasta os documentos que você quer trad
 - As imagens das páginas só são enviadas à IA depois que você confirma na tela de verificação, que mostra quantas páginas são enviadas e qual IA é usada. Isso pode usar a cota do seu plano, e uma conexão paga é identificada como paga antes de qualquer envio.
 - O texto lido é salvo como documento do Word na pasta de saída. Traduza esse documento na visualização de tradução com o painel de IA.
 - Imagens PNG e JPEG são aceitas. Imagens GIF, BMP, TIFF e WebP, imagens com mais de 20 MB e PDFs protegidos por senha não são.
+- Quando um documento ou arquivo de referência contém imagens (Word, PowerPoint, Excel, OpenDocument, HWPX ou EPUB), o detalhe do projeto mostra quantas ao lado desse arquivo. O texto dentro dessas imagens não faz parte do texto do documento, por isso não é traduzido nem enviado. Para lê-lo é preciso OCR, mas o OCR lê apenas PDFs digitalizados e arquivos de imagem, não imagens dentro de outro arquivo: exporte ou copie as páginas com imagens como imagem PNG ou JPEG ou como PDF digitalizado, adicione-o como documento a traduzir e leia-o com OCR. Imagens muito pequenas (menos de 2 KB, como marcadores) e imagens em PDFs não são contadas.
 
 ## Tradução de PDF
 

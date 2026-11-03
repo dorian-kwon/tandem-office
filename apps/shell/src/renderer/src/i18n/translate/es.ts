@@ -208,4 +208,8 @@ export const es = {
     'Archivos de referencia ({count}): {names}. Ninguno tiene texto utilizable, así que solo se envían sus nombres.',
   trConfirmSendsNamesOnly:
     'El texto del documento se envía a esta IA junto con tus prompts de traducción, el glosario (completo si es pequeño; si no, las entradas cuyos términos aparecen en el texto) y los nombres de los archivos de referencia (no su contenido).',
+  pictureHintSource:
+    'Imágenes en este documento: {count}. El texto dentro de una imagen no forma parte del texto del documento, así que no se traducirá. Para leerlo hace falta OCR, y la aplicación no lee por sí sola las imágenes de este archivo: exporta o copia las páginas con imágenes como imagen (PNG o JPEG) o como PDF escaneado, añádelo como documento para traducir y léelo con OCR.',
+  pictureHintReference:
+    'Imágenes en este archivo: {count}. El texto dentro de una imagen no forma parte del texto convertido, así que no se envía con las solicitudes. Para leerlo hace falta OCR, y la aplicación no lee por sí sola las imágenes de este archivo: exporta o copia esas páginas como imagen (PNG o JPEG) o como PDF escaneado, añádelo como documento para traducir, léelo con OCR y añade aquí el documento de Word resultante.',
 } satisfies Record<keyof typeof zh, string>

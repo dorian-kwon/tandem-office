@@ -208,4 +208,8 @@ export const ms = {
     'Fail rujukan ({count}): {names}. Tiada satu pun mempunyai teks yang boleh digunakan, jadi hanya namanya dihantar.',
   trConfirmSendsNamesOnly:
     'Teks dokumen dihantar kepada AI ini bersama prompt terjemahan anda, glosari (keseluruhan jika kecil, jika tidak entri yang istilahnya muncul dalam teks) dan nama fail rujukan (bukan kandungannya).',
+  pictureHintSource:
+    'Gambar dalam dokumen ini: {count}. Teks di dalam gambar bukan sebahagian daripada teks dokumen, jadi ia tidak akan diterjemah. Untuk membacanya OCR diperlukan, dan aplikasi tidak membaca sendiri gambar di dalam fail ini: eksport atau salin halaman yang bergambar sebagai imej (PNG atau JPEG) atau PDF imbasan, tambahkan sebagai dokumen untuk diterjemah, kemudian baca dengan OCR.',
+  pictureHintReference:
+    'Gambar dalam fail ini: {count}. Teks di dalam gambar bukan sebahagian daripada teks yang ditukar, jadi ia tidak dihantar bersama permintaan. Untuk membacanya OCR diperlukan, dan aplikasi tidak membaca sendiri gambar di dalam fail ini: eksport atau salin halaman tersebut sebagai imej (PNG atau JPEG) atau PDF imbasan, tambahkan sebagai dokumen untuk diterjemah, baca dengan OCR, kemudian tambahkan dokumen Word yang terhasil di sini.',
 } satisfies Record<keyof typeof zh, string>

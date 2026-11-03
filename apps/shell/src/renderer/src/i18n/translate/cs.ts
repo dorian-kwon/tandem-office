@@ -204,4 +204,8 @@ export const cs = {
     'Referenční soubory ({count}): {names}. Žádný nemá použitelný text, proto se posílají jen jejich názvy.',
   trConfirmSendsNamesOnly:
     'Text dokumentu se posílá této AI spolu s vašimi překladovými prompty, glosářem (celým, pokud je malý, jinak položkami, jejichž termíny se v textu vyskytují) a názvy referenčních souborů (bez jejich obsahu).',
+  pictureHintSource:
+    'Obrázky v tomto dokumentu: {count}. Text uvnitř obrázku není součástí textu dokumentu, proto nebude přeložen. K jeho přečtení je potřeba OCR a aplikace sama obrázky v tomto souboru nečte: exportujte nebo zkopírujte stránky s obrázky jako obrázek (PNG nebo JPEG) či naskenované PDF, přidejte jej jako dokument k překladu a přečtěte jej pomocí OCR.',
+  pictureHintReference:
+    'Obrázky v tomto souboru: {count}. Text uvnitř obrázku není součástí převedeného textu, proto se neposílá s požadavky. K jeho přečtení je potřeba OCR a aplikace sama obrázky v tomto souboru nečte: exportujte nebo zkopírujte tyto stránky jako obrázek (PNG nebo JPEG) či naskenované PDF, přidejte jej jako dokument k překladu, přečtěte jej pomocí OCR a výsledný dokument Word přidejte sem.',
 } satisfies Record<keyof typeof zh, string>

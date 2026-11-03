@@ -193,4 +193,8 @@ export const ko = {
     '참고자료 파일 {count}개: {names}. 쓸 수 있는 글이 있는 파일이 없어 이름만 보냅니다.',
   trConfirmSendsNamesOnly:
     '문서의 글이 이 AI로 보내집니다. 번역 프롬프트, 단어집(작으면 전부, 크면 글에 나오는 용어의 항목만), 참고자료의 파일 이름(내용은 아님)이 함께 갑니다.',
+  pictureHintSource:
+    '이 문서에 든 그림: {count}개. 그림 안의 글자는 문서의 글이 아니어서 번역되지 않습니다. 읽으려면 OCR이 필요하지만, 앱은 이 파일 안의 그림을 스스로 읽지 않습니다. 그림이 있는 쪽을 그림 파일(PNG·JPEG)이나 스캔 PDF로 내보내거나 복사해 번역할 문서로 더한 뒤 OCR로 읽으세요.',
+  pictureHintReference:
+    '이 파일에 든 그림: {count}개. 그림 안의 글자는 변환한 글에 들어가지 않아 요청과 함께 보내지지 않습니다. 읽으려면 OCR이 필요하지만, 앱은 이 파일 안의 그림을 스스로 읽지 않습니다. 그 쪽을 그림 파일(PNG·JPEG)이나 스캔 PDF로 내보내거나 복사해 번역할 문서로 더하고, OCR로 읽은 뒤 그 결과인 Word 문서를 여기에 더하세요.',
 } satisfies Record<keyof typeof zh, string>
