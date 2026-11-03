@@ -19,17 +19,33 @@ export const UPSTREAM_PRODUCT_NAME = 'GenOffice'
 export const UPSTREAM_NAME_LITERAL = `{{${UPSTREAM_PRODUCT_NAME}}}`
 
 /**
- * The product name in every language without a localized one. Also the name
- * everything registered on the user's machine derives from (the installer's
- * productName, the userData folder, the default save folder), which must stay
- * the same whatever the UI language is.
+ * The product name, the same in every UI language (no language has a
+ * localized one). Also the name everything registered on the user's machine
+ * derives from (the installer's productName, the app bundle and executable,
+ * the userData folder, the default save folder), which must stay the same
+ * whatever the UI language is.
  */
-export const PRODUCT_NAME = 'IeumOffice'
+export const PRODUCT_NAME = 'tandem office'
 
-/** Languages that show a localized product name instead of PRODUCT_NAME. */
-const LOCALIZED_PRODUCT_NAMES: Readonly<Record<string, string>> = {
-  ko: '이음오피스',
-}
+/**
+ * PRODUCT_NAME as a file name without spaces: the installer files people
+ * download (GitHub Releases rewrites spaces in asset names, and the update
+ * feed must name the file exactly as it is downloaded), the Linux executable
+ * and package, and the name of the packaged app's package.json. Also what a
+ * file name in a UI string gets where the product name is joined to the rest
+ * with `-` or `_` ("GenOffice-Setup-<version>.exe").
+ */
+export const PRODUCT_FILE_NAME = 'tandem-office'
+
+/**
+ * PRODUCT_NAME as a Windows registry identifier: the prefix of this product's
+ * own ProgIds ("TandemOffice.WordDocument") and its registry key. Letters
+ * and digits only, as a ProgId's parts must be.
+ */
+export const PRODUCT_ID_NAME = 'TandemOffice'
+
+/** Languages that show a localized product name instead of PRODUCT_NAME (none at present). */
+const LOCALIZED_PRODUCT_NAMES: Readonly<Record<string, string>> = {}
 
 /** The product name as shown in a UI language (a Lang or a raw locale tag). */
 export function productName(lang: string | null | undefined): string {
@@ -69,10 +85,16 @@ function insideFileName(before: string, after: string): boolean {
   return /[\\/]/.test(before) || /^(?:[\\/]|[-_][A-Za-z0-9<]|\.[A-Za-z0-9])/.test(after)
 }
 
+/** the name is joined to the rest of a file name with `-` or `_` (GenOffice-Setup-<version>.exe) */
+function joinedFileName(after: string): boolean {
+  return /^[-_][A-Za-z0-9<]/.test(after)
+}
+
 /**
  * Rewrite the product name in a UI string for a language: "GenOffice" becomes
  * productName(lang), except inside file and folder names, which carry
- * PRODUCT_NAME in every language. `{{GenOffice}}` prints the literal upstream
+ * PRODUCT_NAME in every language (PRODUCT_FILE_NAME where the name is joined
+ * to the rest with `-` or `_`). `{{GenOffice}}` prints the literal upstream
  * name. Text that does not mention the name is returned as is.
  */
 export function brandText(text: string, lang: string | null | undefined): string {
@@ -83,6 +105,7 @@ export function brandText(text: string, lang: string | null | undefined): string
     const before = text.charAt(offset - 1)
     const after = text.slice(offset + match.length, offset + match.length + 2)
     if (insideIdentifier(before, after)) return match
-    return insideFileName(before, after) ? PRODUCT_NAME : localized
+    if (!insideFileName(before, after)) return localized
+    return joinedFileName(after) ? PRODUCT_FILE_NAME : PRODUCT_NAME
   })
 }

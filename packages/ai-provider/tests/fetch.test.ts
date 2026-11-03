@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { PRODUCT_NAME, UPSTREAM_PRODUCT_NAME } from '@genoffice/i18n'
+import { PRODUCT_FILE_NAME, UPSTREAM_PRODUCT_NAME } from '@genoffice/i18n'
 import {
   AI_DEFAULT_USER_AGENT,
   aiFetch,
@@ -26,7 +26,7 @@ describe('aiFetch', () => {
     await aiFetch('https://x/', { headers: { Authorization: 'Bearer k' } })
     const headers = sentHeaders(fetchMock)
     // as this product, not as the project it is based on
-    expect(headers.get('user-agent')).toBe(PRODUCT_NAME)
+    expect(headers.get('user-agent')).toBe(PRODUCT_FILE_NAME)
     expect(AI_DEFAULT_USER_AGENT).not.toContain(UPSTREAM_PRODUCT_NAME)
     expect(headers.get('authorization')).toBe('Bearer k')
   })
@@ -34,9 +34,9 @@ describe('aiFetch', () => {
   it('lets the host refine the user agent and never overrides an explicit one', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response('ok'))
     vi.stubGlobal('fetch', fetchMock)
-    setAiUserAgent(`${PRODUCT_NAME}/1.2.3`)
+    setAiUserAgent(`${PRODUCT_FILE_NAME}/1.2.3`)
     await aiFetch('https://x/', {})
-    expect(sentHeaders(fetchMock).get('user-agent')).toBe(`${PRODUCT_NAME}/1.2.3`)
+    expect(sentHeaders(fetchMock).get('user-agent')).toBe(`${PRODUCT_FILE_NAME}/1.2.3`)
 
     fetchMock.mockClear()
     await aiFetch('https://x/', { headers: { 'User-Agent': 'custom/9' } })
@@ -48,7 +48,7 @@ describe('aiFetch', () => {
     const rescue = vi.fn().mockResolvedValue(new Response('rescued'))
     setRescueFetch(rescue)
     await aiFetch('https://x/', {})
-    expect(sentHeaders(rescue).get('user-agent')).toBe(PRODUCT_NAME)
+    expect(sentHeaders(rescue).get('user-agent')).toBe(PRODUCT_FILE_NAME)
   })
 
   it('returns the primary response without touching the rescue path', async () => {

@@ -97,6 +97,7 @@ import {
   getUiLang,
   type Lang,
   normalizeLang,
+  PRODUCT_FILE_NAME,
   PRODUCT_NAME,
   setUiLang,
 } from '@genoffice/i18n'
@@ -4316,7 +4317,7 @@ export function registerSheetsAiIpc(): void {
 
   // Node fetch (undici) direct connections get reset under VPN/tun setups; retry over Chromium's stack
   setRescueFetch((url, init) => net.fetch(url, init))
-  setAiUserAgent(`${PRODUCT_NAME}/${app.getVersion()}`)
+  setAiUserAgent(`${PRODUCT_FILE_NAME}/${app.getVersion()}`)
 
   const broadcastAiSettingsChanged = (): void => {
     for (const wc of webContents.getAllWebContents())

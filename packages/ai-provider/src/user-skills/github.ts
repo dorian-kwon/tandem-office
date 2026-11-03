@@ -6,6 +6,7 @@
  * are followed by hand so every hop is checked against the same hosts. Nothing
  * here connects unless a caller asks; `fetch` is passed in.
  */
+import { PRODUCT_FILE_NAME } from '@genoffice/i18n'
 import { USER_SKILL_NAME } from './constants'
 import { SkillImportError, isAbortError } from './errors'
 
@@ -204,7 +205,7 @@ export async function githubSkillGet(
         method: 'GET',
         redirect: 'manual',
         credentials: 'omit',
-        headers: { Accept: accept, 'User-Agent': 'IeumOffice' },
+        headers: { Accept: accept, 'User-Agent': PRODUCT_FILE_NAME },
         ...(options.signal ? { signal: options.signal } : {}),
       })
     } catch (error) {

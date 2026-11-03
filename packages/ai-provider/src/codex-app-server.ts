@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { StringDecoder } from 'node:string_decoder'
 import type { AgentImage, AgentMessage, AgentToolCall, AgentToolDef } from '@genoffice/agent-core'
-import { PRODUCT_NAME } from '@genoffice/i18n'
+import { PRODUCT_ID_NAME, PRODUCT_NAME } from '@genoffice/i18n'
 import type {
   AiChatResponse,
   AiProviderConfig,
@@ -94,9 +94,10 @@ const MAX_MCP_STATUS_PAGES = 10
 const CODEX_TEMP_PREFIX = 'genoffice-codex-app-server-'
 /**
  * How this client names itself to Codex, which passes it on to OpenAI: the
- * product, not the project it is based on. Also the tag around a turn's payload.
+ * product, not the project it is based on. Also the tag around a turn's payload,
+ * so letters and digits only.
  */
-const CODEX_CLIENT_NAME = PRODUCT_NAME.toLowerCase()
+const CODEX_CLIENT_NAME = PRODUCT_ID_NAME.toLowerCase()
 const CODEX_BASE_INSTRUCTIONS = `You are the language-model backend embedded in ${PRODUCT_NAME}. Never inspect or modify local files, run shell commands, browse, call MCP, use apps, or invoke any built-in Codex tool. The caller supplies the complete relevant conversation and a JSON Schema. Return exactly one assistant response matching that schema; ${PRODUCT_NAME} itself executes document tools.`
 
 /** Max buffered stdout line: a child that writes megabytes without a newline would grow the RPC

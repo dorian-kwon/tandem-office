@@ -4,6 +4,8 @@ import {
   createI18n,
   DEV_USER_DATA_DIR_NAME,
   LANGS,
+  PRODUCT_FILE_NAME,
+  PRODUCT_ID_NAME,
   PRODUCT_NAME,
   PRODUCT_REPO_NAME,
   PRODUCT_REPO_OWNER,
@@ -16,45 +18,46 @@ import {
 } from '../src/index'
 
 describe('productName', () => {
-  it('is the Korean name in the Korean UI and the Latin name everywhere else', () => {
-    expect(productName('ko')).toBe('이음오피스')
-    for (const lang of LANGS) {
-      if (lang !== 'ko') expect(productName(lang), lang).toBe('IeumOffice')
+  it('is the same name in every UI language', () => {
+    for (const lang of LANGS) expect(productName(lang), lang).toBe('tandem office')
+  })
+
+  it('accepts raw locale tags and empty values', () => {
+    for (const tag of ['ko-KR', 'KO_kr', 'en-US', '', undefined, null]) {
+      expect(productName(tag), String(tag)).toBe('tandem office')
     }
   })
 
-  it('accepts raw locale tags and falls back to the Latin name', () => {
-    expect(productName('ko-KR')).toBe('이음오피스')
-    expect(productName('KO_kr')).toBe('이음오피스')
-    expect(productName('en-US')).toBe('IeumOffice')
-    expect(productName('')).toBe('IeumOffice')
-    expect(productName(undefined)).toBe('IeumOffice')
-    expect(productName(null)).toBe('IeumOffice')
+  it('keeps PRODUCT_NAME as the one definition', () => {
+    expect(PRODUCT_NAME).toBe('tandem office')
+    expect(productName('en')).toBe(PRODUCT_NAME)
   })
 
-  it('keeps the Latin name as the one PRODUCT_NAME definition', () => {
-    expect(PRODUCT_NAME).toBe('IeumOffice')
-    expect(productName('en')).toBe(PRODUCT_NAME)
+  it('derives a file name and a registry identifier without spaces', () => {
+    expect(PRODUCT_FILE_NAME).toBe('tandem-office')
+    expect(PRODUCT_ID_NAME).toBe('TandemOffice')
+    expect(PRODUCT_FILE_NAME).toMatch(/^[a-z][a-z0-9-]*$/)
+    expect(PRODUCT_ID_NAME).toMatch(/^[A-Za-z][A-Za-z0-9]*$/)
   })
 })
 
 describe('brandText', () => {
   it('swaps the upstream name for the product name of the language', () => {
-    expect(brandText('Welcome to GenOffice', 'en')).toBe('Welcome to IeumOffice')
+    expect(brandText('Welcome to GenOffice', 'en')).toBe('Welcome to tandem office')
     expect(brandText('GenOffice에 오신 것을 환영합니다', 'ko')).toBe(
-      '이음오피스에 오신 것을 환영합니다',
+      'tandem office에 오신 것을 환영합니다',
     )
-    expect(brandText('GenOffice のインストール', 'ja')).toBe('IeumOffice のインストール')
-    expect(brandText('关于 GenOffice', 'zh')).toBe('关于 IeumOffice')
+    expect(brandText('GenOffice のインストール', 'ja')).toBe('tandem office のインストール')
+    expect(brandText('关于 GenOffice', 'zh')).toBe('关于 tandem office')
   })
 
   it('replaces every occurrence, including sub-app names and compounds', () => {
     expect(brandText('GenOffice Docs and GenOffice Sheets', 'en')).toBe(
-      'IeumOffice Docs and IeumOffice Sheets',
+      'tandem office Docs and tandem office Sheets',
     )
-    expect(brandText('GenOffice Markdown', 'ko')).toBe('이음오피스 Markdown')
-    expect(brandText('das GenOffice-Fenster', 'de')).toBe('das IeumOffice-Fenster')
-    expect(brandText("GenOffice's window", 'en')).toBe("IeumOffice's window")
+    expect(brandText('GenOffice Markdown', 'ko')).toBe('tandem office Markdown')
+    expect(brandText('das GenOffice-Fenster', 'de')).toBe('das tandem-office-Fenster')
+    expect(brandText("GenOffice's window", 'en')).toBe("tandem office's window")
   })
 
   it('returns strings without the name untouched', () => {
@@ -75,23 +78,29 @@ describe('brandText', () => {
       'GenOffice를 바탕으로 만들었습니다',
     )
     expect(brandText('GenOffice is based on {{GenOffice}}.', 'en')).toBe(
-      'IeumOffice is based on GenOffice.',
+      'tandem office is based on GenOffice.',
     )
     expect(brandText('GenOffice는 {{GenOffice}}를 바탕으로 합니다.', 'ko')).toBe(
-      '이음오피스는 GenOffice를 바탕으로 합니다.',
+      'tandem office는 GenOffice를 바탕으로 합니다.',
     )
   })
 
-  it('uses the Latin name inside file and folder names in every language', () => {
+  it('uses the file-system forms of the name inside file and folder names in every language', () => {
     expect(brandText('chmod +x GenOffice-<version>.AppImage', 'ko')).toBe(
-      'chmod +x IeumOffice-<version>.AppImage',
+      'chmod +x tandem-office-<version>.AppImage',
     )
-    expect(brandText('문서/GenOffice 폴더', 'ko')).toBe('문서/IeumOffice 폴더')
-    expect(brandText('%APPDATA%\\GenOffice', 'ko')).toBe('%APPDATA%\\IeumOffice')
-    expect(brandText('GenOffice.exe를 실행합니다', 'ko')).toBe('IeumOffice.exe를 실행합니다')
+    expect(brandText('문서/GenOffice 폴더', 'ko')).toBe('문서/tandem office 폴더')
+    expect(brandText('%APPDATA%\\GenOffice', 'ko')).toBe('%APPDATA%\\tandem office')
+    expect(brandText('GenOffice.exe를 실행합니다', 'ko')).toBe('tandem office.exe를 실행합니다')
+    expect(brandText('GenOffice-Setup-<version>.exe', 'en')).toBe(
+      'tandem-office-Setup-<version>.exe',
+    )
+    expect(brandText('GenOffice_<version>_amd64.deb', 'en')).toBe(
+      'tandem-office_<version>_amd64.deb',
+    )
     // a sentence-ending period is not a file extension
-    expect(brandText('이것은 GenOffice. 다음 문장', 'ko')).toBe('이것은 이음오피스. 다음 문장')
-    expect(brandText('GenOffice.', 'ko')).toBe('이음오피스.')
+    expect(brandText('이것은 GenOffice. 다음 문장', 'ko')).toBe('이것은 tandem office. 다음 문장')
+    expect(brandText('GenOffice.', 'ko')).toBe('tandem office.')
   })
 
   it('leaves identifiers that merely contain the name alone', () => {
@@ -118,9 +127,9 @@ describe('createI18n product name', () => {
   const t = createI18n(dicts)
 
   it('renders the product name of the requested language', () => {
-    expect(t('en', 'about')).toBe('About IeumOffice')
-    expect(t('zh', 'about')).toBe('关于 IeumOffice')
-    expect(t('ko', 'about')).toBe('이음오피스 정보')
+    expect(t('en', 'about')).toBe('About tandem office')
+    expect(t('zh', 'about')).toBe('关于 tandem office')
+    expect(t('ko', 'about')).toBe('tandem office 정보')
   })
 
   it('keeps the upstream name in the acknowledgement', () => {
@@ -131,20 +140,22 @@ describe('createI18n product name', () => {
 
   it('never rewrites interpolated values (a file may be called GenOffice)', () => {
     expect(t('en', 'open', { name: 'GenOffice notes.docx' })).toBe(
-      'Open GenOffice notes.docx in IeumOffice',
+      'Open GenOffice notes.docx in tandem office',
     )
-    expect(t('ko', 'open', { name: 'GenOffice.docx' })).toBe('이음오피스에서 GenOffice.docx 열기')
+    expect(t('ko', 'open', { name: 'GenOffice.docx' })).toBe(
+      'tandem office에서 GenOffice.docx 열기',
+    )
   })
 
   it('brands the fallback text of a language without its own entry', () => {
-    expect(t('fr', 'about')).toBe('About IeumOffice')
+    expect(t('fr', 'about')).toBe('About tandem office')
   })
 })
 
 describe('registered names derived from the product name', () => {
-  it('names the userData folders after the Latin product name', () => {
-    expect(USER_DATA_DIR_NAME).toBe('IeumOffice')
-    expect(DEV_USER_DATA_DIR_NAME).toBe('IeumOffice-Dev')
+  it('names the userData folders after the product name', () => {
+    expect(USER_DATA_DIR_NAME).toBe('tandem office')
+    expect(DEV_USER_DATA_DIR_NAME).toBe('tandem office-Dev')
     expect(USER_DATA_DIR_NAME).not.toBe(UPSTREAM_PRODUCT_NAME)
   })
 

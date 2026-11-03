@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { EventEmitter } from 'node:events'
 import { PassThrough } from 'node:stream'
 import type { SpawnOptions } from 'node:child_process'
-import { PRODUCT_NAME, UPSTREAM_PRODUCT_NAME } from '@genoffice/i18n'
+import { PRODUCT_ID_NAME, PRODUCT_NAME, UPSTREAM_PRODUCT_NAME } from '@genoffice/i18n'
 import { AiRunError } from '../src/run-error'
 import type { StreamCallbacks } from '../src/protocols/shared'
 import type { AiSubscriptionUsage } from '../src/types'
@@ -237,7 +237,7 @@ describe('Codex app-server launch', () => {
     const h = harness()
     await run(callbacks().cb)
     const child = h.child()
-    const product = PRODUCT_NAME.toLowerCase()
+    const product = PRODUCT_ID_NAME.toLowerCase()
     expect(child.paramsOf('initialize')).toMatchObject({
       clientInfo: { name: product, title: PRODUCT_NAME, version: '0.1.0' },
     })

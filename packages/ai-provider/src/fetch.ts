@@ -7,7 +7,7 @@
  * fails at the network layer, the request is retried once over the Chromium
  * stack. Renderers never inject one (their fetch already is Chromium's).
  */
-import { PRODUCT_NAME } from '@genoffice/i18n'
+import { PRODUCT_FILE_NAME } from '@genoffice/i18n'
 import { freeLimitOf, isFreeTierModelRefusal } from './free-ai'
 
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>
@@ -22,9 +22,10 @@ export function setRescueFetch(fn: FetchLike | null): void {
  * Node's fetch announces itself as a bare `node`, which gateways that watch
  * for anonymous automation treat as abusive traffic (OpenCode Go requires
  * clients to identify themselves and flags "broad" user agents). Main
- * processes refine the default with the app version.
+ * processes refine the default with the app version. The name without spaces:
+ * a space would split it into two product tokens.
  */
-export const AI_DEFAULT_USER_AGENT = PRODUCT_NAME
+export const AI_DEFAULT_USER_AGENT = PRODUCT_FILE_NAME
 
 let userAgent = AI_DEFAULT_USER_AGENT
 

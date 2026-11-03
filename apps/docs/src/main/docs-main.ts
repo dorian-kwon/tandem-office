@@ -81,7 +81,14 @@ import {
   familyInfoFor,
   familyVerticalMetrics,
 } from '@genoffice/font-metrics'
-import { createI18n, getUiLang, normalizeLang, PRODUCT_NAME, setUiLang } from '@genoffice/i18n'
+import {
+  createI18n,
+  getUiLang,
+  normalizeLang,
+  PRODUCT_FILE_NAME,
+  PRODUCT_NAME,
+  setUiLang,
+} from '@genoffice/i18n'
 import { ProjectStore, type LegacyDocumentChat } from '@genoffice/project-store'
 import {
   aiChatGptSignInPages,
@@ -4668,7 +4675,7 @@ export function registerDocsIpc(): void {
   void app.whenReady().then(() => registerLazyMediaProtocol(fontsDir))
   // Node fetch (undici) direct connections get reset under VPN/tun setups; retry over Chromium's stack
   setRescueFetch((url, init) => net.fetch(url, init))
-  setAiUserAgent(`${PRODUCT_NAME}/${app.getVersion()}`)
+  setAiUserAgent(`${PRODUCT_FILE_NAME}/${app.getVersion()}`)
 
   // shared with the other editor modules — last (identical) registration wins
   ipcMain.removeHandler('app:get-language')

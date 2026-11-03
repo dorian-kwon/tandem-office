@@ -51,7 +51,7 @@ import {
   type AiToolCallContext,
   type AiToolCapabilities,
 } from '@genoffice/ai-search'
-import { getUiLang, PRODUCT_NAME } from '@genoffice/i18n'
+import { getUiLang, PRODUCT_FILE_NAME } from '@genoffice/i18n'
 import { addPicture, editPictureSrcRect, replacePictureBytes } from '@genoffice/pptx-engine'
 import { rasterImageExt } from './media-mime'
 import { matchesElementRef } from '@genoffice/pptx-engine/identity'
@@ -142,7 +142,7 @@ export function registerAiIpc(): void {
   app.once('before-quit', shutdownCodexAppServers)
   // Node fetch (undici) direct connections get reset under VPN/tun setups; retry over Chromium's stack
   setRescueFetch((url, init) => net.fetch(url, init))
-  setAiUserAgent(`${PRODUCT_NAME}/${app.getVersion()}`)
+  setAiUserAgent(`${PRODUCT_FILE_NAME}/${app.getVersion()}`)
 
   ipcMain.handle('ai:get-settings', (): AiSettings => readAiSettings())
 

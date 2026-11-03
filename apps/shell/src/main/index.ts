@@ -66,7 +66,12 @@ import menuEpubIcon2x from './assets/menu-epub@2x.png?asset'
 import menuHomeIcon1x from './assets/menu-home.png?asset'
 import menuHomeIcon2x from './assets/menu-home@2x.png?asset'
 import { createI18n, isLang, normalizeLang, setUiLang, type Lang } from '@genoffice/i18n'
-import { DEV_USER_DATA_DIR_NAME, PRODUCT_CONTACT_EMAIL, productName } from '@genoffice/i18n'
+import {
+  DEV_USER_DATA_DIR_NAME,
+  PRODUCT_CONTACT_EMAIL,
+  PRODUCT_NAME,
+  productName,
+} from '@genoffice/i18n'
 import {
   DEFAULT_SAVE_DIR_KEY,
   defaultSaveDirFallback,
@@ -9641,7 +9646,7 @@ app.whenReady().then(async () => {
         withProject ? enabled : enabled.filter((skill) => skill.source !== 'project'),
         // not under userData: that folder is protected from sessions, and the
         // copied skills' scripts must be readable to run
-        join(process.env.LOCALAPPDATA ?? tmpdir(), 'IeumOffice', 'agent-skills'),
+        join(process.env.LOCALAPPDATA ?? tmpdir(), PRODUCT_NAME, 'agent-skills'),
       )
     },
     projectSkills: {
