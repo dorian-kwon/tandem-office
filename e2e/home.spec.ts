@@ -20,11 +20,18 @@ test.describe('home screen', () => {
       await expect(page.locator('.quick-card').nth(7)).toContainText('AI PDF')
       await expect(page.locator('.quick-card').nth(8)).toContainText('Open Local File')
       await expect(page.locator('.quick-card').nth(9)).toContainText('PDF tools')
-      // the agent is not a document to make: it sits in the sidebar, under Ask AI
-      // and the project folders (decision 0088)
+      // the agent is not a document to make: it sits in the sidebar, under Ask AI,
+      // the project folders (decision 0088) and the translation projects
       const nav = page.locator('.sidebar-nav .nav-label')
-      await expect(nav).toHaveText(['Recent', 'Starred', 'Ask AI', 'Projects', 'Agent'])
-      await expect(page.locator('.sidebar-nav .nav-item').nth(4)).toHaveAttribute(
+      await expect(nav).toHaveText([
+        'Recent',
+        'Starred',
+        'Ask AI',
+        'Projects',
+        'Translation',
+        'Agent',
+      ])
+      await expect(page.locator('.sidebar-nav .nav-item').nth(5)).toHaveAttribute(
         'title',
         'Work in a folder with Claude Code or Codex',
       )
@@ -36,7 +43,7 @@ test.describe('home screen', () => {
       await expect(page.locator('img.logo-lockup')).toHaveAttribute('alt', PRODUCT_NAME)
       await page.screenshot({ path: screenshotPath('home-overview') })
       // clicking it opens the agent window
-      await page.locator('.sidebar-nav .nav-item').nth(4).click()
+      await page.locator('.sidebar-nav .nav-item').nth(5).click()
       const agent = await waitForPageWithUrl(launched.app, 'agent.html', 30_000)
       await expect(agent.locator('.agent')).toBeVisible()
     } finally {
