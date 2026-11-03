@@ -238,8 +238,8 @@ describe('ProjectList', () => {
     expect(api.create).toHaveBeenCalledWith({
       parentToken: 'tok',
       name: 'Novel',
-      sourceLang: 'en',
-      targetLang: 'ko',
+      sourceLang: 'ko',
+      targetLang: 'en',
     })
     expect(onOpen).toHaveBeenCalledWith('/p/new')
   })
