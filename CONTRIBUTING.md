@@ -7,7 +7,7 @@ repository.
 ## How changes land here
 
 Development happens in this repository,
-[pblsketch/openoffice](https://github.com/pblsketch/openoffice). Pull requests,
+[dorian-kwon/tandem-office](https://github.com/dorian-kwon/tandem-office). Pull requests,
 issues and feature requests are all handled here.
 
 tandem office is a fork of IeumOffice, a modified version of GenOffice (see

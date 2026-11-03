@@ -2,8 +2,8 @@
 
 [한국어](README.md) · **English**
 
-[![Total downloads](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fpblsketch%2Fopenoffice%2Fmain%2Fdocs%2Ftracking%2Fgrowth-latest.json&query=%24.totalDownloads&label=total%20downloads)](https://github.com/pblsketch/openoffice/releases)
-[![Stars](https://img.shields.io/github/stars/pblsketch/openoffice?style=social)](https://github.com/pblsketch/openoffice/stargazers)
+[![Total downloads](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fdorian-kwon%2Ftandem-office%2Fmain%2Fdocs%2Ftracking%2Fgrowth-latest.json&query=%24.totalDownloads&label=total%20downloads)](https://github.com/dorian-kwon/tandem-office/releases)
+[![Stars](https://img.shields.io/github/stars/dorian-kwon/tandem-office?style=social)](https://github.com/dorian-kwon/tandem-office/stargazers)
 
 If tandem office helps you, please tap the **star** above. Every star makes it
 easier for the next person to find this program.
@@ -95,7 +95,7 @@ The IeumOffice author's own account, in Korean, is at
 Released for **Windows**, with separate **betas for Macs (Apple Silicon and
 Intel) and 64-bit Linux (x64)**. The developer has not been able to check the
 Mac or Linux builds on those machines; please report problems as
-[issues](https://github.com/pblsketch/openoffice/issues).
+[issues](https://github.com/dorian-kwon/tandem-office/issues).
 
 ## Connecting your subscription
 
@@ -226,7 +226,7 @@ ieumoffice open report.docx
 
 - **Agent skill.** **Settings → Integrations** lists the coding agents found
   on the PC and installs the `ieumoffice` skill into the ones you choose. From
-  a terminal: `npx skills add pblsketch/openoffice`.
+  a terminal: `npx skills add dorian-kwon/tandem-office`.
 - **MCP server.** `ieumoffice mcp` serves the same commands as Model Context
   Protocol tools. The same settings page shows ready-made snippets, for
   example `claude mcp add --transport stdio ieumoffice -- ieumoffice mcp`.
@@ -253,7 +253,7 @@ does not read or change GenOffice's.
 ## Download and install
 
 Installers are published on the
-[Releases page](https://github.com/pblsketch/openoffice/releases) as
+[Releases page](https://github.com/dorian-kwon/tandem-office/releases) as
 `tandem-office-Setup-<version>.exe`, for 64-bit Windows 10 and 11. If that page
 is still empty, no release has been published yet; build from source instead.
 
@@ -353,7 +353,7 @@ You need Node 22.12 or newer (npm 10 or newer) and a Rust toolchain with
 `cargo` on the PATH (for the spreadsheet engine).
 
 ```bash
-git clone https://github.com/pblsketch/openoffice.git
+git clone https://github.com/dorian-kwon/tandem-office.git
 cd openoffice
 npm install
 npm run dev      # all editors and the shell, against development servers
@@ -454,13 +454,13 @@ anywhere. The full list is in [PRIVACY.md](PRIVACY.md).
 ## Contributing and reporting problems
 
 - Bugs and requests:
-  [GitHub Issues](https://github.com/pblsketch/openoffice/issues).
+  [GitHub Issues](https://github.com/dorian-kwon/tandem-office/issues).
 - Security problems: report them privately as described in
   [SECURITY.md](SECURITY.md), not as a public issue.
 - Code: see [CONTRIBUTING.md](CONTRIBUTING.md) and the
   [Code of Conduct](CODE_OF_CONDUCT.md).
 - Trademark and copyright questions, infringement reports:
-  pblsketch@gmail.com.
+  dorian.kwon@gmail.com.
 
 ### Contributors
 
@@ -519,7 +519,7 @@ it works with and which files it opens.
 ### Official downloads and redistribution
 
 tandem office is free. Its only official downloads are the
-[GitHub releases](https://github.com/pblsketch/openoffice/releases) and
+[GitHub releases](https://github.com/dorian-kwon/tandem-office/releases) and
 [ieumoffice.com](https://ieumoffice.com); a copy sold for money is not an
 official release.
 
@@ -540,4 +540,4 @@ before you use it. Making sure you have the right to use it is up to you.
 ### Trademark and copyright contact
 
 Send trademark or copyright infringement reports and licensing questions to
-pblsketch@gmail.com. The same address is in the app under Settings → About.
+dorian.kwon@gmail.com. The same address is in the app under Settings → About.

@@ -21,7 +21,7 @@ const { join } = require('node:path')
 // installed on one machine without touching each other's registration (nor
 // with IeumOffice, the fork this product comes from: it registers
 // io.github.pblsketch.ieumoffice, IeumOffice and ieumoffice).
-const APP_ID = 'io.github.pblsketch.tandemoffice'
+const APP_ID = 'io.github.dorian-kwon.tandemoffice'
 const PRODUCT_NAME = 'tandem office'
 // PRODUCT_NAME without spaces (PRODUCT_FILE_NAME in product.ts): the
 // installer files people download, the Linux executable and packages.
@@ -34,9 +34,9 @@ const PACKAGED_APP_NAME = PRODUCT_FILE_NAME
 // PRODUCT_NAME as a registry identifier (PRODUCT_ID_NAME in product.ts): the
 // prefix of the Windows ProgIds, which take no spaces.
 const PRODUCT_ID_NAME = 'TandemOffice'
-const REPO_OWNER = 'pblsketch'
-const REPO_NAME = 'openoffice'
-const MAINTAINER = 'pblsketch <pblsketch@users.noreply.github.com>'
+const REPO_OWNER = 'dorian-kwon'
+const REPO_NAME = 'tandem-office'
+const MAINTAINER = 'dorian-kwon <dorian-kwon@users.noreply.github.com>'
 
 // GENOFFICE_MAC_X64=1 — package the Intel (x64) dmg/zip alongside arm64.
 // The release build on GitHub's Mac runner sets it (.github/workflows/

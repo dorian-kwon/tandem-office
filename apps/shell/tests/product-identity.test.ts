@@ -151,7 +151,7 @@ describe('coexistence with the upstream app on one machine', () => {
     // nor the ones of IeumOffice, the fork this product comes from
     expect(config.appId).not.toBe('io.github.pblsketch.ieumoffice')
     expect(config.productName).not.toBe('IeumOffice')
-    expect(config.appId).toBe('io.github.pblsketch.tandemoffice')
+    expect(config.appId).toBe('io.github.dorian-kwon.tandemoffice')
     expect(config.appId).not.toBe(UPSTREAM.appId)
     expect(config.productName).not.toBe(UPSTREAM.productName)
     // the downloaded files carry the name without spaces: GitHub Releases
@@ -311,13 +311,13 @@ describe('repository coordinates', () => {
   })
 
   it('names the same repository in the package metadata', () => {
-    expect(GITHUB_REPO_URL).toBe('https://github.com/pblsketch/openoffice')
+    expect(GITHUB_REPO_URL).toBe('https://github.com/dorian-kwon/tandem-office')
     expect(shellPackage.homepage).toBe(GITHUB_REPO_URL)
     expect((rootPackage.repository as { url: string }).url).toBe(`git+${GITHUB_REPO_URL}.git`)
   })
 
   it('credits the maintainer of this product in the Linux package metadata', () => {
-    const maintainer = 'pblsketch <pblsketch@users.noreply.github.com>'
+    const maintainer = 'dorian-kwon <dorian-kwon@users.noreply.github.com>'
     expect(config.linux.maintainer).toBe(maintainer)
     expect(config.linux.vendor).toBe(maintainer)
   })
