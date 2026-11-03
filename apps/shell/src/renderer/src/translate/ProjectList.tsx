@@ -232,21 +232,11 @@ export function ProjectList({ onOpen }: ProjectListProps) {
             onBlur={saveSystemPrompt}
           />
           <span className="projects-hint">{s('systemPromptHint')}</span>
-          <div className="projects-buttons translate-save-row">
-            <button
-              type="button"
-              className="projects-primary"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={saveSystemPrompt}
-            >
-              {s('save')}
-            </button>
-            {promptSaved && (
-              <span className="projects-hint" role="status">
-                {s('saved')}
-              </span>
-            )}
-          </div>
+          {promptSaved && (
+            <span className="projects-hint" role="status">
+              {s('saved')}
+            </span>
+          )}
         </label>
 
         {error && (

@@ -345,21 +345,11 @@ export function ProjectDetail({
                 onBlur={savePrompt}
               />
               <span className="projects-hint">{s('promptHint')}</span>
-              <div className="projects-buttons translate-save-row">
-                <button
-                  type="button"
-                  className="projects-primary"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={savePrompt}
-                >
-                  {s('save')}
-                </button>
-                {promptSaved && !promptFailed && (
-                  <span className="projects-hint" role="status">
-                    {s('saved')}
-                  </span>
-                )}
-              </div>
+              {promptSaved && !promptFailed && (
+                <span className="projects-hint" role="status">
+                  {s('saved')}
+                </span>
+              )}
               {promptFailed && (
                 <span className="projects-hint" role="status">
                   {s('promptNotSaved')}

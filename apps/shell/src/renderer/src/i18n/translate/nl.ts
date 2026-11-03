@@ -7,7 +7,6 @@ export const nl = {
     'Een vertaalproject houdt de te vertalen documenten, referentiemateriaal en woordenlijsten samen in één map.',
   systemPromptLabel: 'Systeemprompt voor alle projecten',
   systemPromptHint: 'Wordt opgeslagen als je het veld verlaat. Geldt voor elk vertaalproject.',
-  save: 'Opslaan',
   saved: 'Opgeslagen',
   newProject: 'Nieuw project',
   emptyHint: 'Nog geen vertaalprojecten. Maak er een om te beginnen.',

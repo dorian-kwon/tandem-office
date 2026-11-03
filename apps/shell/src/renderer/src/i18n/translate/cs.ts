@@ -7,7 +7,6 @@ export const cs = {
     'Překladatelský projekt drží dokumenty k překladu, referenční materiály a glosáře pohromadě v jedné složce.',
   systemPromptLabel: 'Systémový prompt pro všechny projekty',
   systemPromptHint: 'Uloží se, když pole opustíte. Platí pro každý překladatelský projekt.',
-  save: 'Uložit',
   saved: 'Uloženo',
   newProject: 'Nový projekt',
   emptyHint: 'Zatím žádné překladatelské projekty. Pro začátek nějaký vytvořte.',

@@ -7,7 +7,6 @@ export const es = {
     'Un proyecto de traducción reúne en una sola carpeta los documentos que se van a traducir, el material de referencia y los glosarios.',
   systemPromptLabel: 'Prompt del sistema para todos los proyectos',
   systemPromptHint: 'Se guarda al salir del campo. Se aplica a todos los proyectos de traducción.',
-  save: 'Guardar',
   saved: 'Guardado',
   newProject: 'Nuevo proyecto',
   emptyHint: 'Aún no hay proyectos de traducción. Crea uno para empezar.',
