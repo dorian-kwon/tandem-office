@@ -49,7 +49,8 @@ export const pt = {
   errInvalidName: 'Esse nome de projeto não pode ser usado como nome de pasta.',
   errNotListed: 'Este projeto não está na lista.',
   errNotAProject: 'Esta pasta não é um projeto de tradução.',
-  errUnsupportedSource: 'Este tipo de arquivo não pode ser traduzido.',
+  errUnsupportedSource:
+    'Este tipo de arquivo não pode ser traduzido. Tipos compatíveis: docx, odt, xlsx, xlsm, xls, csv, tsv, pptx, hwp, hwpx, epub, md, markdown, txt, json, html, htm, xmind, pdf, png, jpg, jpeg.',
   errNotRegistered:
     'Essa pasta ou arquivo não foi escolhido na caixa de diálogo. Escolha-o novamente.',
   errInvalidArgument: 'A solicitação não era válida. Verifique os valores e tente novamente.',
@@ -168,4 +169,24 @@ export const pt = {
   trStoredProgress: '{done} de {total} blocos de texto já estão traduzidos e mantidos.',
   trContinue: 'Continuar ({pending} blocos restantes)',
   trWriteStored: 'Gerar o PDF a partir da tradução guardada',
+  openExisting: 'Abrir uma pasta de projeto existente',
+  locateFolder: 'Localizar a pasta…',
+  adoptNotLinked:
+    'O projeto foi adicionado. A pasta contém instruções ou memória de IA de outro lugar, por isso os painéis de IA ainda não usam o contexto de tradução dele. Para usá-lo, adicione a pasta em Projetos e confirme-a lá.',
+  errProjectInUse:
+    'Há documentos deste projeto abertos. Feche as abas e janelas deles e depois exclua a pasta.',
+  errGlossaryInvalid:
+    'Não foi possível ler o arquivo do glossário. Use um arquivo CSV, TXT separado por tabulações ou XLSX com o termo na primeira coluna e a tradução na segunda.',
+  ctxTitle: 'Enviado com cada solicitação deste projeto:',
+  ctxSystemOn: 'Prompt do sistema para todos os projetos: sim',
+  ctxSystemOff: 'Prompt do sistema para todos os projetos: nenhum (vazio)',
+  ctxProjectOn: 'Prompt do projeto: sim',
+  ctxProjectOff: 'Prompt do projeto: nenhum (vazio); só o par de idiomas',
+  ctxGlossaryNone: 'Glossário: nenhum',
+  ctxGlossaryAll: 'Glossário: todas as {count} entradas',
+  ctxGlossaryPerBlock:
+    'Glossário: {count} entradas, mais de {limit}, então cada solicitação leva só as entradas cujos termos aparecem nos seus blocos de texto',
+  ctxReferencesNone: 'Arquivos de referência: nenhum',
+  ctxReferences:
+    'Nomes dos arquivos de referência ({count}, só os nomes, nunca o conteúdo): {names}',
 } satisfies Record<keyof typeof zh, string>

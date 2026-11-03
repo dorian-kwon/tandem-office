@@ -39,6 +39,8 @@ export const TRANSLATE_CHANNELS = {
   pdfRelease: 'translate:pdf-release',
   openResult: 'translate:open-result',
   setSourceKind: 'translate:set-source-kind',
+  pickExisting: 'translate:pick-existing',
+  relocate: 'translate:relocate',
 } as const
 
 export type TranslateMaterialKind = 'source' | 'reference' | 'glossary'
@@ -66,6 +68,24 @@ export interface TranslateCreateArgs {
 export interface TranslateRemoveArgs {
   dir: string
   deleteFolder: boolean
+}
+
+/**
+ * A project folder the person picked and the app now lists (`pickExisting`,
+ * `relocate`). `contextLinked` false: the folder holds AI instructions or
+ * memory from elsewhere (or could not be listed), so it stays off the project
+ * list, as "Add folder" in Projects leaves it, and the editors' AI panels do
+ * not carry its translation context until the person adds it there.
+ */
+export interface TranslateAdoptedProject {
+  dir: string
+  name: string
+  contextLinked: boolean
+}
+
+export interface TranslateRelocateArgs {
+  /** the registered entry whose folder is gone; the picked folder replaces it */
+  dir: string
 }
 
 export interface TranslateAddMaterialArgs {
@@ -155,10 +175,28 @@ export interface TranslateInstructionsForArgs {
   text: string
 }
 
+/**
+ * What of the project goes with every request, for the screen to show before
+ * anything is sent (read from the same composition as `prompts` and `material`).
+ */
+export interface TranslateContextSummary {
+  /** the system prompt for all projects is not empty */
+  systemPrompt: boolean
+  /** this project's own prompt is not empty (the language pair always goes) */
+  projectPrompt: boolean
+  /** entries in the project's glossary */
+  glossaryTotal: number
+  /** over this many entries, each request carries only the entries whose terms appear in it */
+  glossaryLimit: number
+  /** reference file names (their names only; contents are never sent) */
+  referenceNames: string[]
+}
+
 /** the translation context of one request: the person's prompts, and the glossary as material */
 export interface TranslateInstructions {
   prompts: string
   material: string
+  summary: TranslateContextSummary
 }
 
 export interface TranslatePdfPrepareArgs {
@@ -273,6 +311,14 @@ export interface TranslateApi {
   openResult(args: TranslateOpenResultArgs): Promise<TranslateOpenResultAnswer>
   /** the person's correction of a PDF source's kind; remembered for that copy */
   setSourceKind(args: TranslateSetSourceKindArgs): Promise<ProjectFile>
+  /**
+   * add a translation project folder made elsewhere (moved, copied, or listed
+   * before): main opens the folder dialog; null when cancelled. Refused with
+   * NOT_A_PROJECT when the folder holds no valid project file.
+   */
+  pickExisting(): Promise<TranslateAdoptedProject | null>
+  /** a listed project whose folder is gone: pick where it is now; null when cancelled */
+  relocate(args: TranslateRelocateArgs): Promise<TranslateAdoptedProject | null>
 }
 
 // ---- errors ----
@@ -303,6 +349,8 @@ export type TranslateErrorCode =
   | 'TRANSLATE_EXPIRED'
   | 'TRANSLATE_FAILED'
   | 'SOURCE_CHANGED'
+  | 'PROJECT_IN_USE'
+  | 'GLOSSARY_INVALID'
   | 'UNKNOWN'
 
 const TRANSLATE_ERROR_CODES: readonly TranslateErrorCode[] = [
@@ -328,6 +376,8 @@ const TRANSLATE_ERROR_CODES: readonly TranslateErrorCode[] = [
   'TRANSLATE_EXPIRED',
   'TRANSLATE_FAILED',
   'SOURCE_CHANGED',
+  'PROJECT_IN_USE',
+  'GLOSSARY_INVALID',
   'UNKNOWN',
 ]
 
@@ -358,6 +408,7 @@ const CODE_BY_ERROR_NAME: Record<string, TranslateErrorCode> = {
   UnsupportedTargetLanguageError: 'UNSUPPORTED_LANGUAGE',
   SourceChangedError: 'SOURCE_CHANGED',
   SourceKindChosenError: 'INVALID_ARGUMENT',
+  GlossaryFormatError: 'GLOSSARY_INVALID',
 }
 
 /** Map a translate-project error (or anything else) to a TranslateIpcError. */

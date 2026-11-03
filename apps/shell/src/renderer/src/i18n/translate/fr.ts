@@ -50,7 +50,8 @@ export const fr = {
   errInvalidName: 'Ce nom de projet ne peut pas servir de nom de dossier.',
   errNotListed: 'Ce projet ne figure pas dans la liste.',
   errNotAProject: 'Ce dossier n’est pas un projet de traduction.',
-  errUnsupportedSource: 'Ce type de fichier ne peut pas être traduit.',
+  errUnsupportedSource:
+    'Ce type de fichier ne peut pas être traduit. Types pris en charge : docx, odt, xlsx, xlsm, xls, csv, tsv, pptx, hwp, hwpx, epub, md, markdown, txt, json, html, htm, xmind, pdf, png, jpg, jpeg.',
   errNotRegistered:
     'Ce dossier ou ce fichier n’a pas été choisi dans la boîte de dialogue. Choisissez-le de nouveau.',
   errInvalidArgument: 'La requête n’était pas valide. Vérifiez les valeurs et réessayez.',
@@ -169,4 +170,24 @@ export const fr = {
   trStoredProgress: '{done} blocs de texte sur {total} sont déjà traduits et conservés.',
   trContinue: 'Continuer ({pending} blocs restants)',
   trWriteStored: 'Écrire le PDF à partir de la traduction enregistrée',
+  openExisting: 'Ouvrir un dossier de projet existant',
+  locateFolder: 'Localiser le dossier…',
+  adoptNotLinked:
+    'Le projet a été ajouté. Son dossier contient des instructions ou une mémoire d’IA venues d’ailleurs, les panneaux d’IA n’utilisent donc pas encore son contexte de traduction. Pour l’utiliser, ajoutez le dossier dans Projets et confirmez-le.',
+  errProjectInUse:
+    'Des documents de ce projet sont ouverts. Fermez leurs onglets et fenêtres, puis supprimez le dossier.',
+  errGlossaryInvalid:
+    'Le fichier de glossaire est illisible. Utilisez un fichier CSV, TXT séparé par des tabulations ou XLSX, avec le terme dans la première colonne et sa traduction dans la deuxième.',
+  ctxTitle: 'Envoyé avec chaque requête de ce projet :',
+  ctxSystemOn: 'Prompt système de tous les projets : oui',
+  ctxSystemOff: 'Prompt système de tous les projets : aucun (vide)',
+  ctxProjectOn: 'Prompt du projet : oui',
+  ctxProjectOff: 'Prompt du projet : aucun (vide) ; seule la paire de langues',
+  ctxGlossaryNone: 'Glossaire : aucun',
+  ctxGlossaryAll: 'Glossaire : les {count} entrées',
+  ctxGlossaryPerBlock:
+    'Glossaire : {count} entrées, plus de {limit}, donc chaque requête ne contient que les entrées dont les termes figurent dans ses blocs de texte',
+  ctxReferencesNone: 'Fichiers de référence : aucun',
+  ctxReferences:
+    'Noms des fichiers de référence ({count}, noms seulement, jamais leur contenu) : {names}',
 } satisfies Record<keyof typeof zh, string>

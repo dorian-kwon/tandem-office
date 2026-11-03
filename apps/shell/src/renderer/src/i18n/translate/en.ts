@@ -48,7 +48,8 @@ export const en = {
   errInvalidName: 'That project name cannot be used as a folder name.',
   errNotListed: 'This project is not in the list.',
   errNotAProject: 'This folder is not a translation project.',
-  errUnsupportedSource: 'This file type cannot be translated.',
+  errUnsupportedSource:
+    'This file type cannot be translated. Supported types: docx, odt, xlsx, xlsm, xls, csv, tsv, pptx, hwp, hwpx, epub, md, markdown, txt, json, html, htm, xmind, pdf, png, jpg, jpeg.',
   errNotRegistered: 'That folder or file was not chosen in the dialog. Choose it again.',
   errInvalidArgument: 'The request was not valid. Check the values and try again.',
   errProjectFileInvalid: 'The project file is damaged or unreadable.',
@@ -162,4 +163,23 @@ export const en = {
   trStoredProgress: '{done} of {total} text blocks are already translated and kept.',
   trContinue: 'Continue ({pending} blocks left)',
   trWriteStored: 'Write the PDF from the stored translation',
+  openExisting: 'Open existing project folder',
+  locateFolder: 'Locate folder…',
+  adoptNotLinked:
+    'The project was added. Its folder holds AI instructions or memory from elsewhere, so the AI panels do not use its translation context yet. To use it, add the folder in Projects and confirm it there.',
+  errProjectInUse:
+    'Documents from this project are open. Close their tabs and windows, then delete the folder.',
+  errGlossaryInvalid:
+    'The glossary file could not be read. Use a CSV, a tab-separated TXT or an XLSX file with the term in the first column and its translation in the second.',
+  ctxTitle: 'Sent with every request from this project:',
+  ctxSystemOn: 'System prompt for all projects: yes',
+  ctxSystemOff: 'System prompt for all projects: none (empty)',
+  ctxProjectOn: 'Project prompt: yes',
+  ctxProjectOff: 'Project prompt: none (empty); only the language pair',
+  ctxGlossaryNone: 'Glossary: none',
+  ctxGlossaryAll: 'Glossary: all {count} entries',
+  ctxGlossaryPerBlock:
+    'Glossary: {count} entries, more than {limit}, so each request carries only the entries whose terms appear in its text blocks',
+  ctxReferencesNone: 'Reference files: none',
+  ctxReferences: 'Reference file names ({count}, names only, never their contents): {names}',
 } satisfies Record<keyof typeof zh, string>

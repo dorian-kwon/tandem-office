@@ -47,7 +47,8 @@ export const ar = {
   errInvalidName: 'لا يمكن استخدام اسم المشروع هذا اسمًا لمجلد.',
   errNotListed: 'هذا المشروع ليس في القائمة.',
   errNotAProject: 'هذا المجلد ليس مشروع ترجمة.',
-  errUnsupportedSource: 'لا يمكن ترجمة هذا النوع من الملفات.',
+  errUnsupportedSource:
+    'لا يمكن ترجمة هذا النوع من الملفات. الأنواع المدعومة: docx, odt, xlsx, xlsm, xls, csv, tsv, pptx, hwp, hwpx, epub, md, markdown, txt, json, html, htm, xmind, pdf, png, jpg, jpeg.',
   errNotRegistered: 'لم يتم اختيار هذا المجلد أو الملف في مربع الحوار. اختره مرة أخرى.',
   errInvalidArgument: 'الطلب غير صالح. تحقق من القيم وحاول مرة أخرى.',
   errProjectFileInvalid: 'ملف المشروع تالف أو غير قابل للقراءة.',
@@ -158,4 +159,22 @@ export const ar = {
   trStoredProgress: 'تمت ترجمة {done} من {total} كتلة نصية وحفظها بالفعل.',
   trContinue: 'متابعة (تبقّى {pending} كتلة)',
   trWriteStored: 'كتابة ملف PDF من الترجمة المحفوظة',
+  openExisting: 'فتح مجلد مشروع موجود',
+  locateFolder: 'تحديد موقع المجلد…',
+  adoptNotLinked:
+    'أُضيف المشروع. يحتوي مجلده على تعليمات أو ذاكرة ذكاء اصطناعي من مكان آخر، لذا لا تستخدم لوحات الذكاء الاصطناعي سياق ترجمته بعد. لاستخدامه، أضف المجلد في المشاريع وأكّده هناك.',
+  errProjectInUse: 'مستندات هذا المشروع مفتوحة. أغلق علاماتها ونوافذها، ثم احذف المجلد.',
+  errGlossaryInvalid:
+    'تعذّرت قراءة ملف المسرد. استخدم ملف CSV أو TXT مفصولًا بعلامات جدولة أو XLSX، يكون فيه المصطلح في العمود الأول وترجمته في الثاني.',
+  ctxTitle: 'يُرسل مع كل طلب من هذا المشروع:',
+  ctxSystemOn: 'موجّه النظام لكل المشاريع: نعم',
+  ctxSystemOff: 'موجّه النظام لكل المشاريع: لا يوجد (فارغ)',
+  ctxProjectOn: 'موجّه المشروع: نعم',
+  ctxProjectOff: 'موجّه المشروع: لا يوجد (فارغ)؛ زوج اللغتين فقط',
+  ctxGlossaryNone: 'المسرد: لا يوجد',
+  ctxGlossaryAll: 'المسرد: كل المدخلات ({count})',
+  ctxGlossaryPerBlock:
+    'المسرد: {count} مدخلًا، أكثر من {limit}، لذا لا يحمل كل طلب إلا المدخلات التي تظهر مصطلحاتها في كتل نصه',
+  ctxReferencesNone: 'الملفات المرجعية: لا يوجد',
+  ctxReferences: 'أسماء الملفات المرجعية ({count}، الأسماء فقط ولا يُرسل محتواها أبدًا): {names}',
 } satisfies Record<keyof typeof zh, string>

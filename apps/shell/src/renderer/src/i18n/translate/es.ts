@@ -48,7 +48,8 @@ export const es = {
   errInvalidName: 'Ese nombre de proyecto no se puede usar como nombre de carpeta.',
   errNotListed: 'Este proyecto no está en la lista.',
   errNotAProject: 'Esta carpeta no es un proyecto de traducción.',
-  errUnsupportedSource: 'Este tipo de archivo no se puede traducir.',
+  errUnsupportedSource:
+    'Este tipo de archivo no se puede traducir. Tipos admitidos: docx, odt, xlsx, xlsm, xls, csv, tsv, pptx, hwp, hwpx, epub, md, markdown, txt, json, html, htm, xmind, pdf, png, jpg, jpeg.',
   errNotRegistered: 'Esa carpeta o archivo no se eligió en el cuadro de diálogo. Elígelo de nuevo.',
   errInvalidArgument: 'La solicitud no era válida. Revisa los valores e inténtalo de nuevo.',
   errProjectFileInvalid: 'El archivo del proyecto está dañado o no se puede leer.',
@@ -167,4 +168,24 @@ export const es = {
   trStoredProgress: '{done} de {total} bloques de texto ya están traducidos y guardados.',
   trContinue: 'Continuar (quedan {pending} bloques)',
   trWriteStored: 'Generar el PDF a partir de la traducción guardada',
+  openExisting: 'Abrir una carpeta de proyecto existente',
+  locateFolder: 'Buscar la carpeta…',
+  adoptNotLinked:
+    'Se añadió el proyecto. Su carpeta contiene instrucciones o memoria de IA de otro lugar, así que los paneles de IA aún no usan su contexto de traducción. Para usarlo, añade la carpeta en Proyectos y confírmala allí.',
+  errProjectInUse:
+    'Hay documentos de este proyecto abiertos. Cierra sus pestañas y ventanas y luego elimina la carpeta.',
+  errGlossaryInvalid:
+    'No se pudo leer el archivo del glosario. Usa un archivo CSV, TXT separado por tabulaciones o XLSX con el término en la primera columna y su traducción en la segunda.',
+  ctxTitle: 'Se envía con cada solicitud de este proyecto:',
+  ctxSystemOn: 'Prompt del sistema para todos los proyectos: sí',
+  ctxSystemOff: 'Prompt del sistema para todos los proyectos: ninguno (vacío)',
+  ctxProjectOn: 'Prompt del proyecto: sí',
+  ctxProjectOff: 'Prompt del proyecto: ninguno (vacío); solo el par de idiomas',
+  ctxGlossaryNone: 'Glosario: ninguno',
+  ctxGlossaryAll: 'Glosario: las {count} entradas',
+  ctxGlossaryPerBlock:
+    'Glosario: {count} entradas, más de {limit}, así que cada solicitud lleva solo las entradas cuyos términos aparecen en sus bloques de texto',
+  ctxReferencesNone: 'Archivos de referencia: ninguno',
+  ctxReferences:
+    'Nombres de los archivos de referencia ({count}, solo nombres, nunca su contenido): {names}',
 } satisfies Record<keyof typeof zh, string>

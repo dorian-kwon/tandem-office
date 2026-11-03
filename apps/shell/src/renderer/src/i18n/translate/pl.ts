@@ -48,7 +48,8 @@ export const pl = {
   errInvalidName: 'Tej nazwy projektu nie można użyć jako nazwy folderu.',
   errNotListed: 'Tego projektu nie ma na liście.',
   errNotAProject: 'Ten folder nie jest projektem tłumaczeniowym.',
-  errUnsupportedSource: 'Tego typu pliku nie można tłumaczyć.',
+  errUnsupportedSource:
+    'Tego typu pliku nie można tłumaczyć. Obsługiwane typy: docx, odt, xlsx, xlsm, xls, csv, tsv, pptx, hwp, hwpx, epub, md, markdown, txt, json, html, htm, xmind, pdf, png, jpg, jpeg.',
   errNotRegistered:
     'Ten folder lub plik nie został wybrany w oknie dialogowym. Wybierz go ponownie.',
   errInvalidArgument: 'Żądanie było nieprawidłowe. Sprawdź wartości i spróbuj ponownie.',
@@ -166,4 +167,23 @@ export const pl = {
   trStoredProgress: 'Przetłumaczono i zachowano już {done} z {total} bloków tekstu.',
   trContinue: 'Kontynuuj (pozostało bloków: {pending})',
   trWriteStored: 'Zapisz PDF z zapisanego tłumaczenia',
+  openExisting: 'Otwórz istniejący folder projektu',
+  locateFolder: 'Znajdź folder…',
+  adoptNotLinked:
+    'Projekt został dodany. Jego folder zawiera instrukcje lub pamięć AI z innego miejsca, więc panele AI nie używają jeszcze jego kontekstu tłumaczenia. Aby go używać, dodaj folder w sekcji Projekty i potwierdź go tam.',
+  errProjectInUse:
+    'Dokumenty z tego projektu są otwarte. Zamknij ich karty i okna, a potem usuń folder.',
+  errGlossaryInvalid:
+    'Nie można odczytać pliku glosariusza. Użyj pliku CSV, TXT rozdzielanego tabulatorami lub XLSX z terminem w pierwszej kolumnie i tłumaczeniem w drugiej.',
+  ctxTitle: 'Wysyłane z każdym żądaniem z tego projektu:',
+  ctxSystemOn: 'Prompt systemowy dla wszystkich projektów: tak',
+  ctxSystemOff: 'Prompt systemowy dla wszystkich projektów: brak (pusty)',
+  ctxProjectOn: 'Prompt projektu: tak',
+  ctxProjectOff: 'Prompt projektu: brak (pusty); tylko para języków',
+  ctxGlossaryNone: 'Glosariusz: brak',
+  ctxGlossaryAll: 'Glosariusz: wszystkie wpisy ({count})',
+  ctxGlossaryPerBlock:
+    'Glosariusz: {count} wpisów, więcej niż {limit}, więc każde żądanie zawiera tylko wpisy, których terminy występują w jego blokach tekstu',
+  ctxReferencesNone: 'Pliki referencyjne: brak',
+  ctxReferences: 'Nazwy plików referencyjnych ({count}, tylko nazwy, nigdy zawartość): {names}',
 } satisfies Record<keyof typeof zh, string>

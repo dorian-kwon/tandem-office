@@ -47,7 +47,8 @@ export const he = {
   errInvalidName: 'אי אפשר להשתמש בשם הפרויקט הזה כשם תיקייה.',
   errNotListed: 'הפרויקט הזה אינו ברשימה.',
   errNotAProject: 'התיקייה הזו אינה פרויקט תרגום.',
-  errUnsupportedSource: 'אי אפשר לתרגם סוג קובץ זה.',
+  errUnsupportedSource:
+    'אי אפשר לתרגם סוג קובץ זה. סוגים נתמכים: docx, odt, xlsx, xlsm, xls, csv, tsv, pptx, hwp, hwpx, epub, md, markdown, txt, json, html, htm, xmind, pdf, png, jpg, jpeg.',
   errNotRegistered: 'התיקייה או הקובץ לא נבחרו בחלון הדו-שיח. בחרו אותם שוב.',
   errInvalidArgument: 'הבקשה אינה תקינה. בדקו את הערכים ונסו שוב.',
   errProjectFileInvalid: 'קובץ הפרויקט פגום או שאי אפשר לקרוא אותו.',
@@ -153,4 +154,23 @@ export const he = {
   trStoredProgress: '{done} מתוך {total} גושי טקסט כבר תורגמו ונשמרו.',
   trContinue: 'המשך ({pending} גושים נותרו)',
   trWriteStored: 'כתיבת ה-PDF מהתרגום השמור',
+  openExisting: 'פתיחת תיקיית פרויקט קיימת',
+  locateFolder: 'איתור התיקייה…',
+  adoptNotLinked:
+    'הפרויקט נוסף. התיקייה שלו מכילה הוראות או זיכרון של AI ממקום אחר, ולכן חלוניות ה-AI עדיין לא משתמשות בהקשר התרגום שלו. כדי להשתמש בו, הוסיפו את התיקייה בפרויקטים ואשרו אותה שם.',
+  errProjectInUse:
+    'מסמכים מהפרויקט הזה פתוחים. סגרו את הכרטיסיות והחלונות שלהם ואז מחקו את התיקייה.',
+  errGlossaryInvalid:
+    'אי אפשר לקרוא את קובץ מילון המונחים. השתמשו בקובץ CSV, TXT מופרד בטאבים או XLSX, עם המונח בעמודה הראשונה והתרגום בשנייה.',
+  ctxTitle: 'נשלח עם כל בקשה מהפרויקט הזה:',
+  ctxSystemOn: 'הנחיית מערכת לכל הפרויקטים: כן',
+  ctxSystemOff: 'הנחיית מערכת לכל הפרויקטים: אין (ריקה)',
+  ctxProjectOn: 'הנחיית פרויקט: כן',
+  ctxProjectOff: 'הנחיית פרויקט: אין (ריקה); רק צמד השפות',
+  ctxGlossaryNone: 'מילון מונחים: אין',
+  ctxGlossaryAll: 'מילון מונחים: כל {count} הרשומות',
+  ctxGlossaryPerBlock:
+    'מילון מונחים: {count} רשומות, יותר מ-{limit}, ולכן כל בקשה נושאת רק את הרשומות שהמונחים שלהן מופיעים בגושי הטקסט שלה',
+  ctxReferencesNone: 'קובצי עזר: אין',
+  ctxReferences: 'שמות קובצי העזר ({count}, שמות בלבד, אף פעם לא התוכן): {names}',
 } satisfies Record<keyof typeof zh, string>

@@ -50,7 +50,8 @@ export const de = {
   errInvalidName: 'Dieser Projektname kann nicht als Ordnername verwendet werden.',
   errNotListed: 'Dieses Projekt steht nicht in der Liste.',
   errNotAProject: 'Dieser Ordner ist kein Übersetzungsprojekt.',
-  errUnsupportedSource: 'Dieser Dateityp kann nicht übersetzt werden.',
+  errUnsupportedSource:
+    'Dieser Dateityp kann nicht übersetzt werden. Unterstützte Typen: docx, odt, xlsx, xlsm, xls, csv, tsv, pptx, hwp, hwpx, epub, md, markdown, txt, json, html, htm, xmind, pdf, png, jpg, jpeg.',
   errNotRegistered:
     'Dieser Ordner oder diese Datei wurde im Dialog nicht ausgewählt. Wählen Sie sie erneut aus.',
   errInvalidArgument: 'Die Anfrage war ungültig. Prüfen Sie die Werte und versuchen Sie es erneut.',
@@ -175,4 +176,23 @@ export const de = {
   trStoredProgress: '{done} von {total} Textblöcken sind bereits übersetzt und gespeichert.',
   trContinue: 'Fortsetzen ({pending} Blöcke übrig)',
   trWriteStored: 'PDF aus der gespeicherten Übersetzung erstellen',
+  openExisting: 'Vorhandenen Projektordner öffnen',
+  locateFolder: 'Ordner suchen…',
+  adoptNotLinked:
+    'Das Projekt wurde hinzugefügt. Sein Ordner enthält KI-Anweisungen oder -Gedächtnis von anderswo, daher verwenden die KI-Bereiche seinen Übersetzungskontext noch nicht. Um ihn zu verwenden, fügen Sie den Ordner unter „Projekte“ hinzu und bestätigen Sie ihn dort.',
+  errProjectInUse:
+    'Dokumente dieses Projekts sind geöffnet. Schließen Sie deren Tabs und Fenster und löschen Sie dann den Ordner.',
+  errGlossaryInvalid:
+    'Die Glossardatei konnte nicht gelesen werden. Verwenden Sie eine CSV-, eine tabulatorgetrennte TXT- oder eine XLSX-Datei mit dem Begriff in der ersten und der Übersetzung in der zweiten Spalte.',
+  ctxTitle: 'Wird mit jeder Anfrage aus diesem Projekt gesendet:',
+  ctxSystemOn: 'System-Prompt für alle Projekte: ja',
+  ctxSystemOff: 'System-Prompt für alle Projekte: keiner (leer)',
+  ctxProjectOn: 'Projekt-Prompt: ja',
+  ctxProjectOff: 'Projekt-Prompt: keiner (leer); nur das Sprachpaar',
+  ctxGlossaryNone: 'Glossar: keines',
+  ctxGlossaryAll: 'Glossar: alle {count} Einträge',
+  ctxGlossaryPerBlock:
+    'Glossar: {count} Einträge, mehr als {limit}, daher enthält jede Anfrage nur die Einträge, deren Begriffe in ihren Textblöcken vorkommen',
+  ctxReferencesNone: 'Referenzdateien: keine',
+  ctxReferences: 'Namen der Referenzdateien ({count}, nur Namen, nie der Inhalt): {names}',
 } satisfies Record<keyof typeof zh, string>

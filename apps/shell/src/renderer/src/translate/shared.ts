@@ -26,6 +26,8 @@ const ERROR_KEYS: Record<TranslateErrorCode, TranslateStringKey> = {
   TRANSLATE_EXPIRED: 'errTranslateExpired',
   TRANSLATE_FAILED: 'errTranslateFailed',
   SOURCE_CHANGED: 'errSourceChanged',
+  PROJECT_IN_USE: 'errProjectInUse',
+  GLOSSARY_INVALID: 'errGlossaryInvalid',
   UNKNOWN: 'errUnknown',
 }
 

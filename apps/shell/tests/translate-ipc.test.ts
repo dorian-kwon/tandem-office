@@ -1,10 +1,20 @@
-import { chmodSync, existsSync, readdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  mkdtempSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { readAppSettings, writeAppSettings } from '../src/main/app-settings'
 import { createTranslateHandlers, registerTranslateIpc } from '../src/main/translate/translate-ipc'
 import {
+  GlossaryFormatError,
   InvalidProjectNameError,
   NotAProjectError,
   NotListedError,
@@ -25,7 +35,7 @@ let clock: number
 let dialogResult: { canceled: boolean; filePaths: string[] }
 let dialogOptions: unknown[]
 
-function handlers() {
+function handlers(extra: Partial<Parameters<typeof createTranslateHandlers>[0]> = {}) {
   return createTranslateHandlers({
     settingsPath: () => settingsPath,
     now: () => clock,
@@ -33,6 +43,7 @@ function handlers() {
       dialogOptions.push(options)
       return dialogResult
     },
+    ...extra,
   })
 }
 
@@ -429,14 +440,235 @@ describe('error codes', () => {
 describe('registerTranslateIpc', () => {
   it('registers every channel once with the translate: prefix', () => {
     const seen: string[] = []
-    registerTranslateIpc({ handle: (c: string) => void seen.push(c) } as never, {
-      settingsPath: () => settingsPath,
-      now: () => clock,
-      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
-    })
+    registerTranslateIpc(
+      { handle: (c: string) => void seen.push(c) } as never,
+      {
+        settingsPath: () => settingsPath,
+        now: () => clock,
+        showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+      },
+      () => true,
+    )
     expect(seen.sort()).toEqual(Object.values(TRANSLATE_CHANNELS).sort())
     expect(new Set(seen).size).toBe(seen.length)
     expect(seen.every((c) => c.startsWith('translate:'))).toBe(true)
+  })
+})
+
+describe('channels answer the shell window only', () => {
+  function register(isShell: (sender: unknown) => boolean) {
+    const answers = new Map<string, (event: { sender: unknown }, ...args: unknown[]) => unknown>()
+    registerTranslateIpc(
+      { handle: (c: string, fn: never) => void answers.set(c, fn) } as never,
+      {
+        settingsPath: () => settingsPath,
+        now: () => clock,
+        showOpenDialog: async () => dialogResult,
+      },
+      isShell,
+    )
+    return answers
+  }
+  const shell = { id: 1 }
+  const editor = { id: 2 }
+
+  it('refuses every channel (remove and the mutating ones included) from another window', async () => {
+    const h = handlers()
+    const { dir } = await createIn(h, { name: 'Guarded', sourceLang: 'en', targetLang: 'ko' })
+    const answers = register((sender) => sender === shell)
+    for (const [channel, answer] of answers) {
+      const code = await Promise.resolve()
+        .then(() => answer({ sender: editor }, { dir, deleteFolder: true }))
+        .then(
+          () => 'ok',
+          (err: unknown) => parseTranslateError(err).code,
+        )
+      expect(code, channel).toBe('INVALID_ARGUMENT')
+    }
+    // nothing was removed or deleted
+    expect(existsSync(dir)).toBe(true)
+    expect((await h.list()).map((e) => e.dir)).toEqual([dir])
+  })
+
+  it('answers the shell window', async () => {
+    const answers = register((sender) => sender === shell)
+    const listed = await answers.get(TRANSLATE_CHANNELS.list)!({ sender: shell })
+    expect(listed).toEqual([])
+  })
+})
+
+describe('create cleanup', () => {
+  it('removes the folder it made when the settings cannot be written, so a retry works', async () => {
+    const parent = join(root, 'parent')
+    mkdirSync(parent)
+    const h = handlers()
+    // the settings file's folder is read-only: the atomic settings write fails
+    chmodSync(root, 0o500)
+    try {
+      dialogResult = { canceled: false, filePaths: [parent] }
+      const picked = await h.pickParentDir()
+      await expect(
+        h.create({ parentToken: picked!.token, name: 'Half', sourceLang: 'en', targetLang: 'ko' }),
+      ).rejects.toBeDefined()
+      expect(existsSync(join(parent, 'Half'))).toBe(false)
+    } finally {
+      chmodSync(root, 0o700)
+    }
+    const { dir } = await createIn(h, { name: 'Half', sourceLang: 'en', targetLang: 'ko' }, parent)
+    expect(dir).toBe(join(parent, 'Half'))
+  })
+})
+
+describe('delete folder while documents are open', () => {
+  it('is refused with PROJECT_IN_USE and changes nothing', async () => {
+    const asked: string[] = []
+    const h = handlers({ isPathOpen: (dir) => (asked.push(dir), true) })
+    const { dir } = await createIn(h, { name: 'Open', sourceLang: 'en', targetLang: 'ko' })
+    await expect(h.remove({ dir, deleteFolder: true })).rejects.toMatchObject({
+      code: 'PROJECT_IN_USE',
+    })
+    expect(asked).toEqual([dir])
+    expect(existsSync(dir)).toBe(true)
+    expect((await h.list()).map((e) => e.dir)).toEqual([dir])
+  })
+
+  it('removing from the list only stays allowed', async () => {
+    const h = handlers({ isPathOpen: () => true })
+    const { dir } = await createIn(h, { name: 'Open2', sourceLang: 'en', targetLang: 'ko' })
+    await h.remove({ dir, deleteFolder: false })
+    expect(existsSync(dir)).toBe(true)
+    expect(await h.list()).toEqual([])
+  })
+
+  it('deletes once nothing under the folder is open', async () => {
+    const h = handlers({ isPathOpen: () => false })
+    const { dir } = await createIn(h, { name: 'Closed', sourceLang: 'en', targetLang: 'ko' })
+    await h.remove({ dir, deleteFolder: true })
+    expect(existsSync(dir)).toBe(false)
+  })
+})
+
+describe('open an existing project folder', () => {
+  function linkFake(result: 'listed' | 'refused') {
+    const calls = { ensure: [] as string[], unlist: [] as string[] }
+    return {
+      calls,
+      projects: {
+        ensureListed: async (d: string) => {
+          calls.ensure.push(d)
+          return result === 'listed' ? ('p1' as never) : null
+        },
+        unlist: async (d: string) => void calls.unlist.push(d),
+      },
+    }
+  }
+
+  /** a project made by one app instance, then dropped from its list (as after a move) */
+  async function madeElsewhere(name: string): Promise<string> {
+    const h = handlers()
+    const { dir } = await createIn(h, { name, sourceLang: 'en', targetLang: 'ko' })
+    await h.remove({ dir, deleteFolder: false })
+    return dir
+  }
+
+  it('registers a picked project folder and lists it through the project link', async () => {
+    const dir = await madeElsewhere('Moved')
+    const link = linkFake('listed')
+    const h = handlers({ projects: link.projects })
+    dialogResult = { canceled: false, filePaths: [dir] }
+    expect(await h.pickExisting()).toEqual({ dir, name: 'Moved', contextLinked: true })
+    expect(link.calls.ensure).toEqual([dir])
+    expect((await h.list()).map((e) => e.dir)).toEqual([dir])
+    expect(JSON.stringify(dialogOptions.at(-1))).toContain('openDirectory')
+  })
+
+  it('a folder the link refuses (foreign instructions) is registered but reported unlinked', async () => {
+    const dir = await madeElsewhere('Foreign')
+    const link = linkFake('refused')
+    const h = handlers({ projects: link.projects })
+    dialogResult = { canceled: false, filePaths: [dir] }
+    expect(await h.pickExisting()).toEqual({ dir, name: 'Foreign', contextLinked: false })
+    const stored = readAppSettings(settingsPath).translationProjects as { listed?: true }[]
+    expect(stored[0]?.listed).toBeUndefined()
+  })
+
+  it('refuses a folder without a project file, and returns null when cancelled', async () => {
+    const h = handlers()
+    const plain = join(root, 'plain')
+    mkdirSync(plain)
+    dialogResult = { canceled: false, filePaths: [plain] }
+    await expect(h.pickExisting()).rejects.toMatchObject({ code: 'NOT_A_PROJECT' })
+    expect(await h.list()).toEqual([])
+    dialogResult = { canceled: true, filePaths: [] }
+    expect(await h.pickExisting()).toBeNull()
+  })
+
+  it('picking an already listed folder keeps one entry', async () => {
+    const h = handlers()
+    const { dir } = await createIn(h, { name: 'Twice', sourceLang: 'en', targetLang: 'ko' })
+    dialogResult = { canceled: false, filePaths: [dir] }
+    await h.pickExisting()
+    expect((await h.list()).map((e) => e.dir)).toEqual([dir])
+  })
+
+  it('relocate replaces a not-found entry with the picked folder', async () => {
+    const link = linkFake('listed')
+    const h = handlers({ projects: link.projects })
+    const { dir } = await createIn(h, { name: 'Away', sourceLang: 'en', targetLang: 'ko' })
+    const moved = join(root, 'moved-here')
+    renameSync(dir, moved)
+    expect((await h.list())[0]?.status).toBe('not-found')
+    dialogResult = { canceled: false, filePaths: [moved] }
+    expect(await h.relocate({ dir })).toEqual({ dir: moved, name: 'Away', contextLinked: true })
+    const list = await h.list()
+    expect(list.map((e) => [e.dir, e.status])).toEqual([[moved, 'ok']])
+    expect(link.calls.unlist).toContain(dir)
+  })
+
+  it('relocate only takes a registered entry and a real project folder', async () => {
+    const h = handlers()
+    await expect(h.relocate({ dir: join(root, 'nope') })).rejects.toMatchObject({
+      code: 'NOT_REGISTERED',
+    })
+    const { dir } = await createIn(h, { name: 'Stay', sourceLang: 'en', targetLang: 'ko' })
+    const plain = join(root, 'plain2')
+    mkdirSync(plain)
+    dialogResult = { canceled: false, filePaths: [plain] }
+    await expect(h.relocate({ dir })).rejects.toMatchObject({ code: 'NOT_A_PROJECT' })
+    expect((await h.list()).map((e) => e.dir)).toEqual([dir])
+  })
+})
+
+describe('instructions summary', () => {
+  it('reports what goes with each request without composing a request to send', async () => {
+    const h = handlers()
+    const { dir } = await createIn(h, { name: 'Ctx', sourceLang: 'en', targetLang: 'ko' })
+    await h.setSystemPrompt('Be formal.')
+    await h.updateSettings({ dir, patch: { projectPrompt: '' } })
+    const ref = join(root, 'style.pdf')
+    writeFileSync(ref, 'x')
+    await addPicked(h, dir, 'reference', ref)
+    const got = await h.instructionsFor({ dir, text: '' })
+    expect(got.summary).toEqual({
+      systemPrompt: true,
+      projectPrompt: false,
+      glossaryTotal: 0,
+      glossaryLimit: 200,
+      referenceNames: ['style.pdf'],
+    })
+  })
+})
+
+describe('glossary errors', () => {
+  it('a glossary that cannot be read is GLOSSARY_INVALID', async () => {
+    const h = handlers()
+    const { dir } = await createIn(h, { name: 'Gl', sourceLang: 'en', targetLang: 'ko' })
+    const bad = join(root, 'bad.xlsx')
+    writeFileSync(bad, 'not a zip')
+    await expect(addPicked(h, dir, 'glossary', bad)).rejects.toMatchObject({
+      code: 'GLOSSARY_INVALID',
+    })
+    expect(toTranslateIpcError(new GlossaryFormatError('x')).code).toBe('GLOSSARY_INVALID')
   })
 })
 

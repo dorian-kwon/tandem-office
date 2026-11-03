@@ -47,7 +47,8 @@ export const th = {
   errInvalidName: 'ไม่สามารถใช้ชื่อโปรเจกต์นั้นเป็นชื่อโฟลเดอร์ได้',
   errNotListed: 'โปรเจกต์นี้ไม่อยู่ในรายการ',
   errNotAProject: 'โฟลเดอร์นี้ไม่ใช่โปรเจกต์แปล',
-  errUnsupportedSource: 'ไม่สามารถแปลไฟล์ประเภทนี้ได้',
+  errUnsupportedSource:
+    'ไม่สามารถแปลไฟล์ประเภทนี้ได้ ประเภทที่รองรับ: docx, odt, xlsx, xlsm, xls, csv, tsv, pptx, hwp, hwpx, epub, md, markdown, txt, json, html, htm, xmind, pdf, png, jpg, jpeg',
   errNotRegistered: 'โฟลเดอร์หรือไฟล์นั้นไม่ได้ถูกเลือกในกล่องโต้ตอบ โปรดเลือกอีกครั้ง',
   errInvalidArgument: 'คำขอไม่ถูกต้อง ตรวจสอบค่าแล้วลองอีกครั้ง',
   errProjectFileInvalid: 'ไฟล์โปรเจกต์เสียหายหรืออ่านไม่ได้',
@@ -154,4 +155,23 @@ export const th = {
   trStoredProgress: 'แปลและเก็บไว้แล้ว {done} จาก {total} บล็อกข้อความ',
   trContinue: 'ทำต่อ (เหลืออีก {pending} บล็อก)',
   trWriteStored: 'เขียน PDF จากคำแปลที่บันทึกไว้',
+  openExisting: 'เปิดโฟลเดอร์โปรเจกต์ที่มีอยู่',
+  locateFolder: 'ค้นหาโฟลเดอร์…',
+  adoptNotLinked:
+    'เพิ่มโปรเจกต์แล้ว แต่โฟลเดอร์นี้มีคำสั่งหรือความจำของ AI จากที่อื่น แผง AI จึงยังไม่ใช้บริบทการแปลของโปรเจกต์นี้ หากต้องการใช้ ให้เพิ่มโฟลเดอร์นี้ในโปรเจกต์และยืนยันที่นั่น',
+  errProjectInUse:
+    'เอกสารของโปรเจกต์นี้ยังเปิดอยู่ ปิดแท็บและหน้าต่างเหล่านั้นก่อน แล้วจึงลบโฟลเดอร์',
+  errGlossaryInvalid:
+    'อ่านไฟล์อภิธานศัพท์ไม่ได้ ใช้ไฟล์ CSV, TXT ที่คั่นด้วยแท็บ หรือ XLSX ที่มีคำต้นฉบับในคอลัมน์แรกและคำแปลในคอลัมน์ที่สอง',
+  ctxTitle: 'สิ่งที่ส่งไปกับทุกคำขอจากโปรเจกต์นี้:',
+  ctxSystemOn: 'พรอมต์ระบบสำหรับทุกโปรเจกต์: ส่ง',
+  ctxSystemOff: 'พรอมต์ระบบสำหรับทุกโปรเจกต์: ไม่มี (ว่าง)',
+  ctxProjectOn: 'พรอมต์ของโปรเจกต์: ส่ง',
+  ctxProjectOff: 'พรอมต์ของโปรเจกต์: ไม่มี (ว่าง) ส่งเฉพาะคู่ภาษา',
+  ctxGlossaryNone: 'อภิธานศัพท์: ไม่มี',
+  ctxGlossaryAll: 'อภิธานศัพท์: ทั้งหมด {count} รายการ',
+  ctxGlossaryPerBlock:
+    'อภิธานศัพท์: {count} รายการ เกิน {limit} รายการ แต่ละคำขอจึงส่งเฉพาะรายการที่คำศัพท์ปรากฏในบล็อกข้อความของคำขอนั้น',
+  ctxReferencesNone: 'ไฟล์อ้างอิง: ไม่มี',
+  ctxReferences: 'ชื่อไฟล์อ้างอิง {count} ไฟล์ (เฉพาะชื่อ ไม่ส่งเนื้อหา): {names}',
 } satisfies Record<keyof typeof zh, string>

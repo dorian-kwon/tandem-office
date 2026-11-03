@@ -47,7 +47,8 @@ export const ja = {
   errInvalidName: 'そのプロジェクト名はフォルダー名として使えません。',
   errNotListed: 'このプロジェクトは一覧にありません。',
   errNotAProject: 'このフォルダーは翻訳プロジェクトではありません。',
-  errUnsupportedSource: 'この種類のファイルは翻訳できません。',
+  errUnsupportedSource:
+    'この種類のファイルは翻訳できません。対応している形式: docx, odt, xlsx, xlsm, xls, csv, tsv, pptx, hwp, hwpx, epub, md, markdown, txt, json, html, htm, xmind, pdf, png, jpg, jpeg。',
   errNotRegistered:
     'そのフォルダーまたはファイルはダイアログで選択されていません。もう一度選択してください。',
   errInvalidArgument: 'リクエストが正しくありません。値を確認してもう一度お試しください。',
@@ -163,4 +164,23 @@ export const ja = {
   trStoredProgress: '{total}個中{done}個のテキストブロックが翻訳済みで、保持されています。',
   trContinue: '続ける（残り{pending}ブロック）',
   trWriteStored: '保存済みの翻訳からPDFを書き出す',
+  openExisting: '既存のプロジェクトフォルダーを開く',
+  locateFolder: 'フォルダーを探す…',
+  adoptNotLinked:
+    'プロジェクトを追加しました。ただし、このフォルダーには他の場所の AI 指示や記憶があるため、AI パネルはまだこのプロジェクトの翻訳コンテキストを使いません。使うには「プロジェクト」でこのフォルダーを追加して確認してください。',
+  errProjectInUse:
+    'このプロジェクトの文書が開いています。そのタブとウィンドウを閉じてから、フォルダーを削除してください。',
+  errGlossaryInvalid:
+    '用語集ファイルを読み取れませんでした。1 列目に原語、2 列目に訳語がある CSV、タブ区切りの TXT、または XLSX ファイルを使ってください。',
+  ctxTitle: 'このプロジェクトから毎回のリクエストに付けて送るもの:',
+  ctxSystemOn: 'すべてのプロジェクト共通のシステムプロンプト: 送る',
+  ctxSystemOff: 'すべてのプロジェクト共通のシステムプロンプト: なし（空）',
+  ctxProjectOn: 'プロジェクトプロンプト: 送る',
+  ctxProjectOff: 'プロジェクトプロンプト: なし（空）。言語の組み合わせのみ',
+  ctxGlossaryNone: '用語集: なし',
+  ctxGlossaryAll: '用語集: 全 {count} 項目',
+  ctxGlossaryPerBlock:
+    '用語集: {count} 項目。{limit} 項目を超えるため、各リクエストにはそのテキストブロックに出てくる用語の項目だけを付けます',
+  ctxReferencesNone: '参考資料: なし',
+  ctxReferences: '参考資料のファイル名 {count} 件（名前のみで、内容は送りません）: {names}',
 } satisfies Record<keyof typeof zh, string>

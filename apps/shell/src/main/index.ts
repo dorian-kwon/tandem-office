@@ -8958,60 +8958,71 @@ function translationProjects(): TranslationProjectLink {
   })
 }
 
-registerTranslateIpc(ipcMain, {
-  settingsPath: APP_SETTINGS_PATH,
-  now: () => Date.now(),
-  showOpenDialog: (options) => {
-    const owner = BrowserWindow.getFocusedWindow()
-    return owner ? dialog.showOpenDialog(owner, options) : dialog.showOpenDialog(options)
-  },
-  view: translationViewDeps(),
-  projects: {
-    ensureListed: (dir) => translationProjects().ensureListed(dir),
-    unlist: (dir) => translationProjects().unlist(dir),
-  },
-  // OCR of scanned PDFs and images: pages are rendered in a structure-job process owned
-  // by the main window, the readings become .docx through the bundled CLI's converter
-  ocr: {
-    pdfPageCount: async (path) =>
-      (await translateJob<PageCountJobValue>({ op: 'pageCount', source: { pdfPath: path } }))
-        .pageCount,
-    renderPdfPage: async (path, page) =>
-      (
-        await translateJob<PageImageJobValue>({
-          op: 'pageImage',
-          source: { pdfPath: path },
-          page,
-        })
-      ).png,
-    markdownToDocx: (markdown) => markdownDocxBytes(markdown),
-  },
-  // PDF sources: scan detection, and the text PDF's translation with the PDF editor's
-  // engine (tree and translated PDF in structure-job processes, the same result store)
-  nonEditable: {
-    pageTextLayer: async (path) => {
-      const value = await translateJob<TextCountsJobValue>(
-        { op: 'textCounts', source: { pdfPath: path } },
-        'TRANSLATE_FAILED',
-      )
-      return { counts: value.counts, objects: value.objects }
+registerTranslateIpc(
+  ipcMain,
+  {
+    settingsPath: APP_SETTINGS_PATH,
+    now: () => Date.now(),
+    showOpenDialog: (options) => {
+      const owner = BrowserWindow.getFocusedWindow()
+      return owner ? dialog.showOpenDialog(owner, options) : dialog.showOpenDialog(options)
     },
-    pdfTree: async (path) => {
-      const value = await translateJob<TreeJobValue>(
-        { op: 'tree', source: { pdfPath: path } },
-        'TRANSLATE_FAILED',
-      )
-      return { docHash: value.docHash, tree: value.tree }
+    view: translationViewDeps(),
+    projects: {
+      ensureListed: (dir) => translationProjects().ensureListed(dir),
+      unlist: (dir) => translationProjects().unlist(dir),
     },
-    writeTranslatedPdf: async (path, outPath, payload) => {
-      await translateJob(
-        { op: 'writeBack', source: { pdfPath: path }, outPath, payload },
-        'TRANSLATE_FAILED',
-      )
+    // OCR of scanned PDFs and images: pages are rendered in a structure-job process owned
+    // by the main window, the readings become .docx through the bundled CLI's converter
+    ocr: {
+      pdfPageCount: async (path) =>
+        (await translateJob<PageCountJobValue>({ op: 'pageCount', source: { pdfPath: path } }))
+          .pageCount,
+      renderPdfPage: async (path, page) =>
+        (
+          await translateJob<PageImageJobValue>({
+            op: 'pageImage',
+            source: { pdfPath: path },
+            page,
+          })
+        ).png,
+      markdownToDocx: (markdown) => markdownDocxBytes(markdown),
     },
-    store: () => new ResultStore(app.getPath('userData')),
+    // PDF sources: scan detection, and the text PDF's translation with the PDF editor's
+    // engine (tree and translated PDF in structure-job processes, the same result store)
+    nonEditable: {
+      pageTextLayer: async (path) => {
+        const value = await translateJob<TextCountsJobValue>(
+          { op: 'textCounts', source: { pdfPath: path } },
+          'TRANSLATE_FAILED',
+        )
+        return { counts: value.counts, objects: value.objects }
+      },
+      pdfTree: async (path) => {
+        const value = await translateJob<TreeJobValue>(
+          { op: 'tree', source: { pdfPath: path } },
+          'TRANSLATE_FAILED',
+        )
+        return { docHash: value.docHash, tree: value.tree }
+      },
+      writeTranslatedPdf: async (path, outPath, payload) => {
+        await translateJob(
+          { op: 'writeBack', source: { pdfPath: path }, outPath, payload },
+          'TRANSLATE_FAILED',
+        )
+      },
+      store: () => new ResultStore(app.getPath('userData')),
+    },
+    // a project folder is not deleted while any tab or window shows a file in it
+    // (split panes and the read-only source tab are tabs too)
+    isPathOpen: (dir) =>
+      [...(tabManager?.openFilePaths() ?? []), ...detachedFilePaths()].some((path) =>
+        isInsideRoot(dir, path),
+      ),
   },
-})
+  // the home screen, its dialogs and the tab strip live in the shell window only
+  (sender) => !!shellWindow && !shellWindow.isDestroyed() && sender === shellWindow.webContents,
+)
 registerTabsIpc()
 registerSplitIpc()
 registerDroppedFilesIpc()

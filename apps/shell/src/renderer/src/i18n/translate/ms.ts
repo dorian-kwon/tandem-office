@@ -50,7 +50,8 @@ export const ms = {
   errInvalidName: 'Nama projek itu tidak boleh digunakan sebagai nama folder.',
   errNotListed: 'Projek ini tiada dalam senarai.',
   errNotAProject: 'Folder ini bukan projek terjemahan.',
-  errUnsupportedSource: 'Jenis fail ini tidak boleh diterjemah.',
+  errUnsupportedSource:
+    'Jenis fail ini tidak boleh diterjemah. Jenis yang disokong: docx, odt, xlsx, xlsm, xls, csv, tsv, pptx, hwp, hwpx, epub, md, markdown, txt, json, html, htm, xmind, pdf, png, jpg, jpeg.',
   errNotRegistered: 'Folder atau fail itu tidak dipilih dalam dialog. Pilih semula.',
   errInvalidArgument: 'Permintaan tidak sah. Semak nilainya dan cuba lagi.',
   errProjectFileInvalid: 'Fail projek rosak atau tidak boleh dibaca.',
@@ -167,4 +168,24 @@ export const ms = {
   trStoredProgress: '{done} daripada {total} blok teks sudah diterjemah dan disimpan.',
   trContinue: 'Sambung ({pending} blok lagi)',
   trWriteStored: 'Tulis PDF daripada terjemahan yang disimpan',
+  openExisting: 'Buka folder projek sedia ada',
+  locateFolder: 'Cari folder…',
+  adoptNotLinked:
+    'Projek telah ditambah. Foldernya mengandungi arahan atau memori AI dari tempat lain, jadi panel AI belum menggunakan konteks terjemahannya. Untuk menggunakannya, tambah folder ini dalam Projek dan sahkan di sana.',
+  errProjectInUse:
+    'Dokumen daripada projek ini sedang dibuka. Tutup tab dan tetingkapnya, kemudian padam folder.',
+  errGlossaryInvalid:
+    'Fail glosari tidak dapat dibaca. Gunakan fail CSV, TXT yang dipisahkan tab atau XLSX dengan istilah dalam lajur pertama dan terjemahannya dalam lajur kedua.',
+  ctxTitle: 'Dihantar bersama setiap permintaan daripada projek ini:',
+  ctxSystemOn: 'Prompt sistem untuk semua projek: ya',
+  ctxSystemOff: 'Prompt sistem untuk semua projek: tiada (kosong)',
+  ctxProjectOn: 'Prompt projek: ya',
+  ctxProjectOff: 'Prompt projek: tiada (kosong); hanya pasangan bahasa',
+  ctxGlossaryNone: 'Glosari: tiada',
+  ctxGlossaryAll: 'Glosari: kesemua {count} entri',
+  ctxGlossaryPerBlock:
+    'Glosari: {count} entri, melebihi {limit}, jadi setiap permintaan hanya membawa entri yang istilahnya muncul dalam blok teksnya',
+  ctxReferencesNone: 'Fail rujukan: tiada',
+  ctxReferences:
+    'Nama fail rujukan ({count}, nama sahaja, kandungan tidak sekali-kali dihantar): {names}',
 } satisfies Record<keyof typeof zh, string>

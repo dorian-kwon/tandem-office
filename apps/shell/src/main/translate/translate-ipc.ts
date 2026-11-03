@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { stat } from 'node:fs/promises'
+import { rm, stat } from 'node:fs/promises'
 import { basename, isAbsolute, resolve } from 'node:path'
 import type { IpcMain } from 'electron'
 import {
@@ -7,6 +7,7 @@ import {
   addReference,
   addSource,
   createProject,
+  DEFAULT_GLOSSARY_LIMIT,
   EDITABLE_SOURCE_EXTENSIONS,
   IMAGE_SOURCE_EXTENSIONS,
   loadProject,
@@ -46,6 +47,7 @@ import {
   toTranslateIpcError,
   TranslateIpcError,
   type TranslateAddMaterialArgs,
+  type TranslateAdoptedProject,
   type TranslateCreateArgs,
   type TranslateInstructions,
   type TranslateInstructionsForArgs,
@@ -66,6 +68,7 @@ import {
   type TranslatePickedParentDir,
   type TranslateProjectListEntry,
   type TranslateRemoveArgs,
+  type TranslateRelocateArgs,
   type TranslateRemoveMaterialArgs,
   type TranslateSetPaneHiddenArgs,
   type TranslateUpdateSettingsArgs,
@@ -102,6 +105,12 @@ export interface TranslateIpcDeps {
    * checked for scans and a text PDF cannot be translated
    */
   nonEditable?: NonEditableDeps
+  /**
+   * whether any open tab or window (split panes, the read-only source tab and
+   * detached windows included) shows a file under `dir`; a project folder is
+   * never deleted while it does. Absent: nothing is open (tests).
+   */
+  isPathOpen?: (dir: string) => boolean
 }
 
 /** the longest request text the glossary entries are picked by (a batch is far shorter) */
@@ -176,6 +185,8 @@ export function createTranslateHandlers(deps: TranslateIpcDeps) {
     pdfRelease: guard(raw.pdfRelease),
     openResult: guard(raw.openResult),
     setSourceKind: guard(raw.setSourceKind),
+    pickExisting: guard(raw.pickExisting),
+    relocate: guard(raw.relocate),
   }
 }
 
@@ -246,24 +257,71 @@ function createRawHandlers(deps: TranslateIpcDeps) {
    * `listed` is never listed again: the person may have removed it from the project
    * list since. A folder that could not be listed (refused, foreign content) stays
    * unmarked. Failures never fail the caller: the translation project works either way.
+   * Answers whether the folder is (now or already) marked listed; true when there is
+   * no project list here at all.
    */
-  async function listOnce(dir: string): Promise<void> {
+  async function listOnce(dir: string): Promise<boolean> {
     const link = deps.projects
-    if (!link) return
+    if (!link) return true
     try {
       const path = deps.settingsPath()
       const entry = readTranslationProjects(path).find((e) => fold(e.dir) === fold(dir))
-      if (!entry || entry.listed) return
-      if ((await link.ensureListed(dir)) === null) return
+      if (!entry) return false
+      if (entry.listed) return true
+      if ((await link.ensureListed(dir)) === null) return false
       writeTranslationProjects(
         path,
         readTranslationProjects(path).map((e) =>
           fold(e.dir) === fold(dir) ? { ...e, listed: true as const } : e,
         ),
       )
+      return true
     } catch {
       // the folder stays unlisted; the AI panels then carry no translation context
+      return false
     }
+  }
+
+  /** a folder the person picked in the main-opened dialog, or null when cancelled */
+  async function pickFolder(): Promise<string | null> {
+    const res = await deps.showOpenDialog({ properties: ['openDirectory'] })
+    const dir = res.filePaths[0]
+    if (res.canceled || !dir || !isAbsolute(dir)) return null
+    return dir
+  }
+
+  /**
+   * Register a picked folder that already holds a translation project
+   * (moved, copied, or made on another PC), replacing the entry `replacing`
+   * when given. It is listed as a project folder through the same rules as a
+   * new project (`listOnce`): a folder with AI instructions or memory from
+   * elsewhere is not trusted here and stays off the project list.
+   */
+  async function adopt(picked: string, replacing?: string): Promise<TranslateAdoptedProject> {
+    if ((await projectStatus(picked)) !== 'ok') throw new NotAProjectError(picked)
+    const project = await loadProject(picked)
+    const path = deps.settingsPath()
+    const current = readTranslationProjects(path)
+    const existing = current.find((e) => fold(e.dir) === fold(picked))
+    const rest = current.filter(
+      (e) =>
+        fold(e.dir) !== fold(picked) &&
+        (replacing === undefined || fold(e.dir) !== fold(replacing)),
+    )
+    // the same folder picked again keeps its entry (and its `listed` mark)
+    writeTranslationProjects(path, [
+      ...rest,
+      existing ? { ...existing, lastOpened: deps.now() } : { dir: picked, lastOpened: deps.now() },
+    ])
+    if (replacing !== undefined && fold(replacing) !== fold(picked)) {
+      try {
+        await deps.projects?.unlist(replacing)
+      } catch {
+        // the old path stays on the project list; the person can remove it there
+      }
+    }
+    const dir = existing?.dir ?? picked
+    return { dir, name: project.name, contextLinked: await listOnce(dir) }
   }
 
   function touch(dir: string): void {
@@ -319,8 +377,15 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       const targetLang = requireString(args.targetLang, 'targetLang')
       const { dir } = await createProject(parentDir, name, sourceLang, targetLang)
       const path = deps.settingsPath()
-      const rest = readTranslationProjects(path).filter((e) => fold(e.dir) !== fold(dir))
-      writeTranslationProjects(path, [...rest, { dir, lastOpened: deps.now() }])
+      try {
+        const rest = readTranslationProjects(path).filter((e) => fold(e.dir) !== fold(dir))
+        writeTranslationProjects(path, [...rest, { dir, lastOpened: deps.now() }])
+      } catch (err) {
+        // the folder this call just made is not registered: remove it so a retry with the
+        // same name does not meet PROJECT_EXISTS. Best effort; the first failure is reported.
+        await rm(dir, { recursive: true, force: true }).catch(() => undefined)
+        throw err
+      }
       parentPicks.consume(parentToken, 0)
       // the app just made this folder at the person's request: list it as a project
       // folder so the AI panels carry its context
@@ -330,6 +395,13 @@ function createRawHandlers(deps: TranslateIpcDeps) {
 
     async remove(args: TranslateRemoveArgs): Promise<void> {
       const dir = registeredDir(args?.dir)
+      // deleting under an open tab loses its unsaved edits, and a later save would make
+      // files again in a half-deleted folder: the tabs are closed first
+      if (args.deleteFolder === true && deps.isPathOpen?.(dir))
+        throw new TranslateIpcError(
+          'PROJECT_IN_USE',
+          'documents of this project are open; close them before deleting the folder',
+        )
       const dropEntry = () => {
         const path = deps.settingsPath()
         writeTranslationProjects(
@@ -492,10 +564,31 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       const text = args.text
       if (typeof text !== 'string' || text.length > INSTRUCTIONS_TEXT_LIMIT)
         throw new TranslateIpcError('INVALID_ARGUMENT', 'the request text is not valid')
-      const built = await buildTranslationInstructions(dir, text, {
-        settingsPath: deps.settingsPath(),
-      })
-      return { prompts: built.promptText, material: built.materialText }
+      const settingsPath = deps.settingsPath()
+      const built = await buildTranslationInstructions(dir, text, { settingsPath })
+      const project = await loadProject(dir)
+      return {
+        prompts: built.promptText,
+        material: built.materialText,
+        summary: {
+          systemPrompt: readTranslationSystemPrompt(settingsPath).trim() !== '',
+          projectPrompt: project.projectPrompt.trim() !== '',
+          glossaryTotal: built.glossaryTotal,
+          glossaryLimit: DEFAULT_GLOSSARY_LIMIT,
+          referenceNames: [...project.references],
+        },
+      }
+    },
+
+    async pickExisting(): Promise<TranslateAdoptedProject | null> {
+      const picked = await pickFolder()
+      return picked === null ? null : adopt(picked)
+    },
+
+    async relocate(args: TranslateRelocateArgs): Promise<TranslateAdoptedProject | null> {
+      const dir = registeredDir(args?.dir)
+      const picked = await pickFolder()
+      return picked === null ? null : adopt(picked, dir)
     },
 
     /** `owner`: the webContents id that asks; its translations end when it goes */
@@ -573,8 +666,36 @@ export interface OcrSender {
   on(event: 'render-process-gone', listener: () => void): unknown
 }
 
-export function registerTranslateIpc(ipc: Pick<IpcMain, 'handle'>, deps: TranslateIpcDeps): void {
+/** the part of an IPC event the sender check reads */
+interface TranslateIpcEvent {
+  sender: unknown
+}
+
+/**
+ * Register the `translate:` channels. Every channel answers only the shell
+ * window (the home screen, its translation dialogs and the tab strip, as the
+ * `mcp-servers:*` settings channels do): `isShellSender` is false for an
+ * editor tab, the manual tab or any other window, and the call is refused
+ * before the handler runs.
+ */
+export function registerTranslateIpc(
+  ipc: Pick<IpcMain, 'handle'>,
+  deps: TranslateIpcDeps,
+  isShellSender: (sender: unknown) => boolean,
+): void {
   const h = createTranslateHandlers(deps)
+  const handle = (
+    channel: string,
+    answer: (event: TranslateIpcEvent, ...args: never[]) => unknown,
+  ): void => {
+    ipc.handle(channel, (event, ...args: unknown[]) => {
+      if (!isShellSender(event.sender))
+        return Promise.reject(
+          new TranslateIpcError('INVALID_ARGUMENT', 'this window cannot use the translation tool'),
+        )
+      return answer(event, ...(args as never[]))
+    })
+  }
   // an OCR listing or run belongs to the window that made it: closing or crashing that
   // window ends it at once instead of after the idle expiry
   const watched = new Set<number>()
@@ -590,53 +711,53 @@ export function registerTranslateIpc(ipc: Pick<IpcMain, 'handle'>, deps: Transla
     }
     return id
   }
-  ipc.handle(TRANSLATE_CHANNELS.list, () => h.list())
-  ipc.handle(TRANSLATE_CHANNELS.create, (_e, args: TranslateCreateArgs) => h.create(args))
-  ipc.handle(TRANSLATE_CHANNELS.remove, (_e, args: TranslateRemoveArgs) => h.remove(args))
-  ipc.handle(TRANSLATE_CHANNELS.getSystemPrompt, () => h.getSystemPrompt())
-  ipc.handle(TRANSLATE_CHANNELS.setSystemPrompt, (_e, text: string) => h.setSystemPrompt(text))
-  ipc.handle(TRANSLATE_CHANNELS.getProject, (_e, dir: string) => h.getProject(dir))
-  ipc.handle(TRANSLATE_CHANNELS.updateSettings, (_e, args: TranslateUpdateSettingsArgs) =>
+  handle(TRANSLATE_CHANNELS.list, () => h.list())
+  handle(TRANSLATE_CHANNELS.create, (_e, args: TranslateCreateArgs) => h.create(args))
+  handle(TRANSLATE_CHANNELS.remove, (_e, args: TranslateRemoveArgs) => h.remove(args))
+  handle(TRANSLATE_CHANNELS.getSystemPrompt, () => h.getSystemPrompt())
+  handle(TRANSLATE_CHANNELS.setSystemPrompt, (_e, text: string) => h.setSystemPrompt(text))
+  handle(TRANSLATE_CHANNELS.getProject, (_e, dir: string) => h.getProject(dir))
+  handle(TRANSLATE_CHANNELS.updateSettings, (_e, args: TranslateUpdateSettingsArgs) =>
     h.updateSettings(args),
   )
-  ipc.handle(TRANSLATE_CHANNELS.addMaterial, (_e, args: TranslateAddMaterialArgs) =>
+  handle(TRANSLATE_CHANNELS.addMaterial, (_e, args: TranslateAddMaterialArgs) =>
     h.addMaterial(args),
   )
-  ipc.handle(TRANSLATE_CHANNELS.removeMaterial, (_e, args: TranslateRemoveMaterialArgs) =>
+  handle(TRANSLATE_CHANNELS.removeMaterial, (_e, args: TranslateRemoveMaterialArgs) =>
     h.removeMaterial(args),
   )
-  ipc.handle(TRANSLATE_CHANNELS.pickMaterials, (_e, kind: TranslateMaterialKind) =>
+  handle(TRANSLATE_CHANNELS.pickMaterials, (_e, kind: TranslateMaterialKind) =>
     h.pickMaterials(kind),
   )
-  ipc.handle(TRANSLATE_CHANNELS.pickParentDir, () => h.pickParentDir())
-  ipc.handle(TRANSLATE_CHANNELS.openTranslation, (_e, args: TranslateOpenTranslationArgs) =>
+  handle(TRANSLATE_CHANNELS.pickParentDir, () => h.pickParentDir())
+  handle(TRANSLATE_CHANNELS.openTranslation, (_e, args: TranslateOpenTranslationArgs) =>
     h.openTranslation(args),
   )
-  ipc.handle(TRANSLATE_CHANNELS.setPaneHidden, (_e, args: TranslateSetPaneHiddenArgs) =>
+  handle(TRANSLATE_CHANNELS.setPaneHidden, (_e, args: TranslateSetPaneHiddenArgs) =>
     h.setPaneHidden(args),
   )
-  ipc.handle(TRANSLATE_CHANNELS.ocrPrepare, (e, args: TranslateOcrPrepareArgs) =>
+  handle(TRANSLATE_CHANNELS.ocrPrepare, (e, args: TranslateOcrPrepareArgs) =>
     h.ocrPrepare(args, watchOcrSender(e.sender as unknown as OcrSender)),
   )
-  ipc.handle(TRANSLATE_CHANNELS.ocrStart, (_e, args: TranslateOcrStartArgs) => h.ocrStart(args))
-  ipc.handle(TRANSLATE_CHANNELS.ocrPageImage, (_e, args: TranslateOcrPageImageArgs) =>
+  handle(TRANSLATE_CHANNELS.ocrStart, (_e, args: TranslateOcrStartArgs) => h.ocrStart(args))
+  handle(TRANSLATE_CHANNELS.ocrPageImage, (_e, args: TranslateOcrPageImageArgs) =>
     h.ocrPageImage(args),
   )
-  ipc.handle(TRANSLATE_CHANNELS.ocrWrite, (_e, args: TranslateOcrWriteArgs) => h.ocrWrite(args))
-  ipc.handle(TRANSLATE_CHANNELS.ocrRelease, (_e, token: string) => h.ocrRelease(token))
-  ipc.handle(TRANSLATE_CHANNELS.instructionsFor, (_e, args: TranslateInstructionsForArgs) =>
+  handle(TRANSLATE_CHANNELS.ocrWrite, (_e, args: TranslateOcrWriteArgs) => h.ocrWrite(args))
+  handle(TRANSLATE_CHANNELS.ocrRelease, (_e, token: string) => h.ocrRelease(token))
+  handle(TRANSLATE_CHANNELS.instructionsFor, (_e, args: TranslateInstructionsForArgs) =>
     h.instructionsFor(args),
   )
-  ipc.handle(TRANSLATE_CHANNELS.pdfPrepare, (e, args: TranslatePdfPrepareArgs) =>
+  handle(TRANSLATE_CHANNELS.pdfPrepare, (e, args: TranslatePdfPrepareArgs) =>
     h.pdfPrepare(args, watchOcrSender(e.sender as unknown as OcrSender)),
   )
-  ipc.handle(TRANSLATE_CHANNELS.pdfStore, (_e, args: TranslatePdfStoreArgs) => h.pdfStore(args))
-  ipc.handle(TRANSLATE_CHANNELS.pdfWrite, (_e, args: TranslatePdfWriteArgs) => h.pdfWrite(args))
-  ipc.handle(TRANSLATE_CHANNELS.pdfRelease, (_e, token: string) => h.pdfRelease(token))
-  ipc.handle(TRANSLATE_CHANNELS.openResult, (_e, args: TranslateOpenResultArgs) =>
-    h.openResult(args),
-  )
-  ipc.handle(TRANSLATE_CHANNELS.setSourceKind, (_e, args: TranslateSetSourceKindArgs) =>
+  handle(TRANSLATE_CHANNELS.pdfStore, (_e, args: TranslatePdfStoreArgs) => h.pdfStore(args))
+  handle(TRANSLATE_CHANNELS.pdfWrite, (_e, args: TranslatePdfWriteArgs) => h.pdfWrite(args))
+  handle(TRANSLATE_CHANNELS.pdfRelease, (_e, token: string) => h.pdfRelease(token))
+  handle(TRANSLATE_CHANNELS.openResult, (_e, args: TranslateOpenResultArgs) => h.openResult(args))
+  handle(TRANSLATE_CHANNELS.setSourceKind, (_e, args: TranslateSetSourceKindArgs) =>
     h.setSourceKind(args),
   )
+  handle(TRANSLATE_CHANNELS.pickExisting, () => h.pickExisting())
+  handle(TRANSLATE_CHANNELS.relocate, (_e, args: TranslateRelocateArgs) => h.relocate(args))
 }

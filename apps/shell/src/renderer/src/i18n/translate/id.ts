@@ -50,7 +50,8 @@ export const id = {
   errInvalidName: 'Nama proyek itu tidak dapat dipakai sebagai nama folder.',
   errNotListed: 'Proyek ini tidak ada dalam daftar.',
   errNotAProject: 'Folder ini bukan proyek terjemahan.',
-  errUnsupportedSource: 'Jenis file ini tidak dapat diterjemahkan.',
+  errUnsupportedSource:
+    'Jenis file ini tidak dapat diterjemahkan. Jenis yang didukung: docx, odt, xlsx, xlsm, xls, csv, tsv, pptx, hwp, hwpx, epub, md, markdown, txt, json, html, htm, xmind, pdf, png, jpg, jpeg.',
   errNotRegistered: 'Folder atau file itu tidak dipilih di dialog. Pilih lagi.',
   errInvalidArgument: 'Permintaan tidak valid. Periksa nilainya lalu coba lagi.',
   errProjectFileInvalid: 'File proyek rusak atau tidak dapat dibaca.',
@@ -166,4 +167,23 @@ export const id = {
   trStoredProgress: '{done} dari {total} blok teks sudah diterjemahkan dan disimpan.',
   trContinue: 'Lanjutkan (sisa {pending} blok)',
   trWriteStored: 'Tulis PDF dari terjemahan yang tersimpan',
+  openExisting: 'Buka folder proyek yang sudah ada',
+  locateFolder: 'Cari folder…',
+  adoptNotLinked:
+    'Proyek telah ditambahkan. Foldernya berisi instruksi atau memori AI dari tempat lain, jadi panel AI belum memakai konteks terjemahannya. Untuk memakainya, tambahkan folder ini di Proyek dan konfirmasikan di sana.',
+  errProjectInUse:
+    'Dokumen dari proyek ini sedang terbuka. Tutup tab dan jendelanya, lalu hapus folder.',
+  errGlossaryInvalid:
+    'File glosarium tidak dapat dibaca. Gunakan file CSV, TXT yang dipisahkan tab, atau XLSX dengan istilah di kolom pertama dan terjemahannya di kolom kedua.',
+  ctxTitle: 'Dikirim bersama setiap permintaan dari proyek ini:',
+  ctxSystemOn: 'Prompt sistem untuk semua proyek: ya',
+  ctxSystemOff: 'Prompt sistem untuk semua proyek: tidak ada (kosong)',
+  ctxProjectOn: 'Prompt proyek: ya',
+  ctxProjectOff: 'Prompt proyek: tidak ada (kosong); hanya pasangan bahasa',
+  ctxGlossaryNone: 'Glosarium: tidak ada',
+  ctxGlossaryAll: 'Glosarium: semua {count} entri',
+  ctxGlossaryPerBlock:
+    'Glosarium: {count} entri, lebih dari {limit}, jadi setiap permintaan hanya membawa entri yang istilahnya muncul di blok teksnya',
+  ctxReferencesNone: 'File acuan: tidak ada',
+  ctxReferences: 'Nama file acuan ({count}, hanya nama, tidak pernah isinya): {names}',
 } satisfies Record<keyof typeof zh, string>

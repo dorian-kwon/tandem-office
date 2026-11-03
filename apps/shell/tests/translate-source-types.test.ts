@@ -7,6 +7,7 @@ import {
 } from '@genoffice/translate-project'
 import { ROUTED_EXTENSIONS, appForPath } from '../src/main/app-routing'
 import { SOURCE_DIALOG_EXTENSIONS } from '../src/main/translate/translate-ipc'
+import { translateUiStrings } from '../src/renderer/src/i18n/strings-translate'
 
 const sorted = (list: readonly string[]) => [...new Set(list)].sort()
 
@@ -43,5 +44,12 @@ describe('translation source types follow the app routing table', () => {
     expect(sorted(SOURCE_DIALOG_EXTENSIONS)).toEqual(
       sorted([...EDITABLE_SOURCE_EXTENSIONS, 'pdf', ...IMAGE_SOURCE_EXTENSIONS]),
     )
+  })
+
+  it('the unsupported-type message names every accepted type in every language', () => {
+    for (const [lang, table] of Object.entries(translateUiStrings)) {
+      const text = (table as Record<string, string>).errUnsupportedSource ?? ''
+      for (const ext of SOURCE_DIALOG_EXTENSIONS) expect(text, `${lang} ${ext}`).toContain(ext)
+    }
   })
 })

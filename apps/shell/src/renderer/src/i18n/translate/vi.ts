@@ -48,7 +48,8 @@ export const vi = {
   errInvalidName: 'Không thể dùng tên dự án đó làm tên thư mục.',
   errNotListed: 'Dự án này không có trong danh sách.',
   errNotAProject: 'Thư mục này không phải là dự án dịch thuật.',
-  errUnsupportedSource: 'Không thể dịch loại tệp này.',
+  errUnsupportedSource:
+    'Không thể dịch loại tệp này. Các loại được hỗ trợ: docx, odt, xlsx, xlsm, xls, csv, tsv, pptx, hwp, hwpx, epub, md, markdown, txt, json, html, htm, xmind, pdf, png, jpg, jpeg.',
   errNotRegistered: 'Thư mục hoặc tệp đó không được chọn trong hộp thoại. Hãy chọn lại.',
   errInvalidArgument: 'Yêu cầu không hợp lệ. Hãy kiểm tra các giá trị rồi thử lại.',
   errProjectFileInvalid: 'Tệp dự án bị hỏng hoặc không đọc được.',
@@ -160,4 +161,22 @@ export const vi = {
   trStoredProgress: '{done}/{total} khối văn bản đã được dịch và giữ lại.',
   trContinue: 'Tiếp tục (còn {pending} khối)',
   trWriteStored: 'Tạo PDF từ bản dịch đã lưu',
+  openExisting: 'Mở thư mục dự án có sẵn',
+  locateFolder: 'Tìm thư mục…',
+  adoptNotLinked:
+    'Đã thêm dự án. Thư mục của dự án có chỉ dẫn hoặc bộ nhớ AI từ nơi khác, nên các bảng AI chưa dùng ngữ cảnh dịch của nó. Để dùng, hãy thêm thư mục này trong Dự án và xác nhận ở đó.',
+  errProjectInUse: 'Tài liệu của dự án này đang mở. Hãy đóng các thẻ và cửa sổ đó rồi xóa thư mục.',
+  errGlossaryInvalid:
+    'Không đọc được tệp bảng thuật ngữ. Hãy dùng tệp CSV, TXT phân tách bằng tab hoặc XLSX có thuật ngữ ở cột đầu tiên và bản dịch ở cột thứ hai.',
+  ctxTitle: 'Được gửi kèm mỗi yêu cầu từ dự án này:',
+  ctxSystemOn: 'Prompt hệ thống cho mọi dự án: có',
+  ctxSystemOff: 'Prompt hệ thống cho mọi dự án: không có (trống)',
+  ctxProjectOn: 'Prompt của dự án: có',
+  ctxProjectOff: 'Prompt của dự án: không có (trống); chỉ có cặp ngôn ngữ',
+  ctxGlossaryNone: 'Bảng thuật ngữ: không có',
+  ctxGlossaryAll: 'Bảng thuật ngữ: tất cả {count} mục',
+  ctxGlossaryPerBlock:
+    'Bảng thuật ngữ: {count} mục, nhiều hơn {limit}, nên mỗi yêu cầu chỉ mang các mục có thuật ngữ xuất hiện trong các khối văn bản của nó',
+  ctxReferencesNone: 'Tệp tham khảo: không có',
+  ctxReferences: 'Tên tệp tham khảo ({count}, chỉ tên, không bao giờ gửi nội dung): {names}',
 } satisfies Record<keyof typeof zh, string>

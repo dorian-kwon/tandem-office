@@ -47,7 +47,8 @@ export const ko = {
   errInvalidName: '이 이름은 폴더 이름으로 쓸 수 없습니다.',
   errNotListed: '이 프로젝트가 목록에 없습니다.',
   errNotAProject: '이 폴더는 번역 프로젝트가 아닙니다.',
-  errUnsupportedSource: '번역할 수 없는 파일 형식입니다.',
+  errUnsupportedSource:
+    '번역할 수 없는 파일 형식입니다. 지원하는 형식: docx, odt, xlsx, xlsm, xls, csv, tsv, pptx, hwp, hwpx, epub, md, markdown, txt, json, html, htm, xmind, pdf, png, jpg, jpeg.',
   errNotRegistered: '대화상자에서 고른 폴더나 파일이 아닙니다. 다시 골라 주세요.',
   errInvalidArgument: '요청이 올바르지 않습니다. 값을 확인하고 다시 시도하세요.',
   errProjectFileInvalid: '프로젝트 파일이 손상되었거나 읽을 수 없습니다.',
@@ -153,4 +154,22 @@ export const ko = {
   trStoredProgress: '글 블록 {total}개 중 {done}개는 이미 번역해 보관했습니다.',
   trContinue: '이어서 번역 (남은 블록 {pending}개)',
   trWriteStored: '보관된 번역으로 PDF 쓰기',
+  openExisting: '기존 프로젝트 폴더 열기',
+  locateFolder: '폴더 찾기…',
+  adoptNotLinked:
+    '프로젝트를 추가했습니다. 다만 이 폴더에는 다른 곳에서 온 AI 지침이나 기억이 있어, AI 창은 아직 이 프로젝트의 번역 맥락을 쓰지 않습니다. 쓰려면 프로젝트 화면에서 이 폴더를 추가하고 확인하세요.',
+  errProjectInUse: '이 프로젝트의 문서가 열려 있습니다. 그 탭과 창을 닫은 뒤 폴더를 지우세요.',
+  errGlossaryInvalid:
+    '단어집 파일을 읽을 수 없습니다. 첫째 열에 원어, 둘째 열에 번역어가 있는 CSV, 탭으로 나눈 TXT, XLSX 파일을 쓰세요.',
+  ctxTitle: '이 프로젝트에서 요청마다 함께 보내는 것:',
+  ctxSystemOn: '모든 프로젝트에 쓰는 시스템 프롬프트: 보냄',
+  ctxSystemOff: '모든 프로젝트에 쓰는 시스템 프롬프트: 없음(비어 있음)',
+  ctxProjectOn: '프로젝트 프롬프트: 보냄',
+  ctxProjectOff: '프로젝트 프롬프트: 없음(비어 있음). 언어 쌍만 보냄',
+  ctxGlossaryNone: '단어집: 없음',
+  ctxGlossaryAll: '단어집: 항목 {count}개 모두',
+  ctxGlossaryPerBlock:
+    '단어집: 항목 {count}개. {limit}개를 넘어, 요청마다 그 글 블록에 나오는 용어의 항목만 보냄',
+  ctxReferencesNone: '참고자료: 없음',
+  ctxReferences: '참고자료 파일 이름 {count}개(이름만 보내고 내용은 보내지 않음): {names}',
 } satisfies Record<keyof typeof zh, string>

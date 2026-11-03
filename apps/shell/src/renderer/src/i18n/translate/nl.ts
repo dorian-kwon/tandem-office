@@ -49,7 +49,8 @@ export const nl = {
   errInvalidName: 'Die projectnaam kan niet als mapnaam worden gebruikt.',
   errNotListed: 'Dit project staat niet in de lijst.',
   errNotAProject: 'Deze map is geen vertaalproject.',
-  errUnsupportedSource: 'Dit bestandstype kan niet worden vertaald.',
+  errUnsupportedSource:
+    'Dit bestandstype kan niet worden vertaald. Ondersteunde typen: docx, odt, xlsx, xlsm, xls, csv, tsv, pptx, hwp, hwpx, epub, md, markdown, txt, json, html, htm, xmind, pdf, png, jpg, jpeg.',
   errNotRegistered:
     'Die map of dat bestand is niet gekozen in het dialoogvenster. Kies het opnieuw.',
   errInvalidArgument: 'De aanvraag was ongeldig. Controleer de waarden en probeer het opnieuw.',
@@ -169,4 +170,23 @@ export const nl = {
   trStoredProgress: '{done} van {total} tekstblokken zijn al vertaald en bewaard.',
   trContinue: 'Verdergaan ({pending} blokken over)',
   trWriteStored: 'De PDF schrijven van de opgeslagen vertaling',
+  openExisting: 'Bestaande projectmap openen',
+  locateFolder: 'Map zoeken…',
+  adoptNotLinked:
+    'Het project is toegevoegd. De map bevat AI-instructies of -geheugen van elders, dus de AI-panelen gebruiken de vertaalcontext nog niet. Voeg de map toe onder Projecten en bevestig hem daar om die te gebruiken.',
+  errProjectInUse:
+    'Er zijn documenten van dit project geopend. Sluit hun tabbladen en vensters en verwijder daarna de map.',
+  errGlossaryInvalid:
+    'Het woordenlijstbestand kan niet worden gelezen. Gebruik een CSV-, door tabs gescheiden TXT- of XLSX-bestand met de term in de eerste kolom en de vertaling in de tweede.',
+  ctxTitle: 'Meegestuurd met elk verzoek uit dit project:',
+  ctxSystemOn: 'Systeemprompt voor alle projecten: ja',
+  ctxSystemOff: 'Systeemprompt voor alle projecten: geen (leeg)',
+  ctxProjectOn: 'Projectprompt: ja',
+  ctxProjectOff: 'Projectprompt: geen (leeg); alleen het taalpaar',
+  ctxGlossaryNone: 'Woordenlijst: geen',
+  ctxGlossaryAll: 'Woordenlijst: alle {count} items',
+  ctxGlossaryPerBlock:
+    'Woordenlijst: {count} items, meer dan {limit}, dus elk verzoek bevat alleen de items waarvan de term in de tekstblokken voorkomt',
+  ctxReferencesNone: 'Referentiebestanden: geen',
+  ctxReferences: 'Namen van referentiebestanden ({count}, alleen namen, nooit de inhoud): {names}',
 } satisfies Record<keyof typeof zh, string>

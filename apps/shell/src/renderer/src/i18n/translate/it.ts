@@ -49,7 +49,8 @@ export const it = {
   errInvalidName: 'Questo nome di progetto non può essere usato come nome di cartella.',
   errNotListed: 'Questo progetto non è nell’elenco.',
   errNotAProject: 'Questa cartella non è un progetto di traduzione.',
-  errUnsupportedSource: 'Questo tipo di file non può essere tradotto.',
+  errUnsupportedSource:
+    'Questo tipo di file non può essere tradotto. Tipi supportati: docx, odt, xlsx, xlsm, xls, csv, tsv, pptx, hwp, hwpx, epub, md, markdown, txt, json, html, htm, xmind, pdf, png, jpg, jpeg.',
   errNotRegistered:
     'Quella cartella o quel file non è stato scelto nella finestra di dialogo. Sceglilo di nuovo.',
   errInvalidArgument: 'La richiesta non era valida. Controlla i valori e riprova.',
@@ -169,4 +170,23 @@ export const it = {
   trStoredProgress: '{done} blocchi di testo su {total} sono già tradotti e conservati.',
   trContinue: 'Continua ({pending} blocchi rimasti)',
   trWriteStored: 'Crea il PDF dalla traduzione salvata',
+  openExisting: 'Apri una cartella di progetto esistente',
+  locateFolder: 'Trova la cartella…',
+  adoptNotLinked:
+    'Il progetto è stato aggiunto. La sua cartella contiene istruzioni o memoria di IA provenienti da altrove, quindi i pannelli IA non ne usano ancora il contesto di traduzione. Per usarlo, aggiungi la cartella in Progetti e confermala lì.',
+  errProjectInUse:
+    'Alcuni documenti di questo progetto sono aperti. Chiudi le loro schede e finestre, poi elimina la cartella.',
+  errGlossaryInvalid:
+    'Impossibile leggere il file del glossario. Usa un file CSV, TXT separato da tabulazioni o XLSX con il termine nella prima colonna e la traduzione nella seconda.',
+  ctxTitle: 'Inviato con ogni richiesta di questo progetto:',
+  ctxSystemOn: 'Prompt di sistema per tutti i progetti: sì',
+  ctxSystemOff: 'Prompt di sistema per tutti i progetti: nessuno (vuoto)',
+  ctxProjectOn: 'Prompt del progetto: sì',
+  ctxProjectOff: 'Prompt del progetto: nessuno (vuoto); solo la coppia di lingue',
+  ctxGlossaryNone: 'Glossario: nessuno',
+  ctxGlossaryAll: 'Glossario: tutte le {count} voci',
+  ctxGlossaryPerBlock:
+    'Glossario: {count} voci, più di {limit}, quindi ogni richiesta porta solo le voci i cui termini compaiono nei suoi blocchi di testo',
+  ctxReferencesNone: 'File di riferimento: nessuno',
+  ctxReferences: 'Nomi dei file di riferimento ({count}, solo i nomi, mai il contenuto): {names}',
 } satisfies Record<keyof typeof zh, string>

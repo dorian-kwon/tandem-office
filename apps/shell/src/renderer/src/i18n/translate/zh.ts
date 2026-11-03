@@ -46,7 +46,8 @@ export const zh = {
   errInvalidName: '该项目名称不能用作文件夹名称。',
   errNotListed: '此项目不在列表中。',
   errNotAProject: '此文件夹不是翻译项目。',
-  errUnsupportedSource: '无法翻译这种类型的文件。',
+  errUnsupportedSource:
+    '无法翻译这种类型的文件。支持的类型：docx, odt, xlsx, xlsm, xls, csv, tsv, pptx, hwp, hwpx, epub, md, markdown, txt, json, html, htm, xmind, pdf, png, jpg, jpeg。',
   errNotRegistered: '该文件夹或文件不是在对话框中选择的。请重新选择。',
   errInvalidArgument: '请求无效。请检查输入的值后重试。',
   errProjectFileInvalid: '项目文件已损坏或无法读取。',
@@ -149,4 +150,22 @@ export const zh = {
   trStoredProgress: '{total} 个文本块中有 {done} 个已翻译并保留。',
   trContinue: '继续（还剩 {pending} 个文本块）',
   trWriteStored: '根据已保存的译文生成 PDF',
+  openExisting: '打开已有的项目文件夹',
+  locateFolder: '查找文件夹…',
+  adoptNotLinked:
+    '项目已添加。但该文件夹中有来自其他地方的 AI 指令或记忆，因此 AI 面板暂不使用它的翻译上下文。如需使用，请在“项目”中添加此文件夹并确认。',
+  errProjectInUse: '此项目的文档仍处于打开状态。请先关闭这些标签页和窗口，再删除文件夹。',
+  errGlossaryInvalid:
+    '无法读取术语表文件。请使用第一列为原文术语、第二列为译文的 CSV、制表符分隔的 TXT 或 XLSX 文件。',
+  ctxTitle: '此项目的每次请求都会附带：',
+  ctxSystemOn: '所有项目共用的系统提示词：附带',
+  ctxSystemOff: '所有项目共用的系统提示词：无（为空）',
+  ctxProjectOn: '项目提示词：附带',
+  ctxProjectOff: '项目提示词：无（为空），仅附带语言对',
+  ctxGlossaryNone: '术语表：无',
+  ctxGlossaryAll: '术语表：全部 {count} 个条目',
+  ctxGlossaryPerBlock:
+    '术语表：{count} 个条目，超过 {limit} 个，因此每次请求只附带在其文本块中出现的术语条目',
+  ctxReferencesNone: '参考资料：无',
+  ctxReferences: '参考资料文件名 {count} 个（仅名称，从不发送内容）：{names}',
 }

@@ -48,7 +48,8 @@ export const cs = {
   errInvalidName: 'Tento název projektu nelze použít jako název složky.',
   errNotListed: 'Tento projekt není v seznamu.',
   errNotAProject: 'Tato složka není překladatelský projekt.',
-  errUnsupportedSource: 'Tento typ souboru nelze přeložit.',
+  errUnsupportedSource:
+    'Tento typ souboru nelze přeložit. Podporované typy: docx, odt, xlsx, xlsm, xls, csv, tsv, pptx, hwp, hwpx, epub, md, markdown, txt, json, html, htm, xmind, pdf, png, jpg, jpeg.',
   errNotRegistered: 'Tato složka nebo soubor nebyly vybrány v dialogu. Vyberte je znovu.',
   errInvalidArgument: 'Požadavek nebyl platný. Zkontrolujte hodnoty a zkuste to znovu.',
   errProjectFileInvalid: 'Soubor projektu je poškozený nebo nečitelný.',
@@ -163,4 +164,23 @@ export const cs = {
   trStoredProgress: 'Již přeloženo a zachováno: {done} z {total} textových bloků.',
   trContinue: 'Pokračovat (zbývá bloků: {pending})',
   trWriteStored: 'Zapsat PDF z uloženého překladu',
+  openExisting: 'Otevřít existující složku projektu',
+  locateFolder: 'Najít složku…',
+  adoptNotLinked:
+    'Projekt byl přidán. Jeho složka obsahuje pokyny nebo paměť AI odjinud, takže panely AI zatím nepoužívají jeho kontext překladu. Chcete-li ho použít, přidejte složku v části Projekty a potvrďte ji tam.',
+  errProjectInUse:
+    'Dokumenty tohoto projektu jsou otevřené. Zavřete jejich karty a okna a pak složku smažte.',
+  errGlossaryInvalid:
+    'Soubor glosáře nelze přečíst. Použijte soubor CSV, TXT oddělený tabulátory nebo XLSX s termínem v prvním sloupci a překladem ve druhém.',
+  ctxTitle: 'Odesílá se s každým požadavkem z tohoto projektu:',
+  ctxSystemOn: 'Systémový prompt pro všechny projekty: ano',
+  ctxSystemOff: 'Systémový prompt pro všechny projekty: žádný (prázdný)',
+  ctxProjectOn: 'Prompt projektu: ano',
+  ctxProjectOff: 'Prompt projektu: žádný (prázdný); jen jazyková dvojice',
+  ctxGlossaryNone: 'Glosář: žádný',
+  ctxGlossaryAll: 'Glosář: všechny položky ({count})',
+  ctxGlossaryPerBlock:
+    'Glosář: {count} položek, více než {limit}, takže každý požadavek nese jen položky, jejichž termíny se objevují v jeho textových blocích',
+  ctxReferencesNone: 'Referenční soubory: žádné',
+  ctxReferences: 'Názvy referenčních souborů ({count}, jen názvy, nikdy obsah): {names}',
 } satisfies Record<keyof typeof zh, string>

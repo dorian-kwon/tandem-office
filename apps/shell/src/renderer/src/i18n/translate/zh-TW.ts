@@ -47,7 +47,8 @@ export const zhTW = {
   errInvalidName: '該專案名稱不能用作資料夾名稱。',
   errNotListed: '此專案不在清單中。',
   errNotAProject: '此資料夾不是翻譯專案。',
-  errUnsupportedSource: '無法翻譯這種類型的檔案。',
+  errUnsupportedSource:
+    '無法翻譯這種類型的檔案。支援的類型：docx, odt, xlsx, xlsm, xls, csv, tsv, pptx, hwp, hwpx, epub, md, markdown, txt, json, html, htm, xmind, pdf, png, jpg, jpeg。',
   errNotRegistered: '該資料夾或檔案不是在對話框中選擇的。請重新選擇。',
   errInvalidArgument: '要求無效。請檢查輸入的值後再試一次。',
   errProjectFileInvalid: '專案檔案已損毀或無法讀取。',
@@ -150,4 +151,22 @@ export const zhTW = {
   trStoredProgress: '{total} 個文字區塊中有 {done} 個已翻譯並保留。',
   trContinue: '繼續（還剩 {pending} 個區塊）',
   trWriteStored: '根據已儲存的譯文產生 PDF',
+  openExisting: '開啟現有的專案資料夾',
+  locateFolder: '尋找資料夾…',
+  adoptNotLinked:
+    '已加入專案。但此資料夾含有來自其他地方的 AI 指示或記憶，因此 AI 面板暫不使用它的翻譯脈絡。若要使用，請在「專案」中加入此資料夾並確認。',
+  errProjectInUse: '此專案的文件仍在開啟中。請先關閉那些分頁和視窗，再刪除資料夾。',
+  errGlossaryInvalid:
+    '無法讀取詞彙表檔案。請使用第一欄為原文術語、第二欄為譯文的 CSV、以 Tab 分隔的 TXT 或 XLSX 檔案。',
+  ctxTitle: '此專案的每次請求都會附上：',
+  ctxSystemOn: '所有專案共用的系統提示詞：附上',
+  ctxSystemOff: '所有專案共用的系統提示詞：無（空白）',
+  ctxProjectOn: '專案提示詞：附上',
+  ctxProjectOff: '專案提示詞：無（空白），僅附上語言組合',
+  ctxGlossaryNone: '詞彙表：無',
+  ctxGlossaryAll: '詞彙表：全部 {count} 個項目',
+  ctxGlossaryPerBlock:
+    '詞彙表：{count} 個項目，超過 {limit} 個，因此每次請求只附上在其文字區塊中出現的術語項目',
+  ctxReferencesNone: '參考資料：無',
+  ctxReferences: '參考資料檔名 {count} 個（僅名稱，從不傳送內容）：{names}',
 } satisfies Record<keyof typeof zh, string>
