@@ -195,6 +195,13 @@ export const vi = {
   errProjectInUse: 'Tài liệu của dự án này đang mở. Hãy đóng các thẻ và cửa sổ đó rồi xóa thư mục.',
   errGlossaryInvalid:
     'Không đọc được tệp bảng thuật ngữ. Hãy dùng tệp CSV, TXT phân tách bằng tab hoặc XLSX có thuật ngữ ở cột đầu tiên và bản dịch ở cột thứ hai.',
+  exportTranslation: 'Xuất bản dịch',
+  exportDone: 'Đã xuất bản dịch.',
+  exportUnsaved:
+    'Bản dịch có thay đổi chưa lưu. Hãy lưu trong trình soạn thảo trước, rồi xuất lại.',
+  errOutputMissing: 'Chưa có bản dịch để xuất. Hãy mở bản dịch trước.',
+  errExportRefused:
+    'Hãy chọn nơi khác. Không thể dùng thư mục nguồn của dự án hoặc chính tệp bản dịch.',
   ctxTitle: 'Được gửi kèm mỗi yêu cầu từ dự án này:',
   ctxSystemOn: 'Prompt hệ thống cho mọi dự án: có',
   ctxSystemOff: 'Prompt hệ thống cho mọi dự án: không có (trống)',

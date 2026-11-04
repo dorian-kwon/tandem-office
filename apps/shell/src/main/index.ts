@@ -9073,6 +9073,15 @@ registerTranslateIpc(
     // by the main window, the readings become .docx through the bundled CLI's converter
     ocr: translationOcrRuntime,
     onOcrPopupClosed: () => notifyOcrPopupClosed(),
+    // exporting a translation: the native save dialog, the editor's unsaved state, Documents
+    exportTranslation: {
+      showSaveDialog: (options) => {
+        const owner = BrowserWindow.getFocusedWindow()
+        return owner ? dialog.showSaveDialog(owner, options) : dialog.showSaveDialog(options)
+      },
+      isDirty: async (path) => (await tabManager?.isFileDirty(path)) ?? false,
+      documentsDir: () => app.getPath('documents'),
+    },
     // PDF sources: scan detection, and the text PDF's translation with the PDF editor's
     // engine (tree and translated PDF in structure-job processes, the same result store)
     nonEditable: {

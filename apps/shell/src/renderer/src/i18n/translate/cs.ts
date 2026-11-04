@@ -199,6 +199,12 @@ export const cs = {
     'Dokumenty tohoto projektu jsou otevřené. Zavřete jejich karty a okna a pak složku smažte.',
   errGlossaryInvalid:
     'Soubor glosáře nelze přečíst. Použijte soubor CSV, TXT oddělený tabulátory nebo XLSX s termínem v prvním sloupci a překladem ve druhém.',
+  exportTranslation: 'Exportovat překlad',
+  exportDone: 'Překlad byl exportován.',
+  exportUnsaved: 'Překlad má neuložené změny. Nejprve ho uložte v editoru a pak exportujte znovu.',
+  errOutputMissing: 'Zatím není co exportovat. Nejprve otevřete překlad.',
+  errExportRefused:
+    'Vyberte jiné místo. Složku zdrojů projektu ani samotný přeložený soubor nelze použít.',
   ctxTitle: 'Odesílá se s každým požadavkem z tohoto projektu:',
   ctxSystemOn: 'Systémový prompt pro všechny projekty: ano',
   ctxSystemOff: 'Systémový prompt pro všechny projekty: žádný (prázdný)',

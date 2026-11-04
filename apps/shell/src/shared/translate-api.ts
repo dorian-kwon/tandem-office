@@ -42,6 +42,7 @@ export const TRANSLATE_CHANNELS = {
   ocrWrite: 'translate:ocr-write',
   ocrRelease: 'translate:ocr-release',
   ocrPopupClosed: 'translate:ocr-popup-closed',
+  exportTranslation: 'translate:export-translation',
   instructionsFor: 'translate:instructions-for',
   pdfPrepare: 'translate:pdf-prepare',
   pdfStore: 'translate:pdf-store',
@@ -381,6 +382,8 @@ export interface TranslateApi {
   ocrRelease(token: string): Promise<void>
   /** The OCR selection popup closed (finished or dismissed); lets a waiting AI panel carry on. */
   ocrPopupClosed(): Promise<void>
+  /** copy the current saved translation to a place the person picks (native save dialog) */
+  exportTranslation(args: TranslateExportArgs): Promise<TranslateExportResult>
   /**
    * each reference's conversion status; converts first what the index does not know yet
    * (references added before it existed, or changed in the folder)
@@ -446,6 +449,8 @@ export type TranslateErrorCode =
   | 'SOURCE_CHANGED'
   | 'PROJECT_IN_USE'
   | 'GLOSSARY_INVALID'
+  | 'OUTPUT_MISSING'
+  | 'EXPORT_REFUSED'
   | 'UNKNOWN'
 
 const TRANSLATE_ERROR_CODES: readonly TranslateErrorCode[] = [
@@ -473,6 +478,8 @@ const TRANSLATE_ERROR_CODES: readonly TranslateErrorCode[] = [
   'SOURCE_CHANGED',
   'PROJECT_IN_USE',
   'GLOSSARY_INVALID',
+  'OUTPUT_MISSING',
+  'EXPORT_REFUSED',
   'UNKNOWN',
 ]
 
@@ -525,3 +532,17 @@ export function parseTranslateError(err: unknown): { code: TranslateErrorCode; m
   if (match && code) return { code, message: match[2] ?? '' }
   return { code: 'UNKNOWN', message: raw }
 }
+
+/** What exporting a translation did: copied, the person cancelled, or the editor must save first. */
+export type TranslateExportResult =
+  | { status: 'saved'; path: string }
+  | { status: 'canceled' }
+  | { status: 'unsaved' }
+
+/**
+ * Export the current saved translation. Either a source of a project (main finds its output),
+ * or the output file a translation tab shows (main finds the project and source from its path).
+ */
+export type TranslateExportArgs =
+  | { dir: string; file: string; output?: string }
+  | { outputPath: string }

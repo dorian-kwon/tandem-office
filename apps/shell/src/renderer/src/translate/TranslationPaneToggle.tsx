@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react'
 import type { SplitViewState } from '../../../shared/split-view-api'
 import type { TabSummary } from '../../../shared/tabs-api'
 import { useI18n } from '../locale'
+import { exportNoticeFor, type ExportNotice } from './export-action'
 import { makeText } from './shared'
 import { dismissSourceChanged, useChangedSources } from './source-change-notice'
 import './translate.css'
@@ -24,6 +26,14 @@ export function TranslationPaneToggle({ split, tabs }: TranslationPaneToggleProp
   const { lang } = useI18n()
   const s = makeText(lang)
   const changedSources = useChangedSources()
+  const [exportNotice, setExportNotice] = useState<ExportNotice | null>(null)
+  const [exporting, setExporting] = useState(false)
+  // the result of an export stays on the strip for a few seconds
+  useEffect(() => {
+    if (!exportNotice) return undefined
+    const timer = setTimeout(() => setExportNotice(null), 6000)
+    return () => clearTimeout(timer)
+  }, [exportNotice])
   const api = window.translateApi
   if (!split || !api) return null
   const readOnlyOf = (id: string) => tabs.find((t) => t.id === id)?.readOnly === true
@@ -54,6 +64,15 @@ export function TranslationPaneToggle({ split, tabs }: TranslationPaneToggleProp
   }
 
   const sourceTabId = readOnlyOf(split.aTabId) ? split.aTabId : split.bTabId
+  const outputTabId = sourceTabId === split.aTabId ? split.bTabId : split.aTabId
+  const outputPath = tabs.find((t) => t.id === outputTabId)?.filePath
+  const exportOutput = () => {
+    if (!outputPath || exporting) return
+    setExporting(true)
+    void exportNoticeFor(lang, api, { outputPath })
+      .then(setExportNotice)
+      .finally(() => setExporting(false))
+  }
   return (
     <>
       {changedSources.has(sourceTabId) && (
@@ -73,7 +92,37 @@ export function TranslationPaneToggle({ split, tabs }: TranslationPaneToggleProp
       <div className="translate-pane-toggle" role="group" aria-label={s('paneToggleGroup')}>
         {button('a')}
         {button('b')}
+        {outputPath && (
+          <button
+            type="button"
+            className="translate-pane-toggle-btn"
+            data-action="export-translation"
+            disabled={exporting}
+            title={s('exportTranslation')}
+            onClick={exportOutput}
+          >
+            {s('exportTranslation')}
+          </button>
+        )}
       </div>
+      {exportNotice && (
+        <div
+          className={`translate-source-notice${exportNotice.isError ? ' is-error' : ''}`}
+          role={exportNotice.isError ? 'alert' : 'status'}
+          title={exportNotice.text}
+        >
+          <span>{exportNotice.text}</span>
+          <button
+            type="button"
+            className="translate-source-notice-close"
+            aria-label={s('dismissNotice')}
+            title={s('dismissNotice')}
+            onClick={() => setExportNotice(null)}
+          >
+            ×
+          </button>
+        </div>
+      )}
     </>
   )
 }

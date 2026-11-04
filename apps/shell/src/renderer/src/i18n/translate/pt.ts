@@ -204,6 +204,13 @@ export const pt = {
     'Há documentos deste projeto abertos. Feche as abas e janelas deles e depois exclua a pasta.',
   errGlossaryInvalid:
     'Não foi possível ler o arquivo do glossário. Use um arquivo CSV, TXT separado por tabulações ou XLSX com o termo na primeira coluna e a tradução na segunda.',
+  exportTranslation: 'Exportar tradução',
+  exportDone: 'Tradução exportada.',
+  exportUnsaved:
+    'A tradução tem alterações não salvas. Salve-a primeiro no editor e exporte de novo.',
+  errOutputMissing: 'Ainda não há tradução para exportar. Abra primeiro a tradução.',
+  errExportRefused:
+    'Escolha outro local. A pasta de originais do projeto e o próprio arquivo traduzido não podem ser usados.',
   ctxTitle: 'Enviado com cada solicitação deste projeto:',
   ctxSystemOn: 'Prompt do sistema para todos os projetos: sim',
   ctxSystemOff: 'Prompt do sistema para todos os projetos: nenhum (vazio)',

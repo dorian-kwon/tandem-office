@@ -211,6 +211,14 @@ export const de = {
     'Dokumente dieses Projekts sind geöffnet. Schließen Sie deren Tabs und Fenster und löschen Sie dann den Ordner.',
   errGlossaryInvalid:
     'Die Glossardatei konnte nicht gelesen werden. Verwenden Sie eine CSV-, eine tabulatorgetrennte TXT- oder eine XLSX-Datei mit dem Begriff in der ersten und der Übersetzung in der zweiten Spalte.',
+  exportTranslation: 'Übersetzung exportieren',
+  exportDone: 'Übersetzung exportiert.',
+  exportUnsaved:
+    'Die Übersetzung hat ungespeicherte Änderungen. Speichern Sie sie zuerst im Editor und exportieren Sie dann erneut.',
+  errOutputMissing:
+    'Es gibt noch keine Übersetzung zum Exportieren. Öffnen Sie zuerst die Übersetzung.',
+  errExportRefused:
+    'Wählen Sie einen anderen Ort. Der Quellordner des Projekts und die übersetzte Datei selbst sind nicht zulässig.',
   ctxTitle: 'Wird mit jeder Anfrage aus diesem Projekt gesendet:',
   ctxSystemOn: 'System-Prompt für alle Projekte: ja',
   ctxSystemOff: 'System-Prompt für alle Projekte: keiner (leer)',

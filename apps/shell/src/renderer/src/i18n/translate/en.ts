@@ -198,6 +198,13 @@ export const en = {
     'Documents from this project are open. Close their tabs and windows, then delete the folder.',
   errGlossaryInvalid:
     'The glossary file could not be read. Use a CSV, a tab-separated TXT or an XLSX file with the term in the first column and its translation in the second.',
+  exportTranslation: 'Export translation',
+  exportDone: 'Translation exported.',
+  exportUnsaved:
+    'The translation has unsaved changes. Save it in the editor first, then export again.',
+  errOutputMissing: 'There is no translation to export yet. Open the translation first.',
+  errExportRefused:
+    "Choose another place. The project's source folder and the translated file itself cannot be used.",
   ctxTitle: 'Sent with every request from this project:',
   ctxSystemOn: 'System prompt for all projects: yes',
   ctxSystemOff: 'System prompt for all projects: none (empty)',

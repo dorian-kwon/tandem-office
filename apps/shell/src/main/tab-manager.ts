@@ -533,6 +533,18 @@ export class TabManager {
     )
   }
 
+  /**
+   * Whether the editor tab showing this file has unsaved changes. False when no tab shows it
+   * (the file on disk is then the current one). Does not load an unloaded tab: it has no edits.
+   */
+  async isFileDirty(path: string): Promise<boolean> {
+    const wanted = canonicalPath(path)
+    const tab = this.tabs.find(
+      (t) => (t.view || t.opener) && t.filePath && !t.present && canonicalPath(t.filePath) === wanted,
+    )
+    return tab ? this.tabIsDirty(tab) : false
+  }
+
   /** unsaved-changes state of one tab, whichever family owns it */
   private async tabIsDirty(tab: TabRecord): Promise<boolean> {
     const wc = tab.view?.webContents

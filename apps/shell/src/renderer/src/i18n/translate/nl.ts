@@ -205,6 +205,13 @@ export const nl = {
     'Er zijn documenten van dit project geopend. Sluit hun tabbladen en vensters en verwijder daarna de map.',
   errGlossaryInvalid:
     'Het woordenlijstbestand kan niet worden gelezen. Gebruik een CSV-, door tabs gescheiden TXT- of XLSX-bestand met de term in de eerste kolom en de vertaling in de tweede.',
+  exportTranslation: 'Vertaling exporteren',
+  exportDone: 'Vertaling geëxporteerd.',
+  exportUnsaved:
+    'De vertaling heeft niet-opgeslagen wijzigingen. Sla hem eerst op in de editor en exporteer daarna opnieuw.',
+  errOutputMissing: 'Er is nog geen vertaling om te exporteren. Open eerst de vertaling.',
+  errExportRefused:
+    'Kies een andere plek. De bronmap van het project en het vertaalde bestand zelf kunnen niet worden gebruikt.',
   ctxTitle: 'Meegestuurd met elk verzoek uit dit project:',
   ctxSystemOn: 'Systeemprompt voor alle projecten: ja',
   ctxSystemOff: 'Systeemprompt voor alle projecten: geen (leeg)',

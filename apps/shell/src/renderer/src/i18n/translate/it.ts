@@ -205,6 +205,13 @@ export const it = {
     'Alcuni documenti di questo progetto sono aperti. Chiudi le loro schede e finestre, poi elimina la cartella.',
   errGlossaryInvalid:
     'Impossibile leggere il file del glossario. Usa un file CSV, TXT separato da tabulazioni o XLSX con il termine nella prima colonna e la traduzione nella seconda.',
+  exportTranslation: 'Esporta traduzione',
+  exportDone: 'Traduzione esportata.',
+  exportUnsaved:
+    "La traduzione ha modifiche non salvate. Salvala prima nell'editor, poi esporta di nuovo.",
+  errOutputMissing: "Non c'è ancora nessuna traduzione da esportare. Apri prima la traduzione.",
+  errExportRefused:
+    'Scegli un altro percorso. La cartella dei sorgenti del progetto e il file tradotto stesso non sono utilizzabili.',
   ctxTitle: 'Inviato con ogni richiesta di questo progetto:',
   ctxSystemOn: 'Prompt di sistema per tutti i progetti: sì',
   ctxSystemOff: 'Prompt di sistema per tutti i progetti: nessuno (vuoto)',

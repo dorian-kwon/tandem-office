@@ -1,7 +1,7 @@
 import { isAdHocDir } from './adhoc-dirs'
 import { randomUUID } from 'node:crypto'
 import { rm, stat } from 'node:fs/promises'
-import { basename, isAbsolute, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, resolve } from 'node:path'
 import type { IpcMain } from 'electron'
 import {
   addGlossary,
@@ -38,10 +38,13 @@ import {
   type NonEditableService,
 } from './non-editable'
 import {
+  isResultOf,
   openTranslation,
   openTranslationResult,
+  plainFileName,
   type TranslationViewDeps,
 } from './open-translation'
+import { exportTranslation, type ExportTranslationDeps } from './export-translation'
 import { listRecentDocuments, recordRecentDocument } from './recent-documents'
 import type { TranslationProjectLink } from './project-link'
 import {
@@ -55,6 +58,8 @@ import {
   toTranslateIpcError,
   TranslateIpcError,
   type TranslateAddMaterialArgs,
+  type TranslateExportArgs,
+  type TranslateExportResult,
   type TranslateAdoptedProject,
   type TranslateCreateArgs,
   type TranslateInstructions,
@@ -114,6 +119,8 @@ export interface TranslateIpcDeps {
   ocr?: OcrServiceDeps
   /** the OCR popup closed: the sheets AI panel that opened it stops showing "waiting" */
   onOcrPopupClosed?: () => void
+  /** the save dialog, the editor's unsaved state and Documents folder for exporting a translation */
+  exportTranslation?: ExportTranslationDeps
   /**
    * scan detection, the PDF's tree, the result store and the translated-PDF
    * writer (main/translate/non-editable.ts); absent: PDF sources are not
@@ -204,6 +211,7 @@ export function createTranslateHandlers(deps: TranslateIpcDeps) {
     ocrWrite: guard(raw.ocrWrite),
     ocrRelease: guard(raw.ocrRelease),
     ocrPopupClosed: guard(raw.ocrPopupClosed),
+    exportTranslation: guard(raw.exportTranslation),
     ocrForgetOwner: guard(raw.ocrForgetOwner),
     instructionsFor: guard(raw.instructionsFor),
     pdfPrepare: guard(raw.pdfPrepare),
@@ -736,6 +744,36 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       return ocr().recommend(args?.token, args?.pages)
     },
 
+    async exportTranslation(args: TranslateExportArgs): Promise<TranslateExportResult> {
+      const exporter = deps.exportTranslation
+      if (!exporter) throw new TranslateIpcError('OPEN_FAILED', 'exporting is not available here')
+      if (args && 'outputPath' in args) {
+        // a translation tab's own output file: main finds the project and the source from its path
+        const outputPath = requireString(args.outputPath, 'outputPath')
+        const name = basename(outputPath)
+        if (!isAbsolute(outputPath) || !plainFileName(name) || basename(dirname(outputPath)) !== 'output')
+          throw new TranslateIpcError('INVALID_ARGUMENT', 'this is not a translation output file')
+        const dir = registeredDir(dirname(dirname(outputPath)))
+        const project = await loadProject(dir)
+        const listed = project.sources.find((s) => s.file === name)
+        const resolved = listed
+          ? await sourceEntry(dir, listed.file)
+          : await (async () => {
+              for (const s of project.sources) {
+                const r = await sourceEntry(dir, s.file)
+                if (isResultOf(r.entry, name, project.targetLang)) return r
+              }
+              return null
+            })()
+        if (!resolved) throw new TranslateIpcError('NOT_LISTED', 'no source of the project made this file')
+        return exportTranslation(dir, resolved.entry, name, project.targetLang, exporter)
+      }
+      const dir = registeredDir(args?.dir)
+      const file = requireString(args.file, 'file')
+      const { project, entry } = await sourceEntry(dir, file)
+      return exportTranslation(dir, entry, args.output, project.targetLang, exporter)
+    },
+
     async ocrPopupClosed(): Promise<void> {
       deps.onOcrPopupClosed?.()
     },
@@ -845,6 +883,9 @@ export function registerTranslateIpc(
   handle(TRANSLATE_CHANNELS.ocrRecommend, (_e, args: TranslateOcrStartArgs) => h.ocrRecommend(args))
   handle(TRANSLATE_CHANNELS.ocrRelease, (_e, token: string) => h.ocrRelease(token))
   handle(TRANSLATE_CHANNELS.ocrPopupClosed, () => h.ocrPopupClosed())
+  handle(TRANSLATE_CHANNELS.exportTranslation, (_e, args: TranslateExportArgs) =>
+    h.exportTranslation(args),
+  )
   handle(TRANSLATE_CHANNELS.instructionsFor, (_e, args: TranslateInstructionsForArgs) =>
     h.instructionsFor(args),
   )

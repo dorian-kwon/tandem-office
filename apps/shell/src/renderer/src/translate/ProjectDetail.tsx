@@ -10,6 +10,7 @@ import type {
 } from '../../../shared/translate-api'
 import { useI18n } from '../locale'
 import type { TranslateStringKey } from '../i18n/strings-translate'
+import { exportNoticeFor, type ExportNotice } from './export-action'
 import { languageName, makeText, translateErrorText } from './shared'
 import '../projects-panel.css'
 import './translate.css'
@@ -84,6 +85,7 @@ export function ProjectDetail({
   const [prompt, setPrompt] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [exportMessage, setExportMessage] = useState<ExportNotice | null>(null)
   const [promptFailed, setPromptFailed] = useState(false)
   const [promptSaved, setPromptSaved] = useState(false)
   // the newest project object, so a blur-save never writes a stale list over an upload
@@ -332,6 +334,13 @@ export function ProjectDetail({
     </label>
   )
 
+  /** copy this source's saved translation to a place the person picks */
+  const exportSource = async (file: string): Promise<void> => {
+    if (!api) return
+    const notice = await exportNoticeFor(lang, api, { dir, file })
+    setExportMessage(notice)
+  }
+
   // the global button needs exactly one source; with several each row opens its own
   const onlySource = project?.sources.length === 1 ? project.sources[0]?.file : undefined
   const hasManySources = (project?.sources.length ?? 0) > 1
@@ -349,6 +358,15 @@ export function ProjectDetail({
         {error && (
           <div className="projects-note is-warning translate-error" role="alert">
             {error}
+          </div>
+        )}
+        {exportMessage && (
+          <div
+            className={`projects-note translate-error${exportMessage.isError ? ' is-warning' : ''}`}
+            role={exportMessage.isError ? 'alert' : 'status'}
+            data-export-notice
+          >
+            {exportMessage.text}
           </div>
         )}
         {startNotice && (
@@ -442,6 +460,18 @@ export function ProjectDetail({
                               onClick={() => onStartOcr(file)}
                             >
                               {s('ocrTitle')}
+                            </button>
+                          )}
+                          {kind === 'source' && (
+                            <button
+                              type="button"
+                              className="projects-small"
+                              data-action="export-translation"
+                              aria-label={`${s('exportTranslation')}: ${file}`}
+                              disabled={busy}
+                              onClick={() => void exportSource(file)}
+                            >
+                              {s('exportTranslation')}
                             </button>
                           )}
                           {kind === 'source' && (

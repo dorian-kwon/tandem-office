@@ -146,6 +146,12 @@
   white-space: nowrap;
 }
 
+.translate-source-notice > span {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .translate-source-notice-close {
   width: 18px;
   height: 18px;

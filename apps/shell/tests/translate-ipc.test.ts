@@ -894,3 +894,70 @@ describe('reference links and the context summary', () => {
     expect(got.summary.referenceConverted).toBe(1)
   })
 })
+
+describe('exportTranslation handler', () => {
+  async function projectWithOutput() {
+    let dirty = false
+    let target: string | null = null
+    const h = handlers({
+      exportTranslation: {
+        showSaveDialog: async () =>
+          target === null ? { canceled: true } : { canceled: false, filePath: target },
+        isDirty: async () => dirty,
+        documentsDir: () => root,
+      },
+    })
+    const { dir } = await createIn(h, { name: 'Exp', sourceLang: 'en', targetLang: 'ko' })
+    const src = join(root, 'a.md')
+    writeFileSync(src, '# hello')
+    await addPicked(h, dir, 'source', src)
+    writeFileSync(join(dir, 'output', 'a.md'), '# annyeong')
+    return {
+      h,
+      dir,
+      setTarget: (p: string | null) => (target = p),
+      setDirty: (d: boolean) => (dirty = d),
+    }
+  }
+
+  it('exports by project source and by the output tab path, copying the saved bytes', async () => {
+    const { h, dir, setTarget } = await projectWithOutput()
+    setTarget(join(root, 'one.md'))
+    expect(await h.exportTranslation({ dir, file: 'a.md' })).toEqual({
+      status: 'saved',
+      path: join(root, 'one.md'),
+    })
+    setTarget(join(root, 'two.md'))
+    expect(await h.exportTranslation({ outputPath: join(dir, 'output', 'a.md') })).toEqual({
+      status: 'saved',
+      path: join(root, 'two.md'),
+    })
+    expect(readFileSync(join(root, 'two.md'), 'utf8')).toBe('# annyeong')
+  })
+
+  it('reports cancel and unsaved states without writing', async () => {
+    const { h, dir, setTarget, setDirty } = await projectWithOutput()
+    expect(await h.exportTranslation({ dir, file: 'a.md' })).toEqual({ status: 'canceled' })
+    setDirty(true)
+    setTarget(join(root, 'x.md'))
+    expect(await h.exportTranslation({ dir, file: 'a.md' })).toEqual({ status: 'unsaved' })
+    expect(existsSync(join(root, 'x.md'))).toBe(false)
+  })
+
+  it('refuses a folder that is not a registered project, a path outside output/ and the source folder', async () => {
+    const { h, dir, setTarget } = await projectWithOutput()
+    await expect(h.exportTranslation({ dir: root, file: 'a.md' })).rejects.toMatchObject({
+      code: 'NOT_REGISTERED',
+    })
+    await expect(
+      h.exportTranslation({ outputPath: join(dir, 'source', 'a.md') }),
+    ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+    await expect(
+      h.exportTranslation({ outputPath: join(root, 'output', 'a.md') }),
+    ).rejects.toMatchObject({ code: 'NOT_REGISTERED' })
+    setTarget(join(dir, 'source', 'copy.md'))
+    await expect(h.exportTranslation({ dir, file: 'a.md' })).rejects.toMatchObject({
+      code: 'EXPORT_REFUSED',
+    })
+  })
+})

@@ -206,6 +206,13 @@ export const fr = {
     'Des documents de ce projet sont ouverts. Fermez leurs onglets et fenêtres, puis supprimez le dossier.',
   errGlossaryInvalid:
     'Le fichier de glossaire est illisible. Utilisez un fichier CSV, TXT séparé par des tabulations ou XLSX, avec le terme dans la première colonne et sa traduction dans la deuxième.',
+  exportTranslation: 'Exporter la traduction',
+  exportDone: 'Traduction exportée.',
+  exportUnsaved:
+    "La traduction contient des modifications non enregistrées. Enregistrez-la d'abord dans l'éditeur, puis exportez à nouveau.",
+  errOutputMissing: "Il n'y a pas encore de traduction à exporter. Ouvrez d'abord la traduction.",
+  errExportRefused:
+    'Choisissez un autre emplacement. Le dossier des sources du projet et le fichier traduit lui-même ne conviennent pas.',
   ctxTitle: 'Envoyé avec chaque requête de ce projet :',
   ctxSystemOn: 'Prompt système de tous les projets : oui',
   ctxSystemOff: 'Prompt système de tous les projets : aucun (vide)',

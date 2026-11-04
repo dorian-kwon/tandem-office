@@ -210,3 +210,14 @@ Needs a rebuild of the shell app (`npm run build:all`): main, preload and the sh
 1. In the sheets AI panel ask to OCR the workbook's pictures. After the AI opens the popup, the panel's status line says it is waiting for you (not "finished").
 2. Finish or cancel the popup on the home tab, then return to the sheets tab: the waiting line is gone (it clears when the popup closes, even if the sheets tab was in the background).
 3. Run any other AI request: the status line shows running, then finished, as before.
+
+## Translation: export the translated document
+
+Needs a rebuild of the shell app (`npm run build:all`): main, preload and the shell renderer changed.
+
+1. Open a translation of a `.docx` (then the same for `.xlsx`, `.md`, `.html`): the tab strip shows "Export translation" next to the hide/show buttons. Click it: a native save dialog opens in the project folder with the name `<original name> (<target language code>)` and the original extension.
+2. Save it elsewhere (for example the Desktop) and open it in Word or Excel: it is the translated document in the same format, equal to the output file. A "Translation exported." line shows on the strip for a few seconds.
+3. Cancel the dialog: nothing is written and no message shows. Pick a name that exists: the dialog's own overwrite question appears first.
+4. Edit the translation without saving, then click Export: no dialog; the strip says to save in the editor first. Save with Ctrl+S, export again: the saved content is exported.
+5. In the save dialog go into the project's `source` folder and save: the app refuses with a plain message and writes nothing. Choosing the project's `output` file itself is refused as well.
+6. Project detail screen: each source row has "Export translation". Before the translation was ever opened it says there is no translation to export yet. For a text PDF translated earlier it exports the newest translated PDF as a PDF; for an OCR result it exports the Word document.

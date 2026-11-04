@@ -203,6 +203,13 @@ export const ms = {
     'Dokumen daripada projek ini sedang dibuka. Tutup tab dan tetingkapnya, kemudian padam folder.',
   errGlossaryInvalid:
     'Fail glosari tidak dapat dibaca. Gunakan fail CSV, TXT yang dipisahkan tab atau XLSX dengan istilah dalam lajur pertama dan terjemahannya dalam lajur kedua.',
+  exportTranslation: 'Eksport terjemahan',
+  exportDone: 'Terjemahan telah dieksport.',
+  exportUnsaved:
+    'Terjemahan mempunyai perubahan yang belum disimpan. Simpan dahulu dalam editor, kemudian eksport semula.',
+  errOutputMissing: 'Belum ada terjemahan untuk dieksport. Buka terjemahan dahulu.',
+  errExportRefused:
+    'Pilih lokasi lain. Folder sumber projek dan fail terjemahan itu sendiri tidak boleh digunakan.',
   ctxTitle: 'Dihantar bersama setiap permintaan daripada projek ini:',
   ctxSystemOn: 'Prompt sistem untuk semua projek: ya',
   ctxSystemOff: 'Prompt sistem untuk semua projek: tiada (kosong)',

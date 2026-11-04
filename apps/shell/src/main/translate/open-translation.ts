@@ -33,7 +33,7 @@ export interface TranslationViewDeps {
 }
 
 /** a stored source name is a plain file name inside source/ (project.json can be edited by hand) */
-function plainFileName(file: string): boolean {
+export function plainFileName(file: string): boolean {
   return (
     file !== '' && file !== '.' && file !== '..' && basename(file) === file && !/[\\/]/.test(file)
   )
@@ -62,7 +62,7 @@ const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
  * the translated PDF (plain or bilingual) into the project's current target
  * language `targetLang` (a project language code).
  */
-function isResultOf(source: SourceEntry, output: string, targetLang: string): boolean {
+export function isResultOf(source: SourceEntry, output: string, targetLang: string): boolean {
   const stem = escape(stemOf(source.file))
   // the names non-editable.ts and ocr.ts give, with the " (2)" of a taken name
   if (source.kind === 'pdf') {
@@ -80,7 +80,7 @@ function isResultOf(source: SourceEntry, output: string, targetLang: string): bo
 }
 
 /** the newest earlier result of `source` in output/ (for the current target language), or null */
-async function latestResult(
+export async function latestResult(
   dir: string,
   source: SourceEntry,
   targetLang: string,
