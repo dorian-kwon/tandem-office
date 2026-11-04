@@ -28,6 +28,8 @@ export const he = {
   deleteFolderConfirmButton: 'מחיקת התיקייה לצמיתות',
   recentTitle: 'מסמכים אחרונים',
   recentUnavailable: 'התיקייה או הקובץ חסרים',
+  countSources: 'מסמכים: {n}',
+  countReferences: 'חומרי עזר: {n}',
   backToList: 'כל הפרויקטים',
   loading: 'טוען…',
   sourcesTitle: 'מסמכים לתרגום',

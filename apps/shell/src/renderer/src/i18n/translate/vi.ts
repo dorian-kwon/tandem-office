@@ -29,6 +29,8 @@ export const vi = {
   deleteFolderConfirmButton: 'Xóa thư mục vĩnh viễn',
   recentTitle: 'Tài liệu gần đây',
   recentUnavailable: 'Không tìm thấy thư mục hoặc tệp',
+  countSources: 'Tài liệu: {n}',
+  countReferences: 'Tài liệu tham khảo: {n}',
   backToList: 'Tất cả dự án',
   loading: 'Đang tải…',
   sourcesTitle: 'Tài liệu cần dịch',

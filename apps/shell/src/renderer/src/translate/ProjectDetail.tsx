@@ -299,7 +299,7 @@ export function ProjectDetail({
     if (!count) return null
     return (
       <span
-        className="projects-hint translate-ref-hint translate-picture-hint"
+        className="translate-ref-hint translate-note translate-picture-hint"
         role="note"
         data-picture-notice={count}
         data-file={file}
@@ -348,12 +348,37 @@ export function ProjectDetail({
   return (
     <main className="content projects-panel">
       <div className="translate-pane">
-        <div className="projects-head">
-          <button type="button" className="projects-small" onClick={onBack}>
-            {s('backToList')}
-          </button>
-          <h2 className="projects-title">{project?.name ?? s('loading')}</h2>
-        </div>
+        <button type="button" className="translate-back" onClick={onBack}>
+          <span aria-hidden="true">{'←'}</span> {s('backToList')}
+        </button>
+        <header className="translate-head">
+          <div className="translate-head-text">
+            <h2 className="translate-title">{project?.name ?? s('loading')}</h2>
+            {project && (
+              <span className="translate-chip">
+                {languageName(lang, project.sourceLang)} {'→'}{' '}
+                {languageName(lang, project.targetLang)}
+              </span>
+            )}
+          </div>
+          {project && (
+            <div className="translate-head-actions">
+              <button
+                type="button"
+                className="projects-primary"
+                disabled={!onlySource}
+                onClick={() => onlySource && onStartTranslation(onlySource)}
+              >
+                {s('startTranslation')}
+              </button>
+            </div>
+          )}
+        </header>
+        {project && !onlySource && (
+          <p className="translate-start-hint">
+            {hasManySources ? s('startPickHint') : s('startDisabledHint')}
+          </p>
+        )}
 
         {error && (
           <div className="projects-note is-warning translate-error" role="alert">
@@ -380,7 +405,8 @@ export function ProjectDetail({
 
         {project && (
           <>
-            <section className="translate-section" aria-label={s('languagePair')}>
+            <section className="translate-card-section" aria-label={s('languagePair')}>
+              <h3 className="translate-section-title">{s('languagePair')}</h3>
               <div className="translate-lang-row">
                 {languageSelect(project.sourceLang, s('sourceLangLabel'), 'sourceLang')}
                 {languageSelect(project.targetLang, s('targetLangLabel'), 'targetLang')}
@@ -392,22 +418,35 @@ export function ProjectDetail({
               return (
                 <section
                   key={kind}
-                  className="translate-section"
+                  className="translate-card-section"
                   aria-label={s(title)}
                   data-material-kind={kind}
                 >
-                  <h3 className="projects-group-title">{s(title)}</h3>
+                  <div className="translate-section-head">
+                    <h3 className="translate-section-title">
+                      {s(title)}
+                      <span className="translate-count">{files.length}</span>
+                    </h3>
+                    <button
+                      type="button"
+                      className="projects-small translate-add"
+                      disabled={busy}
+                      onClick={() => void upload(kind)}
+                    >
+                      {s('addFiles')}
+                    </button>
+                  </div>
                   {files.length === 0 ? (
-                    <p className="projects-empty">{s('noFiles')}</p>
+                    <p className="translate-none">{s('noFiles')}</p>
                   ) : (
-                    <ul className="projects-list">
+                    <ul className="translate-rows">
                       {files.map((file) => (
                         <li key={file} className="projects-row">
                           <div className="translate-row-main">
                             <span className="projects-row-name">{file}</span>
                             {kind === 'reference' && referenceStatusOf(file)}
                             {kind === 'reference' && refStatus?.[file] === 'needs-ocr' && (
-                              <span className="projects-hint translate-ref-hint">
+                              <span className="translate-ref-hint translate-note">
                                 {s('refNeedsOcrHint')}
                               </span>
                             )}
@@ -497,20 +536,24 @@ export function ProjectDetail({
                       ))}
                     </ul>
                   )}
-                  <button
-                    type="button"
-                    className="projects-ghost"
-                    disabled={busy}
-                    onClick={() => void upload(kind)}
-                  >
-                    {s('addFiles')}
-                  </button>
                 </section>
               )
             })}
 
-            <label className="projects-field translate-section">
-              <span className="projects-field-label">{s('promptLabel')}</span>
+            <label className="projects-field translate-card-section">
+              <span className="translate-field-head">
+                <span className="translate-section-title">{s('promptLabel')}</span>
+                {promptSaved && !promptFailed && (
+                  <span className="translate-saved" role="status">
+                    {s('saved')}
+                  </span>
+                )}
+                {promptFailed && (
+                  <span className="translate-saved is-failed" role="status">
+                    {s('promptNotSaved')}
+                  </span>
+                )}
+              </span>
               <textarea
                 className="projects-textarea"
                 aria-label={s('promptLabel')}
@@ -522,20 +565,10 @@ export function ProjectDetail({
                 onBlur={savePrompt}
               />
               <span className="projects-hint">{s('promptHint')}</span>
-              {promptSaved && !promptFailed && (
-                <span className="projects-hint" role="status">
-                  {s('saved')}
-                </span>
-              )}
-              {promptFailed && (
-                <span className="projects-hint" role="status">
-                  {s('promptNotSaved')}
-                </span>
-              )}
             </label>
 
-            <label className="projects-field translate-section">
-              <span className="projects-field-label">{s('ocrLabel')}</span>
+            <label className="projects-field translate-card-section">
+              <span className="translate-section-title">{s('ocrLabel')}</span>
               <select
                 className="translate-select"
                 aria-label={s('ocrLabel')}
@@ -547,22 +580,6 @@ export function ProjectDetail({
                 <option value="off">{s('ocrOff')}</option>
               </select>
             </label>
-
-            <div className="projects-buttons">
-              <button
-                type="button"
-                className="projects-primary"
-                disabled={!onlySource}
-                onClick={() => onlySource && onStartTranslation(onlySource)}
-              >
-                {s('startTranslation')}
-              </button>
-              {!onlySource && (
-                <span className="projects-hint">
-                  {hasManySources ? s('startPickHint') : s('startDisabledHint')}
-                </span>
-              )}
-            </div>
           </>
         )}
       </div>

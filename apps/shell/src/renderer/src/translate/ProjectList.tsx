@@ -96,6 +96,11 @@ export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
       .catch(fail)
   }
 
+  const startCreate = () => {
+    setCreating(true)
+    setError(null)
+  }
+
   const choosePlace = async () => {
     try {
       const picked = await api.pickParentDir()
@@ -167,12 +172,23 @@ export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
   const renderRow = (entry: TranslateProjectListEntry) => {
     const usable = entry.status === 'ok'
     return (
-      <li key={entry.dir} className="projects-row" data-project-dir={entry.dir}>
+      <li
+        key={entry.dir}
+        className={`projects-row translate-card${usable ? '' : ' is-broken'}`}
+        data-project-dir={entry.dir}
+      >
         {usable ? (
           <button type="button" className="translate-open" onClick={() => onOpen(entry.dir)}>
             <span className="projects-row-name">{entry.name}</span>
-            <span className="projects-row-path">
-              {languageName(lang, entry.sourceLang)} {'->'} {languageName(lang, entry.targetLang)}
+            <span className="translate-chip">
+              {languageName(lang, entry.sourceLang)} {'→'} {languageName(lang, entry.targetLang)}
+            </span>
+            <span className="translate-meta">
+              <span>{s('countSources', { n: entry.sourceCount })}</span>
+              <span>{s('countReferences', { n: entry.referenceCount })}</span>
+              {entry.lastOpened > 0 && (
+                <span>{relativeTime(lang, entry.lastOpened, Date.now())}</span>
+              )}
             </span>
           </button>
         ) : (
@@ -188,7 +204,7 @@ export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
           {usable ? (
             <button
               type="button"
-              className="projects-small"
+              className="projects-small translate-quiet"
               disabled={busy}
               onClick={() => setDeleting({ entry, step: 'choose' })}
             >
@@ -237,30 +253,28 @@ export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
   return (
     <main className="content projects-panel">
       <div className="translate-pane">
-        <div className="projects-head">
-          <h2 className="projects-title">{s('title')}</h2>
-        </div>
-        <p className="projects-desc">{s('intro')}</p>
-
-        <label className="projects-field translate-section">
-          <span className="projects-field-label">{s('systemPromptLabel')}</span>
-          <textarea
-            className="projects-textarea"
-            aria-label={s('systemPromptLabel')}
-            value={systemPrompt}
-            onChange={(e) => {
-              setSystemPrompt(e.target.value)
-              setPromptSaved(false)
-            }}
-            onBlur={saveSystemPrompt}
-          />
-          <span className="projects-hint">{s('systemPromptHint')}</span>
-          {promptSaved && (
-            <span className="projects-hint" role="status">
-              {s('saved')}
-            </span>
-          )}
-        </label>
+        <header className="translate-head">
+          <div className="translate-head-text">
+            <h2 className="translate-title">{s('title')}</h2>
+            <p className="translate-lede">{s('intro')}</p>
+          </div>
+          <div className="translate-head-actions">
+            {/* an empty list carries the primary action in its own card instead */}
+            {(creating || projects === null || projects.length > 0) && (
+              <button type="button" className="projects-primary" onClick={startCreate}>
+                {s('newProject')}
+              </button>
+            )}
+            <button
+              type="button"
+              className="projects-ghost"
+              disabled={busy}
+              onClick={() => void adopt(() => api.pickExisting())}
+            >
+              {s('openExisting')}
+            </button>
+          </div>
+        </header>
 
         {error && (
           <div className="projects-note is-warning translate-error" role="alert">
@@ -272,27 +286,6 @@ export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
             {s('adoptNotLinked')}
           </div>
         )}
-
-        <div className="projects-toolbar">
-          <button
-            type="button"
-            className="projects-primary"
-            onClick={() => {
-              setCreating(true)
-              setError(null)
-            }}
-          >
-            {s('newProject')}
-          </button>
-          <button
-            type="button"
-            className="projects-ghost"
-            disabled={busy}
-            onClick={() => void adopt(() => api.pickExisting())}
-          >
-            {s('openExisting')}
-          </button>
-        </div>
 
         {creating && (
           <form
@@ -392,10 +385,22 @@ export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
           </div>
         )}
 
+        {projects !== null && projects.length === 0 && !creating && (
+          <div className="translate-empty" data-empty-projects>
+            <p className="translate-empty-text">{s('emptyHint')}</p>
+            <button type="button" className="projects-primary" onClick={startCreate}>
+              {s('newProject')}
+            </button>
+          </div>
+        )}
+        {projects !== null && projects.length > 0 && (
+          <ul className="translate-cards">{projects.map(renderRow)}</ul>
+        )}
+
         {recent.length > 0 && (
           <section className="translate-recent" data-recent-list>
-            <h3 className="projects-field-label">{s('recentTitle')}</h3>
-            <ul className="projects-list">
+            <h3 className="translate-section-title">{s('recentTitle')}</h3>
+            <ul className="translate-rows">
               {recent.map((doc) => (
                 <li
                   key={`${doc.dir}\n${doc.file}`}
@@ -412,10 +417,13 @@ export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
                       }}
                     >
                       <span className="projects-row-name">{doc.file}</span>
-                      <span className="projects-row-path">
-                        {doc.projectName} · {languageName(lang, doc.sourceLang)} {'->'}{' '}
-                        {languageName(lang, doc.targetLang)} ·{' '}
-                        {relativeTime(lang, doc.openedAt, Date.now())}
+                      <span className="translate-meta">
+                        <span>{doc.projectName}</span>
+                        <span>
+                          {languageName(lang, doc.sourceLang)} {'→'}{' '}
+                          {languageName(lang, doc.targetLang)}
+                        </span>
+                        <span>{relativeTime(lang, doc.openedAt, Date.now())}</span>
                       </span>
                     </button>
                   ) : (
@@ -431,12 +439,27 @@ export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
           </section>
         )}
 
-        {projects !== null && projects.length === 0 && (
-          <p className="projects-empty">{s('emptyHint')}</p>
-        )}
-        {projects !== null && projects.length > 0 && (
-          <ul className="projects-list">{projects.map(renderRow)}</ul>
-        )}
+        <label className="projects-field translate-card-section">
+          <span className="translate-field-head">
+            <span className="projects-field-label">{s('systemPromptLabel')}</span>
+            {promptSaved && (
+              <span className="translate-saved" role="status">
+                {s('saved')}
+              </span>
+            )}
+          </span>
+          <textarea
+            className="projects-textarea"
+            aria-label={s('systemPromptLabel')}
+            value={systemPrompt}
+            onChange={(e) => {
+              setSystemPrompt(e.target.value)
+              setPromptSaved(false)
+            }}
+            onBlur={saveSystemPrompt}
+          />
+          <span className="projects-hint">{s('systemPromptHint')}</span>
+        </label>
       </div>
     </main>
   )

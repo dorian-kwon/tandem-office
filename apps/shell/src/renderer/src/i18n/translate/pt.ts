@@ -29,6 +29,8 @@ export const pt = {
   deleteFolderConfirmButton: 'Excluir a pasta permanentemente',
   recentTitle: 'Documentos recentes',
   recentUnavailable: 'Pasta ou arquivo não encontrado',
+  countSources: 'Documentos: {n}',
+  countReferences: 'Referências: {n}',
   backToList: 'Todos os projetos',
   loading: 'Carregando…',
   sourcesTitle: 'Documentos a traduzir',

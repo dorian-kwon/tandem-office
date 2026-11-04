@@ -29,6 +29,8 @@ export const cs = {
   deleteFolderConfirmButton: 'Trvale smazat složku',
   recentTitle: 'Nedávné dokumenty',
   recentUnavailable: 'Složka nebo soubor chybí',
+  countSources: 'Dokumenty: {n}',
+  countReferences: 'Podklady: {n}',
   backToList: 'Všechny projekty',
   loading: 'Načítání…',
   sourcesTitle: 'Dokumenty k překladu',

@@ -29,6 +29,8 @@ export const hi = {
   deleteFolderConfirmButton: 'फ़ोल्डर हमेशा के लिए हटाएँ',
   recentTitle: 'हाल के दस्तावेज़',
   recentUnavailable: 'फ़ोल्डर या फ़ाइल नहीं मिली',
+  countSources: 'दस्तावेज़: {n}',
+  countReferences: 'संदर्भ: {n}',
   backToList: 'सभी प्रोजेक्ट',
   loading: 'लोड हो रहा है…',
   sourcesTitle: 'अनुवाद किए जाने वाले दस्तावेज़',

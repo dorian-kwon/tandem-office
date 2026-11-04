@@ -326,3 +326,438 @@
 .translate-recent {
   margin: 0 0 18px;
 }
+
+/* ------------------------------------------------------------------
+   Screen polish: the project list and the project detail follow the Home
+   screen's language (surface cards, 12px radius, 1px --border, soft hover
+   lift, 14px/12px type). Scoped to .translate-pane so the shared project
+   screen styles stay as they are.
+   ------------------------------------------------------------------ */
+
+.translate-pane {
+  max-width: 880px;
+  padding-top: 4px;
+}
+
+/* page header: title and lede on the start side, the primary actions on the end side */
+.translate-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 24px;
+  margin: 0 0 20px;
+}
+
+.translate-head-text {
+  display: flex;
+  flex: 1 1 320px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  min-width: 0;
+}
+
+.translate-title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.translate-lede {
+  flex-basis: 100%;
+  margin: 0;
+  max-width: 640px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.translate-head-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.translate-start-hint {
+  margin: -8px 0 16px;
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.translate-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px -8px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.translate-back:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.translate-back:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* language pair and counts */
+.translate-chip {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--badge-bg);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.translate-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.translate-count {
+  margin-inline-start: 8px;
+  padding: 0 7px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+/* project cards: a responsive grid like Home's quick cards */
+.translate-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+  margin: 0 0 28px;
+  padding: 0;
+  list-style: none;
+}
+
+.translate-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  min-height: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  transition:
+    border-color 0.12s,
+    box-shadow 0.12s;
+}
+
+.translate-card + .translate-card {
+  border-top: 1px solid var(--border);
+}
+
+.translate-card:hover,
+.translate-card:focus-within {
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-btn-hover);
+}
+
+.translate-card .translate-open {
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 16px 16px 8px;
+  border-radius: 12px 12px 0 0;
+}
+
+.translate-card .translate-open:hover {
+  background: none;
+}
+
+.translate-card .projects-row-name {
+  max-width: 100%;
+  font-size: 15px;
+}
+
+.translate-card .translate-row-actions {
+  justify-content: flex-end;
+  padding: 0 10px 10px;
+}
+
+.translate-card .translate-row-main {
+  flex-wrap: wrap;
+  padding: 16px 16px 8px;
+}
+
+.translate-card .translate-row-main .projects-row-path {
+  flex-basis: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.translate-card.is-broken {
+  background: var(--surface-subtle);
+}
+
+/* the delete control is quiet: no border or fill until it is hovered or focused */
+.translate-quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.translate-quiet:hover:not(:disabled) {
+  border-color: var(--border);
+}
+
+/* lists of files and recent documents share one row style */
+.translate-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.translate-rows > .projects-row {
+  min-height: 44px;
+  padding: 8px 4px;
+}
+
+.translate-rows > .projects-row + .projects-row {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.translate-rows .translate-row-main {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 2px 8px;
+}
+
+.translate-rows .projects-row-name {
+  flex: 0 1 auto;
+  max-width: 100%;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.translate-rows .translate-open {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 4px 8px;
+}
+
+.translate-rows .translate-open .projects-row-name {
+  font-weight: 600;
+}
+
+/* reference and PDF state chips (was plain text beside the name) */
+.translate-rows .translate-kind {
+  margin: 0;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.translate-rows [data-reference-status='needs-ocr'],
+.translate-rows [data-reference-status='failed'] {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--text);
+}
+
+.translate-rows [data-reference-status='converted'] {
+  background: var(--surface-subtle);
+}
+
+/* a sentence under a file name: why nothing of it is sent, what to do */
+.translate-note {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-tertiary);
+}
+
+.translate-rows .translate-ref-hint {
+  display: block;
+  margin-top: 0;
+}
+
+/* sections of the detail screen and the global prompt: one card each */
+.translate-card-section {
+  display: block;
+  margin: 0 0 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.translate-card-section > .projects-textarea {
+  min-height: 120px;
+  margin: 8px 0;
+  background: var(--bg-content);
+}
+
+.translate-section-head,
+.translate-field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 30px;
+}
+
+.translate-card-section .translate-rows {
+  margin-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.translate-section-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* Recent documents sit outside a card: a heading and one bordered list, like Home's recents */
+.translate-recent {
+  margin: 0 0 24px;
+}
+
+.translate-recent > .translate-section-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-tertiary);
+}
+
+.translate-recent .translate-rows {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.translate-recent .translate-rows > .projects-row {
+  padding: 4px 6px;
+}
+
+.translate-recent .translate-open:hover {
+  background: var(--bg-hover);
+}
+
+.translate-none {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.translate-add {
+  height: 28px;
+}
+
+.translate-saved {
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--badge-bg);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.translate-saved.is-failed {
+  background: var(--danger-bg);
+  color: var(--text);
+}
+
+/* the empty list: one short line and the primary action */
+.translate-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 28px;
+  padding: 36px 20px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  text-align: center;
+}
+
+.translate-empty-text {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.translate-card-section .translate-lang-row {
+  margin-top: 8px;
+}
+
+.translate-card-section select.translate-select {
+  min-width: 200px;
+}
+
+.translate-pane .projects-hint {
+  margin: 0;
+}
+
+.translate-card-section.projects-field {
+  gap: 4px;
+}
+
+.translate-pane .projects-small:focus-visible,
+.translate-pane .translate-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+@media (max-width: 800px) {
+  .translate-head-actions {
+    flex-basis: 100%;
+  }
+
+  .translate-card-section {
+    padding: 14px;
+  }
+
+  .translate-rows > .projects-row {
+    flex-wrap: wrap;
+  }
+
+  .translate-rows .translate-row-main {
+    flex-basis: 100%;
+  }
+}

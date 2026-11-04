@@ -28,6 +28,8 @@ export const zhTW = {
   deleteFolderConfirmButton: '永久刪除資料夾',
   recentTitle: '最近的文件',
   recentUnavailable: '資料夾或檔案已不存在',
+  countSources: '文件 {n}',
+  countReferences: '參考資料 {n}',
   backToList: '所有專案',
   loading: '載入中…',
   sourcesTitle: '待翻譯的文件',

@@ -28,6 +28,8 @@ export const ar = {
   deleteFolderConfirmButton: 'حذف المجلد نهائيًا',
   recentTitle: 'المستندات الأخيرة',
   recentUnavailable: 'المجلد أو الملف غير موجود',
+  countSources: 'المستندات: {n}',
+  countReferences: 'المراجع: {n}',
   backToList: 'كل المشاريع',
   loading: 'جارٍ التحميل…',
   sourcesTitle: 'مستندات للترجمة',

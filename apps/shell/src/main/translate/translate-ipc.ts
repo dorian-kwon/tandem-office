@@ -392,6 +392,8 @@ function createRawHandlers(deps: TranslateIpcDeps) {
         let name = basename(entry.dir)
         let sourceLang = ''
         let targetLang = ''
+        let sourceCount = 0
+        let referenceCount = 0
         try {
           status = await projectStatus(entry.dir)
           if (status === 'ok') {
@@ -399,6 +401,8 @@ function createRawHandlers(deps: TranslateIpcDeps) {
             name = project.name
             sourceLang = project.sourceLang
             targetLang = project.targetLang
+            sourceCount = project.sources.length
+            referenceCount = project.references.length
           }
         } catch {
           status = 'invalid'
@@ -410,6 +414,8 @@ function createRawHandlers(deps: TranslateIpcDeps) {
           sourceLang,
           targetLang,
           lastOpened: entry.lastOpened,
+          sourceCount,
+          referenceCount,
         })
       }
       return out

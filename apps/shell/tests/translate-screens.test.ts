@@ -52,6 +52,8 @@ function entry(patch: Partial<TranslateProjectListEntry>): TranslateProjectListE
     sourceLang: 'en',
     targetLang: 'ko',
     lastOpened: 1,
+    sourceCount: 0,
+    referenceCount: 0,
     ...patch,
   }
 }
@@ -131,6 +133,26 @@ async function blur(el: Element) {
 }
 
 describe('ProjectList', () => {
+  it('a project card shows its language pair and the source and reference counts', async () => {
+    api.list.mockResolvedValue([
+      entry({ dir: '/p/ok', name: 'Fine', sourceCount: 3, referenceCount: 2 }),
+    ])
+    await render(ProjectList, { onOpen: vi.fn() })
+    const card = host.querySelector('li.translate-card') as HTMLElement
+    expect(card).not.toBeNull()
+    expect(card.textContent).toContain('Documents: 3')
+    expect(card.textContent).toContain('References: 2')
+    expect(card.querySelector('.translate-chip')).not.toBeNull()
+  })
+
+  it('with no projects the empty state offers the new project action', async () => {
+    await render(ProjectList, { onOpen: vi.fn() })
+    const empty = host.querySelector('[data-empty-projects]') as HTMLElement
+    expect(empty).not.toBeNull()
+    expect(empty.textContent).toContain('No translation projects yet')
+    expect(within(empty, 'New project')).toBeTruthy()
+  })
+
   it('list shows not-found projects as disabled with a remove button', async () => {
     api.list.mockResolvedValue([
       entry({ dir: '/p/ok', name: 'Fine' }),

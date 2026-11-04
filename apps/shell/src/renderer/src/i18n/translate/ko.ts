@@ -28,6 +28,8 @@ export const ko = {
   deleteFolderConfirmButton: '폴더 완전히 삭제',
   recentTitle: '최근 문서',
   recentUnavailable: '폴더나 파일이 없습니다',
+  countSources: '문서 {n}',
+  countReferences: '참고자료 {n}',
   backToList: '모든 프로젝트',
   loading: '불러오는 중...',
   sourcesTitle: '번역할 문서',

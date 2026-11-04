@@ -260,3 +260,11 @@ Needs a rebuild of the shell app (`npm run build:all`): main and the tab strip r
 6. Hide the source with the pane toggle: the pair stays grouped; the toggle still works.
 7. Quit and restart with the translation view open: it returns as a pair (source read-only, same bracket). If you delete the output file while the app is closed, the restart does not show a lone source tab.
 8. The output tab of a pair has "Open in new window" off (a pair cannot be torn off).
+
+## Translation: project list and project detail screens (visual polish)
+
+Needs a rebuild of the shell app (`npm run build -w @genoffice/shell`).
+
+1. Project list: the title, intro and the New project / Open existing buttons sit in one header. Projects are cards (name, language pair chip, Documents and References counts, last opened time, a quiet Delete). Recent documents form one bordered list below, the global system prompt is a card at the end, and "Saved" appears as a chip beside its label. With no projects, a dashed card shows one line and the New project button.
+2. Project detail: back link, title with the language pair chip and Start translation in the header (the disabled hint sits under it). Languages, Documents to translate, Reference material, Glossary, Project prompt and OCR are one card each; Add files is in each card header with a count chip; Save as... and Open translation stay on each document row; reference states show as chips.
+3. Check light and dark themes and a narrow window (row buttons wrap under the file name), keyboard Tab focus rings on cards, rows and buttons, and a reference that needs OCR (red-tinted chip plus the note under the name).

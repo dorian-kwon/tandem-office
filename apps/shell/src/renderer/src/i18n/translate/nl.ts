@@ -29,6 +29,8 @@ export const nl = {
   deleteFolderConfirmButton: 'Map definitief verwijderen',
   recentTitle: 'Recente documenten',
   recentUnavailable: 'Map of bestand ontbreekt',
+  countSources: 'Documenten: {n}',
+  countReferences: 'Referenties: {n}',
   backToList: 'Alle projecten',
   loading: 'Laden…',
   sourcesTitle: 'Te vertalen documenten',

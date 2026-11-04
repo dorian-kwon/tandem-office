@@ -97,6 +97,9 @@ export interface TranslateProjectListEntry {
   targetLang: string
   /** epoch milliseconds, kept in the settings list only (never in project.json) */
   lastOpened: number
+  /** documents to translate and reference files in the project (0 when it cannot be read) */
+  sourceCount: number
+  referenceCount: number
 }
 
 /** one document opened lately in the translation view (kept in the app settings file) */

@@ -30,6 +30,8 @@ export const fr = {
   deleteFolderConfirmButton: 'Supprimer définitivement le dossier',
   recentTitle: 'Documents récents',
   recentUnavailable: 'Dossier ou fichier introuvable',
+  countSources: 'Documents : {n}',
+  countReferences: 'Références : {n}',
   backToList: 'Tous les projets',
   loading: 'Chargement…',
   sourcesTitle: 'Documents à traduire',
