@@ -261,6 +261,8 @@ interface ExcelShellProps {
   /// true while the real LLM agent is running (composer disabled meanwhile).
   readonly aiBusy: boolean
   readonly aiRunStatus: RunStatusState
+  /** the AI's numbered question card (ask_choice), above the composer */
+  readonly aiChoiceCard?: React.ReactNode
   /** tokens billed across the session, shown beside the composer */
   readonly sessionUsage?: AiTokenUsageView
   /** subscription connection as the AI panel shows it */
@@ -507,6 +509,7 @@ export function ExcelShell({
   sheetHasContent,
   aiBusy,
   aiRunStatus,
+  aiChoiceCard,
   sessionUsage,
   aiSubscription,
   chat,
@@ -1059,6 +1062,7 @@ export function ExcelShell({
           preview={preview}
           aiBusy={aiBusy}
           aiRunStatus={aiRunStatus}
+          choiceCard={aiChoiceCard}
           sessionUsage={sessionUsage}
           subscription={aiSubscription}
           onPromptChange={onPromptChange}

@@ -22,6 +22,8 @@ import {
   type AiModelPickerBridge,
   AiQueueStrip,
   AiRunStatusLine,
+  choiceBubbleText,
+  useAiChoice,
   useAiRunStatus,
   AI_QUEUE_LABELS,
   AiSubscriptionUsageLine,
@@ -360,6 +362,14 @@ export function AiPanel({ host, filePath, onCollapse }: AiPanelProps): ReactElem
   const [prompt, setPrompt] = useState('')
   const [busy, setBusy] = useState(false)
   const runStatus = useAiRunStatus(busy)
+  // the shared ask_choice question card: the answer starts the next run
+  const choice = useAiChoice({
+    lang,
+    busy,
+    send: (text) => {
+      return send(text)
+    },
+  })
   /** Claude / Codex connection: live statuses and the connect-card actions */
   const subscription = useSubscriptionConnection()
   /** the shared AI settings as last read; null until the first read answered */
@@ -757,6 +767,8 @@ export function AiPanel({ host, filePath, onCollapse }: AiPanelProps): ReactElem
           },
         }),
         // the chosen project: its context and the app-run project tools (adds nothing without one)
+        // the numbered-choice question (ask_choice): the answer arrives as the next message
+        choice.skill,
         ...panelProjectSkill({ run: projectChat.run, lang: () => langRef.current }),
       ]),
       systemSuffix: () => aiLangDirective(langRef.current),
@@ -1611,7 +1623,7 @@ export function AiPanel({ host, filePath, onCollapse }: AiPanelProps): ReactElem
                     <AttachmentList atts={entry.attachments} previews={attachmentPreviews} />
                   </div>
                 )}
-                <span dir="auto">{entry.text}</span>
+                <span dir="auto">{choiceBubbleText(entry.text, lang)}</span>
                 {entry.undelivered && (
                   <div className="ai-msg-undelivered">
                     {t('aiUndelivered')}
@@ -1758,6 +1770,7 @@ export function AiPanel({ host, filePath, onCollapse }: AiPanelProps): ReactElem
         {projectLines}
         {/* Above the input card, not inside its footer: the reset time is long and
             would otherwise squeeze the attach/send buttons in a narrow panel. */}
+        {choice.card}
         <AiRunStatusLine state={runStatus.state} lang={lang} />
         <AiSubscriptionUsageLine usage={subscriptionUsage} lang={lang} />
         <AiComposer

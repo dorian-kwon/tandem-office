@@ -102,6 +102,7 @@ import {
   placeRemoteEntries,
   useProjectPanel,
   TranslationLockBanner,
+  useAiChoice,
   useAiRunStatus,
   useTranslationLock,
   type ProjectPanel,
@@ -1309,6 +1310,15 @@ export function App({
   const streamErrorRef = useRef<IpcStreamError | null>(null)
   const [aiBusy, setAiBusy] = useState(false)
   const aiRunStatus = useAiRunStatus(aiBusy)
+  // the shared ask_choice question card: the answer starts the next run
+  const choice = useAiChoice({
+    lang: getLang(),
+    busy: aiBusy,
+    send: (text) => {
+      if (agentLoopRef.current?.busy) return false
+      handleSend(text)
+    },
+  })
   // The translation view's output pane is locked while the AI translates: `inert` on the
   // grid blocks every pointer and key edit there, while the AI's own writes go through the
   // workbook API and are unaffected. The Unlock button also stops the run.
@@ -1758,6 +1768,8 @@ export function App({
           },
         }),
         // the chosen project folder: its context and its four app-run tools (spec 5.4, 5.5)
+        // the numbered-choice question (ask_choice): the answer arrives as the next message
+        choice.skill,
         // no document_ocr here: this panel opens the app's OCR popup through ocr_pictures
         ...panelProjectSkill({ run: project.chat.run, lang: getLang, ocrChat: false }),
       ]),
@@ -5566,6 +5578,7 @@ export function App({
         onDismissRecoveryNotice={() => setRecoveryNotice(null)}
         aiBusy={aiBusy}
         aiRunStatus={aiRunStatus.state}
+        aiChoiceCard={choice.card}
         {...(sessionUsage !== undefined ? { sessionUsage } : {})}
         aiSubscription={{
           settings: sendGate.settings,

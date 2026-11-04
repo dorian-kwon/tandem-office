@@ -55,7 +55,7 @@ import type { AiBlockedRun } from './subscription-state'
 import type { ChangePlan } from '@genoffice/xlsx-gateway/domain/workbook.types'
 import { ATTACHMENT_IMAGE_EXTS, type AttachmentMeta } from '../../shared/desktop-api'
 import { useI18n, type TFunc } from '../i18n/locale'
-import { AiRunStatusLine, createFileNav, Markdown, type RunStatusState } from '@genoffice/ui'
+import { AiRunStatusLine, choiceBubbleText, createFileNav, Markdown, type RunStatusState } from '@genoffice/ui'
 import { SHEET_NAV_SCHEME } from './sheet-nav'
 import sendEnterOn from '../assets/send-enter-on.png'
 import sendEnterOff from '../assets/send-enter-off.png'
@@ -357,6 +357,7 @@ export function AiChatPanel({
   preview,
   aiBusy,
   aiRunStatus,
+  choiceCard,
   sessionUsage,
   subscription,
   onPromptChange,
@@ -406,6 +407,8 @@ export function AiChatPanel({
   readonly preview: ChangePlan | null
   readonly aiBusy: boolean
   readonly aiRunStatus?: RunStatusState
+  /** the AI's numbered question card (ask_choice) */
+  readonly choiceCard?: React.ReactNode
   /** tokens billed across the session, shown beside the composer */
   readonly sessionUsage?: AiTokenUsageView | undefined
   readonly subscription: AiPanelSubscription
@@ -809,7 +812,10 @@ export function AiChatPanel({
                 {entry.skillProposals?.map((key) => renderSkillCard?.(key))}
                 {entry.text && (
                   <div dir="auto">
-                    <Markdown text={entry.text} navs={[citationNav, fileNav]} />
+                    <Markdown
+                      text={entry.role === 'user' ? choiceBubbleText(entry.text, lang) : entry.text}
+                      navs={[citationNav, fileNav]}
+                    />
                   </div>
                 )}
               </div>
@@ -839,7 +845,7 @@ export function AiChatPanel({
                 {entry.attachments && entry.attachments.length > 0 && (
                   <SentAttachments atts={entry.attachments} previews={attachmentPreviews} />
                 )}
-                <span dir="auto">{entry.text}</span>
+                <span dir="auto">{choiceBubbleText(entry.text, lang)}</span>
                 {entry.undelivered && (
                   <div className="ai-msg-undelivered">
                     {t('aiUndelivered')}
@@ -1003,6 +1009,7 @@ export function AiChatPanel({
         {attachNotice && <div className="ai-attach-notice">{attachNotice}</div>}
         {/* Above the input card, not inside its footer: the reset time is long and
             would otherwise squeeze the attach/send buttons in a narrow panel. */}
+        {choiceCard}
         {aiRunStatus && <AiRunStatusLine state={aiRunStatus} lang={lang} />}
         <AiSubscriptionUsageLine usage={subscription.usage} lang={lang} />
         <AiComposer

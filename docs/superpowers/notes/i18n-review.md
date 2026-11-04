@@ -27,3 +27,5 @@ Added with translation export (2026-11-05, same 19 drafted languages): `apps/she
 
 Added with the translation Save as… rename and the output lock (2026-11-05, same 19 drafted languages): `apps/shell/src/renderer/src/i18n/translate/<lang>.ts` keys `exportTranslation`/`exportDone`/`exportUnsaved` renamed to `saveAsTranslation`/`saveAsDone`/`saveAsUnsaved` with new wording, `errOutputMissing` and (ko, ja, zh, zh-TW) `errExportRefused` reworded from export to save; `packages/ui/src/strings-translation-lock.ts` (banner and Unlock button).
 
+
+Added with the numbered question card (2026-11-05, same 19 drafted languages): `packages/ui/src/strings-ai-choice.ts` (group label, "Type your own answer", placeholder, Send, Skip, "Use this for the rest of the project", key hint, "Skipped the question").

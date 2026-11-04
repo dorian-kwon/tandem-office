@@ -30,6 +30,8 @@ import {
   AiToolsUnsupportedNotice,
   AiQueueStrip,
   AiRunStatusLine,
+  choiceBubbleText,
+  useAiChoice,
   useAiRunStatus,
   AI_QUEUE_LABELS,
   AiScopeQuote,
@@ -224,6 +226,15 @@ export function AiPanel({
   const [prompt, setPrompt] = useState('')
   const [busy, setBusy] = useState(false)
   const runStatus = useAiRunStatus(busy)
+  // the shared ask_choice question card: the answer starts the next run
+  const choice = useAiChoice({
+    lang,
+    busy,
+    send: (text) => {
+      if (loopRef.current?.busy) return false
+      send(text)
+    },
+  })
   /** messages queued while a reply runs; the pump re-runs them through send on settle */
   const msgQueueRef = useRef<ChatRunQueue<{ skillUse: SkillUse }> | null>(null)
   const msgQueue = useChatRunQueue<{ skillUse: SkillUse }>({
@@ -753,6 +764,8 @@ export function AiPanel({
           },
         }),
         // the chosen project folder: its context in the system prompt, project_* tools (app-run)
+        // the numbered-choice question (ask_choice): the answer arrives as the next message
+        choice.skill,
         ...panelProjectSkill({ run: projectPanel.chat.run, lang: () => langRef.current }),
       ]),
       systemSuffix: () => aiLangDirective(langRef.current),
@@ -1213,7 +1226,7 @@ export function AiPanel({
               <div key={i} className="ai-msg ai-msg-user">
                 {entry.scope && <AiScopeQuote scope={entry.scope} />}
                 <SentSkillChips lang={lang} chips={entry.skills} isAvailable={skills.isAvailable} />
-                <span dir="auto">{entry.text}</span>
+                <span dir="auto">{choiceBubbleText(entry.text, lang)}</span>
                 {entry.undelivered && (
                   <div className="ai-msg-undelivered">
                     {t('aiUndelivered')}
@@ -1346,6 +1359,7 @@ export function AiPanel({
         {projectPanel.hint}
         {/* Above the input card, not inside its footer: the reset time is long and
             would otherwise squeeze the attach/send buttons in a narrow panel. */}
+        {choice.card}
         <AiRunStatusLine state={runStatus.state} lang={lang} />
         <AiSubscriptionUsageLine
           usage={subscriptionUsage.filter(

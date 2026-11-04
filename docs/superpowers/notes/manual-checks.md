@@ -276,3 +276,13 @@ Needs a rebuild of the shell app (`npm run build -w @genoffice/shell`).
 1. Open a translation pair A, then an ordinary document B. B shows alone (full width); A's two tabs stay side by side in the strip.
 2. Click A's output, A's source, then B again. A shows its own two panes each time; B always shows alone, never beside a pane of A.
 3. Open a second translation pair B and click all four tabs in turn. Each pair shows exactly its own source and output, never one pane from each pair.
+
+## AI asks through a numbered question card (ask_choice)
+
+Needs a rebuild of the shell app (`npm run build -w @genoffice/shell`). Uses a real AI turn (your subscription limit).
+
+1. In any editor's AI panel, ask for something with a real choice, for example "put the summary somewhere in this document" and say nothing about where. The AI should call the question tool: the status line reads "waiting for you" and, once the AI finished its sentence, a card appears above the composer with the question, numbered options and a "Type your own answer" row.
+2. Press a number key with the composer empty (and with focus on the card): the option is chosen, your chat bubble reads "2 · <option text>" (not a `[choice:...]` tag) and the AI continues using that answer. Typing digits into the document or into a composer that already has text must not choose anything.
+3. Repeat and type your own answer then Enter (a Korean or Japanese IME's Enter that commits composing text must not send); repeat and press Esc or Skip: the AI continues with a safe default or asks once in prose, and the bubble reads "Skipped the question".
+4. While the card is shown, type an ordinary message in the composer and send it: the card disappears.
+5. Check light and dark themes, a narrow panel, Tab order (card, options, typing row, Skip) and that the card does not animate under the OS "reduce motion" setting. Reopen the chat history: the answer bubble still reads in its readable form.

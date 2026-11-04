@@ -13,6 +13,8 @@ import {
   AiQueueStrip,
   AiRunStatusLine,
   TranslationLockBanner,
+  choiceBubbleText,
+  useAiChoice,
   useAiRunStatus,
   useTranslationLock,
   AI_QUEUE_LABELS,
@@ -569,6 +571,15 @@ export function AiPanel({
   const [busy, setBusy] = useState(false)
   const cancelRef = useRef<() => void>(() => undefined)
   const runStatus = useAiRunStatus(busy)
+  // the shared ask_choice question card: the answer starts the next run
+  const choice = useAiChoice({
+    lang,
+    busy,
+    send: (text) => {
+      if (loopRef.current?.busy) return false
+      runWith(text)
+    },
+  })
   const translationLock = useTranslationLock({
     state: runStatus.state,
     probe: () => window.desktop?.isTranslationOutput?.() ?? Promise.resolve(false),
@@ -1220,6 +1231,8 @@ export function AiPanel({
           },
         }),
         // the chosen project folder: its context and its four app-run tools (spec 5.4, 5.5)
+        // the numbered-choice question (ask_choice): the answer arrives as the next message
+        choice.skill,
         ...panelProjectSkill({ run: project.chat.run, lang: () => langRef.current }),
       ]),
       captureSnapshot: () => captureRollbackSnapshot(editorRef.current),
@@ -1942,7 +1955,10 @@ export function AiPanel({
                 {entry.skillProposals?.map((key) => skillCards.render(key))}
                 {entry.text && (
                   <div dir="auto">
-                    <Markdown text={entry.text} navs={chatNavs} />
+                    <Markdown
+                      text={entry.role === 'user' ? choiceBubbleText(entry.text, lang) : entry.text}
+                      navs={chatNavs}
+                    />
                   </div>
                 )}
               </div>
@@ -2024,7 +2040,7 @@ export function AiPanel({
                   <Markdown text={entry.text} navs={chatNavs} />
                 </div>
               ) : (
-                <span dir="auto">{entry.text}</span>
+                <span dir="auto">{choiceBubbleText(entry.text, lang)}</span>
               )}
               {entry.role === 'assistant' && entry.usage && (
                 <div className="ai-message-usage">
@@ -2223,6 +2239,7 @@ export function AiPanel({
         {translationLock.locked && (
           <TranslationLockBanner lang={lang} onUnlock={translationLock.unlock} />
         )}
+        {choice.card}
         <AiRunStatusLine state={runStatus.state} lang={lang} />
         <AiSubscriptionUsageLine usage={subscriptionUsage} lang={lang} />
         <AiComposer

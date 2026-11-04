@@ -112,6 +112,8 @@ import { useI18n, t as tGlobal, aiLangDirective, getLang, type TFunc } from '../
 import {
   AiQueueStrip,
   AiRunStatusLine,
+  choiceBubbleText,
+  useAiChoice,
   useAiRunStatus,
   AI_QUEUE_LABELS,
   AiScopeQuote,
@@ -534,6 +536,15 @@ export function AiPanel({
   const { spellcheck } = useAiPanelPrefs()
   const [busy, setBusy] = useState(false)
   const runStatus = useAiRunStatus(busy)
+  // the shared ask_choice question card: the answer starts the next run
+  const choice = useAiChoice({
+    lang,
+    busy,
+    send: (text) => {
+      if (loopRef.current?.busy) return false
+      runWith(text)
+    },
+  })
   /** messages queued while a reply runs; the pump re-runs them through runWith on settle */
   const msgQueue = useChatRunQueue<{
     attachments: AttachmentMeta[]
@@ -1713,6 +1724,8 @@ export function AiPanel({
           },
         }),
         // the chosen project folder: its context in the system prompt, project_* tools (app-run)
+        // the numbered-choice question (ask_choice): the answer arrives as the next message
+        choice.skill,
         ...panelProjectSkill({ run: projectPanel.chat.run, lang: () => langRef.current }),
       ]),
       events: runStatus.wrap({
@@ -2658,7 +2671,9 @@ export function AiPanel({
                 {entry.skillProposals?.map((key) => skillCards.render(key))}
                 {entry.text && (
                   <div dir="auto">
-                    <Markdown text={entry.text} />
+                    <Markdown
+                      text={entry.role === 'user' ? choiceBubbleText(entry.text, lang) : entry.text}
+                    />
                   </div>
                 )}
               </div>
@@ -2738,7 +2753,7 @@ export function AiPanel({
                   <Markdown text={entry.text} />
                 </div>
               ) : (
-                <span dir="auto">{entry.text}</span>
+                <span dir="auto">{choiceBubbleText(entry.text, lang)}</span>
               )}
               {entry.tools && entry.tools.length > 0 && <ToolChipList tools={entry.tools} />}
               <SkillUsedNotes tools={entry.tools} />
@@ -2924,6 +2939,7 @@ export function AiPanel({
             <AiToolsUnsupportedNotice lang={lang} />
           )}
           {projectPanel.notices}
+          {choice.card}
           <AiRunStatusLine state={runStatus.state} lang={lang} />
           <AiSubscriptionUsageLine usage={subscriptionUsage} lang={lang} />
           <TemplatePicker
