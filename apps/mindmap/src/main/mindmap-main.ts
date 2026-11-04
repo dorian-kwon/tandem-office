@@ -54,6 +54,7 @@ import type {
   RecoveryOpenUntitledRequest,
   SaveDiskState,
 } from '@genoffice/electron-utils'
+import { interceptSaveAs } from '@genoffice/electron-utils'
 import { getUiLang, normalizeLang, setUiLang } from '@genoffice/i18n'
 import { openXmind } from '@genoffice/xmind-engine'
 import { registerMindmapAiIpc } from './ai-attachments'
@@ -657,6 +658,8 @@ function registerMindmapIpc(): void {
         return done({ ok: false, error: 'external-modified' })
       }
     }
+    // the translation output copies through the shell; its source pane never saves
+    if (mode === 'saveAs' && interceptSaveAs(wcId)) return done({ ok: true, canceled: true })
     try {
       const target = await resolveSaveTarget(
         e,

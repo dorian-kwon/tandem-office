@@ -61,4 +61,52 @@ describe('project file', () => {
     const ok = { ...base, references: ['a.txt'], glossaryFiles: ['g.csv'] }
     expect(parseProjectFile(JSON.stringify(ok)).references).toEqual(['a.txt'])
   })
+
+  describe('writing style', () => {
+    it('defaults to the target language convention with no custom text', () => {
+      expect(defaultProjectFile('x', 'ko', 'en').writingStyle).toEqual({
+        serialComma: 'default',
+        quotePunctuation: 'default',
+        custom: '',
+      })
+    })
+
+    it('reads an old project file without writingStyle as the default', () => {
+      const { writingStyle: _w, ...old } = defaultProjectFile('x', 'ko', 'en')
+      expect(parseProjectFile(JSON.stringify(old)).writingStyle).toEqual({
+        serialComma: 'default',
+        quotePunctuation: 'default',
+        custom: '',
+      })
+    })
+
+    it('roundtrips chosen values', () => {
+      const p = {
+        ...defaultProjectFile('x', 'ko', 'en'),
+        writingStyle: { serialComma: 'with', quotePunctuation: 'inside', custom: 'Use "colour".' },
+      }
+      expect(parseProjectFile(serializeProjectFile(p as never))).toEqual(p)
+    })
+
+    it('rejects unknown values and wrong types', () => {
+      const bad = (ws: unknown) =>
+        JSON.stringify({ ...defaultProjectFile('x', 'ko', 'en'), writingStyle: ws })
+      expect(() => parseProjectFile(bad({ serialComma: 'maybe' }))).toThrow(ProjectFileError)
+      expect(() => parseProjectFile(bad({ quotePunctuation: 'around' }))).toThrow(ProjectFileError)
+      expect(() => parseProjectFile(bad({ custom: 3 }))).toThrow(ProjectFileError)
+      expect(() => parseProjectFile(bad('x'))).toThrow(ProjectFileError)
+    })
+
+    it('fills missing fields of a partial writingStyle with defaults', () => {
+      const raw = JSON.stringify({
+        ...defaultProjectFile('x', 'ko', 'en'),
+        writingStyle: { serialComma: 'without' },
+      })
+      expect(parseProjectFile(raw).writingStyle).toEqual({
+        serialComma: 'without',
+        quotePunctuation: 'default',
+        custom: '',
+      })
+    })
+  })
 })

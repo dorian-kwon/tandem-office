@@ -20,6 +20,35 @@ export function isTranslationSourceTab(
   return isReadOnly(tabId)
 }
 
+export interface SaveAsInterceptorDeps {
+  tabIdForWebContents(webContentsId: number): string | undefined
+  split(): { aTabId: string; bTabId: string } | null
+  isReadOnly(tabId: string): boolean
+  filePathOf(tabId: string): string | undefined
+  /** run the shell's copy flow for this output file */
+  requestCopy(outputPath: string): void
+}
+
+/**
+ * The shell's answer to an editor's own Save As (any entry: menu, ribbon, shortcut).
+ * The output pane runs the shell's copy flow instead of retargeting the editor, the
+ * read-only source pane is refused, everything else is the editor's business.
+ */
+export function translationSaveAsInterceptor(
+  deps: SaveAsInterceptorDeps,
+): (webContentsId: number) => boolean {
+  return (webContentsId) => {
+    const tabId = deps.tabIdForWebContents(webContentsId)
+    const split = deps.split()
+    const isReadOnly = (id: string) => deps.isReadOnly(id)
+    if (isTranslationSourceTab(tabId, split, isReadOnly)) return true
+    if (tabId === undefined || !isTranslationOutputTab(tabId, split, isReadOnly)) return false
+    const path = deps.filePathOf(tabId)
+    if (path !== undefined) deps.requestCopy(path)
+    return true
+  }
+}
+
 export function isTranslationOutputTab(
   tabId: string | undefined,
   split: { aTabId: string; bTabId: string } | null,

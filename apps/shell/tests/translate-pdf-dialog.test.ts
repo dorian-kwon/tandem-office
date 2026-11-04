@@ -86,6 +86,7 @@ function project(patch: Partial<ProjectFile> = {}): ProjectFile {
     targetLang: 'de',
     projectPrompt: '',
     ocr: { kind: 'ai', provider: 'claude' },
+    writingStyle: { serialComma: 'default', quotePunctuation: 'default', custom: '' },
     sources: [
       { file: 'report.pdf', sha256: 'x', kind: 'pdf' },
       { file: 'scan.pdf', sha256: 'y', kind: 'scan' },
@@ -565,7 +566,7 @@ describe('ProjectDetail PDF kind', () => {
       el.getAttribute('data-source-kind'),
     )
     expect(kinds).toEqual(['pdf', 'scan'])
-    await click(button('Treat as scanned PDF'))
+    await click(host.querySelector('[data-action="toggle-pdf-kind"]')!)
     expect(setSourceKind).toHaveBeenCalledWith({ dir: '/p/a', file: 'report.pdf', kind: 'scan' })
     expect(host.querySelectorAll('[data-source-kind="scan"]')).toHaveLength(2)
     expect(host.querySelectorAll('[data-action="toggle-pdf-kind"]')).toHaveLength(2)
@@ -615,7 +616,7 @@ describe('TranslationPanel mounting', () => {
       )
     })
     await settle()
-    await click(host.querySelector('.translate-open')!)
+    await click(host.querySelector('[data-tt-primary]')!)
   }
 
   let openTranslationMock: ReturnType<typeof vi.fn>
@@ -625,10 +626,8 @@ describe('TranslationPanel mounting', () => {
   })
 
   async function openRow(file: string) {
-    const row = [...host.querySelectorAll('li, tr')].find((el) => el.textContent?.includes(file))
-    const open = [...(row?.querySelectorAll('button') ?? [])].find(
-      (b) => b.textContent?.trim() === 'Open translation',
-    )
+    const row = host.querySelector(`[role="row"][data-file="${file}"]`)
+    const open = row?.querySelector('[data-action="open-translation"]')
     if (!open) throw new Error(`no open button for ${file}`)
     await click(open)
   }

@@ -90,6 +90,8 @@ import {
   setHeadlessMode,
   setOpenFilesSource,
   setOpenPathProbe,
+  setSaveAsInterceptor,
+  interceptSaveAs,
   type HeadlessArgvParse,
   showOpenDialogWithMemory,
   showSaveDialogWithMemory,
@@ -519,6 +521,7 @@ import { TabManager, canonicalPath, type DetachedTab } from './tab-manager'
 import {
   isTranslationOutputTab,
   isTranslationSourceTab,
+  translationSaveAsInterceptor,
   TRANSLATION_OUTPUT_CHANNEL,
   TRANSLATION_SOURCE_CHANNEL,
 } from './translation-output'
@@ -6462,6 +6465,22 @@ function registerHomeIpc(): void {
     )
   })
 
+  // every editor's own Save As (menu, ribbon, shortcut) asks here first: the output pane
+  // runs the shell's copy flow, the read-only source pane is refused
+  setSaveAsInterceptor(
+    translationSaveAsInterceptor({
+      tabIdForWebContents: (id) => tabManager?.tabIdForWebContents(id),
+      split: () => tabManager?.splitState() ?? null,
+      isReadOnly: (id) => tabManager?.isReadOnlyTab(id) ?? false,
+      filePathOf: (id) => tabManager?.list().find((tab) => tab.id === id)?.filePath,
+      requestCopy: (outputPath) => {
+        const contents = shellWindow?.webContents
+        if (contents && !contents.isDestroyed())
+          contents.send(TRANSLATE_EVENTS.saveAsRequested, { outputPath })
+      },
+    }),
+  )
+
   // an editor asks whether it is the translation view's read-only source pane
   ipcMain.handle(TRANSLATION_SOURCE_CHANNEL, (event): boolean => {
     const manager = tabManager
@@ -8403,6 +8422,8 @@ let savingPdfAs = false
 async function savePdfAs(tab = activePdfTarget()): Promise<void> {
   const host = pdfHostWindow(tab)
   if (!tab?.filePath || !host || savingPdfAs) return
+  // the translation output copies through the shell flow; its source pane never saves
+  if (interceptSaveAs(tab.webContents.id)) return
   savingPdfAs = true
   // Pause renderer autosave for the whole flow: the dialog blurs the window, and a
   // blur-triggered autosave would write the pending edits into the original file

@@ -36,6 +36,7 @@ import {
   rendererUrl,
 } from '@genoffice/electron-utils'
 import type { RecoveryIdentity, SaveDiskState } from '@genoffice/electron-utils'
+import { interceptSaveAs } from '@genoffice/electron-utils'
 import { createI18n, getUiLang } from '@genoffice/i18n'
 import { sharedSubscriptionStatuses } from '@genoffice/ai-provider/subscription'
 import { generateImageTool, documentMediaRoots, withMediaCallSignal } from '@genoffice/ai-search'
@@ -1100,6 +1101,8 @@ function registerMarkdownIpc(): void {
         ? await pendingOwnedAssetsForDocument(pathAtRequest)
         : []
       try {
+        // the translation output copies through the shell; its source pane never saves
+        if (mode === 'saveAs' && interceptSaveAs(e.sender.id)) return done({ ok: true, canceled: true })
         const suggestedName =
           typeof request.suggestedName === 'string' ? request.suggestedName : undefined
         // the AI's silent first save lands in the panel's project when it has one

@@ -5,51 +5,6 @@
   max-width: 820px;
 }
 
-.translate-row-actions {
-  display: flex;
-  flex: none;
-  gap: 6px;
-}
-
-.translate-row-main {
-  display: flex;
-  flex: 1;
-  align-items: baseline;
-  gap: 10px;
-  min-width: 0;
-  padding: 6px 4px;
-  color: var(--text);
-}
-
-.translate-row-main.is-disabled {
-  color: var(--text-tertiary);
-}
-
-.translate-open {
-  display: flex;
-  flex: 1;
-  align-items: baseline;
-  gap: 10px;
-  min-width: 0;
-  padding: 6px 4px;
-  border: none;
-  border-radius: 6px;
-  background: none;
-  color: var(--text);
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-}
-
-.translate-open:hover {
-  background: var(--bg-hover);
-}
-
-.translate-open:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
 .translate-confirm {
   max-width: 640px;
   margin: 0 0 18px;
@@ -102,6 +57,7 @@
 }
 
 /* The translation view's hide/show control in the tab strip (TranslationPaneToggle). */
+
 .translate-pane-toggle {
   -webkit-app-region: no-drag;
   display: flex;
@@ -130,6 +86,7 @@
 }
 
 /* "Source copy changed" notice next to the hide/show control. */
+
 .translate-source-notice {
   -webkit-app-region: no-drag;
   display: flex;
@@ -166,6 +123,7 @@
 }
 
 /* the OCR window (OcrSelectDialog): the shell's .modal frame with a page list */
+
 .translate-ocr {
   width: min(520px, 90vw);
 }
@@ -283,12 +241,14 @@
 }
 
 /* a reference that needs OCR: why nothing of it is sent, under its name */
+
 .translate-ref-hint {
   display: block;
   margin-top: 2px;
 }
 
 /* the read-only view of a reference's converted text */
+
 .translate-converted {
   width: min(720px, 90vw);
   max-width: 720px;
@@ -309,6 +269,7 @@
 }
 
 /* The new-project form: space the rows out so labels, selects and buttons do not touch. */
+
 .translate-pane .projects-create {
   display: flex;
   flex-direction: column;
@@ -340,6 +301,7 @@
 }
 
 /* page header: title and lede on the start side, the primary actions on the end side */
+
 .translate-head {
   display: flex;
   flex-wrap: wrap;
@@ -417,6 +379,7 @@
 }
 
 /* language pair and counts */
+
 .translate-chip {
   flex: none;
   padding: 1px 8px;
@@ -449,156 +412,8 @@
   line-height: 16px;
 }
 
-/* project cards: a responsive grid like Home's quick cards */
-.translate-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 10px;
-  margin: 0 0 28px;
-  padding: 0;
-  list-style: none;
-}
-
-.translate-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0;
-  min-height: 0;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--surface);
-  transition:
-    border-color 0.12s,
-    box-shadow 0.12s;
-}
-
-.translate-card + .translate-card {
-  border-top: 1px solid var(--border);
-}
-
-.translate-card:hover,
-.translate-card:focus-within {
-  border-color: var(--border-hover);
-  box-shadow: var(--shadow-btn-hover);
-}
-
-.translate-card .translate-open {
-  flex: 1;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 16px 16px 8px;
-  border-radius: 12px 12px 0 0;
-}
-
-.translate-card .translate-open:hover {
-  background: none;
-}
-
-.translate-card .projects-row-name {
-  max-width: 100%;
-  font-size: 15px;
-}
-
-.translate-card .translate-row-actions {
-  justify-content: flex-end;
-  padding: 0 10px 10px;
-}
-
-.translate-card .translate-row-main {
-  flex-wrap: wrap;
-  padding: 16px 16px 8px;
-}
-
-.translate-card .translate-row-main .projects-row-path {
-  flex-basis: 100%;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
-.translate-card.is-broken {
-  background: var(--surface-subtle);
-}
-
-/* the delete control is quiet: no border or fill until it is hovered or focused */
-.translate-quiet {
-  border-color: transparent;
-  background: transparent;
-  color: var(--text-muted);
-}
-
-.translate-quiet:hover:not(:disabled) {
-  border-color: var(--border);
-}
-
-/* lists of files and recent documents share one row style */
-.translate-rows {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.translate-rows > .projects-row {
-  min-height: 44px;
-  padding: 8px 4px;
-}
-
-.translate-rows > .projects-row + .projects-row {
-  border-top: 1px solid var(--border-subtle);
-}
-
-.translate-rows .translate-row-main {
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 10px;
-  padding: 2px 8px;
-}
-
-.translate-rows .projects-row-name {
-  flex: 0 1 auto;
-  max-width: 100%;
-  font-weight: 500;
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
-
-.translate-rows .translate-open {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 4px 8px;
-}
-
-.translate-rows .translate-open .projects-row-name {
-  font-weight: 600;
-}
-
-/* reference and PDF state chips (was plain text beside the name) */
-.translate-rows .translate-kind {
-  margin: 0;
-  padding: 0 8px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.translate-rows [data-reference-status='needs-ocr'],
-.translate-rows [data-reference-status='failed'] {
-  border-color: var(--danger-border);
-  background: var(--danger-bg);
-  color: var(--text);
-}
-
-.translate-rows [data-reference-status='converted'] {
-  background: var(--surface-subtle);
-}
-
 /* a sentence under a file name: why nothing of it is sent, what to do */
+
 .translate-note {
   flex-basis: 100%;
   margin: 0;
@@ -607,12 +422,8 @@
   color: var(--text-tertiary);
 }
 
-.translate-rows .translate-ref-hint {
-  display: block;
-  margin-top: 0;
-}
-
 /* sections of the detail screen and the global prompt: one card each */
+
 .translate-card-section {
   display: block;
   margin: 0 0 14px;
@@ -637,11 +448,6 @@
   min-height: 30px;
 }
 
-.translate-card-section .translate-rows {
-  margin-top: 8px;
-  border-top: 1px solid var(--border-subtle);
-}
-
 .translate-section-title {
   margin: 0;
   font-size: 14px;
@@ -650,6 +456,7 @@
 }
 
 /* Recent documents sit outside a card: a heading and one bordered list, like Home's recents */
+
 .translate-recent {
   margin: 0 0 24px;
 }
@@ -660,21 +467,6 @@
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--text-tertiary);
-}
-
-.translate-recent .translate-rows {
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--surface);
-  overflow: hidden;
-}
-
-.translate-recent .translate-rows > .projects-row {
-  padding: 4px 6px;
-}
-
-.translate-recent .translate-open:hover {
-  background: var(--bg-hover);
 }
 
 .translate-none {
@@ -703,6 +495,7 @@
 }
 
 /* the empty list: one short line and the primary action */
+
 .translate-empty {
   display: flex;
   flex-direction: column;
@@ -744,7 +537,529 @@
   outline-offset: 1px;
 }
 
+/* ------------------------------------------------------------------
+   Table look (project list, recent documents, project detail files):
+   a thin header row, full-width rounded rows with a leading icon, a name over
+   a muted second line, quiet actions that appear on hover or focus, and values
+   that line up in columns. Tokens only; the columns come from --tt-cols.
+   ------------------------------------------------------------------ */
+
+.translate-pane {
+  max-width: 980px;
+}
+
+.tt {
+  display: flex;
+  flex-direction: column;
+  margin: 0 0 24px;
+}
+
+.tt-head,
+.tt-row {
+  display: grid;
+  grid-template-columns: var(--tt-cols);
+  align-items: center;
+  column-gap: 14px;
+  padding: 0 12px;
+}
+
+.tt-head {
+  min-height: 34px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tt-col {
+  min-width: 0;
+}
+
+.tt-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  margin-inline-start: -6px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.tt-sort:hover,
+.tt-sort.is-active {
+  color: var(--text-primary);
+}
+
+.tt-sort:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.tt-head .tt-time .tt-sort,
+.tt-head .tt-count {
+  margin-inline-start: 0;
+}
+
+.tt-row {
+  position: relative;
+  min-height: 58px;
+  margin-top: 2px;
+  border-radius: 10px;
+  transition: background 0.1s;
+}
+
+.tt-row.is-link {
+  cursor: pointer;
+}
+
+.tt-row:hover,
+.tt-row:focus-within {
+  background: var(--bg-hover);
+}
+
+.tt-row:has(.tt-menu-wrap.is-open) {
+  background: var(--bg-hover-strong);
+}
+
+.tt-row:has([data-tt-primary]:focus-visible) {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.tt-row.is-broken .tt-title {
+  color: var(--text-tertiary);
+}
+
+.tt-cell {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tt-name {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tt-glyph {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+}
+
+.tt-name-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+  padding: 6px 0;
+}
+
+.tt-title {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tt-title-btn,
+.tt-link {
+  max-width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: start;
+  cursor: pointer;
+}
+
+.tt-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.tt-title-btn:focus-visible,
+.tt-link:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.tt-sub {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tt-name-text .translate-ref-hint,
+.tt-sub .translate-note {
+  margin: 0;
+  color: var(--text-muted);
+  white-space: normal;
+}
+
+.tt-count,
+.tt-time {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.tt-head .tt-time {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.tt-lang .translate-chip {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tt-broken {
+  grid-column: 2 / -2;
+}
+
+.tt-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  overflow: visible;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.tt-head .tt-actions {
+  opacity: 1;
+}
+
+.tt-row:hover .tt-actions,
+.tt-row:focus-within .tt-actions,
+.tt-actions:has(.tt-menu-wrap.is-open) {
+  opacity: 1;
+}
+
+.tt-icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.tt-icon-btn:hover:not(:disabled),
+.tt-icon-btn[aria-expanded='true'] {
+  background: var(--bg-hover-strong);
+  color: var(--text-primary);
+}
+
+.tt-icon-btn.is-danger:hover:not(:disabled) {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.tt-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.tt-icon-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.tt-menu-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.tt-menu {
+  position: absolute;
+  inset-block-start: calc(100% + 4px);
+  inset-inline-end: 0;
+  z-index: 30;
+  min-width: 170px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow-menu);
+}
+
+.tt-menu button {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  text-align: start;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tt-menu button:hover,
+.tt-menu button:focus-visible {
+  background: var(--bg-hover);
+  outline: none;
+}
+
+.tt-menu button.is-danger {
+  color: var(--danger);
+}
+
+.tt-menu button.is-danger:hover,
+.tt-menu button.is-danger:focus-visible {
+  background: var(--danger-bg);
+}
+
+/* the columns of each table */
+.tt-projects {
+  --tt-cols: minmax(0, 2.6fr) minmax(0, 1.3fr) 84px 92px minmax(110px, 0.9fr) 36px;
+}
+
+.tt-recent {
+  --tt-cols: minmax(0, 2.2fr) minmax(0, 1.4fr) minmax(0, 1.2fr) minmax(110px, 0.8fr);
+}
+
+.tt-files {
+  --tt-cols: minmax(0, 1fr) 132px 180px;
+}
+
+.tt-files .tt-status {
+  overflow: visible;
+}
+
+/* status chips (conversion state, PDF kind, ready) */
+.tt .translate-kind {
+  display: inline-block;
+  margin: 0;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.tt [data-reference-status='needs-ocr'],
+.tt [data-reference-status='failed'] {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--text);
+}
+
+.tt [data-reference-status='converted'],
+.tt [data-status='ready'] {
+  background: var(--surface-subtle);
+}
+
+/* the in-place name field (project list row and detail title) */
+.tt-name-input {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 420px;
+  padding: 4px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.translate-title.is-editing {
+  flex: 1 1 280px;
+}
+
+.translate-title.is-editing .tt-name-input {
+  max-width: 560px;
+  font-size: 22px;
+  letter-spacing: -0.01em;
+}
+
+.translate-title-text.is-editable {
+  padding: 0 4px;
+  margin-inline-start: -4px;
+  border-radius: 6px;
+  cursor: text;
+}
+
+.translate-title-text.is-editable:hover {
+  background: var(--bg-hover);
+}
+
+.translate-title-edit {
+  flex: none;
+}
+
+/* file blocks of the detail screen */
+.translate-block {
+  margin: 0 0 22px;
+}
+
+.translate-block .translate-section-head {
+  margin-bottom: 6px;
+}
+
+.translate-block .tt {
+  margin-bottom: 0;
+}
+
+.tt-settings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+  margin: 0 0 22px;
+}
+
+.tt-settings > .translate-card-section {
+  margin: 0;
+}
+
+/* writing style: two numbered questions and a free instruction */
+.tt-questions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 6px 20px;
+  margin-top: 10px;
+}
+
+.tt-question {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.tt-question-legend {
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tt-option {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.tt-option:hover {
+  background: var(--bg-hover);
+}
+
+.tt-option.is-selected {
+  border-color: var(--accent);
+  background: var(--badge-bg);
+}
+
+.tt-option:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.tt-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tt-option-num {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tt-option.is-selected .tt-option-num {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.tt-option-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
+
+.tt-option-label {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.tt-option-example {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.tt-custom {
+  margin-top: 14px;
+}
+
 @media (max-width: 800px) {
+  .tt-projects {
+    --tt-cols: minmax(0, 2fr) minmax(0, 1.2fr) minmax(90px, 0.8fr) 36px;
+  }
+
+  .tt-projects .tt-count,
+  .tt-recent .tt-proj {
+    display: none;
+  }
+
+  .tt-recent {
+    --tt-cols: minmax(0, 2fr) minmax(0, 1.2fr) minmax(90px, 0.8fr);
+  }
+
+  .tt-broken {
+    grid-column: 2 / -2;
+  }
+
+  .tt-files {
+    --tt-cols: minmax(0, 1fr) 110px 180px;
+  }
+
   .translate-head-actions {
     flex-basis: 100%;
   }
@@ -752,12 +1067,18 @@
   .translate-card-section {
     padding: 14px;
   }
+}
 
-  .translate-rows > .projects-row {
-    flex-wrap: wrap;
+/* no hover (touch): the row actions stay visible */
+@media (hover: none) {
+  .tt-actions {
+    opacity: 1;
   }
+}
 
-  .translate-rows .translate-row-main {
-    flex-basis: 100%;
-  }
+.tt-settings > label.translate-card-section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
 }

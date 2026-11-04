@@ -45,6 +45,7 @@ import {
   type TranslationViewDeps,
 } from './open-translation'
 import { exportTranslation, type ExportTranslationDeps } from './export-translation'
+import { normalizeProjectName } from '../../shared/project-name'
 import { listRecentDocuments, recordRecentDocument } from './recent-documents'
 import type { TranslationProjectLink } from './project-link'
 import {
@@ -86,6 +87,7 @@ import {
   type TranslateReferenceText,
   type TranslateReferenceTextArgs,
   type TranslateRemoveArgs,
+  type TranslateRenameArgs,
   type TranslateRelocateArgs,
   type TranslateRemoveMaterialArgs,
   type TranslateSetPaneHiddenArgs,
@@ -165,13 +167,24 @@ const FILTERS: Record<TranslateMaterialKind, { name: string; extensions: string[
   glossary: [{ name: 'Glossary', extensions: ['csv', 'txt', 'xlsx'] }],
 }
 
-const SETTINGS_KEYS = ['projectPrompt', 'ocr', 'sourceLang', 'targetLang']
+const SETTINGS_KEYS = ['projectPrompt', 'ocr', 'writingStyle', 'sourceLang', 'targetLang']
+
+/** Longest custom writing-style instruction the renderer may save */
+export const WRITING_STYLE_CUSTOM_MAX = 500
 
 const KINDS: readonly TranslateMaterialKind[] = ['source', 'reference', 'glossary']
 
 function fold(path: string): string {
   const full = resolve(path)
   return process.platform === 'win32' ? full.toLowerCase() : full
+}
+
+/** A trimmed, non-empty display name without control characters (shared rule). */
+function validDisplayName(value: unknown): string {
+  const name = normalizeProjectName(value)
+  if (name === null)
+    throw new TranslateIpcError('INVALID_ARGUMENT', 'the project name is not valid')
+  return name
 }
 
 function requireString(value: unknown, what: string): string {
@@ -197,6 +210,7 @@ export function createTranslateHandlers(deps: TranslateIpcDeps) {
     setSystemPrompt: guard(raw.setSystemPrompt),
     getProject: guard(raw.getProject),
     updateSettings: guard(raw.updateSettings),
+    rename: guard(raw.rename),
     addMaterial: guard(raw.addMaterial),
     removeMaterial: guard(raw.removeMaterial),
     pickMaterials: guard(raw.pickMaterials),
@@ -527,6 +541,15 @@ function createRawHandlers(deps: TranslateIpcDeps) {
         if (typeof v !== 'string' || (key !== 'projectPrompt' && v === ''))
           throw new TranslateIpcError('INVALID_ARGUMENT', `${key} is not valid`)
       }
+      const style = fields.writingStyle
+      if (
+        style !== undefined &&
+        typeof style === 'object' &&
+        style !== null &&
+        typeof (style as { custom?: unknown }).custom === 'string' &&
+        (style as { custom: string }).custom.length > WRITING_STYLE_CUSTOM_MAX
+      )
+        throw new TranslateIpcError('INVALID_ARGUMENT', 'writingStyle.custom is too long')
       // read-modify-write under the project lock so a concurrent material change survives
       return withProjectLock(dir, async () => {
         const current = await loadProject(dir)
@@ -541,6 +564,17 @@ function createRawHandlers(deps: TranslateIpcDeps) {
         }
         await saveProject(dir, checked)
         return checked
+      })
+    },
+
+    async rename(args: TranslateRenameArgs): Promise<ProjectFile> {
+      const dir = registeredDir(args?.dir)
+      const name = validDisplayName(args.name)
+      return withProjectLock(dir, async () => {
+        const current = await loadProject(dir)
+        const next = { ...current, name }
+        await saveProject(dir, next)
+        return next
       })
     },
 
@@ -757,7 +791,11 @@ function createRawHandlers(deps: TranslateIpcDeps) {
         // a translation tab's own output file: main finds the project and the source from its path
         const outputPath = requireString(args.outputPath, 'outputPath')
         const name = basename(outputPath)
-        if (!isAbsolute(outputPath) || !plainFileName(name) || basename(dirname(outputPath)) !== 'output')
+        if (
+          !isAbsolute(outputPath) ||
+          !plainFileName(name) ||
+          basename(dirname(outputPath)) !== 'output'
+        )
           throw new TranslateIpcError('INVALID_ARGUMENT', 'this is not a translation output file')
         const dir = registeredDir(dirname(dirname(outputPath)))
         const project = await loadProject(dir)
@@ -771,7 +809,8 @@ function createRawHandlers(deps: TranslateIpcDeps) {
               }
               return null
             })()
-        if (!resolved) throw new TranslateIpcError('NOT_LISTED', 'no source of the project made this file')
+        if (!resolved)
+          throw new TranslateIpcError('NOT_LISTED', 'no source of the project made this file')
         return exportTranslation(dir, resolved.entry, name, project.targetLang, exporter)
       }
       const dir = registeredDir(args?.dir)
@@ -861,6 +900,7 @@ export function registerTranslateIpc(
   handle(TRANSLATE_CHANNELS.updateSettings, (_e, args: TranslateUpdateSettingsArgs) =>
     h.updateSettings(args),
   )
+  handle(TRANSLATE_CHANNELS.rename, (_e, args: TranslateRenameArgs) => h.rename(args))
   handle(TRANSLATE_CHANNELS.addMaterial, (_e, args: TranslateAddMaterialArgs) =>
     h.addMaterial(args),
   )

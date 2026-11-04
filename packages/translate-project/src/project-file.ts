@@ -1,5 +1,18 @@
 export type OcrMode = { kind: 'off' } | { kind: 'ai'; provider: 'claude' | 'chatgpt' }
 
+/** Serial (Oxford) comma choice; `default` follows the target language's usual convention. */
+export type SerialComma = 'default' | 'with' | 'without'
+
+/** Where a comma or period goes relative to a closing quotation mark. */
+export type QuotePunctuation = 'default' | 'outside' | 'inside'
+
+export type WritingStyle = {
+  serialComma: SerialComma
+  quotePunctuation: QuotePunctuation
+  /** free-text instruction from the person; '' when none */
+  custom: string
+}
+
 export type SourceKind = 'editable' | 'pdf' | 'scan' | 'image'
 
 export type SourceEntry = { file: string; sha256: string; kind: SourceKind }
@@ -11,6 +24,8 @@ export type ProjectFile = {
   targetLang: string
   projectPrompt: string
   ocr: OcrMode
+  /** absent in files written before this field existed; read as the default style */
+  writingStyle: WritingStyle
   sources: SourceEntry[]
   references: string[]
   glossaryFiles: string[]
@@ -25,6 +40,10 @@ export class ProjectFileError extends Error {
 
 const SOURCE_KINDS: readonly string[] = ['editable', 'pdf', 'scan', 'image']
 
+export function defaultWritingStyle(): WritingStyle {
+  return { serialComma: 'default', quotePunctuation: 'default', custom: '' }
+}
+
 export function defaultProjectFile(
   name: string,
   sourceLang: string,
@@ -37,6 +56,7 @@ export function defaultProjectFile(
     targetLang,
     projectPrompt: '',
     ocr: { kind: 'ai', provider: 'claude' },
+    writingStyle: defaultWritingStyle(),
     sources: [],
     references: [],
     glossaryFiles: [],
@@ -78,6 +98,32 @@ function parseOcr(v: unknown): OcrMode {
   throw new ProjectFileError('ocr has an unknown kind or provider')
 }
 
+function parseWritingStyle(v: unknown): WritingStyle {
+  if (v === undefined) return defaultWritingStyle()
+  if (!isRecord(v)) throw new ProjectFileError('writingStyle must be an object')
+  const out = defaultWritingStyle()
+  if (v.serialComma !== undefined) {
+    if (v.serialComma !== 'default' && v.serialComma !== 'with' && v.serialComma !== 'without')
+      throw new ProjectFileError('writingStyle.serialComma is unknown')
+    out.serialComma = v.serialComma
+  }
+  if (v.quotePunctuation !== undefined) {
+    if (
+      v.quotePunctuation !== 'default' &&
+      v.quotePunctuation !== 'outside' &&
+      v.quotePunctuation !== 'inside'
+    )
+      throw new ProjectFileError('writingStyle.quotePunctuation is unknown')
+    out.quotePunctuation = v.quotePunctuation
+  }
+  if (v.custom !== undefined) {
+    if (typeof v.custom !== 'string')
+      throw new ProjectFileError('writingStyle.custom must be a string')
+    out.custom = v.custom
+  }
+  return out
+}
+
 function parseSource(v: unknown): SourceEntry {
   if (!isRecord(v)) throw new ProjectFileError('source entry must be an object')
   const kind = str(v, 'kind', 'source ')
@@ -107,6 +153,7 @@ export function parseProjectFile(json: string): ProjectFile {
     targetLang: str(raw, 'targetLang'),
     projectPrompt: str(raw, 'projectPrompt'),
     ocr: parseOcr(raw.ocr),
+    writingStyle: parseWritingStyle(raw.writingStyle),
     sources: raw.sources.map(parseSource),
     references: strList(raw, 'references'),
     glossaryFiles: strList(raw, 'glossaryFiles'),

@@ -26,7 +26,7 @@
 - 순수 TypeScript와 Node 내장 모듈(`node:fs`, `node:crypto`, `node:zlib`)만 쓴다. 런타임 npm 의존성을 더하지 않는다. 화면(렌더러)은 이 패키지를 가져오지 못한다.
 - 사람의 원래 파일은 읽기만 한다. 폴더 안에서도 덮어쓰지 않는다(`COPYFILE_EXCL`, 번호 붙이기). `.tandem/`의 JSON은 임시 파일에 쓴 뒤 이름을 바꾼다. 쓰기 실패 때는 방금 만든 사본을 치우고, 정리 실패가 원래 오류를 가리지 않게 한다.
 - 파일 이름을 받는 함수는 파일 시스템에 닿기 전에 경로 구분자·`.`·`..`를 거절한다(`NotListedError`).
-- `ProjectFile`에는 시스템 프롬프트 필드가 없다. 프로젝트 프롬프트(`projectPrompt`)만 사용자가 고치며, 파서는 모르는 키를 버린다. 버전은 1만 받는다. 기본 OCR은 `{ kind: 'ai', provider: 'claude' }`다.
+- `ProjectFile`에는 시스템 프롬프트 필드가 없다. 프로젝트 프롬프트(`projectPrompt`)만 사용자가 고치며, 파서는 모르는 키를 버린다. 버전은 1만 받는다. 기본 OCR은 `{ kind: 'ai', provider: 'claude' }`다. `writingStyle`(`serialComma`·`quotePunctuation`·`custom`, 기본은 모두 번역 언어의 관례를 따름)은 없는 옛 파일도 기본값으로 읽고, 알 수 없는 값은 거절한다. `compose.ts`의 `writingStyleRule`이 기본이 아닌 선택만 프로젝트 맥락 글(언어 줄 아래)에 영어 규칙으로 낸다.
 - 오류는 이름이 있는 클래스로 던진다(`ProjectExistsError`, `InvalidProjectNameError`, `NotAProjectError`, `UnsupportedSourceError`, `NotListedError`, `GlossaryFormatError` 등). 셸은 그 이름으로 오류 코드를 고른다(`src/shared/translate-api.ts`).
 - 맥락 글(`text`)에는 참고자료의 이름만 넣는다. 내용은 요청마다 고른 조각만 `referencesText`로 따로 내고, 호출자가 `<translation-references>`로 감싼다. 참고자료 파일 자체는 읽기만 한다. 변환한 글은 `references/.md/`에만 쓴다.
 - 참고자료 쪽은 링크를 따라가지 않는다(`lstat`, `realpath`). 링크이거나 프로젝트 밖으로 풀리는 것은 읽지도 쓰지도 지우지도 않고 `outside`로 적는다. 지우는 것은 `references/.md/` 바로 안의 보통 파일뿐이다.

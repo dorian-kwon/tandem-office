@@ -7,6 +7,19 @@ import type {
   TranslateRecentDocument,
 } from '../../../shared/translate-api'
 import { useI18n } from '../locale'
+import { normalizeProjectName } from '../../../shared/project-name'
+import { InlineName } from './InlineName'
+import { FileIcon, glyphForFile, ProjectIcon, SortChevron } from './icons'
+import {
+  middleEllipsis,
+  moveRowFocus,
+  readSessionSort,
+  sortProjects,
+  writeSessionSort,
+  type SortKey,
+  type SortState,
+} from './project-table'
+import { RowMenu, type RowMenuItem } from './RowMenu'
 import { languageName, makeText, translateErrorText } from './shared'
 import '../projects-panel.css'
 import './translate.css'
@@ -57,6 +70,9 @@ export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
   const [parent, setParent] = useState<TranslatePickedParentDir | null>(null)
   const [busy, setBusy] = useState(false)
   const [deleting, setDeleting] = useState<Deleting | null>(null)
+  /** the project whose name is being edited in its row */
+  const [renaming, setRenaming] = useState<string | null>(null)
+  const [sort, setSort] = useState<SortState>(readSessionSort)
   /** an added folder whose AI context is not linked (foreign instructions or memory) */
   const [notLinked, setNotLinked] = useState(false)
 
@@ -169,73 +185,160 @@ export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
     }
   }
 
+  const chooseSort = (key: SortKey) => {
+    // the same column again flips the direction; a new column starts newest/A first
+    const next: SortState =
+      sort.key === key
+        ? { key, dir: sort.dir === 'asc' ? 'desc' : 'asc' }
+        : { key, dir: key === 'name' ? 'asc' : 'desc' }
+    writeSessionSort(next)
+    setSort(next)
+  }
+
+  const saveRename = async (entry: TranslateProjectListEntry, raw: string) => {
+    setRenaming(null)
+    const next = normalizeProjectName(raw)
+    if (next === null) {
+      setError(s('renameInvalid'))
+      return
+    }
+    if (next === entry.name) return
+    setBusy(true)
+    setError(null)
+    try {
+      await api.rename({ dir: entry.dir, name: next })
+      await reload()
+    } catch (err) {
+      fail(err)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const sortHeader = (key: SortKey, label: string, extra = '') => (
+    <div
+      role="columnheader"
+      className={`tt-col${extra}`}
+      aria-sort={sort.key === key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
+      <button
+        type="button"
+        className={`tt-sort${sort.key === key ? ' is-active' : ''}`}
+        aria-label={s('sortBy', { column: label })}
+        onClick={() => chooseSort(key)}
+      >
+        {label}
+        {sort.key === key && <SortChevron dir={sort.dir} />}
+      </button>
+    </div>
+  )
+
   const renderRow = (entry: TranslateProjectListEntry) => {
     const usable = entry.status === 'ok'
+    const items: RowMenuItem[] = usable
+      ? [
+          { key: 'rename', label: s('rename'), onSelect: () => setRenaming(entry.dir) },
+          {
+            key: 'delete',
+            label: s('deleteProject'),
+            danger: true,
+            onSelect: () => setDeleting({ entry, step: 'choose' }),
+          },
+        ]
+      : [
+          ...(entry.status === 'not-found'
+            ? [
+                {
+                  key: 'locate',
+                  label: s('locateFolder'),
+                  onSelect: () => void adopt(() => api.relocate({ dir: entry.dir })),
+                },
+              ]
+            : []),
+          {
+            key: 'remove',
+            label: s('removeFromList'),
+            onSelect: () => void remove(entry.dir, false),
+          },
+        ]
+    const editing = renaming === entry.dir
     return (
-      <li
+      <div
         key={entry.dir}
-        className={`projects-row translate-card${usable ? '' : ' is-broken'}`}
+        role="row"
+        className={`tt-row${usable ? ' is-link' : ' is-broken'}`}
         data-project-dir={entry.dir}
+        onClick={usable && !editing ? () => onOpen(entry.dir) : undefined}
       >
+        <div role="cell" className="tt-cell tt-name">
+          <span className="tt-glyph">
+            <ProjectIcon />
+          </span>
+          <span className="tt-name-text">
+            {editing ? (
+              <InlineName
+                initial={entry.name}
+                label={s('renameProject')}
+                placeholder={s('renamePlaceholder')}
+                onSave={(raw) => void saveRename(entry, raw)}
+                onCancel={() => setRenaming(null)}
+              />
+            ) : usable ? (
+              <button
+                type="button"
+                className="tt-title tt-title-btn"
+                data-tt-primary
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onOpen(entry.dir)
+                }}
+              >
+                {entry.name}
+              </button>
+            ) : (
+              <span className="tt-title">{entry.name}</span>
+            )}
+            <span className="tt-sub" title={entry.dir}>
+              {middleEllipsis(entry.dir, 64)}
+            </span>
+          </span>
+        </div>
         {usable ? (
-          <button type="button" className="translate-open" onClick={() => onOpen(entry.dir)}>
-            <span className="projects-row-name">{entry.name}</span>
-            <span className="translate-chip">
-              {languageName(lang, entry.sourceLang)} {'→'} {languageName(lang, entry.targetLang)}
-            </span>
-            <span className="translate-meta">
-              <span>{s('countSources', { n: entry.sourceCount })}</span>
-              <span>{s('countReferences', { n: entry.referenceCount })}</span>
-              {entry.lastOpened > 0 && (
-                <span>{relativeTime(lang, entry.lastOpened, Date.now())}</span>
-              )}
-            </span>
-          </button>
+          <>
+            <div role="cell" className="tt-cell tt-lang">
+              <span className="translate-chip">
+                {languageName(lang, entry.sourceLang)} {'→'} {languageName(lang, entry.targetLang)}
+              </span>
+            </div>
+            <div role="cell" className="tt-cell tt-count">
+              {entry.sourceCount}
+            </div>
+            <div role="cell" className="tt-cell tt-count">
+              {entry.referenceCount}
+            </div>
+            <div
+              role="cell"
+              className="tt-cell tt-time"
+              title={entry.lastOpened > 0 ? new Date(entry.lastOpened).toLocaleString() : undefined}
+            >
+              {entry.lastOpened > 0 ? relativeTime(lang, entry.lastOpened, Date.now()) : ''}
+            </div>
+          </>
         ) : (
-          <div className="translate-row-main is-disabled" aria-disabled="true">
-            <span className="projects-row-name">{entry.name}</span>
-            <span className="projects-row-path">{entry.dir}</span>
+          <div role="cell" className="tt-cell tt-broken">
             <span className="projects-mark is-warning">
               {entry.status === 'not-found' ? s('statusNotFound') : s('statusInvalid')}
             </span>
           </div>
         )}
-        <div className="translate-row-actions">
-          {usable ? (
-            <button
-              type="button"
-              className="projects-small translate-quiet"
-              disabled={busy}
-              onClick={() => setDeleting({ entry, step: 'choose' })}
-            >
-              {s('deleteProject')}
-            </button>
-          ) : (
-            <>
-              {entry.status === 'not-found' && (
-                <button
-                  type="button"
-                  className="projects-small"
-                  disabled={busy}
-                  onClick={() => void adopt(() => api.relocate({ dir: entry.dir }))}
-                >
-                  {s('locateFolder')}
-                </button>
-              )}
-              <button
-                type="button"
-                className="projects-small"
-                disabled={busy}
-                onClick={() => void remove(entry.dir, false)}
-              >
-                {s('removeFromList')}
-              </button>
-            </>
-          )}
+        <div role="cell" className="tt-cell tt-actions">
+          <RowMenu label={s('moreActions', { name: entry.name })} items={items} disabled={busy} />
         </div>
-      </li>
+      </div>
     )
   }
+
+  const sortedProjects = projects ? sortProjects(projects, sort, lang) : []
 
   const languageSelect = (value: string, label: string, set: (code: string) => void) => (
     <label className="projects-field">
@@ -394,48 +497,111 @@ export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
           </div>
         )}
         {projects !== null && projects.length > 0 && (
-          <ul className="translate-cards">{projects.map(renderRow)}</ul>
+          <div
+            role="table"
+            className="tt tt-projects"
+            aria-label={s('title')}
+            onKeyDown={moveRowFocus}
+          >
+            <div role="row" className="tt-head">
+              {sortHeader('name', s('colName'))}
+              <div role="columnheader" className="tt-col tt-lang">
+                {s('colLanguages')}
+              </div>
+              <div role="columnheader" className="tt-col tt-count">
+                {s('colDocuments')}
+              </div>
+              <div role="columnheader" className="tt-col tt-count">
+                {s('colReferences')}
+              </div>
+              {sortHeader('lastOpened', s('colLastOpened'), ' tt-time')}
+              <div role="columnheader" className="tt-col tt-actions" aria-hidden="true" />
+            </div>
+            {sortedProjects.map(renderRow)}
+          </div>
         )}
 
         {recent.length > 0 && (
           <section className="translate-recent" data-recent-list>
             <h3 className="translate-section-title">{s('recentTitle')}</h3>
-            <ul className="translate-rows">
+            <div
+              role="table"
+              className="tt tt-recent"
+              aria-label={s('recentTitle')}
+              onKeyDown={moveRowFocus}
+            >
+              <div role="row" className="tt-head">
+                <div role="columnheader" className="tt-col">
+                  {s('colName')}
+                </div>
+                <div role="columnheader" className="tt-col tt-proj">
+                  {s('title')}
+                </div>
+                <div role="columnheader" className="tt-col tt-lang">
+                  {s('colLanguages')}
+                </div>
+                <div role="columnheader" className="tt-col tt-time">
+                  {s('colLastOpened')}
+                </div>
+              </div>
               {recent.map((doc) => (
-                <li
+                <div
                   key={`${doc.dir}\n${doc.file}`}
-                  className="projects-row"
+                  role="row"
+                  className={`tt-row${doc.available ? ' is-link' : ' is-broken'}`}
                   data-recent-file={doc.file}
+                  onClick={
+                    doc.available
+                      ? () => {
+                          setError(null)
+                          void onOpenRecent?.(doc.dir, doc.file).catch(fail)
+                        }
+                      : undefined
+                  }
                 >
-                  {doc.available ? (
-                    <button
-                      type="button"
-                      className="translate-open"
-                      onClick={() => {
-                        setError(null)
-                        void onOpenRecent?.(doc.dir, doc.file).catch(fail)
-                      }}
-                    >
-                      <span className="projects-row-name">{doc.file}</span>
-                      <span className="translate-meta">
-                        <span>{doc.projectName}</span>
-                        <span>
-                          {languageName(lang, doc.sourceLang)} {'→'}{' '}
-                          {languageName(lang, doc.targetLang)}
+                  <div role="cell" className="tt-cell tt-name">
+                    <span className="tt-glyph">
+                      <FileIcon glyph={glyphForFile(doc.file)} />
+                    </span>
+                    <span className="tt-name-text">
+                      {doc.available ? (
+                        <button
+                          type="button"
+                          className="tt-title tt-title-btn"
+                          data-tt-primary
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setError(null)
+                            void onOpenRecent?.(doc.dir, doc.file).catch(fail)
+                          }}
+                        >
+                          {doc.file}
+                        </button>
+                      ) : (
+                        <span className="tt-title">{doc.file}</span>
+                      )}
+                      {!doc.available && (
+                        <span className="tt-sub">
+                          <span className="projects-mark is-warning">{s('recentUnavailable')}</span>
                         </span>
-                        <span>{relativeTime(lang, doc.openedAt, Date.now())}</span>
-                      </span>
-                    </button>
-                  ) : (
-                    <div className="translate-row-main is-disabled" aria-disabled="true">
-                      <span className="projects-row-name">{doc.file}</span>
-                      <span className="projects-row-path">{doc.projectName}</span>
-                      <span className="projects-mark is-warning">{s('recentUnavailable')}</span>
-                    </div>
-                  )}
-                </li>
+                      )}
+                    </span>
+                  </div>
+                  <div role="cell" className="tt-cell tt-proj">
+                    {doc.projectName}
+                  </div>
+                  <div role="cell" className="tt-cell tt-lang">
+                    <span className="translate-chip">
+                      {languageName(lang, doc.sourceLang)} {'→'}{' '}
+                      {languageName(lang, doc.targetLang)}
+                    </span>
+                  </div>
+                  <div role="cell" className="tt-cell tt-time">
+                    {relativeTime(lang, doc.openedAt, Date.now())}
+                  </div>
+                </div>
               ))}
-            </ul>
+            </div>
           </section>
         )}
 

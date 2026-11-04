@@ -223,7 +223,7 @@ Needs a rebuild of the shell app (`npm run build:all`): main, preload and the sh
 6. Project detail screen: each source row has "Save as…". Before the translation was ever opened it says there is no translation to save yet. For a text PDF translated earlier it saves a copy of the newest translated PDF as a PDF; for an OCR result it saves the Word document.
 7. The strip button is the only Save as… for the translation; the old "Export translation" wording is gone in your screen language. Hover the button: its tooltip names the output file.
 8. Right-click the output tab and choose Save As: the same copy dialog opens (not the editor's own Save As), and the pane stays on the project's output file afterwards. The same menu entry on the source tab does nothing.
-9. Known gap: the editor's own File > Save As inside the output pane still behaves as in a normal document (the pane moves to the copy, and can pick a format such as ODT). Use the strip button or the tab menu for a safe copy; check whether this gap bothers you.
+9. The editor's own Save As inside the output pane (File menu, ribbon, Ctrl/Cmd+Shift+S; try docx, xlsx, pptx, md, html, hwp, epub, mindmap, pdf) opens the same copy dialog as the strip button, in the same format (no ODT or other format choice), and the pane stays on the project's output file. With unsaved edits the strip asks you to save first. In the source pane the same entries do nothing. An ordinary document's Save As is unchanged.
 
 ## Translation: output is read-only while the AI translates
 
@@ -286,3 +286,17 @@ Needs a rebuild of the shell app (`npm run build -w @genoffice/shell`). Uses a r
 3. Repeat and type your own answer then Enter (a Korean or Japanese IME's Enter that commits composing text must not send); repeat and press Esc or Skip: the AI continues with a safe default or asks once in prose, and the bubble reads "Skipped the question".
 4. While the card is shown, type an ordinary message in the composer and send it: the card disappears.
 5. Check light and dark themes, a narrow panel, Tab order (card, options, typing row, Skip) and that the card does not animate under the OS "reduce motion" setting. Reopen the chat history: the answer bubble still reads in its readable form.
+
+
+## Translation screens: table look, writing style, rename, title opens the document
+
+Needs a rebuild of the shell app (`npm run build -w @genoffice/shell`). Check in light and dark.
+
+1. Project list: a header row (Name, Languages, Documents, References, Last opened) over full-width rounded rows with a folder icon, the name over a shortened folder path, the language chip, counts and relative time. Newest opened comes first. Click Name, then Name again, then Last opened: the order and the chevron follow. Leave the list and come back: the order is kept until the app quits.
+2. Hover a row: it highlights and a "..." button appears on the right. Click anywhere on the row: the project opens. Tab to a name, press Up/Down: focus moves between rows; Enter opens. Narrow the window below about 800 px: the count columns disappear.
+3. Row menu: "Rename" edits the name in the row (Enter or leaving the field saves, Escape cancels, an empty or 81-character name shows the notice and changes nothing). "Delete" keeps the two-step confirmation. A project whose folder moved shows "Locate folder..." and "Remove from list" in its menu.
+4. Rename a project, then check the folder on disk keeps its old name, the Recent documents table shows the new project name, and reopening the app still shows the new name.
+5. Project detail: the title has a pencil (or click the title) to rename in place; "Saved" appears next to it. The three file blocks are tables (Name, Status); icons per file type; hover a row for the icon buttons (save as, open translation, delete, OCR, treat as scan/text, view converted text) and read their tooltips.
+6. Click a document's name in "Documents to translate": the translation view opens (same as the arrow button). A PDF scan still shows the OCR confirmation; with several documents "Start translation" stays disabled and shows the hint.
+7. Writing style card: choose "With Oxford comma" and "Inside the quotes": "Saved" appears. Open the translation view and ask the AI panel to show its instructions (or read `.tandem/project.json`): the Writing style rule is in the project context, and not there when both are "Follow the target language's usual convention". Type a custom instruction, leave the field: it is saved and sent as "Custom instruction: ...".
+8. An existing project made before this change opens with both writing style options on "Follow the target language's usual convention".

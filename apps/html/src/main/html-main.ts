@@ -48,6 +48,7 @@ import {
   assertFileSaved,
 } from '@genoffice/electron-utils'
 import { fetchImageBytes } from '@genoffice/electron-utils/fetch-image-bytes'
+import { interceptSaveAs } from '@genoffice/electron-utils'
 import { createI18n, getUiLang } from '@genoffice/i18n'
 import {
   sharedSubscriptionStatuses,
@@ -1588,6 +1589,8 @@ function registerHtmlIpc(): void {
         ? await pendingOwnedAssetsForDocument(pathAtRequest)
         : []
       try {
+        // the translation output copies through the shell; its source pane never saves
+        if (mode === 'saveAs' && interceptSaveAs(e.sender.id)) return done({ ok: true, canceled: true })
         const suggestedName =
           typeof request.suggestedName === 'string' ? request.suggestedName : undefined
         const defaultName =

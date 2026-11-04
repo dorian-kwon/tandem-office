@@ -1,10 +1,20 @@
 export {
   ProjectFileError,
   defaultProjectFile,
+  defaultWritingStyle,
   parseProjectFile,
   serializeProjectFile,
 } from './project-file'
-export type { OcrMode, ProjectFile, SourceEntry, SourceKind } from './project-file'
+export type {
+  OcrMode,
+  ProjectFile,
+  QuotePunctuation,
+  SerialComma,
+  SourceEntry,
+  SourceKind,
+  WritingStyle,
+} from './project-file'
+export { writingStyleRule } from './compose'
 export {
   DEFAULT_GLOSSARY_LIMIT,
   GlossaryFormatError,

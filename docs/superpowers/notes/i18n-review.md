@@ -29,3 +29,5 @@ Added with the translation Save as… rename and the output lock (2026-11-05, sa
 
 
 Added with the numbered question card (2026-11-05, same 19 drafted languages): `packages/ui/src/strings-ai-choice.ts` (group label, "Type your own answer", placeholder, Send, Skip, "Use this for the rest of the project", key hint, "Skipped the question").
+
+Added with the project table look, writing style and project rename (2026-11-05, same 19 drafted languages): `apps/shell/src/renderer/src/i18n/translate/<lang>.ts` keys `colName`, `colLanguages`, `colDocuments`, `colReferences`, `colLastOpened`, `colStatus`, `sortBy`, `moreActions`, `rename`, `renameProject`, `renamePlaceholder`, `renameInvalid`, `statusReady`, `styleTitle`, `styleHint`, `serialCommaLabel`, `quoteLabel`, `styleFollow`, `serialWith`, `serialWithout`, `quoteOutside`, `quoteInside`, `exSerialWith`, `exSerialWithout`, `exQuoteOutside`, `exQuoteInside`, `exFollow`, `styleCustomLabel`, `styleCustomPlaceholder`. Check the example lines (`ex*`): each shows the option's effect in that language's own words, and the Oxford-comma examples may read oddly where the language has no such comma.

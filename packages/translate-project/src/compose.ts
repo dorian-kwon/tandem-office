@@ -1,6 +1,6 @@
 import { DEFAULT_GLOSSARY_LIMIT, selectGlossary } from './glossary'
 import type { GlossaryEntry } from './glossary'
-import type { ProjectFile } from './project-file'
+import type { ProjectFile, WritingStyle } from './project-file'
 import type { ReferenceChunk } from './reference-index'
 
 export type ComposedItemKind = 'system' | 'project' | 'glossary' | 'reference'
@@ -37,7 +37,8 @@ export function composeContext(input: {
   const system = input.systemPrompt.trim()
   const projectPrompt = project.projectPrompt.trim()
   const languageLine = `번역: ${project.sourceLang} → ${project.targetLang}`
-  const projectText = projectPrompt === '' ? languageLine : `${projectPrompt}\n${languageLine}`
+  const styleRule = writingStyleRule(project.writingStyle)
+  const projectText = [projectPrompt, languageLine, styleRule].filter((s) => s !== '').join('\n')
 
   const selected = selectGlossary(
     input.glossary,
@@ -92,6 +93,37 @@ export function composeContext(input: {
       },
     ],
   }
+}
+
+const SCOPE = 'apply only where it makes sense in the target language'
+
+/**
+ * The fixed writing-style rule for the project context ('' for the default style).
+ * Short and precise; it is scoped to the target language because both choices matter
+ * mostly for English.
+ */
+export function writingStyleRule(style: WritingStyle | undefined): string {
+  if (!style) return ''
+  const lines: string[] = []
+  if (style.serialComma === 'with')
+    lines.push(
+      `- Use the serial (Oxford) comma in lists of three or more: "A, B, and C" (${SCOPE}).`,
+    )
+  else if (style.serialComma === 'without')
+    lines.push(
+      `- Do not use the serial (Oxford) comma in lists of three or more: "A, B and C" (${SCOPE}).`,
+    )
+  if (style.quotePunctuation === 'outside')
+    lines.push(
+      `- Put commas and periods outside the closing quotation mark (logical style): "A", "B" (${SCOPE}).`,
+    )
+  else if (style.quotePunctuation === 'inside')
+    lines.push(
+      `- Put commas and periods inside the closing quotation mark (American style): "A," "B," (${SCOPE}).`,
+    )
+  const custom = oneLine(style.custom ?? '')
+  if (custom !== '') lines.push(`- Custom instruction: ${custom}`)
+  return lines.length === 0 ? '' : `Writing style:\n${lines.join('\n')}`
 }
 
 /** Collapses any whitespace run containing a line break so a value stays on one prompt line. */
