@@ -75,6 +75,7 @@ import {
   type RecoveryIdentity,
 } from '@genoffice/electron-utils'
 import { aiRunRefusal } from '@genoffice/electron-utils/ai-run-guard'
+import { interceptSaveAs } from '@genoffice/electron-utils'
 import {
   configureExtraFontDirs,
   configureMetricsCache,
@@ -5167,6 +5168,8 @@ export function registerDocsIpc(): void {
       // an orphaned (closed-tab) renderer must not open dialogs or land new files
       if (tornDownWcIds.has(event.sender.id)) return null
       if (typeof defaultName !== 'string') return null
+      // the translation output copies through the shell; its source pane never saves
+      if (interceptSaveAs(event.sender.id)) return null
       const current: DocFormat = format === 'odt' ? 'odt' : 'docx'
       const word = { name: tm('filterWord'), extensions: ['docx'] }
       const odt = { name: tm('filterOdt'), extensions: ['odt'] }

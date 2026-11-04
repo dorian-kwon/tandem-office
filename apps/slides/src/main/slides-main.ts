@@ -156,6 +156,7 @@ import { DEFAULT_PICTURE_DPI, pictureFrame } from './picture-frame'
 import { refineComplexWidths, shapedMetricsReady } from './shaped-metrics'
 import { cfbKind, isCfbHeader } from './cfb-sniff'
 import { atomicWriteFile, atomicWriteVia } from '@genoffice/electron-utils/atomic-write'
+import { interceptSaveAs } from '@genoffice/electron-utils'
 import {
   decryptOfficeFile,
   encryptOoxml,
@@ -4975,6 +4976,8 @@ export function registerSlidesIpc(): void {
   ipcMain.handle('slides:save-as', async (e, defaultName: string) => {
     const session = sessions.get(e.sender.id)
     if (!session) return { ok: false, error: 'no file open' }
+    // the translation output copies through the shell; its source pane never saves
+    if (interceptSaveAs(e.sender.id)) return { ok: false }
     const parent = dialogParent()
     const options = {
       defaultPath: saveAsSuggestion(session.path, defaultName),

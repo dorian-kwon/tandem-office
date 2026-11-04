@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   isTranslationOutputTab,
   isTranslationSourceTab,
+  translationSaveAsInterceptor,
   TRANSLATION_OUTPUT_CHANNEL,
   TRANSLATION_SOURCE_CHANNEL,
 } from '../src/main/translation-output'
@@ -41,5 +42,41 @@ describe('isTranslationSourceTab', () => {
   })
   it('uses a channel the editors can name', () => {
     expect(TRANSLATION_SOURCE_CHANNEL).toBe('app:is-translation-source')
+  })
+})
+
+describe('translationSaveAsInterceptor', () => {
+  const make = (filePath: string | null = '/p/output/a.docx') => {
+    const sent: string[] = []
+    const ids: Record<number, string> = { 1: 'out', 2: 'src', 3: 'plain' }
+    const fn = translationSaveAsInterceptor({
+      tabIdForWebContents: (wc) => ids[wc],
+      split: () => split,
+      isReadOnly: readOnly,
+      filePathOf: () => filePath ?? undefined,
+      requestCopy: (p) => sent.push(p),
+    })
+    return { fn, sent }
+  }
+  it('runs the shell copy flow for the output pane', () => {
+    const { fn, sent } = make()
+    expect(fn(1)).toBe(true)
+    expect(sent).toEqual(['/p/output/a.docx'])
+  })
+  it('refuses Save As in the source pane without copying', () => {
+    const { fn, sent } = make()
+    expect(fn(2)).toBe(true)
+    expect(sent).toEqual([])
+  })
+  it('leaves ordinary documents and unknown renderers alone', () => {
+    const { fn, sent } = make()
+    expect(fn(3)).toBe(false)
+    expect(fn(99)).toBe(false)
+    expect(sent).toEqual([])
+  })
+  it('never lets an output without a file path be retargeted', () => {
+    const { fn, sent } = make(null)
+    expect(fn(1)).toBe(true)
+    expect(sent).toEqual([])
   })
 })

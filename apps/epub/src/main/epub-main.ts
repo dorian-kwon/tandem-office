@@ -43,6 +43,7 @@ import {
   showSaveDialogWithMemory,
 } from '@genoffice/electron-utils'
 import type { SaveDiskState } from '@genoffice/electron-utils'
+import { interceptSaveAs } from '@genoffice/electron-utils'
 import { getUiLang, normalizeLang, setUiLang } from '@genoffice/i18n'
 import { buildTranslatedEpub, epubTranslationUnits } from '@genoffice/epub-engine'
 import { ResultStore } from '@genoffice/pdf-structure/store'
@@ -467,6 +468,8 @@ async function saveView(contents: WebContents, request: unknown): Promise<EpubSa
   if (mode === 'save' && current && (await conflictStopsSave(contents, current, auto))) {
     return { ok: false, error: 'external-modified' }
   }
+  // the translation output copies through the shell; its source pane never saves
+  if (mode === 'saveAs' && interceptSaveAs(wcId)) return { ok: true, canceled: true }
   const target = await resolveSaveTarget(contents, mode)
   if (target === 'canceled') return { ok: true, canceled: true }
   const sameFile = current !== undefined && samePath(current, target)

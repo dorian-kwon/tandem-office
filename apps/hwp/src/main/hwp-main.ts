@@ -18,6 +18,7 @@ import {
   showSaveDialogWithMemory,
 } from '@genoffice/electron-utils'
 import type { SaveDiskState } from '@genoffice/electron-utils'
+import { interceptSaveAs } from '@genoffice/electron-utils'
 import { hwpToText } from '@genoffice/file-parse'
 import { getUiLang } from '@genoffice/i18n'
 import { registerHwpAttachmentIpc } from './attachments-ipc'
@@ -600,6 +601,11 @@ function registerHwpIpc(): void {
       if (mode !== 'saveAs' && current && currentFormat) {
         target = current
       } else {
+        // the translation output copies through the shell; its source pane never saves
+        if (mode === 'saveAs' && interceptSaveAs(wcId)) {
+          settleSave(wcId, false)
+          return { ok: true, canceled: true }
+        }
         const win =
           BrowserWindow.fromWebContents(e.sender) ?? BrowserWindow.getFocusedWindow() ?? undefined
         const copy = untitledCopyByWc.get(wcId)

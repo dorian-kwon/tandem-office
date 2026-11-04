@@ -212,3 +212,4 @@ export {
   type SaveConflictOptions,
   type SaveDiskState,
 } from './save-conflict'
+export { interceptSaveAs, setSaveAsInterceptor } from './save-as-guard'

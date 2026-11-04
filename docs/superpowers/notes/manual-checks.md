@@ -223,7 +223,7 @@ Needs a rebuild of the shell app (`npm run build:all`): main, preload and the sh
 6. Project detail screen: each source row has "Save as…". Before the translation was ever opened it says there is no translation to save yet. For a text PDF translated earlier it saves a copy of the newest translated PDF as a PDF; for an OCR result it saves the Word document.
 7. The strip button is the only Save as… for the translation; the old "Export translation" wording is gone in your screen language. Hover the button: its tooltip names the output file.
 8. Right-click the output tab and choose Save As: the same copy dialog opens (not the editor's own Save As), and the pane stays on the project's output file afterwards. The same menu entry on the source tab does nothing.
-9. Known gap: the editor's own File > Save As inside the output pane still behaves as in a normal document (the pane moves to the copy, and can pick a format such as ODT). Use the strip button or the tab menu for a safe copy; check whether this gap bothers you.
+9. The editor's own Save As inside the output pane (File menu, ribbon, Ctrl/Cmd+Shift+S; try docx, xlsx, pptx, md, html, hwp, epub, mindmap, pdf) opens the same copy dialog as the strip button, in the same format (no ODT or other format choice), and the pane stays on the project's output file. With unsaved edits the strip asks you to save first. In the source pane the same entries do nothing. An ordinary document's Save As is unchanged.
 
 ## Translation: output is read-only while the AI translates
 

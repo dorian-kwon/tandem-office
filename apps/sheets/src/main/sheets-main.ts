@@ -83,6 +83,7 @@ import {
   type SaveDiskState,
 } from '@genoffice/electron-utils'
 import { aiRunRefusal } from '@genoffice/electron-utils/ai-run-guard'
+import { interceptSaveAs } from '@genoffice/electron-utils'
 import {
   encryptOoxml,
   isCfbHeader,
@@ -3866,6 +3867,8 @@ export function registerSheetsIpc(): void {
         session.unsavedNew && session.suggestSaveAs !== undefined && !session.recoveryOriginalPath
           ? await runtime.newDocumentDir?.(event.sender.id)
           : null
+      // the translation output copies through the shell; its source pane never saves
+      if (request.mode === 'save-as' && interceptSaveAs(event.sender.id)) return { canceled: true }
       const selection = await saveFileDialog(event, {
         defaultPath:
           (projectDir && session.suggestSaveAs !== undefined
