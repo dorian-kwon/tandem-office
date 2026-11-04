@@ -55,6 +55,7 @@ import type {
   ImageSearchResponse,
   ReadUrlResult,
   GenerateImageResult,
+  OcrPicturesResponse,
 } from '../shared/desktop-api'
 import {
   HEADER_FOOTER_PICTURE_POSITION,
@@ -621,6 +622,23 @@ const desktopApi: DesktopApi = {
       throw new Error('Invalid AI tool capabilities response.')
     }
     return result as unknown as AiToolCapabilities
+  },
+  async ocrPictures(request) {
+    if (
+      !isRecord(request) ||
+      typeof request.sessionId !== 'string' ||
+      (request.action !== 'list' && request.action !== 'open')
+    ) {
+      throw new Error('Invalid picture OCR request.')
+    }
+    const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.ocrPictures, {
+      sessionId: request.sessionId,
+      action: request.action,
+    })
+    if (!isRecord(result) || typeof result.ok !== 'boolean') {
+      throw new Error('Invalid picture OCR response.')
+    }
+    return result as unknown as OcrPicturesResponse
   },
   async webSearch(query, maxResults) {
     if (typeof query !== 'string' || !query.trim() || query.length > 512) {

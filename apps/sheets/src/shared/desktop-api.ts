@@ -38,6 +38,15 @@ import type { AiToolCapabilities } from '@genoffice/ai-search'
 import type { AiPanelPrefs, FontFamilyInfo } from '@genoffice/ui'
 import type { SubscriptionApi } from './subscription-api'
 
+export interface OcrPicturesRequest {
+  sessionId: string
+  action: 'list' | 'open'
+}
+export type OcrPicturesResponse =
+  | { ok: true; total: number; pictures: { index: number; sheet: string; cell: string }[] }
+  | { ok: true; opened: boolean }
+  | { ok: false; error: string }
+
 // edit schemas shared with the xlsx gateway package; re-exported so IPC consumers keep one import site
 export {
   CHART_CATEGORY_WIRE_MAX,
@@ -3084,6 +3093,8 @@ export interface DesktopApi {
   aiSubscription: SubscriptionApi
   /// What the image and search tools can do right now (sheets-owned channel)
   aiToolCapabilities(): Promise<AiToolCapabilities>
+  /** The sheets AI's picture OCR: list the open workbook's pictures, or open the OCR popup. */
+  ocrPictures(request: OcrPicturesRequest): Promise<OcrPicturesResponse>
   /// Web search (main-process Serper/DuckDuckGo, shared with docs/slides)
   webSearch(query: string, maxResults?: number): Promise<WebSearchResult>
   /// Read one web page as text (shared ai:read-url handler), paged by character offset

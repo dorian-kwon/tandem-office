@@ -189,3 +189,13 @@ Use a project with target language German (or any of the 21 app languages except
 2. In the next real run on the footnote document: the AI calls `read_runs notes:true`, then `translate_blocks` entries with `note` and `id`; `read_notes` (if it calls it) ends with that exact call form. No claim that edit_note is forbidden.
 3. Look for a space before `, . ) ]` and for double spaces right after a footnote mark or where a source blank run sat between runs ("services;  in", "the score ."): none. Replaying run 4's translate_blocks inputs on its source with the current code left 6 of these (now covered by `translate-spacing-seams.test.ts`).
 4. Known gap: when the model writes no space where the source had none between two runs ("a dancer" + "in many ways"), the words run together; the tool cannot tell that from a name split across runs.
+
+## Sheets AI: OCR of a workbook's own pictures opens the OCR popup
+
+Needs a rebuild of the shell app (`npm run build:all`): main, preload and both renderers changed.
+
+1. Open a workbook with floating pictures (for example the webtoon sheet: headers image / OCR / translation, pictures anchored in column A from row 7, columns B and C empty). In the sheets AI panel ask "OCR the pictures in this workbook".
+2. The AI calls `ocr_pictures` (chat line "N pictures found"), then says in one or two sentences how many pictures it found and where they are anchored, that it will propose a destination next to them, and that nothing is sent until you confirm. It does not ask you to attach, unzip, rename, save or order pictures, and does not point you to the agent window.
+3. The app switches to the home tab and the OCR selection popup shows the pictures with local previews (check the count and the anchor cells in the list against the sheet). Nothing is sent to the AI provider yet; confirm the start (the existing quota confirmation) and later the placement dialog, which should recommend the empty column beside each picture (column B).
+4. The original workbook is unchanged (the result is a new file). A workbook opened from a project source/output folder uses that project; any other workbook uses a private copy under `<userData>/ocr-chat`. An unsaved new workbook, a password-protected one, a CSV or a converted .xls is refused with a plain message in the chat.
+5. Pictures added since the last save are not listed (the popup reads the saved file); the AI says so.

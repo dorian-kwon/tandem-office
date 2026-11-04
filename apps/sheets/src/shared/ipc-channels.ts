@@ -112,6 +112,8 @@ export const IPC_CHANNELS = {
   aiGenerateImage: 'sheets:ai-generate-image',
   // sheets: prefix — answered by the sheets main in the shell too (see registerSheetsIpc)
   aiToolCapabilities: 'sheets:ai-tool-capabilities',
+  // sheets AI's picture OCR: list the workbook's pictures, open the shell's OCR popup
+  ocrPictures: 'sheets:ocr-pictures',
   // MCP visible-grid bridge: shell pushes one command, the renderer that owns
   // the Univer workbook executes it with the built-in AI's executors
   mcpCommand: 'sheets:mcp-command',

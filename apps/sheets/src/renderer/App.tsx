@@ -306,6 +306,7 @@ import { createMergeSkill } from './ai/merge-skill'
 import { mergeAttachedWorkbooks } from './merge-workbooks'
 import { createSearchSkill } from './ai/search-skill'
 import { createImageSkill } from './ai/image-skill'
+import { createOcrPicturesSkill } from './ai/ocr-pictures-skill'
 import { ATTACHMENT_IMAGE_EXTS } from '../shared/desktop-api'
 import type {
   AttachmentAddResult,
@@ -1708,6 +1709,8 @@ export function App({
           () => imageGenRef.current,
           () => availableAttachments(),
         ),
+        // the workbook's own pictures: list them, then open the app's OCR popup
+        createOcrPicturesSkill(() => lazyWorkbookRef.current?.file.sessionId),
         // the person's skills: use_skill, read_skill_file, propose_skill (app-run tools)
         ...panelUserSkills({
           lang: getLang,

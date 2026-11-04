@@ -1652,6 +1652,18 @@ interface SheetsRuntimeConfig {
     fileName: string,
     bytes: Uint8Array,
   ) => Promise<string | null>
+  /**
+   * The sheets AI's picture OCR (host-owned: the shell holds the OCR popup). `list` reads
+   * the saved workbook's pictures locally; `open` shows the shell's OCR selection popup for it.
+   * Neither sends anything to an AI provider.
+   */
+  ocrPictures?: {
+    list: (path: string) => Promise<{
+      total: number
+      pictures: { index: number; sheet: string; cell: string }[]
+    }>
+    open: (path: string) => Promise<{ opened: boolean }>
+  }
 }
 
 let runtime: SheetsRuntimeConfig = {
@@ -3125,6 +3137,36 @@ export function registerSheetsIpc(): void {
       path: 'screen',
       statuses: sharedSubscriptionStatuses(),
     }),
+  )
+
+  // Picture OCR for the AI panel: the pictures of the workbook this tab has open, or the
+  // shell's OCR popup for it. Only a registered tab's own session is ever read (never a
+  // renderer-supplied path), and an encrypted or converted session is refused: its path is
+  // a plaintext or temporary copy that must not be copied into the data folder.
+  ipcMain.handle(
+    IPC_CHANNELS.ocrPictures,
+    async (event, request: { sessionId?: unknown; action?: unknown }) => {
+      const entry = sessionFor(event)
+      const session =
+        typeof request?.sessionId === 'string' ? entry.sessions.get(request.sessionId) : undefined
+      if (!session) return { ok: false, error: 'Unknown workbook session.' }
+      const host = runtime.ocrPictures
+      if (!host) return { ok: false, error: 'Picture OCR is not available here.' }
+      if (
+        session.password !== undefined ||
+        session.suggestSaveAs !== undefined ||
+        session.csvImport === true ||
+        extname(session.path).toLowerCase() !== '.xlsx'
+      )
+        return { ok: false, error: 'Picture OCR needs a saved .xlsx workbook without a password.' }
+      try {
+        if (request.action === 'list') return { ok: true, ...(await host.list(session.path)) }
+        if (request.action === 'open') return { ok: true, ...(await host.open(session.path)) }
+        return { ok: false, error: 'Unknown picture OCR action.' }
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : 'Picture OCR failed.' }
+      }
+    },
   )
 
   // the renderer finished the copy an OS shutdown asked for (writeSheetsCopiesNow)
