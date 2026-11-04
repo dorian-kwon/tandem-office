@@ -134,8 +134,13 @@ export function tabMenuTemplate(input: TabMenuInput): MenuItemConstructorOptions
   const file = tab.filePath
   const onDisk = !!file && input.fileExists
   const closable = (other: TabSummary): boolean => other.id !== 'home' && other.closable
-  const others = tabs.filter((other) => other.id !== tab.id && closable(other))
-  const right = tabs.slice(index + 1).filter(closable)
+  // the clicked tab's group partner is part of the tab that stays: closing it would close the tab
+  const partner = (other: TabSummary): boolean => !!tab.groupId && other.groupId === tab.groupId
+  const others = tabs.filter((other) => other.id !== tab.id && !partner(other) && closable(other))
+  const right = tabs
+    .slice(index + 1)
+    .filter((other) => !partner(other))
+    .filter(closable)
   const everything = tabs.filter(closable)
   const document = input.canDetach && tab.kind !== 'home' && tab.kind !== 'help'
 

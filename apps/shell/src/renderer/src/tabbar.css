@@ -481,6 +481,32 @@ body.overlay-title-bar .tab-bar-drag-spacer {
   right: 8px;
 }
 
+/* the two tabs of a translation group (source + output) share one accent
+ * bracket along their top edge, open at the outer corners, so the strip reads
+ * them as a single unit that closes together */
+.tab-item.group-start,
+.tab-item.group-end {
+  background-image: linear-gradient(var(--accent), var(--accent));
+  background-repeat: no-repeat;
+  background-position: top left;
+  background-size: 100% 2px;
+}
+
+.tab-item.group-start {
+  background-position: top right;
+  background-size: calc(100% - 8px) 2px;
+}
+
+.tab-item.group-end {
+  background-position: top left;
+  background-size: calc(100% - 8px) 2px;
+}
+
+/* no hairline between the two members of a group */
+.tab-item.group-end::before {
+  opacity: 0;
+}
+
 /* drop hint while a dragged tab hovers a split edge; the pane area below is
  * hidden under the views, so the hint is drawn inside the strip */
 .tab-split-hint {

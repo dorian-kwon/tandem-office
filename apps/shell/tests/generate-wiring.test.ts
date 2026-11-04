@@ -60,7 +60,7 @@ describe('the shell wiring', () => {
 
   it('drops a request with the tab that never took it', () => {
     const tabs = src('../src/main/tab-manager.ts')
-    const removeTab = tabs.slice(tabs.indexOf('private removeTab('))
+    const removeTab = tabs.slice(tabs.indexOf('private removeTabOnly('))
     expect(removeTab.slice(0, removeTab.indexOf('\n  }\n'))).toMatch(/dropGenerateHandoff\(/)
     expect(tabs).toMatch(/queueGenerateHandoffFor\(contents, handoff\)/)
   })

@@ -445,3 +445,93 @@ describe('read-only tabs (setTabReadOnly)', () => {
     markdownIsDirty.mockImplementation(() => false)
   })
 })
+
+describe('translation pair as a tab group', () => {
+  function pair() {
+    const { left, right } = translationSplit()
+    expect(manager.groupTabs(left, right)).toBe(true)
+    return { left, right }
+  }
+  const ids = () => manager.list().map((t) => t.id)
+
+  it('lists both tabs with the same group id and keeps them adjacent', () => {
+    const left = manager.openDocsTab('/p/source/a.docx')
+    const other = manager.openDocsTab('/other.docx')
+    const right = manager.openDocsTab('/p/output/a.docx')
+    manager.groupTabs(left, right)
+    expect(ids()).toEqual(['home', left, right, other])
+    const [l, r, o] = manager.list().slice(1)
+    expect(l.groupId).toBeDefined()
+    expect(r.groupId).toBe(l.groupId)
+    expect(o.groupId).toBeUndefined()
+  })
+
+  it('closing the output closes the source too', async () => {
+    const { right } = pair()
+    await manager.closeTab(right)
+    expect(ids()).toEqual(['home'])
+  })
+
+  it('closing the read-only source closes the output too', async () => {
+    const { left } = pair()
+    await manager.closeTab(left)
+    expect(ids()).toEqual(['home'])
+  })
+
+  it('asks about unsaved changes once, and a cancel keeps both tabs', async () => {
+    const { left, right } = pair()
+    docsQueryDirty.mockImplementation(() => Promise.resolve(true))
+    requestDocsClose.mockImplementation(() => Promise.resolve(false))
+    await manager.closeTab(left)
+    expect(requestDocsClose).toHaveBeenCalledTimes(1)
+    expect(ids()).toEqual(['home', left, right])
+    // answering save/discard closes both after one prompt
+    requestDocsClose.mockClear()
+    requestDocsClose.mockImplementation(() => Promise.resolve(true))
+    await manager.closeTab(right)
+    expect(requestDocsClose).toHaveBeenCalledTimes(1)
+    expect(ids()).toEqual(['home'])
+  })
+
+  it('closing without prompt (an agent or a vanished file) also takes the source', () => {
+    const { right } = pair()
+    expect(manager.closeTabWithoutPrompt(right)).toBe(true)
+    expect(ids()).toEqual(['home'])
+  })
+
+  it('hiding a pane keeps the group', () => {
+    pair()
+    manager.setPaneHidden('left', true)
+    expect(manager.list().filter((t) => t.groupId)).toHaveLength(2)
+  })
+
+  it('reordering moves the pair together and never splits it', () => {
+    const { left, right } = pair()
+    const a = manager.openDocsTab('/a.docx')
+    const b = manager.openDocsTab('/b.docx')
+    manager.reorderTab(left, 3)
+    expect(ids()).toEqual(['home', a, b, left, right])
+    manager.reorderTab(b, 4) // to the end: after the pair
+    expect(ids()).toEqual(['home', a, left, right, b])
+    manager.reorderTab(b, 3) // would land between the pair: snaps before it
+    expect(ids()).toEqual(['home', a, b, left, right])
+    expect(ids().indexOf(right) - ids().indexOf(left)).toBe(1)
+    manager.reorderTab(right, 1)
+    expect(ids()).toEqual(['home', left, right, a, b])
+  })
+
+  it('does not group or affect an ordinary split', async () => {
+    const a = manager.openDocsTab('/a.docx')
+    const b = manager.openDocsTab('/b.docx')
+    manager.beginSplit(a, b, 'side', 0.5, 'b')
+    expect(manager.list().some((t) => t.groupId)).toBe(false)
+    await manager.closeTab(a)
+    expect(ids()).toEqual(['home', b])
+  })
+
+  it('cannot be torn off into its own window', () => {
+    const { right } = pair()
+    expect(manager.canDetachTab(right)).toBe(false)
+    expect(manager.detachTab(right)).toBeNull()
+  })
+})

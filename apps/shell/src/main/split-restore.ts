@@ -13,6 +13,8 @@ export interface SplitRestoreDeps {
   openHome(): void
   openDuplicatePaneTab(tabId: string): string | null
   setTabReadOnly(tabId: string): boolean
+  /** bind the translation pair into one unit that closes together */
+  groupTabs(firstId: string, secondId: string): boolean
   beginSplit(
     aTabId: string,
     bTabId: string,
@@ -30,9 +32,12 @@ export interface SplitRestoreDeps {
  * to home.
  *
  * The translation view's source pane (`memory.readOnly`) comes back read-only
- * even when it is the only document left, it is made read-only before the
- * other document opens, and it never enters Recent. A pane stays hidden only
- * while the source is read-only.
+ * and grouped with its output (they close together), it is made read-only
+ * before the other document opens, and it never enters Recent. A pane stays
+ * hidden only while the source is read-only. A read-only source whose output
+ * is gone is not opened at all (a source never outlives its output): the
+ * output alone opens as an ordinary document, and a lone source falls back to
+ * home.
  */
 export function restoreRememberedSplit(memory: SplitMemory | null, deps: SplitRestoreDeps): void {
   const aPath = deps.fileOnDisk(memory?.a)
@@ -45,6 +50,13 @@ export function restoreRememberedSplit(memory: SplitMemory | null, deps: SplitRe
   const ratio = memory?.ratio ?? SPLIT_EVEN_RATIO
   const focus = memory?.focus ?? 'b'
   const readOnly = memory?.readOnly
+  if (readOnly !== undefined && (aPath === undefined || bPath === undefined)) {
+    const outputPath = readOnly === 'a' ? bPath : aPath
+    // the output opens alone and plain; the orphan source is dropped
+    if (outputPath === undefined || deps.openTab(outputPath, { recordRecent: true }) === undefined)
+      deps.openHome()
+    return
+  }
   // both panes held the same file: one tab, duplicated for the second pane
   if (aPath !== undefined && bPath !== undefined && deps.samePath(aPath, bPath)) {
     const aTabId = deps.openTab(aPath, { recordRecent: readOnly === undefined })
@@ -72,6 +84,7 @@ export function restoreRememberedSplit(memory: SplitMemory | null, deps: SplitRe
   }
   if (aTabId !== undefined && bTabId !== undefined) {
     const collapsed = readOnlyApplied ? (memory?.collapsed ?? null) : null
+    if (readOnlyApplied) deps.groupTabs(aTabId, bTabId)
     deps.beginSplit(aTabId, bTabId, orientation, ratio, focus, collapsed)
   }
 }

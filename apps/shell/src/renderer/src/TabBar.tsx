@@ -448,6 +448,15 @@ export function TabBar({ split }: TabBarProps) {
               : split && tab.id === split.bTabId
                 ? ' split-b'
                 : ''
+          // the members of a group (a translation pair) get a shared bracket
+          const next = tabs[index + 1]
+          const prev = tabs[index - 1]
+          const group =
+            tab.groupId && next?.groupId === tab.groupId
+              ? ' group-start'
+              : tab.groupId && prev?.groupId === tab.groupId
+                ? ' group-end'
+                : ''
           // live transforms: the grabbed tab tracks the pointer; tabs between
           // the origin and the current target slide aside by the grabbed width
           let dragStyle: CSSProperties | undefined
@@ -463,7 +472,7 @@ export function TabBar({ split }: TabBarProps) {
           return (
             <div
               key={tab.id}
-              className={`tab-item ${tab.kind === 'home' ? 'tab-home' : ''} ${tab.active ? 'active' : ''} ${dragVisual?.id === tab.id ? 'drag-source' : ''}${pane}`}
+              className={`tab-item ${tab.kind === 'home' ? 'tab-home' : ''} ${tab.active ? 'active' : ''} ${dragVisual?.id === tab.id ? 'drag-source' : ''}${pane}${group}`}
               // long file names ellipsize in the strip — hover reveals the
               // full title and where the file is (the close button's own tooltip still wins there)
               title={tab.kind === 'home' ? productName(lang) : formatTabTooltip(tab)}

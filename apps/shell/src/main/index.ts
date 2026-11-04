@@ -7205,6 +7205,7 @@ function restoreSplitMemoryOrHome(): void {
     openHome: () => manager.openHomeTab(),
     openDuplicatePaneTab: (tabId) => manager.openDuplicatePaneTab(tabId),
     setTabReadOnly: (tabId) => manager.setTabReadOnly(tabId),
+    groupTabs: (a, b) => manager.groupTabs(a, b),
     beginSplit: (a, b, orientation, ratio, focus, collapsed) =>
       manager.beginSplit(a, b, orientation, ratio, focus, collapsed),
   })
@@ -7350,8 +7351,12 @@ function translationViewDeps(): TranslationViewDeps {
       tabManager?.closeTabWithoutPrompt(tabId)
     },
     setTabReadOnly: (tabId) => tabManager?.setTabReadOnly(tabId) ?? false,
-    showSplit: (sourceTabId, outputTabId) =>
-      ensureTabManager().beginSplit(sourceTabId, outputTabId, 'side', SPLIT_EVEN_RATIO, 'b', null),
+    showSplit: (sourceTabId, outputTabId) => {
+      const manager = ensureTabManager()
+      // the pair is one unit in the strip: it closes together
+      manager.groupTabs(sourceTabId, outputTabId)
+      manager.beginSplit(sourceTabId, outputTabId, 'side', SPLIT_EVEN_RATIO, 'b', null)
+    },
     // the toggle only acts on a translation split (one read-only pane)
     setPaneHidden: (side, hidden) => {
       const manager = tabManager

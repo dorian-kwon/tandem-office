@@ -16,6 +16,7 @@ function deps(onDisk: string[]) {
     openHome: vi.fn(),
     openDuplicatePaneTab: vi.fn((id: string) => `${id}#2`),
     setTabReadOnly: vi.fn(() => true),
+    groupTabs: vi.fn(() => true),
     beginSplit: vi.fn(),
   } satisfies SplitRestoreDeps & { opened: unknown[] }
   return d
@@ -51,12 +52,26 @@ describe('restoreRememberedSplit', () => {
     )
   })
 
-  it('keeps the source read-only when it is the only remembered file left', () => {
+  it('groups the restored translation pair so it closes together', () => {
+    const d = deps([translation.a, translation.b!])
+    restoreRememberedSplit(translation, d)
+    expect(d.groupTabs).toHaveBeenCalledWith('t:/p/source/a.docx', 't:/p/output/a.docx')
+  })
+
+  it('drops the source when its output is gone (no orphan source tab)', () => {
     const d = deps([translation.a])
     restoreRememberedSplit(translation, d)
-    expect(d.opened).toEqual([{ path: '/p/source/a.docx', recordRecent: false }])
-    expect(d.setTabReadOnly).toHaveBeenCalledWith('t:/p/source/a.docx')
+    expect(d.opened).toEqual([])
+    expect(d.openHome).toHaveBeenCalled()
     expect(d.beginSplit).not.toHaveBeenCalled()
+  })
+
+  it('opens the output alone and plain when its source is gone', () => {
+    const d = deps([translation.b!])
+    restoreRememberedSplit(translation, d)
+    expect(d.opened).toEqual([{ path: '/p/output/a.docx', recordRecent: true }])
+    expect(d.setTabReadOnly).not.toHaveBeenCalled()
+    expect(d.groupTabs).not.toHaveBeenCalled()
   })
 
   it('makes the source read-only before the output copy opens', () => {

@@ -247,3 +247,16 @@ Needs a rebuild of the shell app (`npm run build:all`): main, preload, the docs 
 4. Repeat with an `.xlsx` translation (copilot panel). Also check an ordinary split of two documents: the unfocused pane still folds to the icon as before.
 5. The output pane's assistant is open every time a translation view opens, even if you had closed the AI panel in normal documents before. Close it by hand and it stays closed for that view; switching panes does not reopen it.
 6. Press the AI button in the source pane, click the composer and type a sentence: the text appears (it used to be swallowed by the read-only guard). Typing in the source document itself, and Ctrl+S, are still refused. Other editors' composers use the same path; check one (for example a markdown translation) if you can.
+
+## Translation view: source and output tabs are one group
+
+Needs a rebuild of the shell app (`npm run build:all`): main and the tab strip renderer changed.
+
+1. Open a `.docx` translation. The two tabs sit side by side with a shared accent line along their top edge and no hairline between them.
+2. Close the output tab (X, middle click, Ctrl/Cmd+W, right-click Close): both tabs close. Reopen and close the source tab: both close.
+3. Type in the output so it has unsaved changes, then close either tab: the save/discard prompt appears once. Cancel keeps both tabs open; Save or Don't save closes both.
+4. Right-click a tab of the pair, "Close other tabs": the pair stays, other tabs close. "Close all tabs" closes the pair with one prompt at most.
+5. Drag one tab of the pair along the strip: both move together and never get another tab between them. A plain split of two unrelated documents shows no bracket and still closes independently.
+6. Hide the source with the pane toggle: the pair stays grouped; the toggle still works.
+7. Quit and restart with the translation view open: it returns as a pair (source read-only, same bracket). If you delete the output file while the app is closed, the restart does not show a lone source tab.
+8. The output tab of a pair has "Open in new window" off (a pair cannot be torn off).

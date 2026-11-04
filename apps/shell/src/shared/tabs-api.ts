@@ -27,6 +27,8 @@ export interface TabSummary {
   filePath?: string
   /** opened read-only (the translation view's source pane); absent otherwise */
   readOnly?: true
+  /** tabs sharing this id are one unit (a translation pair): they close together */
+  groupId?: string
 }
 
 /**

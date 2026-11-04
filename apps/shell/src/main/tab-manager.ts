@@ -196,6 +196,9 @@ interface TabRecord {
   /** opened read-only (the translation view's source pane): the shell refuses
    *  its saves, keeps it in the strip and never asks to save it on close */
   readOnly?: boolean
+  /** tabs sharing a group id are one unit (a translation view's source and
+   *  output): closing any member closes them all, and they stay adjacent */
+  groupId?: string
 }
 
 const HOME_ID = 'home'
@@ -213,6 +216,7 @@ export class TabManager {
   ]
   private activeId: string = HOME_ID
   private nextId = 1
+  private nextGroupId = 1
   /** tab whose page entered HTML fullscreen (e.g. slides slideshow) — its view covers the tab strip */
   private htmlFullScreenId: string | null = null
   /** webContents ids whose view must cover the tab strip without HTML fullscreen
@@ -477,7 +481,46 @@ export class TabManager {
       active: t.id === this.activeId,
       ...(t.filePath ? { filePath: t.filePath } : {}),
       ...(t.readOnly ? { readOnly: true as const } : {}),
+      ...(t.groupId ? { groupId: t.groupId } : {}),
     }))
+  }
+
+  /**
+   * Bind two tabs into one group (the translation view's source and output):
+   * they close together and are kept side by side in the strip, `second`
+   * moved to just after `first`. Any earlier group of either tab is dissolved
+   * first. False for Home or an unknown tab.
+   */
+  groupTabs(firstId: string, secondId: string): boolean {
+    if (firstId === HOME_ID || secondId === HOME_ID || firstId === secondId) return false
+    const first = this.tabById(firstId)
+    const second = this.tabById(secondId)
+    if (!first || !second) return false
+    this.ungroup(first)
+    this.ungroup(second)
+    const groupId = `g${this.nextGroupId++}`
+    first.groupId = groupId
+    second.groupId = groupId
+    const at = this.tabs.indexOf(second)
+    this.tabs.splice(at, 1)
+    this.tabs.splice(this.tabs.indexOf(first) + 1, 0, second)
+    this.onChanged()
+    return true
+  }
+
+  /** the other tabs of this tab's group (empty for an ungrouped tab) */
+  private groupPeers(tab: TabRecord): TabRecord[] {
+    if (!tab.groupId) return []
+    return this.tabs.filter((t) => t !== tab && t.groupId === tab.groupId)
+  }
+
+  /** take a tab out of its group; a group left with one member dissolves */
+  private ungroup(tab: TabRecord): void {
+    const id = tab.groupId
+    if (!id) return
+    delete tab.groupId
+    const rest = this.tabs.filter((t) => t.groupId === id)
+    if (rest.length === 1) delete rest[0].groupId
   }
 
   /**
@@ -546,7 +589,8 @@ export class TabManager {
   async isFileDirty(path: string): Promise<boolean> {
     const wanted = canonicalPath(path)
     const tab = this.tabs.find(
-      (t) => (t.view || t.opener) && t.filePath && !t.present && canonicalPath(t.filePath) === wanted,
+      (t) =>
+        (t.view || t.opener) && t.filePath && !t.present && canonicalPath(t.filePath) === wanted,
     )
     return tab ? this.tabIsDirty(tab) : false
   }
@@ -1552,12 +1596,26 @@ export class TabManager {
   /** move a tab to a new index in the strip; Home is pinned at index 0 */
   reorderTab(id: string, toIndex: number): void {
     if (id === HOME_ID) return
-    const fromIndex = this.tabs.findIndex((t) => t.id === id)
-    if (fromIndex < 0) return
-    const clamped = Math.min(Math.max(Math.trunc(toIndex), 1), this.tabs.length - 1)
-    if (clamped === fromIndex) return
-    const [moved] = this.tabs.splice(fromIndex, 1)
-    this.tabs.splice(clamped, 0, moved)
+    const moved = this.tabs.find((t) => t.id === id)
+    if (!moved) return
+    // a grouped tab drags its whole group: the block lands so the grabbed tab
+    // ends at `toIndex`
+    const block = moved.groupId ? this.tabs.filter((t) => t.groupId === moved.groupId) : [moved]
+    const offset = block.indexOf(moved)
+    const rest = this.tabs.filter((t) => !block.includes(t))
+    let slot = Math.min(Math.max(Math.trunc(toIndex) - offset, 1), rest.length)
+    // never land inside another group: snap to just before it
+    while (
+      slot > 1 &&
+      slot < rest.length &&
+      rest[slot - 1].groupId &&
+      rest[slot - 1].groupId === rest[slot].groupId
+    ) {
+      slot -= 1
+    }
+    const next = [...rest.slice(0, slot), ...block, ...rest.slice(slot)]
+    if (next.every((t, i) => t === this.tabs[i])) return
+    this.tabs.splice(0, this.tabs.length, ...next)
     this.onChanged()
   }
 
@@ -1727,12 +1785,23 @@ export class TabManager {
   async closeTab(id: string): Promise<void> {
     if (id === HOME_ID) return
     const tab = this.tabs.find((t) => t.id === id)
-    if (!tab || this.closingIds.has(id)) return
-    // a read-only tab's edits can never be saved, so there is nothing to ask
-    if (tab.readOnly) {
-      this.removeTab(id)
-      return
+    if (!tab) return
+    // a group closes as one unit: every member is asked first (the output's
+    // save prompt shows once; the read-only source asks nothing), and a cancel
+    // on any of them keeps the whole group open
+    const members = [tab, ...this.groupPeers(tab)]
+    if (members.some((m) => this.closingIds.has(m.id))) return
+    for (const member of members) {
+      if (!(await this.confirmClose(member))) return
     }
+    for (const member of members) this.removeTab(member.id)
+  }
+
+  /** run the tab's unsaved-changes prompt; false when the person cancelled */
+  private async confirmClose(tab: TabRecord): Promise<boolean> {
+    const id = tab.id
+    // a read-only tab's edits can never be saved, so there is nothing to ask
+    if (tab.readOnly) return true
     let closeGuard =
       tab.view &&
       (tab.kind === 'sheets' && sheetsPendingEditCount(tab.view.webContents.id) > 0
@@ -1773,13 +1842,13 @@ export class TabManager {
       if (this.activeId !== id) this.activateTab(id)
       this.closingIds.add(id)
       try {
-        if (!(await closeGuard(tab.view.webContents, this.shellWindow))) return
+        if (!(await closeGuard(tab.view.webContents, this.shellWindow))) return false
       } finally {
         this.closingIds.delete(id)
         this.endExclusivePrompt()
       }
     }
-    this.removeTab(id)
+    return true
   }
 
   /**
@@ -1807,8 +1876,23 @@ export class TabManager {
     return true
   }
 
-  /** detach + drop one tab and re-activate a neighbour (no guards, no prompts) */
+  /**
+   * Detach + drop one tab and re-activate a neighbour (no guards, no prompts).
+   * A group's read-only member (the translation source) goes with its partner:
+   * a source tab never outlives its output, whatever path removed the output
+   * (the file vanished, an agent's close, a replaced pane).
+   */
   private removeTab(id: string): void {
+    const tab = this.tabs.find((t) => t.id === id)
+    const peers = tab ? this.groupPeers(tab) : []
+    this.removeTabOnly(id)
+    for (const peer of peers) {
+      if (peer.readOnly) this.removeTabOnly(peer.id)
+      else this.ungroup(peer)
+    }
+  }
+
+  private removeTabOnly(id: string): void {
     const idx = this.tabs.findIndex((t) => t.id === id)
     if (idx < 0) return
     if (this.htmlFullScreenId === id) this.htmlFullScreenId = null
@@ -1869,7 +1953,7 @@ export class TabManager {
     if (id === HOME_ID) return null
     const idx = this.tabs.findIndex((t) => t.id === id)
     const tab = idx >= 0 ? this.tabs[idx] : undefined
-    if (!tab || tab.present || tab.readOnly || this.closingIds.has(id)) return null
+    if (!tab || tab.present || tab.readOnly || tab.groupId || this.closingIds.has(id)) return null
     // an unloaded tab leaves with a live document: it loads first
     if (!this.loadTab(tab) || !tab.view) return null
     this.tabs.splice(idx, 1)
@@ -1910,6 +1994,8 @@ export class TabManager {
       (!!tab.view || !!tab.opener) &&
       !tab.present &&
       !tab.readOnly &&
+      // a translation pair is one unit: its output cannot leave without its source
+      !tab.groupId &&
       !this.closingIds.has(id)
     )
   }
