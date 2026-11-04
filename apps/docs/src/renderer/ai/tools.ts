@@ -453,7 +453,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
   {
     name: 'edit_note',
     description:
-      'Change the text of an existing footnote or endnote in place (findReplace inside the note): the note keeps its id, reference mark and formatting. Use for a typo or a citation fix instead of delete_note + insert_footnote.',
+      "Change the text of an existing footnote or endnote in place (findReplace inside the note): the note keeps its id, reference mark and formatting. Use for a typo or a citation fix instead of delete_note + insert_footnote. Never use it to translate notes: that goes through read_runs notes:true and translate_blocks, which keep each run's formatting.",
     inputSchema: {
       type: 'object',
       properties: {
@@ -473,7 +473,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
   {
     name: 'read_notes',
     description:
-      'List every footnote and endnote with its id, number, the block holding its reference mark and its text.',
+      'List every footnote and endnote with its id, number, the block holding its reference mark and its text. To translate notes use read_runs with notes:true, not this.',
     inputSchema: { type: 'object', properties: {}, required: [] },
   },
   {

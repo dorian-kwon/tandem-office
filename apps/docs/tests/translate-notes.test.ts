@@ -114,6 +114,85 @@ describe('settleTexts spacing', () => {
   })
 })
 
+describe('settleTexts with empty segments and unseen gap runs', () => {
+  it('a segment the model left empty does not bring back the original trailing space', () => {
+    // source "in the | 1960 | 년 | 1 | 월 | 9": the model folded the date into later segments
+    expect(
+      settleTexts(['… ', '1960', '년 ', '1', '월 ', '9'], ['in the ', '', '', 'January', ' ', '9']),
+    ).toEqual(['in the ', '', '', 'January', ' ', '9'])
+    // no space before the punctuation that follows an emptied group
+    expect(settleTexts(['11)도 ', '유심히 보았', '다.'], ['11, 1959)', '', '.'])).toEqual([
+      '11, 1959)',
+      '',
+      '.',
+    ])
+  })
+
+  it('an emptied group still keeps the words around it apart when nothing else does', () => {
+    expect(settleTexts(['가 ', '나 ', '다'], ['a', '', 'c'])).toEqual(['a ', '', 'c'])
+    expect(settleTexts(['가', '나 ', '다'], ['a', '', 'c'])).toEqual(['a', ' ', 'c'])
+  })
+
+  it('a whitespace-only run between two groups is the separator: no second space', () => {
+    expect(settleTexts(['이응노는', '전주읍'], ['Lee Ungno', ' opened'], [true])).toEqual([
+      'Lee Ungno',
+      'opened',
+    ])
+    expect(settleTexts(['이응노는', '전주읍'], ['Lee Ungno ', 'opened'], [true])).toEqual([
+      'Lee Ungno',
+      'opened',
+    ])
+    // without a gap run the old rules apply
+    expect(settleTexts(['이응노는', '전주읍'], ['Lee Ungno', ' opened'])).toEqual([
+      'Lee Ungno',
+      ' opened',
+    ])
+  })
+})
+
+describe('whitespace-only runs between groups (body and notes)', () => {
+  it('translate_blocks does not double the space of an unseen separator run', async () => {
+    const editor = await createEditor([
+      {
+        type: 'docParagraph',
+        attrs: {},
+        content: [
+          text('이응노는'),
+          { ...text(' '), marks: [{ type: 'docTextStyle', attrs: { ...STYLE, bold: true } }] },
+          {
+            ...text('전주읍에'),
+            marks: [{ type: 'docTextStyle', attrs: { ...STYLE, italic: true } }],
+          },
+        ],
+      },
+    ])
+    const read = await exec(editor, 'read_runs', { startBlockIndex: 0, endBlockIndex: 0 })
+    const fp = JSON.parse(read.output.split('\n')[0]).fp
+    const done = await exec(editor, 'translate_blocks', {
+      blocks: [{ index: 0, fp, segments: ['Lee Ungno', ' opened a shop in Jeonju'] }],
+    })
+    expect(done.isError, done.output).toBeFalsy()
+    expect(editor.state.doc.textContent).toBe('Lee Ungno opened a shop in Jeonju')
+  })
+
+  it('the same for a note whose runs have a separator run', async () => {
+    const editor = await createEditor([paragraph('본문')])
+    const n = notesAccess([
+      richNote('1', [run('이응노는'), run(' '), run('전주읍에', { italic: true })]),
+    ])
+    const read = await exec(editor, 'read_runs', { notes: true }, n.access)
+    const fp = JSON.parse(read.output.split('\n')[0]).fp
+    const done = await exec(
+      editor,
+      'translate_blocks',
+      { blocks: [{ note: 'footnote', id: '1', fp, segments: ['Lee Ungno', ' in Jeonju'] }] },
+      n.access,
+    )
+    expect(done.isError, done.output).toBeFalsy()
+    expect(n.state.footnote[0].text).toBe('Lee Ungno in Jeonju')
+  })
+})
+
 describe('footnotes through read_runs / translate_blocks', () => {
   const notes = () =>
     notesAccess([

@@ -64,7 +64,13 @@ interface Group {
   to: number
   text: string
   marks: readonly Mark[]
+  /** a whitespace-only run (never a group) is all that lies between this group and the next */
+  gapAfter?: boolean
 }
+
+/** the gap flags settleTexts takes, one per group */
+const gapsOf = (groups: readonly { gapAfter?: boolean }[]): boolean[] =>
+  groups.map((g) => g.gapAfter === true)
 
 const isFixed = (node: ProseMirrorNode): boolean =>
   node.marks.some((m) => FIXED_MARK_TYPES.has(m.type.name))
@@ -88,6 +94,16 @@ function groupsOf(block: ProseMirrorNode, pos: number): Group[] {
       at += part.length + 1
     }
   })
+  // blanks (not tabs) between two groups: the separator the model never sees
+  for (let i = 0; i + 1 < groups.length; i++) {
+    const between = block.textBetween(
+      groups[i].to - pos - 1,
+      groups[i + 1].from - pos - 1,
+      '',
+      '\uFFFC',
+    )
+    if (/^[^\S\t\n]+$/.test(between)) groups[i].gapAfter = true
+  }
   return groups
 }
 
@@ -233,15 +249,29 @@ const STARTS_WITH_CLOSING =
  * is dropped where it would read wrongly in the translation: before text that
  * starts with closing punctuation (", most likely" after a run that ended in a
  * space in the source) and where two groups would both put a space between them.
+ *
+ * `gaps[i]` says a whitespace-only run (never part of a group, so never shown
+ * to the model) sits between group i and the next one. That run is already the
+ * separator, so whitespace the neighbouring segments carry at that seam is
+ * dropped. A segment the model left empty has no text and brings no whitespace
+ * of its own; the original's trailing space comes back only when the words
+ * around it would otherwise run together.
  */
-export function settleTexts(originals: readonly string[], segments: readonly string[]): string[] {
+export function settleTexts(
+  originals: readonly string[],
+  segments: readonly string[],
+  gaps: readonly boolean[] = [],
+): string[] {
   interface Piece {
     lead: string
     core: string
     trail: string
     leadInherited: boolean
     trailInherited: boolean
+    /** whitespace-only or empty segment: its whole text */
     whole?: string
+    /** an empty segment: the whitespace the original ended with */
+    spare?: string
   }
   const pieces: Piece[] = segments.map((segment, i) => {
     const original = originals[i]
@@ -253,7 +283,8 @@ export function settleTexts(originals: readonly string[], segments: readonly str
         trail: '',
         leadInherited: false,
         trailInherited: false,
-        whole: LEAD.exec(segment)![0] || TRAIL.exec(original)![0],
+        whole: segment,
+        ...(segment === '' ? { spare: TRAIL.exec(original)![0] } : {}),
       }
     }
     const ownLead = LEAD.exec(segment)![0]
@@ -266,15 +297,32 @@ export function settleTexts(originals: readonly string[], segments: readonly str
       trailInherited: ownTrail === '',
     }
   })
+  const realAfter = (i: number): Piece | undefined => {
+    for (let j = i + 1; j < pieces.length; j++) if (pieces[j].spare === undefined) return pieces[j]
+    return undefined
+  }
+  // a separator run between groups already is the space at that seam
+  gaps.forEach((gap, i) => {
+    if (!gap || i >= pieces.length) return
+    let before: Piece | undefined
+    for (let j = i; j >= 0 && !before; j--) if (pieces[j].spare === undefined) before = pieces[j]
+    const after = realAfter(i)
+    if (before && before.whole === undefined) before.trail = ''
+    if (after && after.whole === undefined) after.lead = ''
+  })
   for (let i = 0; i < pieces.length; i++) {
     const piece = pieces[i]
     if (piece.whole !== undefined) continue
     if (piece.leadInherited && STARTS_WITH_CLOSING.test(piece.core)) piece.lead = ''
+    const real = realAfter(i)
+    if (real && piece.trailInherited && STARTS_WITH_CLOSING.test(real.whole ?? real.core)) {
+      piece.trail = ''
+      continue
+    }
     const next = pieces[i + 1]
     if (!next) continue
     const nextText = next.whole ?? next.lead + next.core
-    if (piece.trailInherited && STARTS_WITH_CLOSING.test(next.whole ?? next.core)) piece.trail = ''
-    else if (
+    if (
       piece.trail !== '' &&
       /^\s/.test(nextText) &&
       next.leadInherited &&
@@ -283,7 +331,22 @@ export function settleTexts(originals: readonly string[], segments: readonly str
       next.lead = ''
     else if (piece.trail !== '' && piece.trailInherited && /^\s/.test(nextText)) piece.trail = ''
   }
-  return pieces.map((p) => p.whole ?? p.lead + p.core + p.trail)
+  const out = pieces.map((p) => p.whole ?? p.lead + p.core + p.trail)
+  // an emptied group gives its original space back only where words would run together
+  pieces.forEach((p, i) => {
+    if (!p.spare) return
+    let beforeIndex = i - 1
+    while (beforeIndex >= 0 && out[beforeIndex] === '') beforeIndex--
+    let afterIndex = i + 1
+    while (afterIndex < pieces.length && out[afterIndex] === '') afterIndex++
+    if (beforeIndex < 0 || afterIndex >= pieces.length) return
+    const before = out[beforeIndex]
+    const after = out[afterIndex]
+    const separated = gaps.slice(beforeIndex, afterIndex).some(Boolean)
+    if (!separated && !/\s$/.test(before) && !/^\s/.test(after) && !STARTS_WITH_CLOSING.test(after))
+      out[i] = p.spare
+  })
+  return out
 }
 
 /** the minimal range of a group to rewrite: shared edge whitespace stays as it is */
@@ -398,6 +461,7 @@ function planParagraph(doc: ProseMirrorNode, item: RunTranslationItem): PlanResu
   const settled = settleTexts(
     groups.map((g) => g.text),
     segments,
+    gapsOf(groups),
   )
   segments.forEach((_segment, i) => {
     const group = groups[i]
@@ -550,6 +614,8 @@ export interface NoteRunParagraph {
 }
 
 interface NoteGroup {
+  /** whitespace-only runs (never groups) are all that lies between this group and the next */
+  gapAfter?: boolean
   /** index into richParas[paragraph] (rich mode); -1 in plain mode */
   run: number
   text: string
@@ -577,12 +643,22 @@ function noteGroupsOf(note: NoteInfo): { rich: boolean; paragraphs: NoteParagrap
   if (consistent && rich) {
     return {
       rich: true,
-      paragraphs: rich.map((runs, paragraph) => ({
-        paragraph,
-        groups: runs.flatMap((r: NoteRun, run) =>
-          !r.del && r.text.trim() !== '' ? [{ run, text: r.text }] : [],
-        ),
-      })),
+      paragraphs: rich.map((runs, paragraph) => {
+        const groups: NoteGroup[] = []
+        let blanks = false
+        runs.forEach((r: NoteRun, run) => {
+          if (r.del) return
+          if (r.text.trim() === '') {
+            if (/^[^\S\t\n]+$/.test(r.text)) blanks = true
+            else if (groups.length > 0) groups[groups.length - 1].gapAfter = false
+            return
+          }
+          if (blanks && groups.length > 0) groups[groups.length - 1].gapAfter = true
+          blanks = false
+          groups.push({ run, text: r.text })
+        })
+        return { paragraph, groups }
+      }),
     }
   }
   return {
@@ -699,6 +775,7 @@ export function planNoteTranslations(
     const settled = settleTexts(
       target.groups.map((g) => g.text),
       segments,
+      gapsOf(target.groups),
     )
     const richParas = rich ? current.richParas!.map((runs) => runs.map((r) => ({ ...r }))) : null
     const texts = current.text.split('\n')
