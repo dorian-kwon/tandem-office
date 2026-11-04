@@ -71,6 +71,8 @@ export function createOcrPicturesSkill(
             'The OCR popup is opening in the app window. The user selects pictures there, confirms the start (nothing is sent before that) and later confirms where the text goes. Stop here and wait; do not claim anything was read or written. The popup reads the saved file, so unsaved pictures are not listed.',
           mutated: false,
           summary: t('aiToolOcrPicturesOpened'),
+          // the popup is the person's turn: the panel's status line says so until it closes
+          awaitingUser: true,
         }
       }
       if (!('pictures' in response)) return failure('Unexpected response.')

@@ -485,3 +485,12 @@ it('does not decode a thumbnail with excessive pixel dimensions', async () => {
   expect(await h.ocrPreview({ token: listing.token, index: 1 })).toBeNull()
   expect(thumbnail).not.toHaveBeenCalled()
 })
+
+describe('ocrPopupClosed', () => {
+  it('tells the host the popup closed, and is harmless without a listener', async () => {
+    const onOcrPopupClosed = vi.fn()
+    await handlers({ onOcrPopupClosed }).ocrPopupClosed()
+    expect(onOcrPopupClosed).toHaveBeenCalledTimes(1)
+    await expect(handlers().ocrPopupClosed()).resolves.toBeUndefined()
+  })
+})

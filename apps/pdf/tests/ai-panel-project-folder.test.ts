@@ -203,7 +203,8 @@ describe('PDF AI panel: project folder', () => {
 
     const release = fake.holdReadContext()
     await typeAndEnter(panel, 'summarize')
-    expect(fake.bridge.readContext).toHaveBeenCalledWith({ projectId: 'p1' })
+    // the request text rides along so main can pick the glossary that fits it
+    expect(fake.bridge.readContext).toHaveBeenCalledWith({ projectId: 'p1', query: 'summarize' })
     expect(editor.api.aiStream).not.toHaveBeenCalled()
     release()
     await settle()

@@ -79,6 +79,8 @@ describe('ocr_pictures skill', () => {
     expect(result.output).toMatch(/popup/i)
     expect(result.output).toMatch(/confirm/i)
     expect(result.summary).toBe(zh.aiToolOcrPicturesOpened)
+    // the status line shows "waiting for you" until the popup closes
+    expect(result.awaitingUser).toBe(true)
   })
 
   it('does not open the popup while the workbook has unsaved changes and tells the model to offer saving', async () => {
@@ -93,6 +95,7 @@ describe('ocr_pictures skill', () => {
     expect(result.output).toMatch(/unsaved/i)
     expect(result.output).toMatch(/save first/i)
     expect(result.summary).toBe(zh.aiToolOcrPicturesUnsaved)
+    expect(result.awaitingUser).toBeFalsy()
     // listing is read-only on the saved file and is not blocked
     expect((await skill.executeTool(call({ action: 'list' }))).output).toContain('5 pictures')
   })

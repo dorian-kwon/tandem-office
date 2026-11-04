@@ -1912,6 +1912,14 @@ function broadcastSidecarCrash(client: XlsxSidecarClient): void {
   }
 }
 
+/** The shell's OCR popup closed: tell every sheets tab so a panel waiting on it can carry on. */
+export function notifyOcrPopupClosed(): void {
+  for (const entry of sheetsTabs.values()) {
+    if (entry.webContents.isDestroyed()) continue
+    entry.webContents.send(IPC_CHANNELS.ocrPopupClosed)
+  }
+}
+
 function registerSheetsSession(webContents: WebContents, client: XlsxSidecarClient): void {
   startPastedTempCleanup()
   if (!crashNotifiedClients.has(client)) {

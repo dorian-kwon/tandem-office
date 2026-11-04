@@ -257,6 +257,7 @@ import {
   setSheetsHostWindowHook,
   setSheetsPasswordPrompt,
   setSheetsShellWindow,
+  notifyOcrPopupClosed,
   setSheetsWorkbookOpenedHook,
   startSheetsCaptureServer,
   stopSheetsSidecar,
@@ -9071,6 +9072,7 @@ registerTranslateIpc(
     // OCR of scanned PDFs and images: pages are rendered in a structure-job process owned
     // by the main window, the readings become .docx through the bundled CLI's converter
     ocr: translationOcrRuntime,
+    onOcrPopupClosed: () => notifyOcrPopupClosed(),
     // PDF sources: scan detection, and the text PDF's translation with the PDF editor's
     // engine (tree and translated PDF in structure-job processes, the same result store)
     nonEditable: {

@@ -731,6 +731,7 @@ const translateApi: TranslateApi = {
   },
   ocrWrite: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrWrite, args),
   ocrRelease: (token) => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrRelease, token),
+  ocrPopupClosed: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrPopupClosed),
   instructionsFor: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.instructionsFor, args),
   pdfPrepare: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.pdfPrepare, args),
   pdfStore: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.pdfStore, args),

@@ -157,6 +157,8 @@ export function TranslationPanel(props: TranslationPanelProps = {}) {
   }, [ocrRequest])
 
   const close = () => {
+    // the sheets AI panel that asked for this popup is waiting for the person to finish here
+    if (flow?.kind === 'ocr') void window.translateApi?.ocrPopupClosed?.()
     if (flow && privateDir.current && flow.dir === privateDir.current) {
       privateDir.current = null
       setOpenDir(null)

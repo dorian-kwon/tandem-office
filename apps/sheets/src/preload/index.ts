@@ -640,6 +640,11 @@ const desktopApi: DesktopApi = {
     }
     return result as unknown as OcrPicturesResponse
   },
+  onOcrPopupClosed(callback) {
+    const listener = (): void => callback()
+    ipcRenderer.on(IPC_CHANNELS.ocrPopupClosed, listener)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.ocrPopupClosed, listener)
+  },
   async webSearch(query, maxResults) {
     if (typeof query !== 'string' || !query.trim() || query.length > 512) {
       throw new Error('Invalid search query.')

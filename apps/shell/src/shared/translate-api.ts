@@ -41,6 +41,7 @@ export const TRANSLATE_CHANNELS = {
   ocrRecommend: 'translate:ocr-recommend',
   ocrWrite: 'translate:ocr-write',
   ocrRelease: 'translate:ocr-release',
+  ocrPopupClosed: 'translate:ocr-popup-closed',
   instructionsFor: 'translate:instructions-for',
   pdfPrepare: 'translate:pdf-prepare',
   pdfStore: 'translate:pdf-store',
@@ -378,6 +379,8 @@ export interface TranslateApi {
   ocrWrite(args: TranslateOcrWriteArgs): Promise<OcrWritten>
   /** drop the token (closing the dialog, stopping) */
   ocrRelease(token: string): Promise<void>
+  /** The OCR selection popup closed (finished or dismissed); lets a waiting AI panel carry on. */
+  ocrPopupClosed(): Promise<void>
   /**
    * each reference's conversion status; converts first what the index does not know yet
    * (references added before it existed, or changed in the folder)

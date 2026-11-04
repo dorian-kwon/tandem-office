@@ -112,6 +112,8 @@ export interface TranslateIpcDeps {
   projects?: TranslationProjectLink
   /** page rendering and the .docx conversion for OCR (main/translate/ocr.ts); absent: no OCR */
   ocr?: OcrServiceDeps
+  /** the OCR popup closed: the sheets AI panel that opened it stops showing "waiting" */
+  onOcrPopupClosed?: () => void
   /**
    * scan detection, the PDF's tree, the result store and the translated-PDF
    * writer (main/translate/non-editable.ts); absent: PDF sources are not
@@ -201,6 +203,7 @@ export function createTranslateHandlers(deps: TranslateIpcDeps) {
     ocrRecommend: guard(raw.ocrRecommend),
     ocrWrite: guard(raw.ocrWrite),
     ocrRelease: guard(raw.ocrRelease),
+    ocrPopupClosed: guard(raw.ocrPopupClosed),
     ocrForgetOwner: guard(raw.ocrForgetOwner),
     instructionsFor: guard(raw.instructionsFor),
     pdfPrepare: guard(raw.pdfPrepare),
@@ -733,6 +736,10 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       return ocr().recommend(args?.token, args?.pages)
     },
 
+    async ocrPopupClosed(): Promise<void> {
+      deps.onOcrPopupClosed?.()
+    },
+
     async ocrRelease(token: string): Promise<void> {
       return ocr().release(token)
     },
@@ -837,6 +844,7 @@ export function registerTranslateIpc(
   handle(TRANSLATE_CHANNELS.ocrWrite, (_e, args: TranslateOcrWriteArgs) => h.ocrWrite(args))
   handle(TRANSLATE_CHANNELS.ocrRecommend, (_e, args: TranslateOcrStartArgs) => h.ocrRecommend(args))
   handle(TRANSLATE_CHANNELS.ocrRelease, (_e, token: string) => h.ocrRelease(token))
+  handle(TRANSLATE_CHANNELS.ocrPopupClosed, () => h.ocrPopupClosed())
   handle(TRANSLATE_CHANNELS.instructionsFor, (_e, args: TranslateInstructionsForArgs) =>
     h.instructionsFor(args),
   )

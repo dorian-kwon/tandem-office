@@ -188,7 +188,10 @@ describe('markdown AI panel: project folder', () => {
     const release = fake.holdReadContext()
     await sendMessage(container, 'summarize')
     // the run waits for the project context
-    expect(fake.bridge.readContext).toHaveBeenCalledWith({ projectId: 'p1' })
+    expect(fake.bridge.readContext).toHaveBeenCalledWith({
+      projectId: 'p1',
+      query: expect.any(String),
+    })
     expect(editor.api.aiStream).not.toHaveBeenCalled()
     release()
     await settle()

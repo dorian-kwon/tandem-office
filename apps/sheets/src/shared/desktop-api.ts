@@ -3095,6 +3095,8 @@ export interface DesktopApi {
   aiToolCapabilities(): Promise<AiToolCapabilities>
   /** The sheets AI's picture OCR: list the open workbook's pictures, or open the OCR popup. */
   ocrPictures(request: OcrPicturesRequest): Promise<OcrPicturesResponse>
+  /** The OCR popup the AI opened for this app closed (finished or dismissed). Returns an unsubscribe. */
+  onOcrPopupClosed(callback: () => void): () => void
   /// Web search (main-process Serper/DuckDuckGo, shared with docs/slides)
   webSearch(query: string, maxResults?: number): Promise<WebSearchResult>
   /// Read one web page as text (shared ai:read-url handler), paged by character offset

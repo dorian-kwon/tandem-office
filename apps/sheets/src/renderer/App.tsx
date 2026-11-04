@@ -1307,6 +1307,12 @@ export function App({
   const streamErrorRef = useRef<IpcStreamError | null>(null)
   const [aiBusy, setAiBusy] = useState(false)
   const aiRunStatus = useAiRunStatus(aiBusy)
+  // the OCR popup the AI opened was finished or dismissed: stop showing "waiting for you"
+  useEffect(
+    () =>
+      window.desktopApi?.onOcrPopupClosed?.(() => aiRunStatus.resolveWaiting()) ?? undefined,
+    [aiRunStatus.resolveWaiting],
+  )
   // Display history survives restarts via localStorage; the AgentLoop's model
   // context does not, so restored turns are read-only transcript.
   const [chat, setChat] = useState<readonly AiChatMessage[]>([])

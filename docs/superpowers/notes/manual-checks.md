@@ -202,3 +202,11 @@ Needs a rebuild of the shell app (`npm run build:all`): main, preload and both r
 6. With unsaved edits in the workbook, ask for the OCR again: the AI does not open the popup, offers to save first, and opens it after you save and say so.
 7. Close the popup (Cancel) for a workbook outside any project: the home tab shows the translation project list, not a project detail screen for a hidden folder.
 8. Copies under `<userData>/ocr-chat` older than 7 days are removed at the next app start or the next private copy. The sheets AI panel never mentions a "document_ocr" chat flow (only the popup).
+
+## Sheets AI: waiting state while the OCR popup is open
+
+Needs a rebuild of the shell app (`npm run build:all`): main, preload and the sheets and shell renderers changed.
+
+1. In the sheets AI panel ask to OCR the workbook's pictures. After the AI opens the popup, the panel's status line says it is waiting for you (not "finished").
+2. Finish or cancel the popup on the home tab, then return to the sheets tab: the waiting line is gone (it clears when the popup closes, even if the sheets tab was in the background).
+3. Run any other AI request: the status line shows running, then finished, as before.

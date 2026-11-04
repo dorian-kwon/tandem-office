@@ -114,6 +114,7 @@ export const IPC_CHANNELS = {
   aiToolCapabilities: 'sheets:ai-tool-capabilities',
   // sheets AI's picture OCR: list the workbook's pictures, open the shell's OCR popup
   ocrPictures: 'sheets:ocr-pictures',
+  ocrPopupClosed: 'sheets:ocr-popup-closed',
   // MCP visible-grid bridge: shell pushes one command, the renderer that owns
   // the Univer workbook executes it with the built-in AI's executors
   mcpCommand: 'sheets:mcp-command',

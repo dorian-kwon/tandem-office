@@ -240,7 +240,10 @@ describe('slides AI panel: project folder', () => {
 
     const release = fake.holdReadContext()
     await send(container, 'tighten the titles')
-    expect(fake.bridge.readContext).toHaveBeenCalledWith({ projectId: 'p1' })
+    expect(fake.bridge.readContext).toHaveBeenCalledWith({
+      projectId: 'p1',
+      query: expect.any(String),
+    })
     expect(agentHarness.runs).toHaveLength(0)
     release()
     await settle()
