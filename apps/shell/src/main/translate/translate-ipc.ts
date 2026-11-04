@@ -45,6 +45,7 @@ import {
   type TranslationViewDeps,
 } from './open-translation'
 import { exportTranslation, type ExportTranslationDeps } from './export-translation'
+import { normalizeProjectName } from '../../shared/project-name'
 import { listRecentDocuments, recordRecentDocument } from './recent-documents'
 import type { TranslationProjectLink } from './project-link'
 import {
@@ -178,14 +179,10 @@ function fold(path: string): string {
   return process.platform === 'win32' ? full.toLowerCase() : full
 }
 
-/** Longest display name a project may get */
-export const PROJECT_NAME_MAX = 80
-
-/** A trimmed, non-empty display name without control characters, at most PROJECT_NAME_MAX. */
+/** A trimmed, non-empty display name without control characters (shared rule). */
 function validDisplayName(value: unknown): string {
-  const name = typeof value === 'string' ? value.trim() : ''
-  // eslint-disable-next-line no-control-regex
-  if (name === '' || name.length > PROJECT_NAME_MAX || /[\u0000-\u001f\u007f]/.test(name))
+  const name = normalizeProjectName(value)
+  if (name === null)
     throw new TranslateIpcError('INVALID_ARGUMENT', 'the project name is not valid')
   return name
 }
@@ -794,7 +791,11 @@ function createRawHandlers(deps: TranslateIpcDeps) {
         // a translation tab's own output file: main finds the project and the source from its path
         const outputPath = requireString(args.outputPath, 'outputPath')
         const name = basename(outputPath)
-        if (!isAbsolute(outputPath) || !plainFileName(name) || basename(dirname(outputPath)) !== 'output')
+        if (
+          !isAbsolute(outputPath) ||
+          !plainFileName(name) ||
+          basename(dirname(outputPath)) !== 'output'
+        )
           throw new TranslateIpcError('INVALID_ARGUMENT', 'this is not a translation output file')
         const dir = registeredDir(dirname(dirname(outputPath)))
         const project = await loadProject(dir)
@@ -808,7 +809,8 @@ function createRawHandlers(deps: TranslateIpcDeps) {
               }
               return null
             })()
-        if (!resolved) throw new TranslateIpcError('NOT_LISTED', 'no source of the project made this file')
+        if (!resolved)
+          throw new TranslateIpcError('NOT_LISTED', 'no source of the project made this file')
         return exportTranslation(dir, resolved.entry, name, project.targetLang, exporter)
       }
       const dir = registeredDir(args?.dir)

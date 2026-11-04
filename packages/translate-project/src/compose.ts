@@ -106,7 +106,9 @@ export function writingStyleRule(style: WritingStyle | undefined): string {
   if (!style) return ''
   const lines: string[] = []
   if (style.serialComma === 'with')
-    lines.push(`- Use the serial (Oxford) comma in lists of three or more: "A, B, and C" (${SCOPE}).`)
+    lines.push(
+      `- Use the serial (Oxford) comma in lists of three or more: "A, B, and C" (${SCOPE}).`,
+    )
   else if (style.serialComma === 'without')
     lines.push(
       `- Do not use the serial (Oxford) comma in lists of three or more: "A, B and C" (${SCOPE}).`,

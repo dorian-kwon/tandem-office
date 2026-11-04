@@ -557,14 +557,11 @@ export function parseTranslateError(err: unknown): { code: TranslateErrorCode; m
 
 /** What exporting a translation did: copied, the person cancelled, or the editor must save first. */
 export type TranslateExportResult =
-  | { status: 'saved'; path: string }
-  | { status: 'canceled' }
-  | { status: 'unsaved' }
+  { status: 'saved'; path: string } | { status: 'canceled' } | { status: 'unsaved' }
 
 /**
  * Export the current saved translation. Either a source of a project (main finds its output),
  * or the output file a translation tab shows (main finds the project and source from its path).
  */
 export type TranslateExportArgs =
-  | { dir: string; file: string; output?: string }
-  | { outputPath: string }
+  { dir: string; file: string; output?: string } | { outputPath: string }

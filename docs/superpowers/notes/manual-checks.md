@@ -276,3 +276,17 @@ Needs a rebuild of the shell app (`npm run build -w @genoffice/shell`).
 1. Open a translation pair A, then an ordinary document B. B shows alone (full width); A's two tabs stay side by side in the strip.
 2. Click A's output, A's source, then B again. A shows its own two panes each time; B always shows alone, never beside a pane of A.
 3. Open a second translation pair B and click all four tabs in turn. Each pair shows exactly its own source and output, never one pane from each pair.
+
+
+## Translation screens: table look, writing style, rename, title opens the document
+
+Needs a rebuild of the shell app (`npm run build -w @genoffice/shell`). Check in light and dark.
+
+1. Project list: a header row (Name, Languages, Documents, References, Last opened) over full-width rounded rows with a folder icon, the name over a shortened folder path, the language chip, counts and relative time. Newest opened comes first. Click Name, then Name again, then Last opened: the order and the chevron follow. Leave the list and come back: the order is kept until the app quits.
+2. Hover a row: it highlights and a "..." button appears on the right. Click anywhere on the row: the project opens. Tab to a name, press Up/Down: focus moves between rows; Enter opens. Narrow the window below about 800 px: the count columns disappear.
+3. Row menu: "Rename" edits the name in the row (Enter or leaving the field saves, Escape cancels, an empty or 81-character name shows the notice and changes nothing). "Delete" keeps the two-step confirmation. A project whose folder moved shows "Locate folder..." and "Remove from list" in its menu.
+4. Rename a project, then check the folder on disk keeps its old name, the Recent documents table shows the new project name, and reopening the app still shows the new name.
+5. Project detail: the title has a pencil (or click the title) to rename in place; "Saved" appears next to it. The three file blocks are tables (Name, Status); icons per file type; hover a row for the icon buttons (save as, open translation, delete, OCR, treat as scan/text, view converted text) and read their tooltips.
+6. Click a document's name in "Documents to translate": the translation view opens (same as the arrow button). A PDF scan still shows the OCR confirmation; with several documents "Start translation" stays disabled and shows the hint.
+7. Writing style card: choose "With Oxford comma" and "Inside the quotes": "Saved" appears. Open the translation view and ask the AI panel to show its instructions (or read `.tandem/project.json`): the Writing style rule is in the project context, and not there when both are "Follow the target language's usual convention". Type a custom instruction, leave the field: it is saved and sent as "Custom instruction: ...".
+8. An existing project made before this change opens with both writing style options on "Follow the target language's usual convention".

@@ -251,7 +251,10 @@ describe('composeContext reference chunks', () => {
     })
 
     it('includes a custom-only style', () => {
-      const { text } = composeContext({ ...base, project: style('default', 'default', 'Be terse.') })
+      const { text } = composeContext({
+        ...base,
+        project: style('default', 'default', 'Be terse.'),
+      })
       expect(text).toContain('Custom instruction: Be terse.')
     })
 
