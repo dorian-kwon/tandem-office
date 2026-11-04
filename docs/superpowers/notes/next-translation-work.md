@@ -48,6 +48,23 @@ Open design points: how placement works in each editor (docx, pptx, xlsx, hwp, p
 pictures inside documents (the picture notice already tells the user OCR is needed), and whether the
 answer is stored with the OCR provider choice in the project settings.
 
+## 3. First translation request: ask overwrite or bilingual (병기)
+
+When the user first asks to translate a document, the tool must ask how the result relates to the original,
+instead of silently picking one:
+
+- **Overwrite:** the translation replaces the source text in the output copy (today's behaviour of
+  `translate_blocks`).
+- **Bilingual (병기):** keep the original and add the translation beside it, for example the translation
+  after the original paragraph, original in parentheses after each term, two columns in a table, or the
+  translation in the next cell/row for spreadsheets.
+- Ask once per document (or per project, with "use this for the rest of the project"), remember the answer
+  in the project beside the prompt and glossary, and put it in the fixed translation context so every request
+  follows it. Section 1 (where to put the original inside a sentence) is the finer setting under bilingual.
+- Without an answer the AI must ask first and must not start writing into the document.
+- Per-editor meaning needs design: docx (paragraph after, inline, table), xlsx (adjacent column), pptx
+  (second text box or notes), hwp, pdf. Overwrite on the output copy only; `source/` stays untouched.
+
 ### OCR example from the owner (2026-11-04)
 
 `US_마계의 달!_22화 2.xlsx` (a webtoon translation worksheet; the file stays outside the repo).
