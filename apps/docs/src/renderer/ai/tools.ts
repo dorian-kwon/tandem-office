@@ -1385,6 +1385,41 @@ async function insertImageBytes(
   }
 }
 
+/**
+ * The document's note counts and how many note paragraphs this tool has not
+ * handled yet, appended to body reads so the model cannot miss that notes
+ * exist ('' when the document has none).
+ */
+function noteStatusLine(editor: Editor, notes: AiNotesAccess | undefined): string {
+  if (!notes) return ''
+  const foot = notes.list('footnote').length
+  const end = notes.list('endnote').length
+  if (foot + end === 0) return ''
+  const left = remainingUntranslated(editor, notes).notes.length
+  const count = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+  return (
+    `This document has ${count(foot, 'footnote')} and ${count(end, 'endnote')}; ` +
+    (left > 0
+      ? `${count(left, 'note paragraph')} not translated yet: read_runs notes:true, then translate_blocks.`
+      : 'every note paragraph has been handled.')
+  )
+}
+
+/** what translate_blocks still leaves open, by its own tracking (short) */
+function remainingLine(editor: Editor, notes: AiNotesAccess | undefined): string {
+  const report = remainingUntranslated(editor, notes)
+  if (report.body.length + report.notes.length === 0)
+    return "Nothing is left by this tool's own tracking; confirm once with read_runs checkRemaining:true and sourceLanguage."
+  const next = [
+    report.body.length > 0 ? 'read_runs for the body blocks' : '',
+    report.notes.length > 0 ? 'read_runs notes:true for the notes' : '',
+  ].filter(Boolean)
+  return (
+    `Still untranslated: ${report.body.length} body block(s) and ${report.notes.length} note paragraph(s) (not finished; ${next.join(' and ')}). ` +
+    'Spacing around punctuation is tidied by the tool; do not fix it by hand.'
+  )
+}
+
 export function executeTool(
   editor: Editor,
   call: AgentToolCall,
@@ -1782,14 +1817,12 @@ function executeSyncTool(
         lines.push(line)
         size += line.length + 1
       }
-      const hasNotes =
-        !!notes && (notes.list('footnote').length > 0 || notes.list('endnote').length > 0)
+      const noteLine = noteStatusLine(editor, notes)
       const note =
-        next === null
-          ? hasNotes && range.end === editor.state.doc.childCount - 1
-            ? '\n(this document has footnotes or endnotes: read them with read_runs notes:true and translate them too)'
-            : ''
-          : `\n…(truncated: call read_runs again with startBlockIndex=${next} to continue)`
+        (next === null
+          ? ''
+          : `\n…(truncated: call read_runs again with startBlockIndex=${next} to continue)`) +
+        (noteLine ? `\n${noteLine}` : '')
       return {
         output: lines.length > 0 ? lines.join('\n') + note : '(range is empty)',
         mutated: false,
@@ -1919,7 +1952,7 @@ function executeSyncTool(
         output: [
           `Translated ${translated.length} paragraph(s)${noteCount > 0 ? ` and ${noteCount} note paragraph(s)` : ''} in place; run formatting, footnote references, paragraph styles and empty paragraphs were kept. Block indexes are unchanged.`,
           ...remarks,
-          'Translation is finished only when read_runs with checkRemaining:true reports nothing left.',
+          remainingLine(editor, notes),
         ].join('\n'),
         mutated: translated.length > 0 || noteCount > 0,
         summary: t('aiSumTranslatedBlocks', { count: translated.length + noteCount }),

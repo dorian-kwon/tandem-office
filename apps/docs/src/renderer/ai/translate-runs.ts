@@ -346,6 +346,35 @@ export function settleTexts(
     if (!separated && !/\s$/.test(before) && !/^\s/.test(after) && !STARTS_WITH_CLOSING.test(after))
       out[i] = p.spare
   })
+  return tidySpacing(out)
+}
+
+/**
+ * Stray-space clean-up of the settled texts, run on every translate_blocks
+ * item so the model never has to repair spacing with find-and-replace.
+ * Only ASCII spaces are touched, and only where the result cannot be wrong
+ * in any target language: two spaces become one, and a space before a comma,
+ * a full stop or a closing round/square bracket is dropped (a full stop that
+ * starts an ellipsis, a file extension or a name such as .NET is kept).
+ * Marks that some languages set off with a space (French ; : ! ? and the
+ * guillemets, German or French %) and any no-break space are never touched,
+ * so the tool needs to know nothing about the target language. The same
+ * rules apply across a segment seam; whitespace-only segments stay as they are.
+ */
+const CLOSER_AFTER_SPACE = /^[,)\]]|^\.(?![.\w])/
+export function tidySpacing(texts: string[]): string[] {
+  const out = texts.map((t) =>
+    t.trim() === '' ? t : t.replace(/ {2,}/g, ' ').replace(/ +(?=[,)\]]|\.(?![.\w]))/g, ''),
+  )
+  for (let i = 0; i < out.length; i++) {
+    if (out[i].trim() === '' || !out[i].endsWith(' ')) continue
+    let j = i + 1
+    while (j < out.length && out[j] === '') j++
+    if (j >= out.length || out[j].trim() === '') continue
+    const next = out[j]
+    if (CLOSER_AFTER_SPACE.test(next.replace(/^ +/, ''))) out[i] = out[i].replace(/ +$/, '')
+    else if (next.startsWith(' ')) out[j] = next.replace(/^ +/, '')
+  }
   return out
 }
 

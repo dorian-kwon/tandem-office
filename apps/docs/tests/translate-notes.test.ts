@@ -105,7 +105,7 @@ describe('settleTexts spacing', () => {
     expect(settleTexts(['가 ', '나'], ['a ', 'b'])).toEqual(['a ', 'b'])
     expect(settleTexts(['가', ' 나'], ['a', ' b'])).toEqual(['a', ' b'])
     expect(settleTexts(['가', '나'], ['a', 'b'])).toEqual(['a', 'b'])
-    expect(settleTexts(['가', '나'], ['a ', ', b'])).toEqual(['a ', ', b'])
+    expect(settleTexts(['가', '나'], ['a', ', b'])).toEqual(['a', ', b'])
   })
 
   it('never doubles the space between two groups', () => {
@@ -193,7 +193,53 @@ describe('whitespace-only runs between groups (body and notes)', () => {
   })
 })
 
+describe('settleTexts tidies stray spaces the model wrote', () => {
+  it('collapses double spaces and drops a space before , . ) ]', () => {
+    expect(settleTexts(['가나', '다'], ['one  two ,', 'three .'])).toEqual(['one two,', 'three.'])
+    expect(settleTexts(['가', '나'], ['(see it ', ') now'])).toEqual(['(see it', ') now'])
+    expect(settleTexts(['가', '나'], ['a ', ', b'])).toEqual(['a', ', b'])
+    expect(settleTexts(['가', '나'], ['a ', ' b'])).toEqual(['a ', 'b'])
+  })
+
+  it('leaves French marks, ellipses and dotted names alone', () => {
+    expect(settleTexts(['가', '나'], ['Quoi ?', 'Bien ; oui : non !'])).toEqual([
+      'Quoi ?',
+      'Bien ; oui : non !',
+    ])
+    expect(settleTexts(['가'], ['wait ... then .NET and « a »'])).toEqual([
+      'wait ... then .NET and « a »',
+    ])
+  })
+})
+
 describe('footnotes through read_runs / translate_blocks', () => {
+  it('states the note counts on every body read and translate_blocks result', async () => {
+    const editor = await createEditor([paragraph('본문'), paragraph('둘째')])
+    const n = notes()
+    const read = await exec(editor, 'read_runs', { startBlockIndex: 0, endBlockIndex: 0 }, n.access)
+    expect(read.output).toMatch(/2 footnotes and 0 endnotes[^\n]*not translated[^\n]*notes:true/)
+    const body = read.output.split('\n').map((l) => JSON.parse(l.startsWith('{') ? l : '{}'))
+    const done = await exec(
+      editor,
+      'translate_blocks',
+      { blocks: [{ index: 0, fp: body[0].fp, segments: ['Body'] }] },
+      n.access,
+    )
+    expect(done.output).toMatch(/Still untranslated: 1 body block\(s\) and 3 note paragraph\(s\)/)
+    expect(done.output).toMatch(/notes:true/)
+  })
+
+  it('says nothing about notes when the document has none, and reports remaining body', async () => {
+    const editor = await createEditor([paragraph('본문')])
+    const read = await exec(editor, 'read_runs', { startBlockIndex: 0, endBlockIndex: 0 })
+    expect(read.output).not.toMatch(/footnote/)
+    const fp = JSON.parse(read.output.split('\n')[0]).fp
+    const done = await exec(editor, 'translate_blocks', {
+      blocks: [{ index: 0, fp, segments: ['Body'] }],
+    })
+    expect(done.output).toMatch(/Nothing is left by this tool's own tracking/)
+  })
+
   const notes = () =>
     notesAccess([
       richNote('1', [run('첫 '), run('각주', { italic: true }), run('입니다.')]),

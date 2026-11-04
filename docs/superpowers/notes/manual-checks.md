@@ -177,3 +177,8 @@ Use a project with target language German (or any of the 21 app languages except
 ## Translation follow-ups, Task 5: pictures need OCR
 
 1. Add a `.docx` (and a `.pptx` reference) with a few photos or screenshots: next to each row the detail screen says how many pictures it holds, that their text is not translated, and that OCR is needed (export the pages as PNG/JPEG or a scanned PDF and add that as a document). A document without pictures, a PDF and an image source show no such notice.
+
+## Translation follow-ups, Task 6: notes visible, spacing tidied by the tool
+
+1. Translate a document with footnotes (real run): every read_runs body result and translate_blocks result states the footnote/endnote counts and what is still untranslated; the AI translates the notes without being asked and never says the document has none.
+2. In the result look for a space before `, . ) ]` and double spaces: none. French `; : ! ?` and `« »` spacing the AI wrote is left as written. The AI does not use findReplace or ask permission for spacing.

@@ -325,7 +325,7 @@ describe('translate_blocks refuses unsafe input (review fixes)', () => {
       NUM_IDS,
     )
     expect(exec.isError).toBeFalsy()
-    expect(texts(blockJson(editor, 0))).toEqual(['A ', ' C'])
+    expect(texts(blockJson(editor, 0))).toEqual(['A ', 'C'])
   })
 
   it('a table entry without paragraph is refused when the table has several cell paragraphs', async () => {

@@ -205,4 +205,9 @@ describe('TRANSLATION_EDITING_RULES', () => {
   it('names the fp fingerprint flow of read_runs and translate_blocks', () => {
     expect(TRANSLATION_EDITING_RULES).toMatch(/"fp"[^\n]*read_runs[^\n]*unchanged/)
   })
+
+  it('tells the model spacing is tidied by the tool and needs no permission', () => {
+    expect(TRANSLATION_EDITING_RULES).toMatch(/tidies spacing itself; do not fix spacing by hand/)
+    expect(TRANSLATION_EDITING_RULES).not.toMatch(/fix spacing with/)
+  })
 })

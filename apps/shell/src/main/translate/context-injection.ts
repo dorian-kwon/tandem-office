@@ -259,11 +259,10 @@ export interface TranslationFolderContext {
  */
 export const TRANSLATION_EDITING_RULES = [
   'How to translate in the editors of this app:',
-  '- In a Word document, translate with read_runs then translate_blocks: one translated string per segment, in order. Never translate or fix spacing with replace_blocks, write_document, edit_note or apply_ops; they lose run formatting.',
-  '- Never delete, fill or restyle empty paragraphs; leave them as they are.',
-  '- Never move, delete or retype a footnote reference mark. Footnotes and endnotes are translated too: read them with read_runs notes:true and pass them to translate_blocks as entries with "note" and "id".',
-  '- Translation is not finished until the body and every note are translated: call read_runs with checkRemaining:true and sourceLanguage, and keep going until it reports nothing left.',
-  '- Pass each paragraph\'s "fp" from read_runs to translate_blocks unchanged; a refused fp means the paragraph changed, so call read_runs again.',
+  '- In a Word document, translate with read_runs then translate_blocks: one translated string per segment, in order. Never translate with replace_blocks, write_document, edit_note or apply_ops; they lose run formatting. translate_blocks tidies spacing itself; do not fix spacing by hand or ask permission.',
+  '- Never delete, fill or restyle empty paragraphs, or move, delete or retype a footnote reference mark.',
+  '- Footnotes and endnotes are translated too: read_runs notes:true, then translate_blocks entries with "note" and "id". Tool results state the note counts and what is left; trust them. Translation is not finished until read_runs with checkRemaining:true and sourceLanguage reports nothing left.',
+  '- Pass each paragraph\'s "fp" from read_runs to translate_blocks unchanged; a refused fp means call read_runs again.',
 ].join('\n')
 
 /** The registered translation project at `root` (any spelling of the path), or undefined */
