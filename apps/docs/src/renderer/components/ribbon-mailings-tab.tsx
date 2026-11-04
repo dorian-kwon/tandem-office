@@ -1,3 +1,4 @@
+import { RibbonOverflow } from './ribbon-overflow'
 import { useEffect, useState } from 'react'
 import type { Editor } from '@tiptap/core'
 import { mergeFieldInstruction } from '@genoffice/docx-engine'
@@ -56,7 +57,7 @@ export function MailingsTab({
   }
 
   return (
-    <>
+    <RibbonOverflow>
       <div className="ribbon-group">
         <div className="ribbon-group-items">
           <button
@@ -152,6 +153,6 @@ export function MailingsTab({
           onClose={() => setPanelOpen(false)}
         />
       )}
-    </>
+    </RibbonOverflow>
   )
 }

@@ -13676,3 +13676,83 @@ tr > .page-gap-cut {
 .rb-field-item:hover {
   background: var(--color-bg-subtle);
 }
+
+/* Measure the editor pane itself: split views need not resize the window. */
+.ribbon-tabs {
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+.ribbon-tabs > :not(.ribbon-overflow):not(.ribbon-tabs-spacer),
+.ribbon-tab {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.ribbon-body {
+  overflow: visible;
+}
+.ribbon-overflow {
+  display: flex;
+  align-items: stretch;
+  flex: 1 1 0;
+  min-width: 0;
+  gap: 0;
+  position: relative;
+}
+.ribbon-overflow-tabs {
+  gap: 2px;
+  align-items: center;
+  align-self: stretch;
+}
+.ribbon-overflow-item {
+  display: flex;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+.ribbon-overflow-item:has(> .ribbon-group-styles) {
+  flex: 1 0 259px;
+}
+.ribbon-overflow-trigger {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  align-self: stretch;
+  justify-content: center;
+}
+.ribbon-overflow-panel {
+  position: fixed;
+  z-index: 4000;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px;
+  width: max-content;
+  max-width: min(640px, calc(100vw - 16px));
+  max-height: min(420px, calc(100vh - 100px));
+  padding: 8px;
+  overflow: auto;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: var(--shadow-menu);
+  -webkit-app-region: no-drag;
+}
+.ribbon-overflow-panel[aria-hidden='true'] {
+  pointer-events: none;
+}
+.ribbon-overflow-panel > .ribbon-overflow-item {
+  flex: 0 0 auto;
+}
+.ribbon-overflow-tab-panel {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 2px;
+  min-width: 140px;
+}
+.ribbon-overflow-tab-panel .ribbon-tab {
+  width: 100%;
+  text-align: start;
+}
+.ribbon-tabs > .ribbon-tabs-spacer {
+  flex: 0;
+}

@@ -1,3 +1,4 @@
+import { RibbonOverflow } from './ribbon-overflow'
 import { useState } from 'react'
 import type { Editor } from '@tiptap/core'
 import type { ZoteroCommand } from '../../shared/ipc'
@@ -503,7 +504,7 @@ export function ReferencesTab({
   }
 
   return (
-    <>
+    <RibbonOverflow>
       <div className="ribbon-group">
         <div className="ribbon-group-items">
           <button
@@ -746,7 +747,7 @@ export function ReferencesTab({
           onClose={() => setXePrompt(null)}
         />
       )}
-    </>
+    </RibbonOverflow>
   )
 }
 

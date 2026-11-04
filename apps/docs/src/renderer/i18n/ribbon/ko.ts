@@ -1,6 +1,7 @@
 import type { zh } from './zh'
 
 export const ko = {
+  ribbonMore: '더보기',
   ribbonAiRewriteConfirm:
     '이 작업은 AI를 호출합니다. 전체 내용이 다시 작성될 수 있습니다. 계속하시겠습니까? (확인 후 다시 묻지 않습니다)',
   // Tabs

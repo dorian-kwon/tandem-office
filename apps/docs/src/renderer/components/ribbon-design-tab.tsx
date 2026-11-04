@@ -1,3 +1,4 @@
+import { RibbonOverflow } from './ribbon-overflow'
 import { useState } from 'react'
 import { type SectionSettings, type ThemeColors, type ThemeFonts } from '@genoffice/docx-engine'
 import { PromptModal } from './PromptModal'
@@ -237,7 +238,7 @@ export function DesignTab({
     setDropdown(() => null)
   }
   return (
-    <>
+    <RibbonOverflow>
       <div className="ribbon-group">
         <div className="ribbon-group-items">
           <div className="rb-split-wrap">
@@ -475,7 +476,7 @@ export function DesignTab({
           onClose={() => setWatermarkPromptOpen(false)}
         />
       )}
-    </>
+    </RibbonOverflow>
   )
 }
 

@@ -1,6 +1,7 @@
 import type { zh } from './zh'
 
 export const ar = {
+  ribbonMore: 'المزيد',
   ribbonAiRewriteConfirm:
     'هذا الإجراء يستدعي الذكاء الاصطناعي وقد يعيد كتابة المحتوى بالكامل. هل تريد المتابعة؟ (لن يتم السؤال مرة أخرى.)',
   ribbonTabFile: 'ملف',

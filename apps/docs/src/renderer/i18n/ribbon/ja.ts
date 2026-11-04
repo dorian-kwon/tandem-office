@@ -1,6 +1,7 @@
 import type { zh } from './zh'
 
 export const ja = {
+  ribbonMore: 'その他',
   ribbonAiRewriteConfirm:
     'この操作は AI を呼び出します。内容全体が書き換えられる可能性があります。続行しますか？（確認後は再表示されません）',
   // Tabs

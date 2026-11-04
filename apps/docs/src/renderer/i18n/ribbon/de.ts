@@ -1,6 +1,7 @@
 import type { zh } from './zh'
 
 export const de = {
+  ribbonMore: 'Mehr',
   ribbonAiRewriteConfirm:
     'Diese Aktion ruft die KI auf und kann den gesamten Inhalt umschreiben. Fortfahren? (Sie werden nicht erneut gefragt.)',
   ribbonTabFile: 'Datei',

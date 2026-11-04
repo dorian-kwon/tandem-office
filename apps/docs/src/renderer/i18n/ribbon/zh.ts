@@ -1,5 +1,6 @@
 /** ribbon strings, zh: defines the key set every other locale shard must match. */
 export const zh = {
+  ribbonMore: '更多',
   ribbonAiRewriteConfirm: '此操作将调用 AI，并可能改写整篇内容。是否继续？（确认后不再提示）',
   // Tabs
   ribbonTabFile: '文件',

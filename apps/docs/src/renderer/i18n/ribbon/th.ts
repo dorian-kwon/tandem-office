@@ -1,6 +1,7 @@
 import type { zh } from './zh'
 
 export const th = {
+  ribbonMore: 'เพิ่มเติม',
   ribbonAiRewriteConfirm:
     'การดำเนินการนี้จะเรียกใช้ AI และอาจเขียนเนื้อหาทั้งหมดใหม่ ดำเนินการต่อหรือไม่ (จะไม่ถามอีก)',
   ribbonTabFile: 'ไฟล์',

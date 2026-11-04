@@ -1,3 +1,4 @@
+import { RibbonOverflow } from './ribbon-overflow'
 import { useState } from 'react'
 import type { CSSProperties } from 'react'
 import { getMarkRange } from '@tiptap/core'
@@ -712,7 +713,7 @@ export function InsertTab({
   }
 
   return (
-    <>
+    <RibbonOverflow>
       {/* Word: Pages (cover page / blank page / page break) sits leftmost */}
       <div className="ribbon-group">
         <div className="ribbon-group-items">
@@ -1367,7 +1368,7 @@ export function InsertTab({
       {bookmarkOpen && <BookmarkModal editor={editor} onClose={() => setBookmarkOpen(false)} />}
       {crossRefOpen && <CrossRefModal editor={editor} onClose={() => setCrossRefOpen(false)} />}
       {chartOpen && <ChartInsertModal editor={editor} onClose={() => setChartOpen(false)} />}
-    </>
+    </RibbonOverflow>
   )
 }
 

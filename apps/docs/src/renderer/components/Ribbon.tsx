@@ -1,3 +1,4 @@
+import { RibbonOverflow } from './ribbon-overflow'
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Lang } from '@genoffice/i18n'
@@ -1403,10 +1404,10 @@ function RibbonInner({
   // and a "more styles" expander appears whenever cards are hidden. The
   // gallery is then capped right after the last visible card so the expander
   // hugs it instead of floating at the group's far edge.
-  const styleGalleryRef = useRef<HTMLDivElement | null>(null)
+  const [styleGalleryElement, setStyleGalleryElement] = useState<HTMLDivElement | null>(null)
   const [styleGalleryOverflow, setStyleGalleryOverflow] = useState(false)
   useLayoutEffect(() => {
-    const el = styleGalleryRef.current
+    const el = styleGalleryElement
     if (!el || typeof ResizeObserver === 'undefined') return
     const check = () => {
       // measure the natural (uncapped) layout at the current wrapper width
@@ -1428,7 +1429,7 @@ function RibbonInner({
     return () => ro.disconnect()
     // re-check when the card set can change, and after the expander mounts or
     // unmounts (it takes row width, which can change how many cards fit)
-  }, [tab, galleryEntries.length, lang, styleGalleryOverflow])
+  }, [tab, galleryEntries.length, lang, styleGalleryOverflow, styleGalleryElement])
 
   const currentSize = fs.fontSizePt
   // computed unconditionally (not inside the dropdown render): cheap, and the
@@ -2195,81 +2196,83 @@ function RibbonInner({
           </div>
         )}
         {quickActions}
-        {TABS.filter((tabName) => tabName !== 'file').map((tabName) => (
-          <button
-            key={tabName}
-            className={`ribbon-tab ${collapse.tabClass(tab === tabName)}`}
-            data-tip={collapse.tabTip(tab === tabName)}
-            onClick={() => {
-              collapse.onTabPress(tab === tabName)
-              lastRegularTab.current = tabName
-              setTab(tabName)
-              setDropdown(null)
-            }}
-          >
-            {t(TAB_LABEL_KEYS[tabName])}
-          </button>
-        ))}
-        {/* contextual tabs render as plain tabs appended to the row, like current Word */}
-        {inTable &&
-          TABLE_TABS.map((tableTab) => (
+        <RibbonOverflow tabs>
+          {TABS.filter((tabName) => tabName !== 'file').map((tabName) => (
             <button
-              key={tableTab}
-              className={`ribbon-tab ${collapse.tabClass(tab === tableTab)}`}
-              data-tip={collapse.tabTip(tab === tableTab)}
+              key={tabName}
+              className={`ribbon-tab ${collapse.tabClass(tab === tabName)}`}
+              data-tip={collapse.tabTip(tab === tabName)}
               onClick={() => {
-                collapse.onTabPress(tab === tableTab)
-                setTab(tableTab)
+                collapse.onTabPress(tab === tabName)
+                lastRegularTab.current = tabName
+                setTab(tabName)
                 setDropdown(null)
               }}
             >
-              {t(TAB_LABEL_KEYS[tableTab])}
+              {t(TAB_LABEL_KEYS[tabName])}
             </button>
           ))}
-        {inImage &&
-          IMAGE_TABS.map((imageTab) => (
-            <button
-              key={imageTab}
-              className={`ribbon-tab ${collapse.tabClass(tab === imageTab)}`}
-              data-tip={collapse.tabTip(tab === imageTab)}
-              onClick={() => {
-                collapse.onTabPress(tab === imageTab)
-                setTab(imageTab)
-                setDropdown(null)
-              }}
-            >
-              {t(TAB_LABEL_KEYS[imageTab])}
-            </button>
-          ))}
-        {inShape &&
-          SHAPE_TABS.map((shapeTab) => (
-            <button
-              key={shapeTab}
-              className={`ribbon-tab ${collapse.tabClass(tab === shapeTab)}`}
-              data-tip={collapse.tabTip(tab === shapeTab)}
-              onClick={() => {
-                collapse.onTabPress(tab === shapeTab)
-                setTab(shapeTab)
-                setDropdown(null)
-              }}
-            >
-              {t(TAB_LABEL_KEYS[shapeTab])}
-            </button>
-          ))}
-        {inHf &&
-          HF_TABS.map((hfTab) => (
-            <button
-              key={hfTab}
-              className={`ribbon-tab ${tab === hfTab ? 'active' : ''}`}
-              onClick={() => {
-                collapse.onTabPress(tab === hfTab)
-                setTab(hfTab)
-                setDropdown(null)
-              }}
-            >
-              {t(TAB_LABEL_KEYS[hfTab])}
-            </button>
-          ))}
+          {/* contextual tabs render as plain tabs appended to the row, like current Word */}
+          {inTable &&
+            TABLE_TABS.map((tableTab) => (
+              <button
+                key={tableTab}
+                className={`ribbon-tab ${collapse.tabClass(tab === tableTab)}`}
+                data-tip={collapse.tabTip(tab === tableTab)}
+                onClick={() => {
+                  collapse.onTabPress(tab === tableTab)
+                  setTab(tableTab)
+                  setDropdown(null)
+                }}
+              >
+                {t(TAB_LABEL_KEYS[tableTab])}
+              </button>
+            ))}
+          {inImage &&
+            IMAGE_TABS.map((imageTab) => (
+              <button
+                key={imageTab}
+                className={`ribbon-tab ${collapse.tabClass(tab === imageTab)}`}
+                data-tip={collapse.tabTip(tab === imageTab)}
+                onClick={() => {
+                  collapse.onTabPress(tab === imageTab)
+                  setTab(imageTab)
+                  setDropdown(null)
+                }}
+              >
+                {t(TAB_LABEL_KEYS[imageTab])}
+              </button>
+            ))}
+          {inShape &&
+            SHAPE_TABS.map((shapeTab) => (
+              <button
+                key={shapeTab}
+                className={`ribbon-tab ${collapse.tabClass(tab === shapeTab)}`}
+                data-tip={collapse.tabTip(tab === shapeTab)}
+                onClick={() => {
+                  collapse.onTabPress(tab === shapeTab)
+                  setTab(shapeTab)
+                  setDropdown(null)
+                }}
+              >
+                {t(TAB_LABEL_KEYS[shapeTab])}
+              </button>
+            ))}
+          {inHf &&
+            HF_TABS.map((hfTab) => (
+              <button
+                key={hfTab}
+                className={`ribbon-tab ${tab === hfTab ? 'active' : ''}`}
+                onClick={() => {
+                  collapse.onTabPress(tab === hfTab)
+                  setTab(hfTab)
+                  setDropdown(null)
+                }}
+              >
+                {t(TAB_LABEL_KEYS[hfTab])}
+              </button>
+            ))}
+        </RibbonOverflow>
         <span className="ribbon-tabs-spacer" />
         {trailingActions}
       </div>
@@ -2283,7 +2286,7 @@ function RibbonInner({
             onAction={onHfAction}
           />
         ) : tab === 'shapeFormat' && inShape ? (
-          <div className="table-ribbon-body">
+          <RibbonOverflow>
             <div className="ribbon-group">
               <div className="ribbon-group-items">
                 {!shapeIsLine && (
@@ -2490,9 +2493,9 @@ function RibbonInner({
               </div>
               <div className="ribbon-group-label">{t('ribbonGroupArrange')}</div>
             </div>
-          </div>
+          </RibbonOverflow>
         ) : tab === 'pictureFormat' && inImage ? (
-          <div className="table-ribbon-body">
+          <RibbonOverflow>
             {/* ---- Adjust: remove background / crop / replace picture ---- */}
             <div className="ribbon-group">
               <div className="ribbon-group-items">
@@ -2666,9 +2669,9 @@ function RibbonInner({
               </div>
               <div className="ribbon-group-label">{t('ribbonGroupSize')}</div>
             </div>
-          </div>
+          </RibbonOverflow>
         ) : tab === 'tableDesign' ? (
-          <div className="table-ribbon-body">
+          <RibbonOverflow>
             <div className="table-tool-group">
               <div className="table-style-gallery">
                 <button
@@ -2881,9 +2884,9 @@ function RibbonInner({
               </div>
               <div className="ribbon-group-label">{t('ribbonGroupBorders')}</div>
             </div>
-          </div>
+          </RibbonOverflow>
         ) : tab === 'tableLayout' ? (
-          <div className="table-ribbon-body">
+          <RibbonOverflow>
             <div className="table-tool-group table-tool-advanced">
               <div className="table-tool-stack table-tool-stack-three">
                 <div className="rb-split-wrap">
@@ -3215,9 +3218,9 @@ function RibbonInner({
               </div>
               <div className="ribbon-group-label">{t('ribbonGroupData')}</div>
             </div>
-          </div>
+          </RibbonOverflow>
         ) : tab === 'home' ? (
-          <>
+          <RibbonOverflow>
             {/* ---- AI (first slot: entry + one-click AI actions) ---- */}
             <div className="ribbon-group">
               <div className="ribbon-group-items">
@@ -4230,7 +4233,7 @@ function RibbonInner({
             {/* ---- Styles ---- */}
             <div className="ribbon-group ribbon-group-styles">
               <div className="ribbon-group-items rb-split-wrap style-gallery-wrap">
-                <div className="style-gallery" ref={styleGalleryRef}>
+                <div className="style-gallery" ref={setStyleGalleryElement}>
                   {renderStyleCards(false)}
                 </div>
                 {/* clipped cards stay reachable through the expander grid */}
@@ -4306,7 +4309,7 @@ function RibbonInner({
                 </div>
               </>
             )}
-          </>
+          </RibbonOverflow>
         ) : tab === 'draw' ? (
           <DrawTab
             hasDoc={hasDoc}

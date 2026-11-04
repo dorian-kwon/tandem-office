@@ -1,6 +1,7 @@
 import type { zh } from './zh'
 
 export const vi = {
+  ribbonMore: 'Thêm',
   ribbonAiRewriteConfirm:
     'Thao tác này sẽ gọi trợ lý AI và có thể viết lại toàn bộ nội dung. Tiếp tục? (Bạn sẽ không được hỏi lại nữa.)',
   ribbonTabFile: 'Tệp',

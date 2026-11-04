@@ -1,3 +1,4 @@
+import { RibbonOverflow } from './ribbon-overflow'
 import { useI18n } from '../i18n/locale'
 import type { HfView } from '../doc-state'
 import {
@@ -97,7 +98,7 @@ export function HeaderFooterTab({
     [t('ribbonPnBottomRight'), 'footer', 'right'],
   ] as Array<[string, 'header' | 'footer', 'left' | 'center' | 'right']>
   return (
-    <div className="hf-ribbon-body">
+    <RibbonOverflow>
       <div className="ribbon-group">
         <div className="ribbon-group-items">
           <div className="rb-split-wrap">
@@ -276,6 +277,6 @@ export function HeaderFooterTab({
         </div>
         <div className="ribbon-group-label">{t('ribbonGroupHfClose')}</div>
       </div>
-    </div>
+    </RibbonOverflow>
   )
 }

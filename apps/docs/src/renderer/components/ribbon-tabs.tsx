@@ -1,3 +1,4 @@
+import { RibbonOverflow } from './ribbon-overflow'
 import { useRef, useState } from 'react'
 import type { Editor, JSONContent } from '@tiptap/core'
 import type { Node as PmNode } from '@tiptap/pm/model'
@@ -851,7 +852,7 @@ export function ReviewTab({
   // With a range selection the rewrite scopes to the selection (no whole-document ack needed)
   const hasRangeSelection = () => !editor.state.selection.empty
   return (
-    <>
+    <RibbonOverflow>
       {/* Word: Proofing (Editor) sits leftmost */}
       <div className="ribbon-group">
         <div className="ribbon-group-items">
@@ -1267,7 +1268,7 @@ export function ReviewTab({
         </div>
         <div className="ribbon-group-label">{t('ribbonGroupProtect')}</div>
       </div>
-    </>
+    </RibbonOverflow>
   )
 }
 
@@ -1342,7 +1343,7 @@ export function ViewTab({
   })
 
   return (
-    <>
+    <RibbonOverflow>
       <div className="ribbon-group">
         <div className="ribbon-group-items">
           <button
@@ -1608,7 +1609,7 @@ export function ViewTab({
         </div>
         <div className="ribbon-group-label">{t('ribbonGroupWindow')}</div>
       </div>
-    </>
+    </RibbonOverflow>
   )
 }
 /* ================= Draw ================= */
@@ -1668,7 +1669,7 @@ export function DrawTab({
   const widths = editingHighlighter ? HIGHLIGHTER_WIDTHS : PEN_WIDTHS
 
   return (
-    <>
+    <RibbonOverflow>
       <div className="ribbon-group">
         <div className="ribbon-group-items">
           <button
@@ -1786,6 +1787,6 @@ export function DrawTab({
         </div>
         <div className="ribbon-group-label">{t('ribbonGroupClear')}</div>
       </div>
-    </>
+    </RibbonOverflow>
   )
 }

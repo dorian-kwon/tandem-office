@@ -1,3 +1,4 @@
+import { RibbonOverflow } from './ribbon-overflow'
 import { useRef, useState } from 'react'
 import { type SectionSettings, type TextboxDisplay } from '@genoffice/docx-engine'
 import { WRAP_OPTIONS } from './ContextMenu'
@@ -339,7 +340,7 @@ export function LayoutTab({
   }
 
   return (
-    <>
+    <RibbonOverflow>
       <div className="ribbon-group">
         <div className="ribbon-group-items">
           <div className="rb-split-wrap">
@@ -730,7 +731,7 @@ export function LayoutTab({
           onClose={() => setPaperDialog(false)}
         />
       )}
-    </>
+    </RibbonOverflow>
   )
 }
 
