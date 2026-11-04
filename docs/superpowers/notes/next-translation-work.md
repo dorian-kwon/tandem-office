@@ -47,3 +47,21 @@ Wanted: after OCR, ask the user where the recognised text goes, then remember th
 Open design points: how placement works in each editor (docx, pptx, xlsx, hwp, pdf), what happens to
 pictures inside documents (the picture notice already tells the user OCR is needed), and whether the
 answer is stored with the OCR provider choice in the project settings.
+
+### OCR example from the owner (2026-11-04)
+
+`US_마계의 달!_22화 2.xlsx` (a webtoon translation worksheet; the file stays outside the repo).
+
+- One sheet, `A1:Z2607`. Header block rows 1-6: `A1` "이미지" (image), `B1` "OCR", `C1` "번역" (translation), `D1` "Instructions"
+  (`A1:A6`, `B1:B6`, `C1:C6` merged; `D1:E1` merged).
+- 36 episode strips as floating pictures (`xl/media/image1..36.jpg`, one-cell anchors) in column A starting at
+  row 7 (rows 7, 82, 157, 232, 275, ...), each about 75 rows tall; the strips are tall comic images with
+  Korean speech bubbles and sound effects.
+- Columns B and C are empty beside every picture. The sheet layout says: recognised text goes into column B
+  next to its picture, the translation into column C.
+- Open points to ask the owner: one cell per picture or one row per speech bubble; whether sound effects
+  (e.g. "툭") are included; reading order of bubbles; whether images are kept (the header says they may need to
+  be deleted when submitting because of size).
+- Design consequence for xlsx: "where to put OCR text" is a worksheet position (column and row relative to the
+  image anchor), so the placement choice needs a spreadsheet variant: next to the picture's anchor row in a
+  chosen column, with optional translation column.
