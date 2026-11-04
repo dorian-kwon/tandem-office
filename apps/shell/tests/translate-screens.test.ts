@@ -16,6 +16,7 @@ import {
   markSourceChanged,
 } from '../src/renderer/src/translate/source-change-notice'
 import { LocaleProvider } from '../src/renderer/src/locale'
+import { DEFAULT_SORT, writeSessionSort } from '../src/renderer/src/translate/project-table'
 
 /**
  * The translation tool's list and detail screens against a fake `translateApi`
@@ -37,6 +38,7 @@ function project(patch: Partial<ProjectFile> = {}): ProjectFile {
     targetLang: 'ko',
     projectPrompt: '',
     ocr: { kind: 'ai', provider: 'claude' },
+    writingStyle: { serialComma: 'default', quotePunctuation: 'default', custom: '' },
     sources: [],
     references: [],
     glossaryFiles: [],
@@ -59,6 +61,7 @@ function entry(patch: Partial<TranslateProjectListEntry>): TranslateProjectListE
 }
 
 beforeEach(() => {
+  writeSessionSort(DEFAULT_SORT)
   host = document.createElement('div')
   document.body.append(host)
   root = createRoot(host)
@@ -70,6 +73,7 @@ beforeEach(() => {
     getSystemPrompt: vi.fn().mockResolvedValue('global'),
     setSystemPrompt: vi.fn().mockResolvedValue(undefined),
     getProject: vi.fn().mockResolvedValue(project()),
+    rename: vi.fn(async ({ name }: { name: string }) => ({ ...project(), name })),
     updateSettings: vi.fn(async ({ patch }: { patch: object }) => ({ ...project(), ...patch })),
     addMaterial: vi.fn(),
     removeMaterial: vi.fn(),
@@ -138,11 +142,13 @@ describe('ProjectList', () => {
       entry({ dir: '/p/ok', name: 'Fine', sourceCount: 3, referenceCount: 2 }),
     ])
     await render(ProjectList, { onOpen: vi.fn() })
-    const card = host.querySelector('li.translate-card') as HTMLElement
-    expect(card).not.toBeNull()
-    expect(card.textContent).toContain('Documents: 3')
-    expect(card.textContent).toContain('References: 2')
-    expect(card.querySelector('.translate-chip')).not.toBeNull()
+    const row = host.querySelector('[role="row"][data-project-dir]') as HTMLElement
+    expect(row).not.toBeNull()
+    const cells = [...row.querySelectorAll('[role="cell"]')].map((c) => c.textContent)
+    expect(cells[2]).toBe('3')
+    expect(cells[3]).toBe('2')
+    expect(row.querySelector('.translate-chip')).not.toBeNull()
+    expect(row.textContent).toContain('/p/ok')
   })
 
   it('with no projects the empty state offers the new project action', async () => {
@@ -159,18 +165,20 @@ describe('ProjectList', () => {
       entry({ dir: '/p/gone', name: 'Gone', status: 'not-found' }),
     ])
     await render(ProjectList, { onOpen: vi.fn() })
-    const rows = host.querySelectorAll('li.projects-row')
+    const rows = host.querySelectorAll('[role="row"][data-project-dir]')
     expect(rows).toHaveLength(2)
-    const gone = rows[1] as HTMLElement
-    expect(gone.querySelector('[aria-disabled="true"]')).not.toBeNull()
-    expect(gone.querySelector('button.translate-open')).toBeNull()
-    await click(within(gone, 'Remove from list'))
+    const gone = host.querySelector('[data-project-dir="/p/gone"]') as HTMLElement
+    expect(gone.classList.contains('is-broken')).toBe(true)
+    expect(gone.querySelector('[data-tt-primary]')).toBeNull()
+    await openMenu(gone)
+    await click(menuItem(gone, 'Remove from list'))
     expect(api.remove).toHaveBeenCalledWith({ dir: '/p/gone', deleteFolder: false })
   })
 
   it('delete asks whether to remove only from the list or also the folder', async () => {
     api.list.mockResolvedValue([entry({ dir: '/p/ok', name: 'Fine' })])
     await render(ProjectList, { onOpen: vi.fn() })
+    await openMenu(host.querySelector('[data-project-dir]') as HTMLElement)
     await click(buttonByText('Delete'))
     expect(buttonByText('Remove from list only')).toBeTruthy()
     // the folder choice needs a second explicit confirmation before anything is sent
@@ -214,8 +222,9 @@ describe('ProjectList', () => {
     api.list.mockResolvedValue([entry({ dir: '/p/gone', name: 'Gone', status: 'not-found' })])
     api.relocate.mockResolvedValue({ dir: '/p/here', name: 'Gone', contextLinked: true })
     await render(ProjectList, { onOpen: vi.fn() })
-    const gone = host.querySelector('li.projects-row') as HTMLElement
-    await click(within(gone, 'Locate folder…'))
+    const gone = host.querySelector('[data-project-dir]') as HTMLElement
+    await openMenu(gone)
+    await click(menuItem(gone, 'Locate folder…'))
     expect(api.relocate).toHaveBeenCalledWith({ dir: '/p/gone' })
     expect(api.list).toHaveBeenCalledTimes(2)
   })
@@ -224,6 +233,7 @@ describe('ProjectList', () => {
     api.list.mockResolvedValue([entry({ dir: '/p/ok', name: 'Fine' })])
     api.remove.mockRejectedValue(new Error('[PROJECT_IN_USE] documents of this project are open'))
     await render(ProjectList, { onOpen: vi.fn() })
+    await openMenu(host.querySelector('[data-project-dir]') as HTMLElement)
     await click(buttonByText('Delete'))
     await click(buttonByText('Remove from list and delete folder'))
     await click(buttonByText('Delete folder permanently'))
@@ -233,6 +243,7 @@ describe('ProjectList', () => {
   it('list-only delete never deletes the folder', async () => {
     api.list.mockResolvedValue([entry({ dir: '/p/ok', name: 'Fine' })])
     await render(ProjectList, { onOpen: vi.fn() })
+    await openMenu(host.querySelector('[data-project-dir]') as HTMLElement)
     await click(buttonByText('Delete'))
     await click(buttonByText('Remove from list only'))
     expect(api.remove).toHaveBeenCalledWith({ dir: '/p/ok', deleteFolder: false })
@@ -292,6 +303,18 @@ describe('ProjectList', () => {
     expect(host.textContent).not.toContain('remote method')
   })
 })
+
+async function openMenu(row: HTMLElement) {
+  await click(row.querySelector('button[aria-haspopup="menu"]')!)
+}
+
+function menuItem(row: HTMLElement, text: string): HTMLButtonElement {
+  const found = [...row.querySelectorAll('[role="menuitem"]')].find(
+    (b) => b.textContent?.trim() === text,
+  )
+  if (!found) throw new Error(`no menu item "${text}"`)
+  return found as HTMLButtonElement
+}
 
 function within(el: HTMLElement, text: string): HTMLButtonElement {
   const found = [...el.querySelectorAll('button')].find((b) => b.textContent?.trim() === text)
@@ -471,10 +494,11 @@ describe('ProjectDetail', () => {
     const p = props()
     await render(ProjectDetail, p)
     const sources = host.querySelector('[data-material-kind="source"]') as HTMLElement
-    const rows = sources.querySelectorAll('li')
-    await click(within(rows[1] as HTMLElement, 'Open translation'))
+    const rows = sources.querySelectorAll('[role="row"][data-file]')
+    expect(rows).toHaveLength(2)
+    await click(rows[1]!.querySelector('[aria-label="Open translation: b.docx"]')!)
     expect(p.onStartTranslation).toHaveBeenCalledWith('b.docx')
-    expect(host.querySelector('[data-material-kind="reference"] li')).toBeNull()
+    expect(host.querySelector('[data-material-kind="reference"] [data-file]')).toBeNull()
   })
 
   it('global start is disabled for zero and for several sources', async () => {
@@ -561,9 +585,11 @@ describe('ProjectDetail reference status', () => {
     const section = host.querySelector('[data-material-kind="reference"]')!
     await click([...section.querySelectorAll('button')].at(-1)!)
     expect(api.referenceStatus).toHaveBeenCalledTimes(2)
-    expect(host.querySelector('[data-file="n.md"]')?.getAttribute('data-reference-status')).toBe(
-      'converted',
-    )
+    expect(
+      host
+        .querySelector('[data-reference-status][data-file="n.md"]')
+        ?.getAttribute('data-reference-status'),
+    ).toBe('converted')
   })
 })
 
@@ -645,7 +671,7 @@ describe('ProjectDetail picture notice', () => {
     await render(ProjectDetail, props())
     expect(host.querySelector('[data-picture-notice][data-file="a.docx"]')).not.toBeNull()
     api.pictureInfo.mockRejectedValue(new Error('[UNKNOWN] nope'))
-    await click(buttonByText('Delete'))
+    await click(host.querySelector('[data-action="delete-file"]')!)
     expect(api.pictureInfo).toHaveBeenCalledTimes(2)
     expect(host.querySelector('[data-picture-notice]')).toBeNull()
   })
@@ -686,12 +712,12 @@ describe('TranslationPanel (opening the translation view)', () => {
       project({ sources: [{ file: 'a.docx', sha256: 'x', kind: 'editable' }] }),
     )
     await render(TranslationPanel, {})
-    await click(host.querySelector('.translate-open')!)
+    await click(host.querySelector('[data-tt-primary]')!)
   }
 
   it('asks main to open the chosen file of this project', async () => {
     await openDetail()
-    await click(buttonByText('Open translation'))
+    await click(host.querySelector('[data-action="open-translation"]')!)
     expect(api.openTranslation).toHaveBeenCalledWith({ dir: '/p/a', file: 'a.docx' })
     expect(host.querySelector('[role="alert"]')).toBeNull()
     expect(host.querySelector('[role="status"]')).toBeNull()
@@ -705,7 +731,7 @@ describe('TranslationPanel (opening the translation view)', () => {
       hashStatus: 'changed',
     })
     await openDetail()
-    await click(buttonByText('Open translation'))
+    await click(host.querySelector('[data-action="open-translation"]')!)
     expect(host.querySelector('[role="status"]')?.textContent).toContain(
       'The source copy has changed',
     )
@@ -718,7 +744,7 @@ describe('TranslationPanel (opening the translation view)', () => {
       ),
     )
     await openDetail()
-    await click(buttonByText('Open translation'))
+    await click(host.querySelector('[data-action="open-translation"]')!)
     const alert = host.querySelector('[role="alert"]')?.textContent ?? ''
     expect(alert).toContain('source copy is missing')
     expect(alert).not.toContain('invoking')
@@ -809,8 +835,8 @@ describe('changed-source notice in the tab strip', () => {
       project({ sources: [{ file: 'a.docx', sha256: 'x', kind: 'editable' }] }),
     )
     await render(TranslationPanel, {})
-    await click(host.querySelector('.translate-open')!)
-    await click(buttonByText('Open translation'))
+    await click(host.querySelector('[data-tt-primary]')!)
+    await click(host.querySelector('[data-action="open-translation"]')!)
     // the tab strip is another part of the same renderer
     act(() => root.unmount())
     root = createRoot(host)
@@ -869,5 +895,272 @@ describe('TranslationPanel (the sheets AI asks for the OCR popup)', () => {
     // not the hidden project's detail screen: the list is back
     expect(host.querySelector('[data-action="embedded-ocr"]')).toBeNull()
     expect(host.textContent).not.toContain('a.xlsx')
+  })
+})
+
+describe('ProjectList table', () => {
+  const names = () =>
+    [...host.querySelectorAll('[role="row"][data-project-dir] .tt-title')].map((e) => e.textContent)
+  const three = () => [
+    entry({ dir: '/p/b', name: 'beta', lastOpened: 5 }),
+    entry({ dir: '/p/a', name: 'Alpha', lastOpened: 9 }),
+    entry({ dir: '/p/c', name: 'gamma', lastOpened: 1 }),
+  ]
+
+  it('is a table with a header and sorts newest first by default', async () => {
+    api.list.mockResolvedValue(three())
+    await render(ProjectList, { onOpen: vi.fn() })
+    expect(host.querySelector('[role="table"] [role="row"] [role="columnheader"]')).not.toBeNull()
+    expect(names()).toEqual(['Alpha', 'beta', 'gamma'])
+    const headers = [...host.querySelectorAll('.tt-projects [role="columnheader"]')]
+    expect(
+      headers.find((h) => h.getAttribute('aria-sort') === 'descending')?.textContent,
+    ).toContain('Last opened')
+  })
+
+  it('sorts by name on click, flips on a second click, and remembers it for the session', async () => {
+    api.list.mockResolvedValue(three())
+    await render(ProjectList, { onOpen: vi.fn() })
+    await click(host.querySelector('[aria-label="Sort by Name"]')!)
+    expect(names()).toEqual(['Alpha', 'beta', 'gamma'])
+    await click(host.querySelector('[aria-label="Sort by Name"]')!)
+    expect(names()).toEqual(['gamma', 'beta', 'Alpha'])
+    act(() => root.unmount())
+    root = createRoot(host)
+    await render(ProjectList, { onOpen: vi.fn() })
+    expect(names()).toEqual(['gamma', 'beta', 'Alpha'])
+    await click(host.querySelector('[aria-label="Sort by Last opened"]')!)
+    expect(names()).toEqual(['Alpha', 'beta', 'gamma'])
+  })
+
+  it('opens a project from anywhere on its row and from the name button', async () => {
+    const onOpen = vi.fn()
+    api.list.mockResolvedValue([entry({ dir: '/p/ok', name: 'Fine' })])
+    await render(ProjectList, { onOpen })
+    await click(host.querySelector('[role="row"][data-project-dir] .tt-lang')!)
+    expect(onOpen).toHaveBeenCalledWith('/p/ok')
+    onOpen.mockClear()
+    const primary = host.querySelector('[data-tt-primary]') as HTMLButtonElement
+    expect(primary.textContent).toBe('Fine')
+    await click(primary)
+    expect(onOpen).toHaveBeenCalledTimes(1)
+  })
+
+  it('arrow keys move between the rows', async () => {
+    api.list.mockResolvedValue(three())
+    await render(ProjectList, { onOpen: vi.fn() })
+    const buttons = [...host.querySelectorAll('[data-tt-primary]')] as HTMLButtonElement[]
+    buttons[0]!.focus()
+    await act(async () => {
+      buttons[0]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    })
+    expect(document.activeElement).toBe(buttons[1])
+    await act(async () => {
+      buttons[1]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }))
+    })
+    expect(document.activeElement).toBe(buttons[0])
+  })
+
+  async function startRename(dir: string) {
+    const row = host.querySelector(`[data-project-dir="${dir}"]`) as HTMLElement
+    await openMenu(row)
+    await click(menuItem(row, 'Rename'))
+    return host.querySelector('[data-rename-input]') as HTMLInputElement
+  }
+
+  async function press(el: Element, key: string) {
+    await act(async () => {
+      el.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
+    })
+  }
+
+  function typeName(input: HTMLInputElement, value: string) {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
+  }
+
+  it('Rename in the row menu edits in place; Enter saves the trimmed name and reloads', async () => {
+    api.list.mockResolvedValue([entry({ dir: '/p/ok', name: 'Fine' })])
+    const onOpen = vi.fn()
+    await render(ProjectList, { onOpen })
+    const input = await startRename('/p/ok')
+    expect(input.value).toBe('Fine')
+    typeName(input, '  New name  ')
+    await press(input, 'Enter')
+    expect(api.rename).toHaveBeenCalledWith({ dir: '/p/ok', name: 'New name' })
+    expect(api.list).toHaveBeenCalledTimes(2)
+    expect(host.querySelector('[data-rename-input]')).toBeNull()
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
+  it('Escape cancels without saving; an unchanged name is not sent', async () => {
+    api.list.mockResolvedValue([entry({ dir: '/p/ok', name: 'Fine' })])
+    await render(ProjectList, { onOpen: vi.fn() })
+    let input = await startRename('/p/ok')
+    typeName(input, 'Other')
+    await press(input, 'Escape')
+    expect(api.rename).not.toHaveBeenCalled()
+    expect(host.querySelector('[data-rename-input]')).toBeNull()
+    input = await startRename('/p/ok')
+    await press(input, 'Enter')
+    expect(api.rename).not.toHaveBeenCalled()
+  })
+
+  it('leaving the field saves; an empty name shows the notice and sends nothing', async () => {
+    api.list.mockResolvedValue([entry({ dir: '/p/ok', name: 'Fine' })])
+    await render(ProjectList, { onOpen: vi.fn() })
+    let input = await startRename('/p/ok')
+    typeName(input, 'Blurred')
+    await act(async () => {
+      input.dispatchEvent(new FocusEvent('focusout', { bubbles: true }))
+    })
+    expect(api.rename).toHaveBeenCalledWith({ dir: '/p/ok', name: 'Blurred' })
+    api.rename.mockClear()
+    input = await startRename('/p/ok')
+    typeName(input, '   ')
+    await press(input, 'Enter')
+    expect(api.rename).not.toHaveBeenCalled()
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('1 to 80 characters')
+  })
+})
+
+describe('ProjectDetail table and settings', () => {
+  const props = () => ({ dir: '/p/a', onBack: vi.fn(), onStartTranslation: vi.fn() })
+  const oneSource = () =>
+    project({ sources: [{ file: 'a.docx', sha256: 'x', kind: 'editable' }], references: ['r.txt'] })
+
+  it('clicking the file name opens the translation, and the explicit action still does', async () => {
+    api.getProject.mockResolvedValue(oneSource())
+    const p = props()
+    await render(ProjectDetail, p)
+    const title = host.querySelector('[data-material-kind="source"] [data-action="open-title"]')!
+    expect(title.textContent).toBe('a.docx')
+    await click(title)
+    expect(p.onStartTranslation).toHaveBeenCalledWith('a.docx')
+    p.onStartTranslation.mockClear()
+    await click(host.querySelector('[data-action="open-translation"]')!)
+    expect(p.onStartTranslation).toHaveBeenCalledWith('a.docx')
+  })
+
+  it('clicking the rest of a row, or a reference name, opens nothing', async () => {
+    api.getProject.mockResolvedValue(oneSource())
+    const p = props()
+    await render(ProjectDetail, p)
+    await click(host.querySelector('[data-material-kind="source"] .tt-status')!)
+    await click(host.querySelector('[data-material-kind="source"] .tt-glyph')!)
+    await click(host.querySelector('[data-material-kind="reference"] .tt-title')!)
+    expect(p.onStartTranslation).not.toHaveBeenCalled()
+    expect(
+      host.querySelector('[data-material-kind="reference"] [data-action="open-title"]'),
+    ).toBeNull()
+  })
+
+  it('shows Name and Status columns and a status chip per file', async () => {
+    api.getProject.mockResolvedValue(oneSource())
+    api.referenceStatus.mockResolvedValue({ 'r.txt': 'converted' })
+    await render(ProjectDetail, props())
+    const table = host.querySelector('[data-material-kind="source"] [role="table"]') as HTMLElement
+    const heads = [...table.querySelectorAll('[role="columnheader"]')].map((h) => h.textContent)
+    expect(heads.slice(0, 2)).toEqual(['Name', 'Status'])
+    expect(table.querySelector('[data-status="ready"]')?.textContent).toBe('Ready')
+    expect(host.querySelector('[data-reference-status="converted"]')).not.toBeNull()
+  })
+
+  it('the title renames in place with a Saved indicator; Escape cancels', async () => {
+    api.getProject.mockResolvedValue(oneSource())
+    await render(ProjectDetail, props())
+    await click(host.querySelector('[data-action="rename-title"]')!)
+    let input = host.querySelector('[data-rename-input]') as HTMLInputElement
+    expect(input.value).toBe('Book')
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+      input,
+      'Renamed',
+    )
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    })
+    expect(api.rename).toHaveBeenCalledWith({ dir: '/p/a', name: 'Renamed' })
+    expect(host.querySelector('.translate-title')?.textContent).toBe('Renamed')
+    expect(host.querySelector('[data-rename-saved]')?.textContent).toBe('Saved')
+    // the project's other settings are untouched
+    expect(api.updateSettings).not.toHaveBeenCalled()
+    await click(host.querySelector('.translate-title-text')!)
+    input = host.querySelector('[data-rename-input]') as HTMLInputElement
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'Nope')
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    })
+    expect(api.rename).toHaveBeenCalledTimes(1)
+    expect(host.querySelector('.translate-title')?.textContent).toBe('Renamed')
+  })
+
+  it('writing style: three numbered options per question, each with an example', async () => {
+    await render(ProjectDetail, props())
+    const card = host.querySelector('[data-style-card]') as HTMLElement
+    const serial = card.querySelectorAll('[data-style-question="serialComma"] .tt-option')
+    expect(serial).toHaveLength(3)
+    expect([...serial].map((o) => o.querySelector('.tt-option-num')?.textContent)).toEqual([
+      '1',
+      '2',
+      '3',
+    ])
+    expect(serial[0]!.textContent).toContain('apples, carrots, and pears')
+    expect(serial[1]!.textContent).toContain('apples, carrots and pears')
+    const quote = card.querySelectorAll('[data-style-question="quotePunctuation"] .tt-option')
+    expect(quote[0]!.textContent).toContain('"apples", "carrots"')
+    expect(quote[1]!.textContent).toContain('"apples," "carrots,"')
+    // the default (follow the target language) is selected for a project without a choice
+    expect(
+      (card.querySelector('[data-style-option="serialComma:default"] input') as HTMLInputElement)
+        .checked,
+    ).toBe(true)
+  })
+
+  it('choosing an option saves the whole style through update-settings and says Saved', async () => {
+    await render(ProjectDetail, props())
+    await click(host.querySelector('[data-style-option="serialComma:with"] input')!)
+    expect(api.updateSettings).toHaveBeenCalledWith({
+      dir: '/p/a',
+      patch: {
+        writingStyle: { serialComma: 'with', quotePunctuation: 'default', custom: '' },
+      },
+    })
+    expect(host.querySelector('[data-style-card] [role="status"]')?.textContent).toBe('Saved')
+    expect(
+      (host.querySelector('[data-style-option="serialComma:with"] input') as HTMLInputElement)
+        .checked,
+    ).toBe(true)
+  })
+
+  it('the custom instruction saves when the field is left, not on every key', async () => {
+    await render(ProjectDetail, props())
+    const input = host.querySelector('[data-style-card] input[type="text"]') as HTMLInputElement
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+        input,
+        'Use British spelling',
+      )
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(api.updateSettings).not.toHaveBeenCalled()
+    await blur(input)
+    expect(api.updateSettings).toHaveBeenCalledWith({
+      dir: '/p/a',
+      patch: {
+        writingStyle: {
+          serialComma: 'default',
+          quotePunctuation: 'default',
+          custom: 'Use British spelling',
+        },
+      },
+    })
+  })
+
+  it('a failed style save shows the unsaved state', async () => {
+    api.updateSettings.mockRejectedValueOnce(new Error('[PROJECT_FILE_INVALID] x'))
+    await render(ProjectDetail, props())
+    await click(host.querySelector('[data-style-option="quotePunctuation:inside"] input')!)
+    expect(host.querySelector('[data-style-card] [role="status"]')?.textContent).toContain(
+      'Not saved',
+    )
   })
 })

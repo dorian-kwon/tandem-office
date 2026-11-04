@@ -209,4 +209,58 @@ describe('composeContext reference chunks', () => {
     })
     expect(out.referencesText).toBe('[a b.md — x y]\nbody')
   })
+
+  describe('writing style rule', () => {
+    const style = (serialComma: string, quotePunctuation: string, custom = '') =>
+      project({ writingStyle: { serialComma, quotePunctuation, custom } })
+
+    it('adds nothing for the default style', () => {
+      const { text } = composeContext({ ...base, project: project() })
+      expect(text).not.toContain('Writing style')
+    })
+
+    it('states the Oxford comma rule', () => {
+      const { text } = composeContext({ ...base, project: style('with', 'default') })
+      expect(text).toContain('Writing style')
+      expect(text).toContain('Use the serial (Oxford) comma')
+      expect(text).toContain('apply only where it makes sense in the target language')
+      expect(text).not.toContain('quotation marks')
+    })
+
+    it('states the no-Oxford-comma rule', () => {
+      const { text } = composeContext({ ...base, project: style('without', 'default') })
+      expect(text).toContain('Do not use the serial (Oxford) comma')
+    })
+
+    it('states quote punctuation outside and inside', () => {
+      const out = composeContext({ ...base, project: style('default', 'outside') }).text
+      expect(out).toContain('outside the closing quotation mark')
+      expect(out).not.toContain('serial')
+      const inn = composeContext({ ...base, project: style('default', 'inside') }).text
+      expect(inn).toContain('inside the closing quotation mark')
+    })
+
+    it('combines both and appends the custom text on one line', () => {
+      const { text } = composeContext({
+        ...base,
+        project: style('with', 'inside', 'Prefer\nBritish spelling.'),
+      })
+      expect(text).toContain('serial (Oxford) comma')
+      expect(text).toContain('inside the closing quotation mark')
+      expect(text).toContain('Custom instruction: Prefer British spelling.')
+    })
+
+    it('includes a custom-only style', () => {
+      const { text } = composeContext({
+        ...base,
+        project: style('default', 'default', 'Be terse.'),
+      })
+      expect(text).toContain('Custom instruction: Be terse.')
+    })
+
+    it('puts the style inside the project block, after the language line', () => {
+      const { text } = composeContext({ ...base, project: style('with', 'default') })
+      expect(text.indexOf('번역: ko → en')).toBeLessThan(text.indexOf('Writing style'))
+    })
+  })
 })

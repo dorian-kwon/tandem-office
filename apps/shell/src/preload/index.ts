@@ -711,6 +711,7 @@ const translateApi: TranslateApi = {
   setSystemPrompt: (text) => ipcRenderer.invoke(TRANSLATE_CHANNELS.setSystemPrompt, text),
   getProject: (dir) => ipcRenderer.invoke(TRANSLATE_CHANNELS.getProject, dir),
   updateSettings: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.updateSettings, args),
+  rename: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.rename, args),
   addMaterial: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.addMaterial, args),
   removeMaterial: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.removeMaterial, args),
   pickMaterials: (kind) => ipcRenderer.invoke(TRANSLATE_CHANNELS.pickMaterials, kind),
