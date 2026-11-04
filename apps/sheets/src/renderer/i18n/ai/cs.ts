@@ -81,6 +81,7 @@ export const cs = {
   aiToolOcrPictures: 'Najít obrázky',
   aiToolOcrPicturesDone: 'Nalezeno obrázků: {count}',
   aiToolOcrPicturesOpened: 'Okno OCR otevřeno',
+  aiToolOcrPicturesUnsaved: 'Nejprve sešit uložte',
   aiToolReadUrl: 'Čtení webové stránky',
   aiToolReadUrlDone: 'Přečteno {host} ({chars} znaků)',
   aiToolFindCells: 'Hledání buněk',

@@ -178,6 +178,8 @@
 
 27. **번역 프로젝트(결정 0102) — 구현 끝, 사람 확인 남음.** 가지 `feat/translation-tool`에서 코드·단위 테스트·문구·도움말까지 만들었다. 설계는 `docs/superpowers/specs/2026-11-02-translation-tool-design.md`, 계획은 `docs/superpowers/plans/2026-11-02-translation-tool.md`다. 남은 것: ① 빌드한 앱에서 `docs/superpowers/notes/manual-checks.md`의 항목을 손으로 확인(앱을 한 번도 띄우지 못했다). ② OCR의 AI를 프로젝트의 선택으로 보고, 설정에서 받아들인 종량 로그인도 쓰는(보내기 전에 요금 표시) 해석을 저장소 주인이 확인. ③ 19개 언어 문구와 도움말의 원어민 검토(`docs/superpowers/notes/i18n-review.md`). ④ 미룬 것: 번역 화면에서 OCR 선택 바꾸기, 단어집 상한 설정, 결과 지우기, 해시가 바뀐 원본의 선택 창, 복구 사본. ⑤ 2026-11-04 후속 넷(최근 문서, 런을 지키는 번역, 참고자료 조각, 고정 맥락)도 단위 테스트까지다. 고정 맥락을 한 번만 보내는 길은 차례 사이에 시스템 프롬프트를 지니는 AI 경로가 없어 꺼 두었고, 켜기 전에 고칠 두 가지는 결정 0103에 있다. 한/영 너비 맞춤 문서의 소수 `w:spacing`은 `findings.md`.
 
+28. **내장 그림 OCR(결정 없음, 계획 `docs/superpowers/plans/2026-11-04-embedded-image-ocr.md`) — 단위 테스트까지, 사람 확인 남음.** DOCX·XLSX 안의 그림 읽기와 놓을 자리 창, 채팅의 `document_ocr`, 시트 AI의 `ocr_pictures`(팝업; 시트 창은 `document_ocr`를 등록하지 않는다). 손 확인은 `docs/superpowers/notes/manual-checks.md`.
+
 ## 막힌 것
 
 저장소 주인의 Anthropic 상업 약관 동의와 GitHub 저장소의 비공개 취약점 신고 켜기는 끝났다(2026-10-15). 첫 릴리스는 합친 설치본의 확인과 자동 업데이트 확인을 기다린다.

@@ -80,6 +80,7 @@ export const pl = {
   aiToolOcrPictures: 'Szukaj obrazów',
   aiToolOcrPicturesDone: 'Znaleziono obrazów: {count}',
   aiToolOcrPicturesOpened: 'Otwarto okno OCR',
+  aiToolOcrPicturesUnsaved: 'Najpierw zapisz skoroszyt',
   aiToolReadUrl: 'Odczyt strony internetowej',
   aiToolReadUrlDone: 'Odczytano {host} ({chars} znaków)',
   aiToolFindCells: 'Wyszukaj komórki',

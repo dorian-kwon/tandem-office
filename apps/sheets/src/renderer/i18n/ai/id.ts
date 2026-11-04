@@ -80,6 +80,7 @@ export const id = {
   aiToolOcrPictures: 'Cari gambar',
   aiToolOcrPicturesDone: '{count} gambar ditemukan',
   aiToolOcrPicturesOpened: 'Jendela OCR dibuka',
+  aiToolOcrPicturesUnsaved: 'Simpan buku kerja terlebih dahulu',
   aiToolReadUrl: 'Baca halaman web',
   aiToolReadUrlDone: 'Membaca {host} ({chars} karakter)',
   aiToolFindCells: 'Cari sel',

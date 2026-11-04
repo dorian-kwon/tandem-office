@@ -80,6 +80,7 @@ export const vi = {
   aiToolOcrPictures: 'Tìm hình ảnh',
   aiToolOcrPicturesDone: 'Tìm thấy {count} hình ảnh',
   aiToolOcrPicturesOpened: 'Đã mở cửa sổ OCR',
+  aiToolOcrPicturesUnsaved: 'Hãy lưu sổ tính trước',
   aiToolReadUrl: 'Đọc trang web',
   aiToolReadUrlDone: 'Đã đọc {host} ({chars} ký tự)',
   aiToolFindCells: 'Tìm ô',

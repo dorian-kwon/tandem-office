@@ -81,6 +81,7 @@ export const en = {
   aiToolOcrPictures: 'Find pictures',
   aiToolOcrPicturesDone: '{count} pictures found',
   aiToolOcrPicturesOpened: 'Opened the OCR popup',
+  aiToolOcrPicturesUnsaved: 'Save the workbook first',
   aiToolReadUrl: 'Read web page',
   aiToolReadUrlDone: 'Read {host} ({chars} chars)',
   aiToolFindCells: 'Find cells',

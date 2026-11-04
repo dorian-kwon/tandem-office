@@ -82,6 +82,7 @@ export const nl = {
   aiToolOcrPictures: 'Afbeeldingen zoeken',
   aiToolOcrPicturesDone: '{count} afbeeldingen gevonden',
   aiToolOcrPicturesOpened: 'OCR-venster geopend',
+  aiToolOcrPicturesUnsaved: 'Sla de werkmap eerst op',
   aiToolReadUrl: 'Webpagina lezen',
   aiToolReadUrlDone: '{host} gelezen ({chars} tekens)',
   aiToolFindCells: 'Cellen zoeken',

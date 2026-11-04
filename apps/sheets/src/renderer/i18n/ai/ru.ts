@@ -81,6 +81,7 @@ export const ru = {
   aiToolOcrPictures: 'Поиск изображений',
   aiToolOcrPicturesDone: 'Найдено изображений: {count}',
   aiToolOcrPicturesOpened: 'Окно OCR открыто',
+  aiToolOcrPicturesUnsaved: 'Сначала сохраните книгу',
   aiToolReadUrl: 'Чтение веб-страницы',
   aiToolReadUrlDone: 'Прочитано {host} ({chars} символов)',
   aiToolFindCells: 'Поиск ячеек',

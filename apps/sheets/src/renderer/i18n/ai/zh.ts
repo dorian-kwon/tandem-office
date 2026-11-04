@@ -76,6 +76,7 @@ export const zh = {
   aiToolOcrPictures: '查找图片',
   aiToolOcrPicturesDone: '找到 {count} 张图片',
   aiToolOcrPicturesOpened: '已打开 OCR 窗口',
+  aiToolOcrPicturesUnsaved: '请先保存工作簿',
   aiToolReadUrl: '读取网页',
   aiToolReadUrlDone: '读取 {host}（{chars} 个字符）',
   aiToolFindCells: '查找单元格',

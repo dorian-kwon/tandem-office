@@ -82,6 +82,7 @@ export const de = {
   aiToolOcrPictures: 'Bilder suchen',
   aiToolOcrPicturesDone: '{count} Bilder gefunden',
   aiToolOcrPicturesOpened: 'OCR-Fenster geöffnet',
+  aiToolOcrPicturesUnsaved: 'Arbeitsmappe zuerst speichern',
   aiToolReadUrl: 'Webseite lesen',
   aiToolReadUrlDone: '{host} gelesen ({chars} Zeichen)',
   aiToolFindCells: 'Zellen suchen',

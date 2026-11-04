@@ -80,6 +80,7 @@ export const ja = {
   aiToolOcrPictures: '画像を探す',
   aiToolOcrPicturesDone: '画像 {count} 枚を確認',
   aiToolOcrPicturesOpened: 'OCR ウィンドウを開きました',
+  aiToolOcrPicturesUnsaved: '先にブックを保存してください',
   aiToolReadUrl: 'ウェブページの読み取り',
   aiToolReadUrlDone: '{host} を読み取り（{chars} 文字）',
   aiToolFindCells: 'セルを検索',

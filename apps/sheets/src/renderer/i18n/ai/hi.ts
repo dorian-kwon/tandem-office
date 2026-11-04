@@ -81,6 +81,7 @@ export const hi = {
   aiToolOcrPictures: 'चित्र खोजें',
   aiToolOcrPicturesDone: '{count} चित्र मिले',
   aiToolOcrPicturesOpened: 'OCR विंडो खोली गई',
+  aiToolOcrPicturesUnsaved: 'पहले वर्कबुक सहेजें',
   aiToolReadUrl: 'वेब पेज पढ़ें',
   aiToolReadUrlDone: '{host} पढ़ा ({chars} अक्षर)',
   aiToolFindCells: 'सेल खोजें',

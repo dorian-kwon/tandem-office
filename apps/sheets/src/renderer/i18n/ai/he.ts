@@ -77,6 +77,7 @@ export const he = {
   aiToolOcrPictures: 'חיפוש תמונות',
   aiToolOcrPicturesDone: 'נמצאו {count} תמונות',
   aiToolOcrPicturesOpened: 'חלון OCR נפתח',
+  aiToolOcrPicturesUnsaved: 'שמרו תחילה את חוברת העבודה',
   aiToolReadUrl: 'קריאת דף אינטרנט',
   aiToolReadUrlDone: 'נקרא {host} ({chars} תווים)',
   aiToolFindCells: 'חיפוש תאים',

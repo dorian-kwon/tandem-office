@@ -80,6 +80,7 @@ export const ar = {
   aiToolOcrPictures: 'البحث عن الصور',
   aiToolOcrPicturesDone: 'تم العثور على {count} صورة',
   aiToolOcrPicturesOpened: 'تم فتح نافذة OCR',
+  aiToolOcrPicturesUnsaved: 'احفظ المصنف أولاً',
   aiToolReadUrl: 'قراءة صفحة ويب',
   aiToolReadUrlDone: 'قُرئ {host} ({chars} حرفًا)',
   aiToolFindCells: 'البحث عن خلايا',

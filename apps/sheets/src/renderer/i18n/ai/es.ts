@@ -83,6 +83,7 @@ export const es = {
   aiToolOcrPictures: 'Buscar imágenes',
   aiToolOcrPicturesDone: '{count} imágenes encontradas',
   aiToolOcrPicturesOpened: 'Ventana de OCR abierta',
+  aiToolOcrPicturesUnsaved: 'Guarda primero el libro',
   aiToolReadUrl: 'Leer página web',
   aiToolReadUrlDone: 'Se leyó {host} ({chars} caracteres)',
   aiToolFindCells: 'Buscar celdas',

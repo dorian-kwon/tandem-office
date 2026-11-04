@@ -80,6 +80,7 @@ export const th = {
   aiToolOcrPictures: 'ค้นหารูปภาพ',
   aiToolOcrPicturesDone: 'พบรูปภาพ {count} รูป',
   aiToolOcrPicturesOpened: 'เปิดหน้าต่าง OCR แล้ว',
+  aiToolOcrPicturesUnsaved: 'บันทึกสมุดงานก่อน',
   aiToolReadUrl: 'อ่านหน้าเว็บ',
   aiToolReadUrlDone: 'อ่าน {host} ({chars} ตัวอักษร)',
   aiToolFindCells: 'ค้นหาเซลล์',

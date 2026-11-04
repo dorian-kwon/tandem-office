@@ -82,6 +82,7 @@ export const pt = {
   aiToolOcrPictures: 'Procurar imagens',
   aiToolOcrPicturesDone: '{count} imagens encontradas',
   aiToolOcrPicturesOpened: 'Janela de OCR aberta',
+  aiToolOcrPicturesUnsaved: 'Salve a pasta de trabalho primeiro',
   aiToolReadUrl: 'Ler página web',
   aiToolReadUrlDone: 'Leitura de {host} ({chars} caracteres)',
   aiToolFindCells: 'Procurar células',

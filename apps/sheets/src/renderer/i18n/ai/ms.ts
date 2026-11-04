@@ -81,6 +81,7 @@ export const ms = {
   aiToolOcrPictures: 'Cari gambar',
   aiToolOcrPicturesDone: '{count} gambar ditemui',
   aiToolOcrPicturesOpened: 'Tetingkap OCR dibuka',
+  aiToolOcrPicturesUnsaved: 'Simpan buku kerja dahulu',
   aiToolReadUrl: 'Baca halaman web',
   aiToolReadUrlDone: 'Membaca {host} ({chars} aksara)',
   aiToolFindCells: 'Cari sel',

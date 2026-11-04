@@ -79,6 +79,7 @@ export const ko = {
   aiToolOcrPictures: '그림 찾기',
   aiToolOcrPicturesDone: '그림 {count}개 확인',
   aiToolOcrPicturesOpened: 'OCR 창을 열었습니다',
+  aiToolOcrPicturesUnsaved: '먼저 통합 문서를 저장해야 합니다',
   aiToolReadUrl: '웹 문서 읽기',
   aiToolReadUrlDone: '{host} 읽음({chars}자)',
   aiToolFindCells: '셀 찾기',

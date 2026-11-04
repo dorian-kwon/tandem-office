@@ -81,6 +81,22 @@ describe('ocr_pictures skill', () => {
     expect(result.summary).toBe(zh.aiToolOcrPicturesOpened)
   })
 
+  it('does not open the popup while the workbook has unsaved changes and tells the model to offer saving', async () => {
+    const api = stub()
+    const skill = createOcrPicturesSkill(
+      () => 'session-1',
+      () => true,
+    )
+    const result = await skill.executeTool(call({ action: 'open' }))
+    expect(api).not.toHaveBeenCalled()
+    expect(result.isError).toBeFalsy()
+    expect(result.output).toMatch(/unsaved/i)
+    expect(result.output).toMatch(/save first/i)
+    expect(result.summary).toBe(zh.aiToolOcrPicturesUnsaved)
+    // listing is read-only on the saved file and is not blocked
+    expect((await skill.executeTool(call({ action: 'list' }))).output).toContain('5 pictures')
+  })
+
   it('surfaces a refusal and a missing bridge as errors', async () => {
     vi.stubGlobal('window', {
       desktopApi: {
@@ -128,6 +144,8 @@ describe('ocr_pictures prompt wording', () => {
     expect(prompt).toMatch(/picture count/i)
     expect(prompt).toMatch(/nothing is sent/i)
     expect(prompt).toMatch(/confirm/i)
+    expect(prompt).toMatch(/unsaved changes/i)
+    expect(prompt).not.toMatch(/never tell the person to use a modal or dialog/i)
     expect(tool).toMatch(/popup/i)
   })
 })
@@ -138,6 +156,7 @@ describe('ocr_pictures chat lines', () => {
       'aiToolOcrPictures',
       'aiToolOcrPicturesDone',
       'aiToolOcrPicturesOpened',
+      'aiToolOcrPicturesUnsaved',
     ] as const) {
       expect(en[key]).toBeTruthy()
       expect(zh[key]).toBeTruthy()
