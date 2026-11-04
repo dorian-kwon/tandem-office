@@ -30,6 +30,20 @@ describe('formatOcrResultMessage', () => {
     expect(message.count).toBe(2)
   })
 
+  it('names the pictures that gave no text so the AI tells the person instead of guessing', () => {
+    const message = formatOcrResultMessage({
+      pages: [page(1, 7, 'hello')],
+      unread: [
+        { index: 2, location: 'Webtoon · A82', reason: 'empty' },
+        { index: 3, location: 'Webtoon · A157', reason: 'failed' },
+      ],
+    })
+    expect(message.text).toContain('2. Webtoon!A82 (no text found)')
+    expect(message.text).toContain('3. Webtoon!A157 (could not be read)')
+    expect(message.text).toMatch(/tell the person/i)
+    expect(message.count).toBe(1)
+  })
+
   it('falls back to a new-sheet suggestion text and survives a missing recommendation', () => {
     const none = formatOcrResultMessage({ pages: [page(1, 7, 'a')] })
     expect(none.text).toMatch(/no placement analysis/i)

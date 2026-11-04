@@ -15,6 +15,7 @@ import {
   type OcrPageResult,
   type OcrPlacement,
   type OcrRecommendation,
+  type OcrSettled,
   type RunOcrResult,
 } from '../../../shared/translate-ocr'
 import { useI18n } from '../locale'
@@ -23,8 +24,13 @@ import { createOcrAsk } from './ocr-ask'
 import { ocrRoute, type OcrRoute } from './ocr-route'
 import { makeText, translateErrorText } from './shared'
 import { OcrImagePreview } from './OcrImagePreview'
+import { OcrImageLightbox } from './OcrImageLightbox'
 import { OcrPlacementDialog } from './OcrPlacementDialog'
-import { ocrPayloadPlainText, type OcrPopupResult } from '../../../shared/ocr-popup'
+import {
+  ocrPayloadPlainText,
+  type OcrPopupResult,
+  type OcrPopupUnread,
+} from '../../../shared/ocr-popup'
 
 /**
  * The translation OCR window (spec 6.5): pick the pages of a scanned PDF or
@@ -88,7 +94,15 @@ type Step =
       recommendation?: OcrRecommendation
     }
   | { kind: 'done'; result: RunOcrResult }
+  | { kind: 'review'; problems: OcrProblem[] }
   | { kind: 'error'; text: string }
+
+/** a picture that gave no text in the picking popup: nothing found, or it could not be read */
+export interface OcrProblem {
+  index: number
+  kind: 'empty' | 'malformed' | 'error' | 'stopped'
+  message: string
+}
 
 function ocrBridge(api: TranslateApi): OcrBridge {
   return {
@@ -117,12 +131,26 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
   const placementRef = useRef<((placement: OcrPlacement | null) => void) | null>(null)
   /** Back was pressed: the cancelled run returns to the picker */
   const backRef = useRef(false)
-  const backStepRef = useRef<'scope' | 'pick'>('pick')
+  const backStepRef = useRef<'scope' | 'pick' | 'review'>('pick')
   const askRef = useRef<OcrAsk | null>(null)
   const runRef = useRef<AbortController | null>(null)
   const tokenRef = useRef<string | null>(null)
   /** selectOnly: the readings were handed over, so the run's own stop is not an error */
   const recognisedRef = useRef(false)
+  /** selectOnly: what the last run reported for each picture (read, or failed with a reason) */
+  const outcomeRef = useRef<OcrSettled | null>(null)
+  /** selectOnly: text kept per picture across runs, so a retry of the failed ones adds to it */
+  const collectedRef = useRef(new Map<number, string>())
+  /** selectOnly: every picture the person asked for, over all runs */
+  const requestedRef = useRef(new Set<number>())
+  /** selectOnly: the review is showing, so the run's own stop is not an error */
+  const reviewRef = useRef<OcrProblem[] | null>(null)
+  /** the review was shown by the run now ending */
+  const reviewShownRef = useRef(false)
+  /** Stop was pressed during the run */
+  const stopRef = useRef(false)
+  /** the picture shown enlarged (1-based number), or null */
+  const [lightbox, setLightbox] = useState<number | null>(null)
 
   const route =
     prepared?.ocr.kind === 'ai'
@@ -183,10 +211,118 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
       return next
     })
 
-  const next = (pages: number[] = [...selected]) => {
-    if (!api || !prepared || pages.length === 0) return
+  /** the picture's text for the asking chat, with the local placement analysis for these pictures */
+  const deliver = async (
+    indices: number[],
+    token: string,
+    unread: OcrPopupUnread[],
+  ): Promise<void> => {
+    if (!api) return
+    const recommendation =
+      typeof api.ocrRecommend === 'function' && indices.length > 0
+        ? await api.ocrRecommend({ token, pages: indices }).catch(() => undefined)
+        : undefined
+    recognisedRef.current = true
+    propsRef.current.onRecognised?.({
+      pages: indices.map((index) => ({
+        index,
+        location: items[index - 1]?.location ?? '',
+        text: collectedRef.current.get(index) ?? '',
+      })),
+      ...(unread.length > 0 ? { unread } : {}),
+      ...(recommendation ? { recommendation } : {}),
+    })
+  }
+
+  const problemsFrom = (outcome: OcrSettled | null, empties: number[]): OcrProblem[] =>
+    [
+      ...(outcome?.failures ?? []).map((f): OcrProblem => ({
+        index: f.index,
+        kind: f.reason,
+        message: f.message,
+      })),
+      ...empties.map((index): OcrProblem => ({ index, kind: 'empty', message: '' })),
+    ].sort((a, b) => a.index - b.index)
+
+  const showReview = (problems: OcrProblem[]) => {
+    reviewShownRef.current = true
+    reviewRef.current = problems
+    setStep({ kind: 'review', problems })
+  }
+
+  /** go on with what was read; the pictures without text are named for the chat */
+  const useRead = async (problems: OcrProblem[]) => {
+    if (!api || !prepared) return
+    const indices = [...collectedRef.current.keys()].sort((a, b) => a - b)
+    if (indices.length === 0) return
+    const unread: OcrPopupUnread[] = problems.map((p) => ({
+      index: p.index,
+      location: items[p.index - 1]?.location ?? '',
+      reason: p.kind === 'empty' ? 'empty' : 'failed',
+    }))
+    // the lease of the last run covers only its own pictures: the recommendation needs one
+    // that names all of them (selecting is local; no picture is read or sent)
+    const old = tokenRef.current
+    tokenRef.current = null
+    if (old) await api.ocrRelease(old).catch(() => undefined)
+    try {
+      const fresh = await api.ocrPrepare({
+        dir: props.dir,
+        files: props.sources.map((x) => x.file),
+      })
+      tokenRef.current = fresh.token
+      await api.ocrStart({ token: fresh.token, pages: indices })
+      await deliver(indices, fresh.token, unread)
+    } catch {
+      recognisedRef.current = true
+      propsRef.current.onRecognised?.({
+        pages: indices.map((index) => ({
+          index,
+          location: items[index - 1]?.location ?? '',
+          text: collectedRef.current.get(index) ?? '',
+        })),
+        ...(unread.length > 0 ? { unread } : {}),
+      })
+    }
+  }
+
+  /** read only the pictures that gave no text, after the usual confirmation */
+  const retry = async (problems: OcrProblem[]) => {
+    if (!api) return
+    const old = tokenRef.current
+    tokenRef.current = null
+    if (old) await api.ocrRelease(old).catch(() => undefined)
+    try {
+      const fresh = await api.ocrPrepare({
+        dir: props.dir,
+        files: props.sources.map((x) => x.file),
+      })
+      tokenRef.current = fresh.token
+      setPrepared(fresh)
+      reviewRef.current = problems
+      next(
+        problems.map((p) => p.index),
+        fresh,
+        'review',
+      )
+    } catch (err) {
+      setStep({ kind: 'error', text: translateErrorText(lang, err) })
+    }
+  }
+
+  const next = (
+    pages: number[] = [...selected],
+    preparedNow: OcrPrepared | null = prepared,
+    backTo?: 'review',
+  ) => {
+    if (!api || !preparedNow || pages.length === 0) return
+    const prepared = preparedNow
     backRef.current = false
-    backStepRef.current = step.kind === 'scope' ? 'scope' : 'pick'
+    backStepRef.current = backTo ?? (step.kind === 'scope' ? 'scope' : 'pick')
+    outcomeRef.current = null
+    reviewShownRef.current = false
+    stopRef.current = false
+    for (const p of pages) requestedRef.current.add(p)
     const controller = new AbortController()
     runRef.current = controller
     void runOcr({
@@ -194,6 +330,9 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
       source: props.sources,
       selection: { kind: 'pages', pages },
       prepared,
+      onSettled: (outcome) => {
+        outcomeRef.current = outcome
+      },
       bridge: ocrBridge(api),
       confirm: (count) =>
         new Promise<boolean>((resolve) => {
@@ -209,25 +348,48 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
       onProgress: (progress) => setStep({ kind: 'running', progress }),
       ...(prepared.kind === 'embedded' && props.selectOnly
         ? {
-            choosePlacement: async (pages: OcrPageResult[]) => {
-              const recommendation =
-                typeof api.ocrRecommend === 'function'
-                  ? await api.ocrRecommend({
-                      token: prepared.token,
-                      pages: pages.map((p) => p.index),
-                    })
-                  : undefined
-              if (controller.signal.aborted) return null
-              recognisedRef.current = true
-              propsRef.current.onRecognised?.({
-                pages: pages.map((p) => ({
-                  index: p.index,
-                  location: items[p.index - 1]?.location ?? '',
-                  text: ocrPayloadPlainText(p.payload),
-                })),
-                ...(recommendation ? { recommendation } : {}),
-              })
+            choosePlacement: async (done: OcrPageResult[]) => {
+              // closing the window ends the run without a review; Stop keeps what was read
+              if (controller.signal.aborted && !stopRef.current) return null
+              // a reading with no text is a result to look at, never a silent success
+              const empties: number[] = []
+              for (const p of done) {
+                const text = ocrPayloadPlainText(p.payload).trim()
+                if (text) collectedRef.current.set(p.index, text)
+                else {
+                  collectedRef.current.delete(p.index)
+                  empties.push(p.index)
+                }
+              }
+              const outcome = outcomeRef.current
+              const problems = [
+                ...problemsFrom(outcome, empties),
+                // Stop left some pictures unasked: they can be retried too
+                ...(stopRef.current
+                  ? pages
+                      .filter(
+                        (p) =>
+                          !done.some((d) => d.index === p) &&
+                          !outcome?.failures.some((f) => f.index === p),
+                      )
+                      .map((index): OcrProblem => ({ index, kind: 'stopped', message: '' }))
+                  : []),
+              ].sort((a, b) => a.index - b.index)
+              if (problems.length > 0) {
+                showReview(problems)
+                return null
+              }
               // no destination here: ending the run releases the lease without writing
+              if (collectedRef.current.size === pages.length) {
+                await deliver(
+                  [...pages].sort((a, b) => a - b),
+                  prepared.token,
+                  [],
+                )
+              } else {
+                // a retry that completed the set: the analysis needs a lease naming all of it
+                await useRead([])
+              }
               return null
             },
           }
@@ -265,10 +427,30 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
       },
       (err: unknown) => {
         runRef.current = null
-        if (recognisedRef.current) return
+        if (recognisedRef.current || reviewShownRef.current) return
         if (err instanceof OcrCancelledError && backRef.current) {
-          setStep({ kind: backStepRef.current })
+          if (backStepRef.current === 'review' && reviewRef.current)
+            setStep({ kind: 'review', problems: reviewRef.current })
+          else setStep({ kind: backStepRef.current === 'review' ? 'pick' : backStepRef.current })
           return
+        }
+        // picking only: nothing read, or the person pressed Stop: show what each picture did
+        // (with a way to retry) instead of a bare error
+        if (props.selectOnly && prepared.kind === 'embedded') {
+          const outcome = outcomeRef.current
+          const unasked = pages.filter(
+            (p) => !collectedRef.current.has(p) && !outcome?.failures.some((f) => f.index === p),
+          )
+          const problems = [
+            ...problemsFrom(outcome, []),
+            ...(stopRef.current
+              ? unasked.map((index): OcrProblem => ({ index, kind: 'stopped', message: '' }))
+              : []),
+          ].sort((a, b) => a.index - b.index)
+          if (problems.length > 0) {
+            showReview(problems)
+            return
+          }
         }
         setStep({ kind: 'error', text: translateErrorText(lang, err) })
       },
@@ -288,7 +470,14 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
     const current = () => routeRef.current ?? { state: 'checking' as const }
     askRef.current = props.makeAsk
       ? props.makeAsk(r, current)
-      : createOcrAsk({ confirmed: r, ocr: prepared.ocr.provider, current, lang: () => lang })
+      : createOcrAsk({
+          confirmed: r,
+          ocr: prepared.ocr.provider,
+          current,
+          lang: () => lang,
+          // pictures inside a document: text in drawings and speech bubbles counts
+          pictures: prepared.kind === 'embedded',
+        })
     setStep({
       kind: 'running',
       progress: { done: 0, total: step.kind === 'confirm' ? step.count : 0, current: null },
@@ -314,7 +503,9 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
       ? s('ocrPlaceTitle')
       : step.kind === 'confirm'
         ? s('ocrConfirmTitle')
-        : s('ocrTitle')
+        : step.kind === 'review'
+          ? s('ocrReviewTitle')
+          : s('ocrTitle')
 
   return (
     <div className="modal-overlay">
@@ -407,12 +598,29 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
                       />
                     )}
                     <span>
+                      {prepared?.kind === 'embedded' && (
+                        <strong className="translate-ocr-number" data-number={item.index}>
+                          {s('ocrPictureNumber', { n: item.index })}
+                        </strong>
+                      )}{' '}
                       {item.name || s('ocrPageLabel', { page: item.index })}
                       {item.location && (
                         <small className="translate-ocr-location">{item.location}</small>
                       )}
                     </span>
                   </label>
+                  {prepared?.kind === 'embedded' && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary translate-ocr-enlarge"
+                      data-action="enlarge"
+                      aria-label={s('ocrEnlarge', { n: item.index })}
+                      title={s('ocrEnlarge', { n: item.index })}
+                      onClick={() => setLightbox(item.index)}
+                    >
+                      ⌕
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -465,7 +673,10 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
                 type="button"
                 className="btn btn-secondary"
                 data-action="stop"
-                onClick={() => runRef.current?.abort()}
+                onClick={() => {
+                  stopRef.current = true
+                  runRef.current?.abort()
+                }}
               >
                 {s('ocrStop')}
               </button>
@@ -522,6 +733,63 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
             </div>
           </>
         )}
+        {step.kind === 'review' && (
+          <>
+            <p role="status" data-review="">
+              {s('ocrReviewSummary', {
+                read: collectedRef.current.size,
+                total: requestedRef.current.size,
+              })}
+            </p>
+            <ul className="translate-ocr-problems" data-problems="">
+              {step.problems.map((problem) => {
+                const where = items[problem.index - 1]?.location
+                  ? ` (${items[problem.index - 1]!.location})`
+                  : ''
+                const text =
+                  problem.kind === 'empty'
+                    ? s('ocrReviewEmpty', { n: problem.index, where })
+                    : problem.kind === 'stopped'
+                      ? `${s('ocrPictureNumber', { n: problem.index })}${where}: ${s('ocrReviewStopped')}`
+                      : s('ocrReviewFailed', {
+                          n: problem.index,
+                          where,
+                          reason:
+                            problem.kind === 'malformed'
+                              ? s('ocrReviewMalformed')
+                              : problem.message,
+                        })
+                return (
+                  <li key={problem.index} data-problem={problem.index} data-kind={problem.kind}>
+                    {text}
+                  </li>
+                )
+              })}
+            </ul>
+            <div className="modal-buttons">
+              <button type="button" className="btn btn-secondary" onClick={close}>
+                {s('ocrClose')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                data-action="use-read"
+                disabled={collectedRef.current.size === 0}
+                onClick={() => void useRead(step.problems)}
+              >
+                {s('ocrUseRead')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                data-action="retry"
+                onClick={() => void retry(step.problems)}
+              >
+                {s('ocrRetryFailed')}
+              </button>
+            </div>
+          </>
+        )}
         {step.kind === 'error' && (
           <>
             <p className="projects-note is-warning" role="alert">
@@ -535,6 +803,15 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
           </>
         )}
       </div>
+      {lightbox !== null && api && prepared?.kind === 'embedded' && (
+        <OcrImageLightbox
+          api={api}
+          token={prepared.token}
+          items={items}
+          start={lightbox}
+          onClose={() => setLightbox(null)}
+        />
+      )}
     </div>
   )
 }

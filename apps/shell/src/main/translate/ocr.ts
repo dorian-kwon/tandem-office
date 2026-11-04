@@ -70,7 +70,12 @@ export interface OcrServiceDeps {
   markdownToDocx(markdown: string): Promise<Uint8Array>
   /** Local preview only; the original image is never returned by the preview endpoint. */
   thumbnail?(image: Uint8Array): Uint8Array | null
+  /** Local enlarged preview (JPEG bytes, downscaled to fit the cap); same rules as `thumbnail`. */
+  largePreview?(image: Uint8Array): Uint8Array | null
 }
+
+/** the most bytes the enlarged local preview may carry over the bridge */
+export const OCR_LARGE_PREVIEW_MAX_BYTES = 2 * 1024 * 1024
 
 interface Lease {
   token: string
@@ -324,6 +329,30 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
       const data = deps.thumbnail(image.data)
       if (!data || data.length > 64 * 1024) return null
       return { data, mime: 'image/png' }
+    },
+
+    /**
+     * A larger local preview for looking at one picture closely. Same rules as the thumbnail
+     * (listed lease, embedded only, header checked before decoding, never the AI input), with a
+     * 2 MB cap on what is returned. Nothing here starts a run or reaches a provider.
+     */
+    async previewLarge(token: unknown, index: unknown): Promise<OcrPageImage | null> {
+      const l = lease(token)
+      if (
+        l.kind !== 'embedded' ||
+        !Number.isInteger(index) ||
+        (index as number) < 1 ||
+        (index as number) > l.count
+      )
+        throw invalid('this item has no embedded preview')
+      if (!deps.largePreview) return null
+      await embeddedPath(l.dir, l.source!)
+      const image = await readEmbeddedImage(l.paths[0]!, l.embedded![(index as number) - 1]!)
+      const size = imageSize(image.data)
+      if (!size || size.width * size.height > 16_000_000) return null
+      const data = deps.largePreview(image.data)
+      if (!data || data.length === 0 || data.length > OCR_LARGE_PREVIEW_MAX_BYTES) return null
+      return { data, mime: 'image/jpeg' }
     },
 
     async pageImage(token: unknown, index: unknown): Promise<OcrPageImage> {

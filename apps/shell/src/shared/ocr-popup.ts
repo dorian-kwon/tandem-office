@@ -7,6 +7,13 @@ export interface OcrPopupPage {
   text: string
 }
 
+/** A picture the popup could not get text from: nothing found, or the reading failed. */
+export interface OcrPopupUnread {
+  index: number
+  location: string
+  reason: 'empty' | 'failed'
+}
+
 /** The local placement analysis the popup carries back (never an extra model call). */
 export interface OcrPopupRecommendation {
   /** the structured placement `ocr-recommendation.ts` proposed */
@@ -17,6 +24,8 @@ export interface OcrPopupRecommendation {
 /** What the OCR popup returns once the person confirmed and the pictures were read. */
 export interface OcrPopupResult {
   pages: OcrPopupPage[]
+  /** pictures that gave no text when the person went on without them */
+  unread?: OcrPopupUnread[]
   recommendation?: OcrPopupRecommendation
 }
 
@@ -62,6 +71,23 @@ export function checkOcrPopupResult(value: unknown): OcrPopupResult {
   })
   if (total > OCR_POPUP_MAX_TOTAL) return bad()
   const result: OcrPopupResult = { pages }
+  const rawUnread = (value as { unread?: unknown }).unread
+  if (rawUnread !== undefined) {
+    if (!Array.isArray(rawUnread) || rawUnread.length > OCR_POPUP_MAX_PAGES) return bad()
+    result.unread = rawUnread.map((u): OcrPopupUnread => {
+      const item = u as Partial<OcrPopupUnread> | null
+      if (
+        !item ||
+        !Number.isInteger(item.index) ||
+        (item.index as number) < 1 ||
+        typeof item.location !== 'string' ||
+        item.location.length > 500 ||
+        (item.reason !== 'empty' && item.reason !== 'failed')
+      )
+        return bad()
+      return { index: item.index as number, location: item.location, reason: item.reason }
+    })
+  }
   const rec = raw.recommendation as Partial<OcrPopupRecommendation> | undefined
   if (rec !== undefined) {
     if (

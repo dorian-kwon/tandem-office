@@ -177,6 +177,98 @@
   object-fit: contain;
 }
 
+.translate-ocr-items li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.translate-ocr-items li > label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.translate-ocr-number {
+  color: var(--text);
+}
+
+.translate-ocr-enlarge {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+}
+
+.translate-ocr-problems {
+  max-height: 220px;
+  margin: 10px 0 0;
+  padding: 8px 10px 8px 26px;
+  overflow-y: auto;
+  border-radius: 8px;
+  background: var(--surface-subtle);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* the enlarged picture: covers the popup, bar on top, the picture scrolls below it */
+.translate-ocr-lightbox {
+  position: fixed;
+  inset: 16px;
+  z-index: 110;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-8);
+  background: var(--surface);
+  box-shadow: var(--shadow-modal-strong);
+  outline: none;
+}
+
+.translate-ocr-lightbox-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+.translate-ocr-lightbox-where {
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.translate-ocr-lightbox-spacer {
+  flex: 1 1 auto;
+}
+
+.translate-ocr-lightbox-view {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+  background: var(--surface-subtle);
+  color: var(--text);
+}
+
+/* fit: the picture takes the view's width and a tall one scrolls vertically */
+.translate-ocr-lightbox-view[data-zoom='fit'] .translate-ocr-lightbox-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+/* actual size: the picture's own pixels; drag or scroll to pan */
+.translate-ocr-lightbox-view[data-zoom='actual'] {
+  cursor: grab;
+}
+
+.translate-ocr-lightbox-view[data-zoom='actual'] .translate-ocr-lightbox-img {
+  display: block;
+  max-width: none;
+  width: auto;
+  height: auto;
+  user-select: none;
+}
+
 .translate-ocr-location {
   display: block;
   color: var(--text-muted);

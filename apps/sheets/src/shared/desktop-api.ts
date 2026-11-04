@@ -50,6 +50,8 @@ export type OcrPicturesResponse =
 /** What the OCR popup read, as the shell hands it to the asking panel (plain text only). */
 export interface OcrPopupResult {
   pages: { index: number; location: string; text: string }[]
+  /** pictures that gave no text (nothing found, or could not be read) when the person went on */
+  unread?: { index: number; location: string; reason: 'empty' | 'failed' }[]
   /** the local placement analysis; absent when none was made */
   recommendation?: { placement: unknown; reason: 'empty-cells' | 'new-sheet' | 'after-images' }
 }

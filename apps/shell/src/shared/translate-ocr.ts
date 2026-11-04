@@ -130,6 +130,37 @@ export interface RunOcrArgs {
   onProgress?: (progress: OcrProgress) => void
   /** Required for embedded images: review the readings and explicitly choose their destination. */
   choosePlacement?: (pages: OcrPageResult[], error?: unknown) => Promise<OcrPlacement | null>
+  /**
+   * Called once the reading ended and before anything is handed on, with what each item did:
+   * read, or failed with a reason. It also runs when nothing could be read.
+   */
+  onSettled?: (outcome: OcrSettled) => void
+}
+
+/** why one item gave no reading */
+export interface OcrFailure {
+  index: number
+  /** malformed: answered but not in the required form; error: the call failed; stopped: never asked */
+  reason: 'malformed' | 'error' | 'stopped'
+  /** display-safe: no paths, no long secrets, bounded */
+  message: string
+}
+
+export interface OcrSettled {
+  read: number[]
+  failures: OcrFailure[]
+  stopped?: RunOcrResult['stopped']
+}
+
+/** The error text of a failed call as it may be shown: no absolute paths or tokens, bounded. */
+export function safeOcrMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err)
+  return raw
+    .replace(/(?:[A-Za-z]:)?[\\/](?:[^\s\\/:"']+[\\/])+[^\s"']*/g, '…')
+    .replace(/\b[A-Za-z0-9_-]{32,}\b/g, '…')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 200)
 }
 
 export interface RunOcrResult extends OcrWritten {
@@ -267,6 +298,7 @@ async function readAndWrite(
 
   const results = new Map<number, unknown>()
   const failed: number[] = []
+  const failures = new Map<number, OcrFailure>()
   let failuresInARow = 0
   let stopped: RunOcrResult['stopped']
   let stopCause: { kind?: string; resetsAt?: number; message: string } | undefined
@@ -305,6 +337,14 @@ async function readAndWrite(
         }
         if (attempt === 0 && retryable(err)) continue
         failed.push(index)
+        failures.set(index, {
+          index,
+          reason:
+            (err as { reason?: unknown } | null)?.reason === 'malformed-response'
+              ? 'malformed'
+              : 'error',
+          message: safeOcrMessage(err),
+        })
         if (++failuresInARow >= OCR_MAX_FAILURES_IN_A_ROW) {
           stopCause = cause
           stop('failures')
@@ -335,6 +375,21 @@ async function readAndWrite(
   if (aborted(signal)) stopped = 'cancelled'
 
   const read = pages.filter((p) => results.has(p))
+  if (stopped !== 'cancelled') {
+    // pages a stop left unasked are reported too, so a retry can take them
+    for (const p of pages)
+      if (!results.has(p) && !failures.has(p))
+        failures.set(p, {
+          index: p,
+          reason: 'stopped',
+          message: stopCause ? safeOcrMessage(stopCause.message) : '',
+        })
+  }
+  args.onSettled?.({
+    read,
+    failures: [...failures.values()].sort((a, b) => a.index - b.index),
+    ...(stopped ? { stopped } : {}),
+  })
   if (read.length === 0) {
     if (stopped === 'cancelled') throw new OcrCancelledError()
     throw new OcrFailedError(

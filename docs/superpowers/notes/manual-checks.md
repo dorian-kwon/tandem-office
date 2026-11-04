@@ -316,3 +316,13 @@ Needs a rebuild of the shell app (`npm run build -w @genoffice/shell`). Uses rea
 4. A scan or picture OCR run in the chat (Word or any non-sheets editor): after you reviewed the recognised text the AI asks where it goes as a numbered card, the recommended place first and "Only keep the text as reference" last; choosing the reference option writes nothing into the document. In the sheets AI panel the picture OCR still opens its popup with its own placement dialog (unchanged).
 5. Look at the card in light and dark themes and a narrow window (the answer text moves under the name).
 
+
+## Sheets picture OCR popup: order, enlarging, text in drawings, failures
+
+Needs a rebuild of the shell and sheets apps. Uses ONE real AI picture-read at a time (your subscription limit). Use a copy of the webtoon workbook.
+
+1. Open the workbook in Sheets, ask the AI to read the text in the pictures. The popup lists "Picture 1 ... N" top to bottom with the sheet and anchor cell (A7, A82, A157 ...). A workbook whose pictures were added out of order still lists them by anchor row.
+2. Press the magnifier on a row: a large preview opens inside the popup. Left/Right (or the arrow buttons) move between pictures; Esc closes only the preview; "Actual size" switches from fit-to-width (a tall strip scrolls vertically) to real pixels with drag panning. Nothing is sent to the AI by this.
+3. Choose picture 1 (speech bubbles), Next, Start. The bubble text ("리루, 네 침대 밑에 이런 게 있던데....") should come back in the chat message. Before this change a picture of art came back with 0 characters and no error.
+4. Choose a blank picture (for example picture 29): the popup must say "Picture 29 (...): no text found in this picture." with "Retry these pictures" and "Continue with what was read"; no silent success.
+5. Disconnect or sign out of the AI program and start again: the failure shows per picture with its reason, and "Retry these pictures" runs only those after the usual confirmation.

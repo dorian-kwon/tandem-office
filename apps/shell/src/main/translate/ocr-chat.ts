@@ -4,6 +4,7 @@ import type { OcrPageResult, OcrPlacement, OcrPrepared } from '../../shared/tran
 import { readAiPage } from '../../../../../packages/pdf-structure/src/ai-read/read-page'
 import type { AiReadRequest } from '../../../../../packages/pdf-structure/src/ai-read/instruction'
 import { resolveOcrSelection } from '../../shared/translate-ocr'
+import { asPictureRequest } from '../../shared/ocr-picture-instruction'
 
 export interface ChatOcrContext {
   docPath: string | null
@@ -284,7 +285,8 @@ export function createOcrChatService(deps: OcrChatDeps) {
                 image: image.data,
                 mime: image.mime,
                 signal: controller.signal,
-                ask: (request, signal) => deps.ask(route, request, signal, owner),
+                // pictures inside a document: the text in drawings counts
+                ask: (request, signal) => deps.ask(route, asPictureRequest(request), signal, owner),
               })
               s.pages.set(index, { index, payload: reading.payload })
               s.proposal = undefined

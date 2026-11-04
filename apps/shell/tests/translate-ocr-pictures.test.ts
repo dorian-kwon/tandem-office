@@ -66,6 +66,13 @@ const deps = (over: Record<string, unknown> = {}) => ({
   ...over,
 })
 
+it('lists pictures top to bottom by anchor row even when the drawing stores them in another order', async () => {
+  const path = await workbook('shuffled.xlsx', [156, 6, 81])
+  const listing = await createOcrPicturesHost(deps()).list(path)
+  expect(listing.pictures.map((p) => p.cell)).toEqual(['A7', 'A82', 'A157'])
+  expect(listing.pictures.map((p) => p.index)).toEqual([1, 2, 3])
+})
+
 it('lists the pictures in document order with sheet, anchor cell and the total', async () => {
   const path = await workbook('a.xlsx', [6, 81, 156])
   const host = createOcrPicturesHost(deps())

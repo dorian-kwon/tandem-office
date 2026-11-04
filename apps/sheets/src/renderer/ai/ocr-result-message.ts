@@ -35,6 +35,7 @@ function describePlacement(recommendation: OcrPopupResult['recommendation']): st
 export function formatOcrResultMessage(result: OcrPopupResult): { text: string; count: number } {
   let budget = OCR_RESULT_MAX_TOTAL
   let hidden = 0
+  const unread = result.unread ?? []
   const lines = result.pages.map((p) => {
     const head = `${p.index}. ${anchor(p.location)} (${p.text.length} chars)`
     if (budget <= 0) {
@@ -56,6 +57,14 @@ export function formatOcrResultMessage(result: OcrPopupResult): { text: string; 
     ...lines,
     hidden > 0
       ? `(the text of ${hidden} more pictures is not shown here to keep this message small; their anchors are listed above)`
+      : '',
+    unread.length > 0
+      ? `Pictures that gave NO text (do not invent any; tell the person which ones and that they can retry them): ${unread
+          .map(
+            (u) =>
+              `${u.index}. ${anchor(u.location)} (${u.reason === 'empty' ? 'no text found' : 'could not be read'})`,
+          )
+          .join('; ')}`
       : '',
     `Local structure analysis (no model call): suggested placement is ${describePlacement(result.recommendation)}.`,
     'Next: show the person a short preview of what was recognised in the chat, then ask where it goes with ask_choice (id ocrPlacement), the recommended option first and marked. Write nothing into the workbook before they answer.',

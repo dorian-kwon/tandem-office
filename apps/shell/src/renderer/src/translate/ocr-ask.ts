@@ -9,6 +9,7 @@ import type { Lang } from '@genoffice/i18n'
 import { aiRunErrorText } from '@genoffice/ui'
 import type { AiStreamChunk, AiStreamRequest } from '@genoffice/ai-provider'
 import type { OcrAsk, OcrProvider } from '../../../shared/translate-ocr'
+import { asPictureRequest } from '../../../shared/ocr-picture-instruction'
 import { translateText } from '../i18n/strings-translate'
 import type { OcrRoute } from './ocr-route'
 
@@ -55,6 +56,8 @@ export interface OcrAskOptions {
   current: () => OcrRoute
   lang: () => Lang
   bridge?: OcrStreamBridge
+  /** the images are pictures inside a document (text in drawings counts), not scanned pages */
+  pictures?: boolean
 }
 
 const abortError = (signal: AbortSignal): unknown =>
@@ -84,7 +87,8 @@ export function createOcrAsk(o: OcrAskOptions): OcrAsk {
     if (signal.aborted) throw abortError(signal)
     if (provider !== o.ocr)
       throw new OcrCallError('another provider was asked for', { kind: 'not-connected' })
-    return ask(request.system, request.messages, signal)
+    const sent = o.pictures ? asPictureRequest(request) : request
+    return ask(sent.system, sent.messages, signal)
   }
 }
 

@@ -722,6 +722,7 @@ const translateApi: TranslateApi = {
   ocrStart: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrStart, args),
   ocrPageImage: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrPageImage, args),
   ocrPreview: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrPreview, args),
+  ocrPreviewLarge: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrPreviewLarge, args),
   ocrRecommend: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrRecommend, args),
   onSaveAsRequested: (listener) => {
     const handler = (_event: unknown, payload: { outputPath: string }): void => listener(payload)

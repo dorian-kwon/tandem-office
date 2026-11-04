@@ -180,13 +180,26 @@ export async function listEmbeddedImages(path: string): Promise<EmbeddedImage[]>
         for (const d of (await text(sheet)).matchAll(/<(?:\w+:)?drawing\b[^>]*>/g)) {
           const drawing = sheetRels.get(attrs(d[0])['r:id'] ?? '')?.path
           if (!drawing) continue
-          for (const anchor of (await text(drawing)).matchAll(
-            /<(?:\w+:)?(twoCellAnchor|oneCellAnchor|absoluteAnchor)\b[\s\S]*?<\/(?:\w+:)?\1\s*>/g,
-          )) {
+          // Excel appends a picture to the drawing in the order it was added, not by position:
+          // the list follows the sheet, top to bottom then left to right (ties and anchors
+          // without a cell keep their stored order, those last).
+          const anchors = [
+            ...(await text(drawing)).matchAll(
+              /<(?:\w+:)?(twoCellAnchor|oneCellAnchor|absoluteAnchor)\b[\s\S]*?<\/(?:\w+:)?\1\s*>/g,
+            ),
+          ].map((anchor, order) => {
             const from =
               anchor[0].match(/<(?:\w+:)?from\b[^>]*>([\s\S]*?)<\/(?:\w+:)?from\s*>/)?.[1] ?? ''
             const col = Number(from.match(/<(?:\w+:)?col\b[^>]*>(\d+)<\/(?:\w+:)?col>/)?.[1] ?? NaN)
             const row = Number(from.match(/<(?:\w+:)?row\b[^>]*>(\d+)<\/(?:\w+:)?row>/)?.[1] ?? NaN)
+            return { anchor, col, row, order }
+          })
+          const place = (n: number): number => (Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER)
+          anchors.sort(
+            (a, b) =>
+              place(a.row) - place(b.row) || place(a.col) - place(b.col) || a.order - b.order,
+          )
+          for (const { anchor, col, row } of anchors) {
             let cell = ''
             if (col >= 0 && col < 16384 && row >= 0 && row < 1048576) {
               let c = col + 1

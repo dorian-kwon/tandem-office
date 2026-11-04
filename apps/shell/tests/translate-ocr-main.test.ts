@@ -486,6 +486,46 @@ it('does not decode a thumbnail with excessive pixel dimensions', async () => {
   expect(thumbnail).not.toHaveBeenCalled()
 })
 
+describe('large local preview', () => {
+  it('serves a bounded local preview of one listed picture and never needs a start or a provider', async () => {
+    await project([{ file: 'pictures.docx', kind: 'editable', bytes: await embeddedDoc() }])
+    const big = new Uint8Array(1_500_000).fill(7)
+    const largePreview = vi.fn(() => big)
+    const h = handlers({ ocr: { ...ocrDeps, largePreview } })
+    const listing = await h.ocrPrepare({ dir, files: ['pictures.docx'] })
+    const out = await h.ocrPreviewLarge({ token: listing.token, index: 2 })
+    expect(out).toEqual({ data: big, mime: 'image/jpeg' })
+    expect(largePreview).toHaveBeenCalledTimes(1)
+    // the lease was not started: the original bytes stay gated
+    expect(await codeOf(h.ocrPageImage({ token: listing.token, index: 2 }))).toBe(
+      'INVALID_ARGUMENT',
+    )
+  })
+
+  it('refuses a result above the 2 MB cap, an unknown index, and excessive pixel sizes', async () => {
+    await project([{ file: 'pictures.docx', kind: 'editable', bytes: await embeddedDoc() }])
+    const h = handlers({
+      ocr: { ...ocrDeps, largePreview: () => new Uint8Array(2 * 1024 * 1024 + 1) },
+    })
+    const listing = await h.ocrPrepare({ dir, files: ['pictures.docx'] })
+    expect(await h.ocrPreviewLarge({ token: listing.token, index: 1 })).toBeNull()
+    expect(await codeOf(h.ocrPreviewLarge({ token: listing.token, index: 9 }))).toBe(
+      'INVALID_ARGUMENT',
+    )
+  })
+
+  it('does not decode a picture with excessive pixel dimensions', async () => {
+    await project([
+      { file: 'pictures.docx', kind: 'editable', bytes: await embeddedDoc(5000, 5000) },
+    ])
+    const largePreview = vi.fn(() => PNG)
+    const h = handlers({ ocr: { ...ocrDeps, largePreview } })
+    const listing = await h.ocrPrepare({ dir, files: ['pictures.docx'] })
+    expect(await h.ocrPreviewLarge({ token: listing.token, index: 1 })).toBeNull()
+    expect(largePreview).not.toHaveBeenCalled()
+  })
+})
+
 describe('ocr popup bridge', () => {
   it('tells the host which popup closed, and is harmless without a listener', async () => {
     const onOcrPopupClosed = vi.fn()

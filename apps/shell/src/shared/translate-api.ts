@@ -46,6 +46,7 @@ export const TRANSLATE_CHANNELS = {
   ocrStart: 'translate:ocr-start',
   ocrPageImage: 'translate:ocr-page-image',
   ocrPreview: 'translate:ocr-preview',
+  ocrPreviewLarge: 'translate:ocr-preview-large',
   ocrRecommend: 'translate:ocr-recommend',
   ocrWrite: 'translate:ocr-write',
   ocrRelease: 'translate:ocr-release',
@@ -391,6 +392,8 @@ export interface TranslateApi {
   ocrPageImage(args: TranslateOcrPageImageArgs): Promise<OcrPageImage>
   /** A small local thumbnail of an embedded image, never the AI input. */
   ocrPreview(args: TranslateOcrPageImageArgs): Promise<OcrPageImage | null>
+  /** An enlarged local preview (JPEG, at most 2 MB) for looking closely; never the AI input. */
+  ocrPreviewLarge(args: TranslateOcrPageImageArgs): Promise<OcrPageImage | null>
   ocrRecommend(args: TranslateOcrStartArgs): Promise<OcrRecommendation>
   /** the tab menu's Save As on a translation output tab: run "Save as…" for that output file */
   onSaveAsRequested(listener: (args: { outputPath: string }) => void): () => void

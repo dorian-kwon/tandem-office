@@ -147,6 +147,7 @@ import { chatOcrSourceResolver, pruneOcrWorkDir } from './translate/ocr-chat-sou
 import type { OcrMode } from '@genoffice/translate-project'
 import { createOcrPicturesHost } from './translate/ocr-pictures'
 import { createOcrPopupHost } from './translate/ocr-popup-host'
+import { largePreviewJpeg } from './translate/ocr-large-preview'
 import { mountOcrPopupView } from './translate/ocr-popup-view'
 import { TranslateIpcError, TRANSLATE_EVENTS } from '../shared/translate-api'
 import type {
@@ -9079,6 +9080,7 @@ const translationOcrRuntime: OcrServiceDeps = {
       })
       .toPNG()
   },
+  largePreview: (bytes) => largePreviewJpeg(nativeImage.createFromBuffer(Buffer.from(bytes))),
 }
 
 const chatOcrModel = createChatOcrModel({
