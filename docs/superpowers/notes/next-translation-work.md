@@ -2,6 +2,23 @@
 
 Items the owner asked to handle in the next round of the translation tool.
 
+## 0. Every question is a numbered choice with a typing option (applies to items 1-3 and the AI's own questions)
+
+Whenever the app or the AI asks the user something, it appears as a question card with numbered options
+(1, 2, 3, ...) and a last option "type your own answer" with a text field. The user picks a number or types.
+
+- Covers the overwrite/bilingual question, where to put the original, where to put OCR results, how to treat
+  sound effects or citations, and any clarifying question the AI would otherwise write as free text
+  (the real runs showed the AI asking things like "how should I style the source citations?" in plain text).
+- Needs one shared mechanism: an AI tool (for example `ask_choice` with `question`, `options[]`,
+  `allowTyping`) that stops the run in the "waiting for you" state of the chat status line, renders the card in
+  `packages/ui` for every editor, returns the chosen option or the typed text to the model, and can store the
+  answer in the project when the question offers "use this for the rest of the project".
+- Keyboard: number keys choose; Enter confirms typed text. Accessible labels; 21 languages.
+- The translation rules tell the AI to use it instead of asking in prose, and never to start writing into the
+  document while a required answer is missing.
+- No such mechanism exists today (no `ask_user`-style tool in the repo as of 2026-11-05).
+
 ## 1. Bilingual annotation (병기) translation: ask where to put it
 
 Some source passages need the translation shown next to the original (a term, a title, a name):
