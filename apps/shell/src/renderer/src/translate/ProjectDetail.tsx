@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { LANGS } from '@genoffice/i18n'
 import type { OcrMode, ProjectFile } from '@genoffice/translate-project'
 import type {
@@ -10,7 +10,21 @@ import type {
 } from '../../../shared/translate-api'
 import { useI18n } from '../locale'
 import type { TranslateStringKey } from '../i18n/strings-translate'
+import { normalizeProjectName } from '../../../shared/project-name'
+import { InlineName } from './InlineName'
+import {
+  EyeIcon,
+  FileIcon,
+  glyphForFile,
+  OpenIcon,
+  PencilIcon,
+  SaveAsIcon,
+  ScanIcon,
+  SwapIcon,
+  TrashIcon,
+} from './icons'
 import { saveAsNoticeFor, type SaveAsNotice } from './save-as-action'
+import { DEFAULT_WRITING_STYLE, WritingStyleCard } from './WritingStyleCard'
 import { languageName, makeText, translateErrorText } from './shared'
 import '../projects-panel.css'
 import './translate.css'
@@ -88,6 +102,8 @@ export function ProjectDetail({
   const [exportMessage, setExportMessage] = useState<SaveAsNotice | null>(null)
   const [promptFailed, setPromptFailed] = useState(false)
   const [promptSaved, setPromptSaved] = useState(false)
+  const [renamingTitle, setRenamingTitle] = useState(false)
+  const [titleSaved, setTitleSaved] = useState(false)
   // the newest project object, so a blur-save never writes a stale list over an upload
   const latest = useRef<ProjectFile | null>(null)
   // each reference's conversion status; null until main answered
@@ -180,6 +196,7 @@ export function ProjectDetail({
       ...base,
       projectPrompt: next.projectPrompt,
       ocr: next.ocr,
+      writingStyle: next.writingStyle,
       sourceLang: next.sourceLang,
       targetLang: next.targetLang,
     })
@@ -205,6 +222,26 @@ export function ProjectDetail({
       setPromptFailed(!ok)
       setPromptSaved(ok)
     })
+  }
+
+  /** change the display name only; the folder on disk keeps its name */
+  const saveTitle = async (raw: string) => {
+    setRenamingTitle(false)
+    const next = normalizeProjectName(raw)
+    if (next === null) {
+      setError(s('renameInvalid'))
+      return
+    }
+    if (next === latest.current?.name) return
+    setError(null)
+    try {
+      const renamed = await api.rename({ dir, name: next })
+      const base = latest.current
+      if (base) adopt({ ...base, name: renamed.name })
+      setTitleSaved(true)
+    } catch (err) {
+      setError(translateErrorText(lang, err))
+    }
   }
 
   const save = async (patch: TranslateSettingsPatch): Promise<boolean> => {
@@ -345,6 +382,123 @@ export function ProjectDetail({
   const onlySource = project?.sources.length === 1 ? project.sources[0]?.file : undefined
   const hasManySources = (project?.sources.length ?? 0) > 1
 
+  /** icon-only row action with its name as tooltip and accessible label */
+  const rowAction = (
+    action: string,
+    label: string,
+    icon: ReactNode,
+    onClick: () => void,
+    options: { disabled?: boolean; danger?: boolean } = {},
+  ) => (
+    <button
+      type="button"
+      className={`tt-icon-btn${options.danger ? ' is-danger' : ''}`}
+      data-action={action}
+      aria-label={label}
+      title={label}
+      disabled={options.disabled}
+      onClick={onClick}
+    >
+      {icon}
+    </button>
+  )
+
+  const renderFileRow = (project: ProjectFile, kind: TranslateMaterialKind, file: string) => {
+    const pdfKind = kind === 'source' ? pdfKindOf(project, file) : null
+    const picture = pictureNotice(kind, file)
+    const needsOcr = kind === 'reference' && refStatus?.[file] === 'needs-ocr'
+    const ext = file.includes('.') ? (file.split('.').pop() ?? '').toUpperCase() : ''
+    return (
+      <div key={file} role="row" className="tt-row" data-file={file}>
+        <div role="cell" className="tt-cell tt-name">
+          <span className="tt-glyph">
+            <FileIcon glyph={kind === 'glossary' ? 'glossary' : glyphForFile(file)} />
+          </span>
+          <span className="tt-name-text">
+            {kind === 'source' ? (
+              <button
+                type="button"
+                className="tt-title tt-link"
+                data-action="open-title"
+                title={s('openTranslation')}
+                onClick={() => onStartTranslation(file)}
+              >
+                {file}
+              </button>
+            ) : (
+              <span className="tt-title">{file}</span>
+            )}
+            {picture ?? (
+              <span className="tt-sub">
+                {needsOcr ? <span className="translate-note">{s('refNeedsOcrHint')}</span> : ext}
+              </span>
+            )}
+          </span>
+        </div>
+        <div role="cell" className="tt-cell tt-status">
+          {kind === 'reference' ? (
+            referenceStatusOf(file)
+          ) : pdfKind ? (
+            <span className="translate-kind" data-source-kind={pdfKind}>
+              {pdfKind === 'scan' ? s('kindScan') : s('kindPdf')}
+            </span>
+          ) : (
+            <span className="translate-kind" data-status="ready">
+              {s('statusReady')}
+            </span>
+          )}
+        </div>
+        <div role="cell" className="tt-cell tt-actions">
+          {kind === 'source' &&
+            onStartOcr &&
+            /\.(docx|xlsx)$/i.test(file) &&
+            rowAction(
+              'embedded-ocr',
+              `${s('ocrTitle')}: ${file}`,
+              <ScanIcon />,
+              () => onStartOcr(file),
+              { disabled: busy },
+            )}
+          {pdfKind &&
+            rowAction(
+              'toggle-pdf-kind',
+              pdfKind === 'scan' ? s('treatAsText') : s('treatAsScan'),
+              <SwapIcon />,
+              () => void setPdfKind(file, pdfKind === 'scan' ? 'pdf' : 'scan'),
+              { disabled: busy },
+            )}
+          {kind === 'reference' &&
+            refStatus?.[file] === 'converted' &&
+            rowAction(
+              'view-converted',
+              `${s('viewConverted')}: ${file}`,
+              <EyeIcon />,
+              () => void viewConverted(file),
+            )}
+          {kind === 'source' &&
+            rowAction(
+              'save-as-translation',
+              `${s('saveAsTranslation')}: ${file}`,
+              <SaveAsIcon />,
+              () => void saveAsSource(file),
+              { disabled: busy },
+            )}
+          {kind === 'source' &&
+            rowAction('open-translation', `${s('openTranslation')}: ${file}`, <OpenIcon />, () =>
+              onStartTranslation(file),
+            )}
+          {rowAction(
+            'delete-file',
+            s('deleteFileAria', { name: file }),
+            <TrashIcon />,
+            () => void removeFile(kind, file),
+            { disabled: busy, danger: true },
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <main className="content projects-panel">
       <div className="translate-pane">
@@ -353,7 +507,43 @@ export function ProjectDetail({
         </button>
         <header className="translate-head">
           <div className="translate-head-text">
-            <h2 className="translate-title">{project?.name ?? s('loading')}</h2>
+            {renamingTitle && project ? (
+              <h2 className="translate-title is-editing">
+                <InlineName
+                  initial={project.name}
+                  label={s('renameProject')}
+                  placeholder={s('renamePlaceholder')}
+                  onSave={(raw) => void saveTitle(raw)}
+                  onCancel={() => setRenamingTitle(false)}
+                />
+              </h2>
+            ) : (
+              <h2 className="translate-title">
+                <span
+                  className={project ? 'translate-title-text is-editable' : undefined}
+                  onClick={project ? () => setRenamingTitle(true) : undefined}
+                >
+                  {project?.name ?? s('loading')}
+                </span>
+              </h2>
+            )}
+            {project && !renamingTitle && (
+              <button
+                type="button"
+                className="tt-icon-btn translate-title-edit"
+                data-action="rename-title"
+                title={s('renameProject')}
+                aria-label={s('renameProject')}
+                onClick={() => setRenamingTitle(true)}
+              >
+                <PencilIcon />
+              </button>
+            )}
+            {titleSaved && !renamingTitle && (
+              <span className="translate-saved" role="status" data-rename-saved>
+                {s('saved')}
+              </span>
+            )}
             {project && (
               <span className="translate-chip">
                 {languageName(lang, project.sourceLang)} {'→'}{' '}
@@ -405,20 +595,35 @@ export function ProjectDetail({
 
         {project && (
           <>
-            <section className="translate-card-section" aria-label={s('languagePair')}>
-              <h3 className="translate-section-title">{s('languagePair')}</h3>
-              <div className="translate-lang-row">
-                {languageSelect(project.sourceLang, s('sourceLangLabel'), 'sourceLang')}
-                {languageSelect(project.targetLang, s('targetLangLabel'), 'targetLang')}
-              </div>
-            </section>
+            <div className="tt-settings">
+              <section className="translate-card-section" aria-label={s('languagePair')}>
+                <h3 className="translate-section-title">{s('languagePair')}</h3>
+                <div className="translate-lang-row">
+                  {languageSelect(project.sourceLang, s('sourceLangLabel'), 'sourceLang')}
+                  {languageSelect(project.targetLang, s('targetLangLabel'), 'targetLang')}
+                </div>
+              </section>
+              <label className="projects-field translate-card-section">
+                <span className="translate-section-title">{s('ocrLabel')}</span>
+                <select
+                  className="translate-select"
+                  aria-label={s('ocrLabel')}
+                  value={ocrChoice(project.ocr)}
+                  onChange={(e) => void save({ ocr: ocrMode(e.target.value as OcrChoice) })}
+                >
+                  <option value="claude">{s('ocrClaude')}</option>
+                  <option value="chatgpt">{s('ocrChatgpt')}</option>
+                  <option value="off">{s('ocrOff')}</option>
+                </select>
+              </label>
+            </div>
 
             {SECTIONS.map(({ kind, title }) => {
               const files = filesOf(project, kind)
               return (
                 <section
                   key={kind}
-                  className="translate-card-section"
+                  className="translate-block"
                   aria-label={s(title)}
                   data-material-kind={kind}
                 >
@@ -439,102 +644,18 @@ export function ProjectDetail({
                   {files.length === 0 ? (
                     <p className="translate-none">{s('noFiles')}</p>
                   ) : (
-                    <ul className="translate-rows">
-                      {files.map((file) => (
-                        <li key={file} className="projects-row">
-                          <div className="translate-row-main">
-                            <span className="projects-row-name">{file}</span>
-                            {kind === 'reference' && referenceStatusOf(file)}
-                            {kind === 'reference' && refStatus?.[file] === 'needs-ocr' && (
-                              <span className="translate-ref-hint translate-note">
-                                {s('refNeedsOcrHint')}
-                              </span>
-                            )}
-                            {kind === 'source' && pdfKindOf(project, file) && (
-                              <span
-                                className="translate-kind"
-                                data-source-kind={pdfKindOf(project, file)}
-                              >
-                                {pdfKindOf(project, file) === 'scan' ? s('kindScan') : s('kindPdf')}
-                              </span>
-                            )}
-                            {pictureNotice(kind, file)}
-                          </div>
-                          {kind === 'source' && pdfKindOf(project, file) && (
-                            <button
-                              type="button"
-                              className="projects-small"
-                              data-action="toggle-pdf-kind"
-                              disabled={busy}
-                              onClick={() =>
-                                void setPdfKind(
-                                  file,
-                                  pdfKindOf(project, file) === 'scan' ? 'pdf' : 'scan',
-                                )
-                              }
-                            >
-                              {pdfKindOf(project, file) === 'scan'
-                                ? s('treatAsText')
-                                : s('treatAsScan')}
-                            </button>
-                          )}
-                          {kind === 'reference' && refStatus?.[file] === 'converted' && (
-                            <button
-                              type="button"
-                              className="projects-small"
-                              data-action="view-converted"
-                              aria-label={`${s('viewConverted')}: ${file}`}
-                              onClick={() => void viewConverted(file)}
-                            >
-                              {s('viewConverted')}
-                            </button>
-                          )}
-                          {kind === 'source' && onStartOcr && /\.(docx|xlsx)$/i.test(file) && (
-                            <button
-                              type="button"
-                              className="projects-small"
-                              data-action="embedded-ocr"
-                              aria-label={`${s('ocrTitle')}: ${file}`}
-                              disabled={busy}
-                              onClick={() => onStartOcr(file)}
-                            >
-                              {s('ocrTitle')}
-                            </button>
-                          )}
-                          {kind === 'source' && (
-                            <button
-                              type="button"
-                              className="projects-small"
-                              data-action="save-as-translation"
-                              aria-label={`${s('saveAsTranslation')}: ${file}`}
-                              disabled={busy}
-                              onClick={() => void saveAsSource(file)}
-                            >
-                              {s('saveAsTranslation')}
-                            </button>
-                          )}
-                          {kind === 'source' && (
-                            <button
-                              type="button"
-                              className="projects-small"
-                              aria-label={`${s('openTranslation')}: ${file}`}
-                              onClick={() => onStartTranslation(file)}
-                            >
-                              {s('openTranslation')}
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            className="projects-small"
-                            aria-label={s('deleteFileAria', { name: file })}
-                            disabled={busy}
-                            onClick={() => void removeFile(kind, file)}
-                          >
-                            {s('deleteFile')}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
+                    <div role="table" className="tt tt-files" aria-label={s(title)}>
+                      <div role="row" className="tt-head">
+                        <div role="columnheader" className="tt-col">
+                          {s('colName')}
+                        </div>
+                        <div role="columnheader" className="tt-col tt-status">
+                          {s('colStatus')}
+                        </div>
+                        <div role="columnheader" className="tt-col tt-actions" aria-hidden="true" />
+                      </div>
+                      {files.map((file) => renderFileRow(project, kind, file))}
+                    </div>
                   )}
                 </section>
               )
@@ -567,19 +688,11 @@ export function ProjectDetail({
               <span className="projects-hint">{s('promptHint')}</span>
             </label>
 
-            <label className="projects-field translate-card-section">
-              <span className="translate-section-title">{s('ocrLabel')}</span>
-              <select
-                className="translate-select"
-                aria-label={s('ocrLabel')}
-                value={ocrChoice(project.ocr)}
-                onChange={(e) => void save({ ocr: ocrMode(e.target.value as OcrChoice) })}
-              >
-                <option value="claude">{s('ocrClaude')}</option>
-                <option value="chatgpt">{s('ocrChatgpt')}</option>
-                <option value="off">{s('ocrOff')}</option>
-              </select>
-            </label>
+            <WritingStyleCard
+              style={project.writingStyle ?? DEFAULT_WRITING_STYLE}
+              s={s}
+              onSave={(writingStyle) => save({ writingStyle })}
+            />
           </>
         )}
       </div>

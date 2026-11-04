@@ -135,6 +135,28 @@ test('translation project: create, upload, split view, read-only source, remove'
       })
       .toBe('off')
 
+    // the writing style choice persists in project.json
+    await page.locator('[data-style-option="serialComma:with"]').click()
+    await page.locator('[data-style-option="quotePunctuation:inside"]').click()
+    await expect
+      .poll(async () => {
+        const p = JSON.parse(await readFile(join(projectDir, '.tandem', 'project.json'), 'utf8'))
+        return p.writingStyle
+      })
+      .toEqual({ serialComma: 'with', quotePunctuation: 'inside', custom: '' })
+
+    // renaming changes the display name only: the folder keeps its name
+    await page.locator('[data-action="rename-title"]').click()
+    await page.locator('[data-rename-input]').fill('Demo contract EN')
+    await page.locator('[data-rename-input]').press('Enter')
+    await expect
+      .poll(async () => {
+        const p = JSON.parse(await readFile(join(projectDir, '.tandem', 'project.json'), 'utf8'))
+        return p.name
+      })
+      .toBe('Demo contract EN')
+    expect(existsSync(projectDir)).toBe(true)
+
     // open the translation view: two panes, source read-only on the left
     await page.getByRole('button', { name: 'Open translation' }).first().click()
     await expect
