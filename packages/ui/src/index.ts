@@ -230,6 +230,7 @@ export {
   effectiveAiPanelOpen,
   onAiRailClick,
   useTranslationAiDock,
+  reportAiComposerFocus,
   probeTranslationPaneKind,
   type TranslationPaneKind,
   type TranslationPaneProbes,

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   effectiveAiPanelOpen,
   probeTranslationPaneKind,
+  reportAiComposerFocus,
   useTranslationAiDock,
   type SplitPaneBridge,
   type SplitPaneRole,
@@ -127,6 +128,19 @@ describe('source pane', () => {
 })
 
 describe('output pane', () => {
+  it('opens on first detection even when its remembered state is closed', async () => {
+    const s = setup('focus', 'output', false)
+    await s.settle()
+    expect(s.dock.open).toBe(true)
+    // an explicit close afterwards stays closed through role changes
+    act(() => s.dock.onExpand())
+    expect(s.dock.open).toBe(false)
+    s.push('secondary')
+    s.push('focus')
+    expect(s.dock.open).toBe(false)
+    s.unmount()
+  })
+
   it('is open by default and stays open when the source takes focus and back', async () => {
     const s = setup('focus', 'output', true)
     await s.settle()
@@ -145,5 +159,42 @@ describe('output pane', () => {
     s.push('secondary')
     expect(s.dock.open).toBe(false)
     s.unmount()
+  })
+})
+
+describe('ordinary documents', () => {
+  it('keep their remembered closed state', async () => {
+    const handlers = new Set<(r: SplitPaneRole | null) => void>()
+    ;(globalThis as Record<string, unknown>)[KEY] = {
+      getRole: async () => 'focus',
+      onRoleChanged: (h: (r: SplitPaneRole | null) => void) => {
+        handlers.add(h)
+        return () => handlers.delete(h)
+      },
+      requestFocus: vi.fn(),
+      reportFocus: vi.fn(),
+    }
+    let latest: ReturnType<typeof useTranslationAiDock> | null = null
+    function Probe() {
+      const [open, setOpen] = useState(false)
+      latest = useTranslationAiDock(open, setOpen, {})
+      return null
+    }
+    const root = createRoot(host)
+    act(() => root.render(createElement(Probe)))
+    await act(async () => {})
+    expect(latest!.open).toBe(false)
+    act(() => root.unmount())
+  })
+})
+
+describe('reportAiComposerFocus', () => {
+  it('forwards to the bridge when it can and is silent otherwise', () => {
+    expect(() => reportAiComposerFocus(true)).not.toThrow()
+    const setComposerFocus = vi.fn()
+    ;(globalThis as Record<string, unknown>)[KEY] = { setComposerFocus }
+    reportAiComposerFocus(true)
+    reportAiComposerFocus(false)
+    expect(setComposerFocus.mock.calls).toEqual([[true], [false]])
   })
 })

@@ -16,6 +16,8 @@ export const SPLIT_PANE_CHANNELS = {
   requestFocus: 'tabs:focus-pane',
   /** send: fallback focus ping from a view that gained focus */
   reportFocus: 'app:view-focused',
+  /** send: boolean, the AI composer has the keyboard focus (read-only views let it type) */
+  composerFocus: 'app:ai-composer-focus',
 } as const
 
 /** Key of the bridge exposed on the editor's window object. */
@@ -30,6 +32,8 @@ export interface SplitPaneBridge {
   requestFocus(): void
   /** fallback ping: this view gained focus */
   reportFocus(): void
+  /** the AI composer gained or lost focus */
+  setComposerFocus(focused: boolean): void
 }
 
 export function splitPaneBridge(ipcRenderer: IpcRenderer): SplitPaneBridge {
@@ -48,6 +52,9 @@ export function splitPaneBridge(ipcRenderer: IpcRenderer): SplitPaneBridge {
     },
     reportFocus() {
       ipcRenderer.send(SPLIT_PANE_CHANNELS.reportFocus)
+    },
+    setComposerFocus(focused) {
+      ipcRenderer.send(SPLIT_PANE_CHANNELS.composerFocus, focused === true)
     },
   }
 }

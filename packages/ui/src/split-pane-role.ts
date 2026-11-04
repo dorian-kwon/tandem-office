@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useAiPanelPrefs } from './ai-panel-prefs-store'
 
 /** What a pane is for; "no role" (standalone editor, no split) is null. */
 export type SplitPaneRole = 'focus' | 'secondary'
@@ -18,6 +19,18 @@ export interface SplitPaneBridge {
   requestFocus(): void
   /** fallback ping: this view gained focus */
   reportFocus(): void
+  /** the AI composer gained or lost focus (a read-only view still lets it take text) */
+  setComposerFocus?(focused: boolean): void
+}
+
+/** Tell the shell the AI composer has (or no longer has) the keyboard focus. */
+export function reportAiComposerFocus(focused: boolean): void {
+  try {
+    const b = (globalThis as { aiOfficeSplit?: Partial<SplitPaneBridge> }).aiOfficeSplit
+    b?.setComposerFocus?.(focused)
+  } catch {
+    // a missing bridge only means a standalone editor
+  }
 }
 
 /** Key of the bridge an editor's preload exposes on its window object. */
@@ -162,6 +175,16 @@ export function useTranslationAiDock(
       live = false
     }
   }, [role])
+  const sidebarOn = useAiPanelPrefs().showAiSidebar
+  const sidebarOnRef = useRef(sidebarOn)
+  sidebarOnRef.current = sidebarOn
+  const wasOutput = useRef(false)
+  useEffect(() => {
+    // a translation view opens with the output's assistant out, whatever the
+    // remembered per-app state says; a later close is the person's choice
+    if (paneKind === 'output' && !wasOutput.current && sidebarOnRef.current) setLocalOpen(true)
+    wasOutput.current = paneKind === 'output'
+  }, [paneKind, setLocalOpen])
   const wasSource = useRef(false)
   useEffect(() => {
     if (paneKind === 'source' && !wasSource.current) setLocalOpen(false)

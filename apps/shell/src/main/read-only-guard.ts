@@ -10,8 +10,8 @@ import type { WebContents } from 'electron'
  *   paste, undo or save, before the page or a menu accelerator sees it. Moving,
  *   selecting, copying and zooming still work. Because the guard cannot tell an
  *   editor's text from an input box, typing is blocked everywhere in the pane:
- *   the find box opens but takes no text, and the source pane's AI panel input
- *   cannot be typed into (use the output pane's AI panel instead).
+ *   the find box opens but takes no text, and the AI panel's composer reports
+ *   its focus (`app:ai-composer-focus`) and then types freely, except the save chord.
  * - IPC: handlers on the view's own `webContents.ipc` answer the editors' save
  *   channels with a failure. Electron looks there before `ipcMain`, so the
  *   editor's real handler never runs for this view, and other views are not
@@ -71,8 +71,15 @@ const isFunctionKey = (key: string): boolean => /^F\d{1,2}$/.test(key)
 export function readOnlyBlocksInput(
   input: ReadOnlyKeyInput,
   platform: NodeJS.Platform = process.platform,
+  composerFocused = false,
 ): boolean {
   if (input.type === 'keyUp') return false
+  // the AI composer is the person's own text box, not the document: it types
+  // freely, and only the save chord stays refused
+  if (composerFocused) {
+    const command = platform === 'darwin' ? input.meta || input.control : input.control
+    return command && input.key.toLowerCase() === 's'
+  }
   const { key } = input
   if (MODIFIER_KEYS.has(key) || NAVIGATION_KEYS.has(key) || isFunctionKey(key)) return false
   // Ctrl on Windows/Linux; on macOS both, since Ctrl+key still edits text there
@@ -134,13 +141,20 @@ export const READ_ONLY_IPC_THROWS: readonly string[] = [
 ]
 
 type GuardedContents = Pick<WebContents, 'on' | 'removeListener'> & {
-  ipc?: Pick<WebContents['ipc'], 'handle' | 'removeHandler'>
+  ipc?: Pick<WebContents['ipc'], 'handle' | 'removeHandler'> &
+    Partial<Pick<WebContents['ipc'], 'on' | 'removeListener'>>
 }
 
 /** Install the guard on one view; returns the function that removes it. */
 export function installReadOnlyGuard(contents: GuardedContents): () => void {
+  // reported by the editor's AI composer (packages/ui AiComposer) on focus/blur
+  let composerFocused = false
+  const onComposerFocus = (_event: unknown, focused: unknown): void => {
+    composerFocused = focused === true
+  }
+  contents.ipc?.on?.('app:ai-composer-focus', onComposerFocus)
   const onInput = (event: Electron.Event, input: Electron.Input): void => {
-    if (readOnlyBlocksInput(input)) event.preventDefault()
+    if (readOnlyBlocksInput(input, process.platform, composerFocused)) event.preventDefault()
   }
   contents.on('before-input-event', onInput)
   // a handler on the view's own ipc is found before ipcMain's (Electron's
@@ -157,6 +171,7 @@ export function installReadOnlyGuard(contents: GuardedContents): () => void {
   }
   return () => {
     contents.removeListener('before-input-event', onInput)
+    contents.ipc?.removeListener?.('app:ai-composer-focus', onComposerFocus)
     for (const channel of channels) contents.ipc?.removeHandler(channel)
   }
 }

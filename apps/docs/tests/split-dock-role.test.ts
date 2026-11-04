@@ -28,6 +28,7 @@ function fakeBridge(getRoleImpl: SplitPaneBridge['getRole'] = async () => null) 
     },
     requestFocus,
     reportFocus: vi.fn(),
+    setComposerFocus: vi.fn(),
   }
   return {
     bridge,

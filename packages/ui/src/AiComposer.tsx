@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react'
+import { reportAiComposerFocus } from './split-pane-role'
 import { IconEnter, IconSend, IconStop } from './icons'
 import { useAiPanelPrefs } from './ai-panel-prefs-store'
 import { clipboardPictureIsRendering } from './clipboard-picture'
@@ -95,6 +96,8 @@ export function AiComposer({
 }): React.JSX.Element {
   const innerRef = useRef<HTMLTextAreaElement | null>(null)
   const ref = textareaRef ?? innerRef
+  // a composer that unmounts while focused must not leave the shell believing it is
+  useEffect(() => () => reportAiComposerFocus(false), [])
   const canSend = value.trim().length > 0 && !busy
   const { spellcheck } = useAiPanelPrefs()
   const picker = useComposerPickers({ skills, docs, value, onChange, textareaRef: ref })
@@ -134,7 +137,11 @@ export function AiComposer({
         onSelect={(e) => picker.track(e.currentTarget)}
         onCompositionStart={picker.onCompositionStart}
         onCompositionEnd={picker.onCompositionEnd}
-        onBlur={picker.onBlur}
+        onFocus={() => reportAiComposerFocus(true)}
+        onBlur={() => {
+          reportAiComposerFocus(false)
+          picker.onBlur()
+        }}
         onKeyDown={(e) => {
           // an open skill or document list takes ↑/↓/Enter/Tab/Esc first; its Esc never stops a run
           if (picker.onKeyDown(e)) return

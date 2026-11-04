@@ -170,3 +170,44 @@ describe('channels added after review', () => {
     expect(READ_ONLY_IPC_ANSWERS['slides:save-as']).toMatchObject({ ok: false })
   })
 })
+
+describe('the AI composer stays typable in a read-only view', () => {
+  it('lets typing, IME, paste and undo through while the composer has focus', () => {
+    for (const k of ['a', 'Enter', 'Backspace', 'Process', ' '])
+      expect(readOnlyBlocksInput(key(k), 'win32', true)).toBe(false)
+    expect(readOnlyBlocksInput(key('v', { control: true }), 'win32', true)).toBe(false)
+    expect(readOnlyBlocksInput(key('z', { meta: true }), 'darwin', true)).toBe(false)
+  })
+  it('still refuses the save chord and blocks document typing otherwise', () => {
+    expect(readOnlyBlocksInput(key('s', { control: true }), 'win32', true)).toBe(true)
+    expect(readOnlyBlocksInput(key('a'), 'win32', false)).toBe(true)
+  })
+  it('follows the focus the editor reports over its own ipc', () => {
+    const handlers = new Map<string, (e: unknown, v: unknown) => void>()
+    let onInput: (e: { preventDefault(): void }, i: ReturnType<typeof key>) => void = () => {}
+    installReadOnlyGuard({
+      on: ((_n: string, fn: typeof onInput) => {
+        onInput = fn
+      }) as never,
+      removeListener: vi.fn() as never,
+      ipc: {
+        handle: vi.fn(),
+        removeHandler: vi.fn(),
+        on: ((c: string, fn: (e: unknown, v: unknown) => void) => {
+          handlers.set(c, fn)
+        }) as never,
+        removeListener: vi.fn() as never,
+      },
+    })
+    const typed = () => {
+      const prevent = vi.fn()
+      onInput({ preventDefault: prevent }, key('a'))
+      return prevent.mock.calls.length === 1
+    }
+    expect(typed()).toBe(true)
+    handlers.get('app:ai-composer-focus')!({}, true)
+    expect(typed()).toBe(false)
+    handlers.get('app:ai-composer-focus')!({}, false)
+    expect(typed()).toBe(true)
+  })
+})
