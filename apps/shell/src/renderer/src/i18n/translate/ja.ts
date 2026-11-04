@@ -84,6 +84,30 @@ export const ja = {
     'このOCRのウィンドウは期限切れか、プロジェクトのOCR設定が変更されました。もう一度開いてください。',
   errOcrFailed: 'OCRを完了できませんでした。',
   ocrTitle: 'AIで読み取る（OCR）',
+  ocrRecommendation: 'おすすめの配置先',
+  ocrUseRecommendation: 'おすすめを使う',
+  ocrRecommendCells: '画像の隣の空セルに入れ、既存の内容を保ちます。',
+  ocrRecommendSheet: '既存の内容と重ならないよう、新しいシートをおすすめします。',
+  ocrRecommendAfter: '表と画像の配置を保ち、各画像の後に文字を追加します。',
+  ocrTableCell: '表のセル',
+  ocrTableNumber: '表番号',
+  ocrRow: '開始行',
+  ocrColumn: '列',
+  ocrPlaceTitle: '読み取った文字をどこに配置しますか？',
+  ocrPlaceIntro:
+    '認識結果を確認して配置先を選んでください。元の形式を保ったコピーに保存します。Excelでは画像ごとに1セルずつ順番に入れます。',
+  ocrNewSheet: '新しいシート',
+  ocrExistingCells: '既存シートのセル',
+  ocrSheetName: 'シート名',
+  ocrStartCell: '開始セル',
+  ocrOverwrite: '既存のセル内容の上書きを許可',
+  ocrAfterImages: '各画像の後',
+  ocrDocumentEnd: '文書の末尾',
+  ocrPlaceSave: 'ここに保存',
+  ocrReadText: '読み取った文字',
+  ocrScopePrompt: '{count}件すべてを読み取りますか、それとも項目を選択しますか？',
+  ocrReadAll: 'すべて読み取る',
+  ocrChooseItems: '項目を選ぶ',
   ocrIntro:
     '読み取るページまたはファイルを選んでください。選んだものだけが、1枚ずつAIに送信されます。読み取ったテキストは出力フォルダーにWord文書として保存され、その文書を翻訳します。',
   ocrLoading: 'ページを一覧にしています…',
@@ -204,6 +228,8 @@ export const ja = {
     '参考資料のファイル {count} 件: {names}。使えるテキストがないため、名前だけを送信します。',
   trConfirmSendsNamesOnly:
     '文書のテキストが、翻訳プロンプト、用語集（少ない場合は全件、多い場合は本文に出てくる語の項目のみ）、参考ファイルの名前（内容は送りません）とともに、このAIに送信されます。',
+  pictureHintEmbedded:
+    '画像が{count}枚あります。画像内の文字は自動翻訳されません。OCRですべて、または選んだ画像を読み取れます。',
   pictureHintSource:
     'この文書に含まれる画像：{count} 点。画像の中の文字は文書のテキストではないため、翻訳されません。読み取るには OCR が必要ですが、アプリはこのファイル内の画像を自動では読み取りません。画像のあるページを画像（PNG または JPEG）やスキャン PDF として書き出すかコピーし、翻訳する文書として追加してから OCR で読み取ってください。',
   pictureHintReference:

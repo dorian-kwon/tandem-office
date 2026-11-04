@@ -82,6 +82,30 @@ export const en = {
   errOcrExpired: "This OCR window has expired or the project's OCR setting changed. Open it again.",
   errOcrFailed: 'OCR could not be completed.',
   ocrTitle: 'Read with AI (OCR)',
+  ocrRecommendation: 'Recommended destination',
+  ocrUseRecommendation: 'Use recommendation',
+  ocrRecommendCells: 'Use empty cells beside the images to preserve existing contents.',
+  ocrRecommendSheet: 'A new sheet avoids overlapping existing contents.',
+  ocrRecommendAfter: 'Add text after each image while keeping tables and images in place.',
+  ocrTableCell: 'Table cell',
+  ocrTableNumber: 'Table number',
+  ocrRow: 'Starting row',
+  ocrColumn: 'Column',
+  ocrPlaceTitle: 'Where should the OCR text go?',
+  ocrPlaceIntro:
+    'Review the recognised text and choose its destination. A copy keeps the source format. Excel uses one cell per image, in order.',
+  ocrNewSheet: 'New sheet',
+  ocrExistingCells: 'Cells in an existing sheet',
+  ocrSheetName: 'Sheet name',
+  ocrStartCell: 'Starting cell',
+  ocrOverwrite: 'Allow replacing existing cell contents',
+  ocrAfterImages: 'After each image',
+  ocrDocumentEnd: 'End of document',
+  ocrPlaceSave: 'Save here',
+  ocrReadText: 'Recognised text',
+  ocrScopePrompt: 'Read all {count} items, or choose which ones to read?',
+  ocrReadAll: 'Read all',
+  ocrChooseItems: 'Choose items',
   ocrIntro:
     'Choose the pages or files to read. Only the chosen ones are sent to the AI, one image at a time. The text read is saved as a Word document in the output folder, and you translate that document.',
   ocrLoading: 'Listing the pages…',
@@ -203,6 +227,8 @@ export const en = {
     'Reference files ({count}): {names}. None of them has usable text, so only their names are sent.',
   trConfirmSendsNamesOnly:
     "The document's text is sent to this AI, with your translation prompts, the glossary (whole when it is small, otherwise the entries whose terms appear in the text) and the names of the reference files (not their contents).",
+  pictureHintEmbedded:
+    'Pictures in this document: {count}. Text inside images will not be translated automatically. Use OCR to read all or selected images.',
   pictureHintSource:
     'Pictures in this document: {count}. Text inside a picture is not part of the document text, so it will not be translated. Reading it needs OCR, and the app does not read pictures inside this file by itself: export or copy the pages with pictures as an image (PNG or JPEG) or a scanned PDF, add that as a document to translate, and read it with OCR.',
   pictureHintReference:

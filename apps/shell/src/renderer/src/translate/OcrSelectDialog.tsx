@@ -12,6 +12,9 @@ import {
   type OcrBridge,
   type OcrPrepared,
   type OcrProgress,
+  type OcrPageResult,
+  type OcrPlacement,
+  type OcrRecommendation,
   type RunOcrResult,
 } from '../../../shared/translate-ocr'
 import { useI18n } from '../locale'
@@ -19,12 +22,14 @@ import type { SubscriptionConnection } from '../subscription-client'
 import { createOcrAsk } from './ocr-ask'
 import { ocrRoute, type OcrRoute } from './ocr-route'
 import { makeText, translateErrorText } from './shared'
+import { OcrImagePreview } from './OcrImagePreview'
+import { OcrPlacementDialog } from './OcrPlacementDialog'
 
 /**
  * The translation OCR window (spec 6.5): pick the pages of a scanned PDF or
- * the image files to read, then the price and transfer confirmation, then
- * the run. Nothing is selected at first; "Select all" and "Clear selection"
- * are there, and Next stays disabled while nothing is chosen.
+ * the image files to read. First choose all items or open the selection
+ * list, then confirm the count and transfer before running. The selection
+ * list starts empty, and Next stays disabled while nothing is chosen.
  *
  * The confirmation shows how many items go out, to which AI (the project's
  * OCR choice, through the app's own connection and send gate, `ocrRoute`),
@@ -34,13 +39,13 @@ import { makeText, translateErrorText } from './shared'
  * nothing. The first-connection notice is the home screen's dialog
  * (`onNoticeNeeded`), as for the other home panels.
  *
- * The run itself is `runOcr`; its result is a Word document in output/.
+ * The run itself is `runOcr`; embedded sources keep their format and require placement review.
  */
 
 export interface OcrSelectDialogProps {
   /** a registered translation project */
   dir: string
-  /** one PDF source, or one or more image sources in reading order */
+  /** One PDF or DOCX/XLSX source, or standalone images in reading order. */
   sources: SourceEntry[]
   /** the AI settings as last read; null until they are */
   aiSettings: AiSettings | null
@@ -53,7 +58,7 @@ export interface OcrSelectDialogProps {
   /** the run ended with a document */
   onFinished?: (result: RunOcrResult) => void
   /** open the written document (shown as a button when given) */
-  onOpenResult?: (docxPath: string) => void
+  onOpenResult?: (outputPath: string) => void
   onClose: () => void
   /** the bridge; default window.translateApi (tests pass a fake) */
   api?: TranslateApi
@@ -63,9 +68,17 @@ export interface OcrSelectDialogProps {
 
 type Step =
   | { kind: 'loading' }
+  | { kind: 'scope' }
   | { kind: 'pick' }
   | { kind: 'confirm'; count: number }
   | { kind: 'running'; progress: OcrProgress }
+  | {
+      kind: 'place'
+      pages: OcrPageResult[]
+      busy: boolean
+      error?: unknown
+      recommendation?: OcrRecommendation
+    }
   | { kind: 'done'; result: RunOcrResult }
   | { kind: 'error'; text: string }
 
@@ -74,7 +87,8 @@ function ocrBridge(api: TranslateApi): OcrBridge {
     prepare: (dir, files) => api.ocrPrepare({ dir, files }),
     start: (token, pages) => api.ocrStart({ token, pages }),
     pageImage: (token, index) => api.ocrPageImage({ token, index }),
-    write: (token, pages) => api.ocrWrite({ token, pages }),
+    write: (token, pages, placement) =>
+      api.ocrWrite({ token, pages, ...(placement ? { placement } : {}) }),
     release: (token) => api.ocrRelease(token),
   }
 }
@@ -92,8 +106,10 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
   propsRef.current = props
   /** answers the pending confirmation (runOcr's `confirm`) */
   const answerRef = useRef<((go: boolean) => void) | null>(null)
+  const placementRef = useRef<((placement: OcrPlacement | null) => void) | null>(null)
   /** Back was pressed: the cancelled run returns to the picker */
   const backRef = useRef(false)
+  const backStepRef = useRef<'scope' | 'pick'>('pick')
   const askRef = useRef<OcrAsk | null>(null)
   const runRef = useRef<AbortController | null>(null)
   const tokenRef = useRef<string | null>(null)
@@ -123,7 +139,7 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
         }
         tokenRef.current = out.token
         setPrepared(out)
-        setStep({ kind: 'pick' })
+        setStep({ kind: 'scope' })
       },
       (err: unknown) => {
         if (alive) setStep({ kind: 'error', text: translateErrorText(lang, err) })
@@ -132,6 +148,7 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
     return () => {
       alive = false
       answerRef.current?.(false)
+      placementRef.current?.(null)
       runRef.current?.abort()
       if (tokenRef.current) void api.ocrRelease(tokenRef.current).catch(() => undefined)
     }
@@ -156,15 +173,16 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
       return next
     })
 
-  const next = () => {
-    if (!api || !prepared || selected.size === 0) return
+  const next = (pages: number[] = [...selected]) => {
+    if (!api || !prepared || pages.length === 0) return
     backRef.current = false
+    backStepRef.current = step.kind === 'scope' ? 'scope' : 'pick'
     const controller = new AbortController()
     runRef.current = controller
     void runOcr({
       dir: props.dir,
       source: props.sources,
-      selection: { kind: 'pages', pages: [...selected] },
+      selection: { kind: 'pages', pages },
       prepared,
       bridge: ocrBridge(api),
       confirm: (count) =>
@@ -179,6 +197,30 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
       },
       signal: controller.signal,
       onProgress: (progress) => setStep({ kind: 'running', progress }),
+      ...(prepared.kind === 'embedded'
+        ? {
+            choosePlacement: async (pages: OcrPageResult[], error?: unknown) => {
+              const recommendation =
+                typeof api.ocrRecommend === 'function'
+                  ? await api.ocrRecommend({
+                      token: prepared.token,
+                      pages: pages.map((p) => p.index),
+                    })
+                  : undefined
+              if (controller.signal.aborted) return null
+              return new Promise<OcrPlacement | null>((resolve) => {
+                placementRef.current = resolve
+                setStep({
+                  kind: 'place',
+                  pages,
+                  busy: false,
+                  ...(error !== undefined ? { error } : {}),
+                  ...(recommendation ? { recommendation } : {}),
+                })
+              })
+            },
+          }
+        : {}),
     }).then(
       (result) => {
         runRef.current = null
@@ -190,7 +232,7 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
       (err: unknown) => {
         runRef.current = null
         if (err instanceof OcrCancelledError && backRef.current) {
-          setStep({ kind: 'pick' })
+          setStep({ kind: backStepRef.current })
           return
         }
         setStep({ kind: 'error', text: translateErrorText(lang, err) })
@@ -226,11 +268,18 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
 
   const close = () => {
     answer(false)
+    placementRef.current?.(null)
+    placementRef.current = null
     runRef.current?.abort()
     props.onClose()
   }
 
-  const title = step.kind === 'confirm' ? s('ocrConfirmTitle') : s('ocrTitle')
+  const title =
+    step.kind === 'place'
+      ? s('ocrPlaceTitle')
+      : step.kind === 'confirm'
+        ? s('ocrConfirmTitle')
+        : s('ocrTitle')
 
   return (
     <div className="modal-overlay">
@@ -247,9 +296,38 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
             {s('ocrLoading')}
           </p>
         )}
+        {step.kind === 'scope' && (
+          <>
+            <p>{s('ocrScopePrompt', { count: items.length })}</p>
+            <div className="modal-buttons">
+              <button type="button" className="btn btn-secondary" onClick={close}>
+                {s('cancel')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={items.length === 0}
+                onClick={() => next(items.map((item) => item.index))}
+              >
+                {s('ocrReadAll')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={items.length === 0}
+                onClick={() => {
+                  setSelected(new Set())
+                  setStep({ kind: 'pick' })
+                }}
+              >
+                {s('ocrChooseItems')}
+              </button>
+            </div>
+          </>
+        )}
         {step.kind === 'pick' && (
           <>
-            <p>{s('ocrIntro')}</p>
+            <p>{s(prepared?.kind === 'embedded' ? 'ocrPlaceIntro' : 'ocrIntro')}</p>
             <div className="translate-ocr-tools">
               <button
                 type="button"
@@ -277,7 +355,20 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
                       checked={selected.has(item.index)}
                       onChange={() => toggle(item.index)}
                     />
-                    <span>{item.name || s('ocrPageLabel', { page: item.index })}</span>
+                    {api && prepared?.kind === 'embedded' && (
+                      <OcrImagePreview
+                        api={api}
+                        token={prepared.token}
+                        index={item.index}
+                        name={item.name}
+                      />
+                    )}
+                    <span>
+                      {item.name || s('ocrPageLabel', { page: item.index })}
+                      {item.location && (
+                        <small className="translate-ocr-location">{item.location}</small>
+                      )}
+                    </span>
                   </label>
                 </li>
               ))}
@@ -287,6 +378,13 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
             </p>
             {selected.size === 0 && <p className="projects-hint">{s('ocrNothingSelected')}</p>}
             <div className="modal-buttons">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setStep({ kind: 'scope' })}
+              >
+                {s('ocrBack')}
+              </button>
               <button type="button" className="btn btn-secondary" onClick={close}>
                 {s('cancel')}
               </button>
@@ -295,7 +393,7 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
                 className="btn btn-primary"
                 data-action="next"
                 disabled={selected.size === 0}
-                onClick={next}
+                onClick={() => next()}
               >
                 {s('ocrNext')}
               </button>
@@ -331,10 +429,26 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
             </div>
           </>
         )}
+        {step.kind === 'place' && prepared && (
+          <OcrPlacementDialog
+            prepared={prepared}
+            pages={step.pages}
+            busy={step.busy}
+            error={step.error}
+            recommendation={step.recommendation}
+            onCancel={close}
+            onPlace={(placement) => {
+              setStep({ ...step, busy: true })
+              const resolve = placementRef.current
+              placementRef.current = null
+              resolve?.(placement)
+            }}
+          />
+        )}
         {step.kind === 'done' && (
           <>
             <p role="status" data-done>
-              {s('ocrDone', { file: baseName(step.result.docxPath) })}
+              {s('ocrDone', { file: baseName(step.result.outputPath) })}
             </p>
             {step.result.stopped && <p>{s('ocrStoppedEarly')}</p>}
             {step.result.failed.length > 0 && (
@@ -353,7 +467,7 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
                   className="btn btn-primary"
                   data-action="open-result"
                   onClick={() =>
-                    props.onOpenResult?.((step as { result: RunOcrResult }).result.docxPath)
+                    props.onOpenResult?.((step as { result: RunOcrResult }).result.outputPath)
                   }
                 >
                   {s('ocrOpenResult')}

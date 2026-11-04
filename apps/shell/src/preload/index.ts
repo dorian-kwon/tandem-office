@@ -63,8 +63,8 @@ import type { DriveApi, DriveUiState } from '../shared/drive-api'
 import { MCP_SERVERS_CHANNELS, MCP_SERVERS_SETTINGS_KEY } from '../shared/mcp-servers-api'
 import type { McpServersApi, McpServersSettingsView } from '../shared/mcp-servers-api'
 import type { ResultStoreApi } from '../shared/result-store-api'
-import { TRANSLATE_CHANNELS } from '../shared/translate-api'
-import type { TranslateApi } from '../shared/translate-api'
+import { TRANSLATE_CHANNELS, TRANSLATE_EVENTS } from '../shared/translate-api'
+import type { TranslateApi, TranslateOpenOcrEvent } from '../shared/translate-api'
 import type { TabsApi, TabSummary } from '../shared/tabs-api'
 import { TABS_CHANNELS } from '../shared/tabs-api'
 import { SPLIT_TABS_CHANNELS } from '../shared/split-view-api'
@@ -720,6 +720,15 @@ const translateApi: TranslateApi = {
   ocrPrepare: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrPrepare, args),
   ocrStart: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrStart, args),
   ocrPageImage: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrPageImage, args),
+  ocrPreview: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrPreview, args),
+  ocrRecommend: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrRecommend, args),
+  onOpenOcr: (listener) => {
+    const handler = (_event: unknown, payload: TranslateOpenOcrEvent): void => listener(payload)
+    ipcRenderer.on(TRANSLATE_EVENTS.openOcr, handler)
+    return () => {
+      ipcRenderer.removeListener(TRANSLATE_EVENTS.openOcr, handler)
+    }
+  },
   ocrWrite: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrWrite, args),
   ocrRelease: (token) => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrRelease, token),
   instructionsFor: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.instructionsFor, args),

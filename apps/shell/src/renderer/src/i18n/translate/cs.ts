@@ -84,6 +84,30 @@ export const cs = {
     'Toto okno OCR vypršelo nebo se změnilo nastavení OCR projektu. Otevřete ho znovu.',
   errOcrFailed: 'OCR se nepodařilo dokončit.',
   ocrTitle: 'Čtení pomocí AI (OCR)',
+  ocrRecommendation: 'Doporučené umístění',
+  ocrUseRecommendation: 'Použít doporučení',
+  ocrRecommendCells: 'Prázdné buňky vedle obrázků zachovají stávající obsah.',
+  ocrRecommendSheet: 'Nový list zabrání překrytí stávajícího obsahu.',
+  ocrRecommendAfter: 'Vložit text za každý obrázek a zachovat tabulky i obrázky.',
+  ocrTableCell: 'Buňka tabulky',
+  ocrTableNumber: 'Číslo tabulky',
+  ocrRow: 'Počáteční řádek',
+  ocrColumn: 'Sloupec',
+  ocrPlaceTitle: 'Kam vložit rozpoznaný text?',
+  ocrPlaceIntro:
+    'Zkontrolujte text a vyberte umístění. Kopie zachová původní formát. Excel použije pro každý obrázek jednu buňku v daném pořadí.',
+  ocrNewSheet: 'Nový list',
+  ocrExistingCells: 'Buňky v existujícím listu',
+  ocrSheetName: 'Název listu',
+  ocrStartCell: 'Počáteční buňka',
+  ocrOverwrite: 'Povolit přepsání obsahu buněk',
+  ocrAfterImages: 'Za každý obrázek',
+  ocrDocumentEnd: 'Konec dokumentu',
+  ocrPlaceSave: 'Uložit sem',
+  ocrReadText: 'Rozpoznaný text',
+  ocrScopePrompt: 'Přečíst všech {count} položek, nebo vybrat konkrétní položky?',
+  ocrReadAll: 'Přečíst vše',
+  ocrChooseItems: 'Vybrat položky',
   ocrIntro:
     'Vyberte stránky nebo soubory ke čtení. Do AI se posílají jen vybrané, vždy jeden obrázek. Přečtený text se uloží jako dokument Word do výstupní složky a tento dokument pak překládáte.',
   ocrLoading: 'Načítání seznamu stránek…',
@@ -204,6 +228,8 @@ export const cs = {
     'Referenční soubory ({count}): {names}. Žádný nemá použitelný text, proto se posílají jen jejich názvy.',
   trConfirmSendsNamesOnly:
     'Text dokumentu se posílá této AI spolu s vašimi překladovými prompty, glosářem (celým, pokud je malý, jinak položkami, jejichž termíny se v textu vyskytují) a názvy referenčních souborů (bez jejich obsahu).',
+  pictureHintEmbedded:
+    'Obsahuje {count} obrázků. Text v obrázcích se nepřekládá automaticky. Pomocí OCR můžete přečíst všechny nebo vybrané obrázky.',
   pictureHintSource:
     'Obrázky v tomto dokumentu: {count}. Text uvnitř obrázku není součástí textu dokumentu, proto nebude přeložen. K jeho přečtení je potřeba OCR a aplikace sama obrázky v tomto souboru nečte: exportujte nebo zkopírujte stránky s obrázky jako obrázek (PNG nebo JPEG) či naskenované PDF, přidejte jej jako dokument k překladu a přečtěte jej pomocí OCR.',
   pictureHintReference:

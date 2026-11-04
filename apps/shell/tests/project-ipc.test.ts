@@ -1022,3 +1022,22 @@ describe('"the app wrote part of a project" (onProjectChanged)', () => {
     expect(changesTo(DOCS)).toEqual([])
   })
 })
+
+describe('conversational OCR routing', () => {
+  it('binds OCR to the sender document and an owned project scope', async () => {
+    const ocr = vi.fn(async () => ({output:'inspected',summary:'OCR'}))
+    const test = setup({ocr})
+    await test.call('ocr',DOCS,{action:'inspect',turnId:'human',scope:`scope-of-${DOCS}`,docPath:'/untrusted.docx',projectRoot:'/untrusted'})
+    expect(ocr).toHaveBeenCalledWith(DOCS,expect.anything(),{docPath:DOC,projectRoot:ROOT})
+    await expect(test.call('ocr',STRANGER,{action:'inspect',turnId:'human'})).rejects.toThrow(PROJECT_IPC_UNKNOWN_WINDOW)
+    await expect(test.call('ocr',DOCS,{action:'inspect',turnId:'human',scope:'scope-of-another-window'})).rejects.toThrow()
+    expect(ocr).toHaveBeenCalledTimes(1)
+  })
+  it('discards staged OCR when the page is reset or closed', () => {
+    const forgetOcr=vi.fn()
+    const test=setup({forgetOcr})
+    test.controller.reset(DOCS)
+    test.controller.forget(DOCS)
+    expect(forgetOcr).toHaveBeenCalledTimes(2)
+  })
+})

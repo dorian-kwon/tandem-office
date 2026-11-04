@@ -20,6 +20,8 @@ export interface ProjectDetailProps {
   onBack: () => void
   /** called with the source file's name when the person opens a translation */
   onStartTranslation: (sourceFile: string) => void
+  /** Read embedded DOCX/XLSX images without opening the editable translation. */
+  onStartOcr?: (sourceFile: string) => void
   /** what opening the translation view reported (an error, or the changed-source warning) */
   startNotice?: { text: string; isError: boolean } | null
   /** bumped when the source list may have changed elsewhere (a PDF found to be a scan) */
@@ -71,6 +73,7 @@ export function ProjectDetail({
   dir,
   onBack,
   onStartTranslation,
+  onStartOcr,
   startNotice,
   listsVersion = 0,
 }: ProjectDetailProps) {
@@ -299,7 +302,14 @@ export function ProjectDetail({
         data-picture-notice={count}
         data-file={file}
       >
-        {s(kind === 'source' ? 'pictureHintSource' : 'pictureHintReference', { count })}
+        {s(
+          kind === 'source' && /\.(docx|xlsx)$/i.test(file)
+            ? 'pictureHintEmbedded'
+            : kind === 'source'
+              ? 'pictureHintSource'
+              : 'pictureHintReference',
+          { count },
+        )}
       </span>
     )
   }
@@ -420,6 +430,18 @@ export function ProjectDetail({
                               onClick={() => void viewConverted(file)}
                             >
                               {s('viewConverted')}
+                            </button>
+                          )}
+                          {kind === 'source' && onStartOcr && /\.(docx|xlsx)$/i.test(file) && (
+                            <button
+                              type="button"
+                              className="projects-small"
+                              data-action="embedded-ocr"
+                              aria-label={`${s('ocrTitle')}: ${file}`}
+                              disabled={busy}
+                              onClick={() => onStartOcr(file)}
+                            >
+                              {s('ocrTitle')}
                             </button>
                           )}
                           {kind === 'source' && (

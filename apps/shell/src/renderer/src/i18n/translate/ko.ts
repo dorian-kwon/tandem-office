@@ -78,6 +78,30 @@ export const ko = {
   errOcrExpired: 'OCR 창이 만료되었거나 프로젝트의 OCR 설정이 바뀌었습니다. 다시 여세요.',
   errOcrFailed: 'OCR을 마치지 못했습니다.',
   ocrTitle: 'AI로 읽기(OCR)',
+  ocrRecommendation: '추천 위치',
+  ocrUseRecommendation: '추천 위치 사용',
+  ocrRecommendCells: '이미지 옆의 빈 셀에 넣어 기존 내용을 보존합니다.',
+  ocrRecommendSheet: '기존 내용과 겹치지 않도록 새 시트를 추천합니다.',
+  ocrRecommendAfter: '표와 이미지 위치를 유지하며 각 이미지 뒤에 추가합니다.',
+  ocrTableCell: '표의 셀',
+  ocrTableNumber: '표 번호',
+  ocrRow: '시작 행',
+  ocrColumn: '열',
+  ocrPlaceTitle: 'OCR 글자를 어디에 넣을까요?',
+  ocrPlaceIntro:
+    '인식 결과를 확인하고 배치 위치를 고르세요. 원본 형식을 유지한 사본에 저장합니다. 엑셀은 이미지 하나당 셀 하나에 순서대로 넣습니다.',
+  ocrNewSheet: '새 시트',
+  ocrExistingCells: '기존 시트의 셀',
+  ocrSheetName: '시트 이름',
+  ocrStartCell: '시작 셀',
+  ocrOverwrite: '기존 셀 내용 덮어쓰기 허용',
+  ocrAfterImages: '각 이미지 뒤',
+  ocrDocumentEnd: '문서 끝',
+  ocrPlaceSave: '이 위치에 저장',
+  ocrReadText: '인식한 글자',
+  ocrScopePrompt: '전체 {count}개를 OCR 처리할까요, 처리할 항목을 선택할까요?',
+  ocrReadAll: '전체 처리',
+  ocrChooseItems: '선택 처리',
   ocrIntro:
     '읽을 페이지나 파일을 고르세요. 고른 것만 한 장씩 그림으로 AI에 보냅니다. 읽은 글은 output 폴더에 Word 문서로 저장되고, 그 문서를 번역합니다.',
   ocrLoading: '페이지를 세는 중…',
@@ -193,6 +217,8 @@ export const ko = {
     '참고자료 파일 {count}개: {names}. 쓸 수 있는 글이 있는 파일이 없어 이름만 보냅니다.',
   trConfirmSendsNamesOnly:
     '문서의 글이 이 AI로 보내집니다. 번역 프롬프트, 단어집(작으면 전부, 크면 글에 나오는 용어의 항목만), 참고자료의 파일 이름(내용은 아님)이 함께 갑니다.',
+  pictureHintEmbedded:
+    '이미지 {count}개가 있습니다. 이미지 속 글자는 자동 번역되지 않습니다. OCR에서 전체 또는 일부를 골라 읽을 수 있습니다.',
   pictureHintSource:
     '이 문서에 든 그림: {count}개. 그림 안의 글자는 문서의 글이 아니어서 번역되지 않습니다. 읽으려면 OCR이 필요하지만, 앱은 이 파일 안의 그림을 스스로 읽지 않습니다. 그림이 있는 쪽을 그림 파일(PNG·JPEG)이나 스캔 PDF로 내보내거나 복사해 번역할 문서로 더한 뒤 OCR로 읽으세요.',
   pictureHintReference:

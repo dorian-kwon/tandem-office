@@ -77,6 +77,30 @@ export const zh = {
   errOcrExpired: '此 OCR 窗口已过期，或项目的 OCR 设置已更改。请重新打开。',
   errOcrFailed: 'OCR 未能完成。',
   ocrTitle: '用 AI 读取（OCR）',
+  ocrRecommendation: '推荐位置',
+  ocrUseRecommendation: '使用推荐位置',
+  ocrRecommendCells: '使用图片旁的空单元格，保留现有内容。',
+  ocrRecommendSheet: '建议使用新工作表以避免覆盖现有内容。',
+  ocrRecommendAfter: '在每张图片之后添加文字，保留表格和图片的位置。',
+  ocrTableCell: '表格单元格',
+  ocrTableNumber: '表格编号',
+  ocrRow: '起始行',
+  ocrColumn: '列',
+  ocrPlaceTitle: '将识别的文字放在哪里？',
+  ocrPlaceIntro:
+    '检查识别结果并选择位置。副本保留原文件格式。Excel 中每张图片的文字按顺序放入一个单元格。',
+  ocrNewSheet: '新工作表',
+  ocrExistingCells: '现有工作表中的单元格',
+  ocrSheetName: '工作表名称',
+  ocrStartCell: '起始单元格',
+  ocrOverwrite: '允许替换现有单元格内容',
+  ocrAfterImages: '每张图片之后',
+  ocrDocumentEnd: '文档末尾',
+  ocrPlaceSave: '保存到此处',
+  ocrReadText: '识别的文字',
+  ocrScopePrompt: '识别全部 {count} 项，还是选择要识别的项目？',
+  ocrReadAll: '全部识别',
+  ocrChooseItems: '选择项目',
   ocrIntro:
     '请选择要读取的页面或文件。只有选中的内容会逐张图片发送给 AI。读取到的文字会作为 Word 文档保存在输出文件夹中，您翻译的就是这份文档。',
   ocrLoading: '正在列出页面…',
@@ -187,6 +211,8 @@ export const zh = {
   ctxReferencesNamesOnly: '参考资料文件 {count} 个：{names}。其中没有可用的文字，因此只发送名称。',
   trConfirmSendsNamesOnly:
     '文档的文字会连同您的翻译提示词、术语表（较少时发送全部，否则只发送其词条出现在文中的部分）以及参考文件的名称（不含内容）一起发送给这个 AI。',
+  pictureHintEmbedded:
+    '包含 {count} 张图片。图片中的文字不会自动翻译。可通过 OCR 识别全部或选定的图片。',
   pictureHintSource:
     '此文档包含图片：{count} 张。图片中的文字不属于文档文字，因此不会被翻译。读取这些文字需要 OCR，但本应用不会自行读取此文件内的图片：请将含图片的页面导出或复制为图片（PNG 或 JPEG）或扫描 PDF，将其添加为待翻译文档，再用 OCR 读取。',
   pictureHintReference:

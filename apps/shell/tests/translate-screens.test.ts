@@ -548,6 +548,28 @@ describe('ProjectDetail reference status', () => {
 describe('ProjectDetail picture notice', () => {
   const props = () => ({ dir: '/p/a', onBack: vi.fn(), onStartTranslation: vi.fn() })
 
+  it('offers embedded OCR separately from translation for DOCX and XLSX sources', async () => {
+    api.getProject.mockResolvedValue(
+      project({
+        sources: [
+          { file: 'a.docx', kind: 'editable', sha256: 'x' },
+          { file: 'b.xlsx', kind: 'editable', sha256: 'y' },
+        ],
+      }),
+    )
+    api.pictureInfo.mockResolvedValue([
+      { file: 'a.docx', kind: 'source', pictures: 0 },
+      { file: 'b.xlsx', kind: 'source', pictures: 3 },
+    ])
+    const onStartOcr = vi.fn()
+    await render(ProjectDetail, { ...props(), onStartOcr })
+    const buttons = [...host.querySelectorAll('button[data-action="embedded-ocr"]')]
+    expect(buttons).toHaveLength(2)
+    await click(buttons[1]!)
+    expect(onStartOcr).toHaveBeenCalledWith('b.xlsx')
+    expect(api.openTranslation).not.toHaveBeenCalled()
+  })
+
   it('says next to a file that its pictures need OCR and will not be translated', async () => {
     api.getProject.mockResolvedValue(
       project({
@@ -575,8 +597,7 @@ describe('ProjectDetail picture notice', () => {
     expect(a.textContent).toContain('Pictures in this document: 3')
     expect(a.textContent).toContain('will not be translated')
     expect(a.textContent).toContain('OCR')
-    // it promises no automatic reading of the pictures inside the file
-    expect(a.textContent).toContain('does not read pictures inside this file')
+    expect(a.textContent).toContain('Use OCR to read all or selected images')
     expect(notice('reference', 'r.pptx')?.textContent).toContain('Pictures in this file: 2')
     // no pictures, or unknown: no notice
     expect(notice('source', 'plain.docx')).toBeNull()
@@ -784,5 +805,47 @@ describe('changed-source notice in the tab strip', () => {
     await render(TranslationPaneToggle, { split, tabs })
     expect(host.querySelector('.translate-source-notice')).toBeNull()
     dismissSourceChanged('other')
+  })
+})
+
+describe('TranslationPanel (the sheets AI asks for the OCR popup)', () => {
+  const connection = {
+    statuses: { 'claude-code': { state: 'ready' } },
+    busy: false,
+    failed: {},
+    codexImageAvailable: false,
+  } as never
+  const settings = { provider: 'auto', providers: {} } as never
+
+  async function openRequested() {
+    api.getProject.mockResolvedValue(
+      project({ sources: [{ file: 'a.xlsx', sha256: 'x', kind: 'editable' }] }),
+    )
+    Object.assign(api, {
+      ocrPrepare: vi.fn(async () => ({
+        token: 't',
+        kind: 'embedded',
+        ocr: { kind: 'ai', provider: 'claude' },
+        items: [],
+      })),
+      ocrRelease: vi.fn(async () => undefined),
+      ocrPreview: vi.fn(async () => null),
+    })
+    await render(TranslationPanel, {
+      connection,
+      aiSettings: settings,
+      ocrRequest: { dir: '/work/private', file: 'a.xlsx', seq: 1 },
+    })
+  }
+
+  it('shows the popup for the private project and returns to the project list when it closes', async () => {
+    await openRequested()
+    expect(host.querySelector('.translate-ocr')).not.toBeNull()
+    expect(host.textContent).toContain('a.xlsx')
+    await click(buttonByText('Cancel'))
+    expect(host.querySelector('.translate-ocr')).toBeNull()
+    // not the hidden project's detail screen: the list is back
+    expect(host.querySelector('[data-action="embedded-ocr"]')).toBeNull()
+    expect(host.textContent).not.toContain('a.xlsx')
   })
 })

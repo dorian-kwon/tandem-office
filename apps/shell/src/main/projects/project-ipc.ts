@@ -6,6 +6,8 @@ import {
   PROJECT_FOLDER_EVENTS,
   READ_CONTEXT_QUERY_MAX_CHARS,
   READ_CONTEXT_CONVERSATION_ID_MAX_CHARS,
+  type ChatOcrAnswer,
+  type ChatOcrRequest,
   type AddFolderResult,
   type AppendProjectChatArgs,
   type ReadContextConversation,
@@ -146,6 +148,12 @@ export interface ProjectIpcDeps {
    * null. Asked only while the window's own panel has chosen nothing yet.
    */
   presetProjectOf?: (sender: number) => Promise<ProjectId | null> | ProjectId | null
+  ocr?: (
+    sender: number,
+    args: ChatOcrRequest,
+    context: { docPath: string | null; projectRoot: string | null },
+  ) => Promise<ChatOcrAnswer>
+  forgetOcr?: (sender: number) => void
   platform?: NodeJS.Platform
 }
 
@@ -295,6 +303,7 @@ export function registerProjectFolderIpc(deps: ProjectIpcDeps): ProjectIpcContro
   }
 
   const reset = (sender: number): void => {
+    deps.forgetOcr?.(sender)
     unwatch(sender)
     listening.delete(sender)
     untitled.delete(sender)
@@ -436,6 +445,13 @@ export function registerProjectFolderIpc(deps: ProjectIpcDeps): ProjectIpcContro
   const handlers: {
     [K in keyof typeof C]: (sender: number, raw: unknown) => unknown
   } = {
+    ocr: async (sender, raw): Promise<ChatOcrAnswer> => {
+      const win = windowOf(sender)
+      const id = record(raw).scope === undefined ? null : svc().scopes.projectOf(sender, raw)
+      const projectRoot = id ? svc().guide.projectRoot(id) : null
+      if (!deps.ocr) return { output: 'OCR is unavailable', summary: 'OCR', isError: true }
+      return deps.ocr(sender, raw as ChatOcrRequest, { docPath: docPathOf(win), projectRoot })
+    },
     // ---- list ----
     listProjects: () => svc().guide.listProjects(),
 

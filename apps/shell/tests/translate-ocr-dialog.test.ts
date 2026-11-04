@@ -71,7 +71,8 @@ beforeEach(() => {
     ocrPrepare: vi.fn(async () => prepared),
     ocrStart: vi.fn(async () => undefined),
     ocrPageImage: vi.fn(async () => ({ data: new Uint8Array([1]), mime: 'image/png' })),
-    ocrWrite: vi.fn(async () => ({ docxPath: '/p/output/scan (OCR).docx' })),
+    ocrPreview: vi.fn(async () => ({ data: new Uint8Array([1, 2, 3]), mime: 'image/png' })),
+    ocrWrite: vi.fn(async () => ({ outputPath: '/p/output/scan (OCR).docx' })),
     ocrRelease: vi.fn(async () => undefined),
   }
   ask = vi.fn<OcrAsk>(async () => ANSWER)
@@ -85,6 +86,7 @@ afterEach(() => {
 async function render(
   props: Partial<Parameters<typeof OcrSelectDialog>[0]> = {},
   statuses: SubscriptionConnection['statuses'] = { 'claude-code': { state: 'ready' } as never },
+  scopeOnly = false,
 ) {
   await act(async () => {
     root.render(
@@ -105,6 +107,7 @@ async function render(
       ),
     )
   })
+  if (!scopeOnly && host.querySelector('[data-step="scope"]')) await click(button('Choose items'))
 }
 
 function button(text: string): HTMLButtonElement {
@@ -122,6 +125,60 @@ async function click(el: Element) {
 const boxes = () => [...host.querySelectorAll<HTMLInputElement>('input[type=checkbox]')]
 
 describe('OcrSelectDialog', () => {
+  it('shows embedded image names, locations and local previews only in the selection list', async () => {
+    prepared.kind = 'embedded'
+    prepared.items = [{ index: 1, name: 'menu.png', location: 'Menu · B5' }]
+    await render(
+      { sources: [{ file: 'menu.xlsx', kind: 'editable', sha256: 'x' }] },
+      undefined,
+      true,
+    )
+    expect(api.ocrPreview).not.toHaveBeenCalled()
+    await click(button('Choose items'))
+    expect(host.textContent).toContain('Menu · B5')
+    expect(host.querySelector('img[alt="menu.png"]')?.getAttribute('src')).toBe(
+      'data:image/png;base64,AQID',
+    )
+    expect(api.ocrPreview).toHaveBeenCalledWith({ token: 'tok', index: 1 })
+    expect(api.ocrPageImage).not.toHaveBeenCalled()
+    expect(ask).not.toHaveBeenCalled()
+  })
+  it('asks for the OCR scope before showing the selection list or sending images', async () => {
+    await render({}, undefined, true)
+    expect(host.querySelector('[data-step="scope"]')).not.toBeNull()
+    expect(boxes()).toHaveLength(0)
+    expect(button('Read all').disabled).toBe(false)
+    await click(button('Choose items'))
+    expect(boxes()).toHaveLength(3)
+    expect(boxes().every((b) => !b.checked)).toBe(true)
+    expect(api.ocrPageImage).not.toHaveBeenCalled()
+    expect(ask).not.toHaveBeenCalled()
+  })
+
+  it('confirms all items before reading them and allows changing to a subset', async () => {
+    await render({}, undefined, true)
+    await click(button('Read all'))
+    expect(host.textContent).toContain('Pages or files to read: 3')
+    expect(ask).not.toHaveBeenCalled()
+    expect(api.ocrStart).not.toHaveBeenCalled()
+    await click(button('Back'))
+    expect(host.querySelector('[data-step="scope"]')).not.toBeNull()
+    await click(button('Choose items'))
+    await click(boxes()[1]!)
+    await click(button('Next'))
+    await click(button('Start'))
+    expect(api.ocrStart).toHaveBeenCalledWith({ token: 'tok', pages: [2] })
+    expect(ask).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads every listed item only after confirming the whole document', async () => {
+    await render({}, undefined, true)
+    await click(button('Read all'))
+    await click(button('Start'))
+    expect(api.ocrStart).toHaveBeenCalledWith({ token: 'tok', pages: [1, 2, 3] })
+    expect(ask).toHaveBeenCalledTimes(3)
+  })
+
   it('lists the pages with nothing chosen at first', async () => {
     await render()
     expect(api.ocrPrepare).toHaveBeenCalledWith({ dir: '/p', files: ['scan.pdf'] })

@@ -86,6 +86,30 @@ export const pl = {
     'To okno OCR wygasło lub zmieniło się ustawienie OCR projektu. Otwórz je ponownie.',
   errOcrFailed: 'Nie udało się dokończyć OCR.',
   ocrTitle: 'Odczyt przez AI (OCR)',
+  ocrRecommendation: 'Zalecane miejsce',
+  ocrUseRecommendation: 'Użyj zalecenia',
+  ocrRecommendCells: 'Puste komórki obok obrazów pozwalają zachować istniejącą zawartość.',
+  ocrRecommendSheet: 'Nowy arkusz pozwoli uniknąć nadpisania zawartości.',
+  ocrRecommendAfter: 'Dodaj tekst po każdym obrazie, zachowując tabele i obrazy.',
+  ocrTableCell: 'Komórka tabeli',
+  ocrTableNumber: 'Numer tabeli',
+  ocrRow: 'Wiersz początkowy',
+  ocrColumn: 'Kolumna',
+  ocrPlaceTitle: 'Gdzie umieścić rozpoznany tekst?',
+  ocrPlaceIntro:
+    'Sprawdź tekst i wybierz miejsce. Kopia zachowa oryginalny format. Excel użyje kolejno jednej komórki na obraz.',
+  ocrNewSheet: 'Nowy arkusz',
+  ocrExistingCells: 'Komórki w istniejącym arkuszu',
+  ocrSheetName: 'Nazwa arkusza',
+  ocrStartCell: 'Komórka początkowa',
+  ocrOverwrite: 'Zezwól na zastąpienie zawartości komórek',
+  ocrAfterImages: 'Po każdym obrazie',
+  ocrDocumentEnd: 'Koniec dokumentu',
+  ocrPlaceSave: 'Zapisz tutaj',
+  ocrReadText: 'Rozpoznany tekst',
+  ocrScopePrompt: 'Odczytać wszystkie elementy ({count}) czy wybrać konkretne?',
+  ocrReadAll: 'Odczytaj wszystkie',
+  ocrChooseItems: 'Wybierz elementy',
   ocrIntro:
     'Wybierz strony lub pliki do odczytu. Do AI wysyłane są tylko wybrane, po jednym obrazie naraz. Odczytany tekst jest zapisywany jako dokument Word w folderze wyjściowym i to ten dokument tłumaczysz.',
   ocrLoading: 'Wyświetlanie listy stron…',
@@ -207,6 +231,8 @@ export const pl = {
     'Pliki referencyjne ({count}): {names}. Żaden nie ma użytecznego tekstu, więc wysyłane są tylko nazwy.',
   trConfirmSendsNamesOnly:
     'Tekst dokumentu jest wysyłany do tego AI wraz z Twoimi promptami tłumaczenia, glosariuszem (w całości, gdy jest mały, w przeciwnym razie wpisami, których terminy występują w tekście) i nazwami plików referencyjnych (bez ich zawartości).',
+  pictureHintEmbedded:
+    'Zawiera {count} obrazów. Tekst na obrazach nie jest tłumaczony automatycznie. Użyj OCR, aby odczytać wszystkie lub wybrane obrazy.',
   pictureHintSource:
     'Obrazy w tym dokumencie: {count}. Tekst wewnątrz obrazu nie jest częścią tekstu dokumentu, więc nie zostanie przetłumaczony. Aby go odczytać, potrzebny jest OCR, a aplikacja sama nie odczytuje obrazów w tym pliku: wyeksportuj lub skopiuj strony z obrazami jako obraz (PNG lub JPEG) albo zeskanowany PDF, dodaj go jako dokument do tłumaczenia i odczytaj przez OCR.',
   pictureHintReference:

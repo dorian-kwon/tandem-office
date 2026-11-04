@@ -4,7 +4,7 @@ import { readAiPage } from '../../../../packages/pdf-structure/src/ai-read/read-
 import { classifyRunError, isJobStopKind } from '../../../../packages/pdf-structure/src/jobs/errors'
 
 /**
- * OCR of a translation project's scanned PDF or image sources through the
+ * OCR of a translation project's scanned PDF, standalone or embedded images through the
  * signed-in AI ("AI reading", spec 6.5). Environment-free: the renderer runs
  * it with the bridge (`translate:ocr-*`) and the shared `ai:stream` call, the
  * tests with fakes.
@@ -35,20 +35,25 @@ export const OCR_MAX_FAILURES_IN_A_ROW = 3
 
 export type OcrProvider = Extract<OcrMode, { kind: 'ai' }>['provider']
 
-/** one readable item: a PDF page or an image file */
+/** One readable item: a PDF page, standalone image or placed document image. */
 export interface OcrItem {
   /** 1-based position */
   index: number
   /** PDF: '' (the screen says "page N"); images: the plain file name */
   name: string
+  /** document part/paragraph or workbook sheet/cell; absent for standalone images */
+  location?: string
 }
 
 /** what `prepare` answers: the items to choose from, under a token main holds */
 export interface OcrPrepared {
   token: string
-  kind: 'pdf' | 'images'
+  kind: 'pdf' | 'images' | 'embedded'
   ocr: OcrMode
   items: OcrItem[]
+  format?: 'docx' | 'xlsx'
+  sheets?: string[]
+  tables?: OcrTable[]
 }
 
 export interface OcrPageImage {
@@ -63,8 +68,26 @@ export interface OcrPageResult {
 }
 
 export interface OcrWritten {
-  /** the Word document in the project's output/ folder */
-  docxPath: string
+  /** The result in output/, keeping the editable source's format. */
+  outputPath: string
+}
+
+export type OcrPlacement =
+  | { kind: 'xlsx-cells'; sheet: string; cell: string; overwrite: boolean }
+  | { kind: 'xlsx-new-sheet'; sheet: string }
+  | { kind: 'docx-after-images' }
+  | { kind: 'docx-end' }
+  | { kind: 'docx-table-cell'; table: number; row: number; column: number; overwrite: boolean }
+
+export interface OcrTable {
+  index: number
+  rows: number
+  columns: number
+}
+
+export interface OcrRecommendation {
+  placement: OcrPlacement
+  reason: 'empty-cells' | 'new-sheet' | 'after-images'
 }
 
 /** the bridge calls `runOcr` needs (window.translateApi in the app) */
@@ -73,7 +96,7 @@ export interface OcrBridge {
   /** the person confirmed these items; main serves and accepts only them from now on */
   start(token: string, pages: number[]): Promise<void>
   pageImage(token: string, index: number): Promise<OcrPageImage>
-  write(token: string, pages: OcrPageResult[]): Promise<OcrWritten>
+  write(token: string, pages: OcrPageResult[], placement?: OcrPlacement): Promise<OcrWritten>
   release(token: string): Promise<void>
 }
 
@@ -94,7 +117,7 @@ export interface OcrProgress {
 export interface RunOcrArgs {
   /** the registered project folder */
   dir: string
-  /** a PDF (alone) or one or more image sources, in the order they are listed */
+  /** One PDF or DOCX/XLSX, or standalone images in reading order. */
   source: SourceEntry | readonly SourceEntry[]
   selection: OcrSelection
   /** the price and transfer confirmation; true sends, false sends nothing */
@@ -105,6 +128,8 @@ export interface RunOcrArgs {
   prepared?: OcrPrepared
   signal?: AbortSignal
   onProgress?: (progress: OcrProgress) => void
+  /** Required for embedded images: review the readings and explicitly choose their destination. */
+  choosePlacement?: (pages: OcrPageResult[], error?: unknown) => Promise<OcrPlacement | null>
 }
 
 export interface RunOcrResult extends OcrWritten {
@@ -194,7 +219,7 @@ function retryable(err: unknown): boolean {
 
 /**
  * Read the selected items with the project's OCR provider and write them
- * into one Word document in output/. See the module comment for the rules.
+ * into a new output file after destination confirmation. Embedded sources retain their format.
  */
 export async function runOcr(args: RunOcrArgs): Promise<RunOcrResult> {
   const { bridge, signal } = args
@@ -214,6 +239,8 @@ export async function runOcr(args: RunOcrArgs): Promise<RunOcrResult> {
     ))
   try {
     if (prepared.ocr.kind !== 'ai') throw new OcrDisabledError()
+    if (prepared.kind === 'embedded' && !args.choosePlacement)
+      throw new OcrFailedError('an embedded OCR destination must be chosen')
     const provider = prepared.ocr.provider
     const pages = resolveOcrSelection(args.selection, prepared.items.length)
     if (aborted(signal)) throw new OcrCancelledError()
@@ -315,12 +342,25 @@ async function readAndWrite(
       stopCause,
     )
   }
-  const written = await bridge.write(
-    token,
-    read.map((index) => ({ index, payload: results.get(index) })),
-  )
+  const pagesToWrite = read.map((index) => ({ index, payload: results.get(index) }))
+  let written: OcrWritten
+  if (args.prepared?.kind === 'embedded' || args.choosePlacement) {
+    if (!args.choosePlacement) throw new OcrFailedError('an OCR destination must be chosen')
+    let error: unknown
+    for (;;) {
+      const placement = await args.choosePlacement(pagesToWrite, error)
+      if (!placement || aborted(signal)) throw new OcrCancelledError()
+      try {
+        written = await bridge.write(token, pagesToWrite, placement)
+        break
+      } catch (err) {
+        if (!(err instanceof Error) || !err.message.includes('[INVALID_ARGUMENT]')) throw err
+        error = err
+      }
+    }
+  } else written = await bridge.write(token, pagesToWrite)
   return {
-    docxPath: written.docxPath,
+    outputPath: written.outputPath,
     read,
     failed: failed.sort((a, b) => a - b),
     ...(stopped ? { stopped } : {}),

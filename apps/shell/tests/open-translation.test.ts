@@ -11,7 +11,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createProject, importSource, type SourceEntry } from '@genoffice/translate-project'
-import { openTranslation, type TranslationViewDeps } from '../src/main/translate/open-translation'
+import {
+  openTranslation,
+  openTranslationResult,
+  type TranslationViewDeps,
+} from '../src/main/translate/open-translation'
 import { parseTranslateError } from '../src/shared/translate-api'
 
 let root: string
@@ -58,6 +62,19 @@ async function codeOf(promise: Promise<unknown>): Promise<string> {
   }
   return 'resolved'
 }
+
+it.each(['docx', 'xlsx'])(
+  'opens a generated OCR document in the original %s format',
+  async (ext) => {
+    const entry = await addSource(`a.${ext}`, 'source')
+    writeFileSync(join(dir, 'output', `a (OCR).${ext}`), 'ocr result')
+    const result = await openTranslationResult(dir, entry, `a (OCR).${ext}`, deps)
+    expect(result.sourceTabId).not.toBeNull()
+    expect(opened).toEqual([join(dir, 'source', `a.${ext}`), join(dir, 'output', `a (OCR).${ext}`)])
+    expect(deps.setTabReadOnly).toHaveBeenCalled()
+    expect(deps.showSplit).toHaveBeenCalled()
+  },
+)
 
 describe('openTranslation', () => {
   it('opens the source copy read-only on the left and the output copy on the right', async () => {

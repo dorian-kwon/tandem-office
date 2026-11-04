@@ -1,5 +1,5 @@
-import { readFile, stat } from 'node:fs/promises'
-import { basename, extname, join, resolve } from 'node:path'
+import { lstat, readFile, realpath, stat } from 'node:fs/promises'
+import { basename, extname, join, resolve, sep } from 'node:path'
 import {
   IMAGE_SOURCE_EXTENSIONS,
   loadProject,
@@ -20,9 +20,19 @@ import {
   type OcrPageResult,
   type OcrPrepared,
   type OcrWritten,
+  type OcrPlacement,
 } from '../../shared/translate-ocr'
 import { TranslateIpcError } from '../../shared/translate-api'
 import { writeNewFile } from './output-file'
+import {
+  listEmbeddedImages,
+  readEmbeddedImage,
+  supportsEmbeddedOcr,
+  type EmbeddedImage,
+} from './embedded-images'
+import { imageSize } from '../../../../../packages/cli/src/formats/image-size'
+import { ocrSheetNames, ocrWordTables, placeOcrText } from './ocr-placement'
+import { recommendOcrPlacement } from './ocr-recommendation'
 
 /**
  * The main-process half of the translation OCR (spec 6.5). The renderer runs
@@ -30,8 +40,9 @@ import { writeNewFile } from './output-file'
  * `ai:stream` channel like every other AI request of the app, under the same
  * provider choice and send gate. This module only
  *
- * - lists what can be read (a scanned PDF's pages, or image files) under a
+ * - lists what can be read (PDF pages, standalone or embedded images) under a
  *   token, for a registered project whose OCR is on;
+ * - serves bounded local thumbnails for the embedded-image selection list;
  * - after the person confirmed, fixes the selection and serves those page
  *   images and nothing else;
  * - writes the readings, checked again by the engine's payload reader, into a
@@ -57,6 +68,8 @@ export interface OcrServiceDeps {
   renderPdfPage(path: string, page: number): Promise<Uint8Array>
   /** Markdown → .docx bytes (the bundled CLI's converter in the app) */
   markdownToDocx(markdown: string): Promise<Uint8Array>
+  /** Local preview only; the original image is never returned by the preview endpoint. */
+  thumbnail?(image: Uint8Array): Uint8Array | null
 }
 
 interface Lease {
@@ -64,7 +77,9 @@ interface Lease {
   /** folded project folder, for the one-run-per-project rule */
   key: string
   dir: string
-  kind: 'pdf' | 'images'
+  kind: OcrPrepared['kind']
+  embedded?: EmbeddedImage[]
+  source?: SourceEntry
   /** source/ paths: the PDF, or the images in item order */
   paths: string[]
   count: number
@@ -104,6 +119,27 @@ function imageMime(bytes: Uint8Array): OcrPageImage['mime'] | null {
 }
 
 const invalid = (text: string) => new TranslateIpcError('INVALID_ARGUMENT', text)
+
+async function embeddedPath(dir: string, entry: SourceEntry): Promise<string> {
+  const path = join(dir, 'source', entry.file)
+  const [root, file, folder, actual] = await Promise.all([
+    realpath(dir),
+    lstat(path),
+    lstat(join(dir, 'source')),
+    realpath(path),
+  ])
+  if (
+    !file.isFile() ||
+    file.isSymbolicLink() ||
+    folder.isSymbolicLink() ||
+    !actual.startsWith(join(root, 'source') + sep)
+  )
+    throw new TranslateIpcError(
+      'UNSUPPORTED_SOURCE',
+      'the OCR source must be a regular project file',
+    )
+  return path
+}
 
 export function createOcrService(deps: OcrServiceDeps, now: () => number, newToken: () => string) {
   const leases = new Map<string, Lease>()
@@ -154,18 +190,23 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
         throw new TranslateIpcError('OCR_DISABLED', 'OCR is switched off for this project')
       const entries = entriesOf(project.sources, files)
       const isPdf = (e: SourceEntry) => e.kind === 'pdf' || e.kind === 'scan'
-      if (entries.some((e) => e.kind === 'editable'))
+      const editable = entries.some((e) => e.kind === 'editable')
+      if (entries.some((e) => e.kind === 'editable' && !supportsEmbeddedOcr(e.file)))
         throw new TranslateIpcError(
           'SOURCE_NOT_EDITABLE',
           'an editable document is translated in its editor, not read by OCR',
         )
-      if (entries.some(isPdf) && entries.length > 1)
+      if ((entries.some(isPdf) || editable) && entries.length > 1)
         throw invalid('a PDF is read on its own, not together with other files')
       for (const e of entries) {
+        if (e.kind === 'editable') await embeddedPath(dir, e)
         if (e.kind === 'image' && !IMAGE_EXTENSIONS.includes(extname(e.file).toLowerCase()))
           throw new TranslateIpcError('UNSUPPORTED_SOURCE', 'only PNG and JPEG images can be read')
-        if ((await verifySource(dir, e)) === 'missing')
+        const status = await verifySource(dir, e)
+        if (status === 'missing')
           throw new TranslateIpcError('SOURCE_MISSING', 'the copy in the source folder is missing')
+        if (editable && status !== 'ok')
+          throw new TranslateIpcError('SOURCE_CHANGED', 'the OCR source changed; import it again')
       }
       const key = fold(dir)
       if (runningFor(key))
@@ -174,8 +215,14 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
       for (const [token, l] of leases) if (l.key === key) leases.delete(token)
 
       const paths = entries.map((e) => join(dir, 'source', e.file))
-      const kind = isPdf(entries[0]!) ? 'pdf' : 'images'
-      const count = kind === 'pdf' ? await deps.pdfPageCount(paths[0]!) : entries.length
+      const kind = editable ? 'embedded' : isPdf(entries[0]!) ? 'pdf' : 'images'
+      const embedded = editable
+        ? await listEmbeddedImages(paths[0]!).catch(() => {
+            throw new TranslateIpcError('OCR_FAILED', 'the document images could not be listed')
+          })
+        : undefined
+      const count =
+        kind === 'pdf' ? await deps.pdfPageCount(paths[0]!) : (embedded?.length ?? entries.length)
       if (!Number.isInteger(count) || count < 1)
         throw new TranslateIpcError('OCR_FAILED', 'the document has no pages to read')
       if (count > OCR_MAX_ITEMS)
@@ -188,6 +235,8 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
         dir,
         kind,
         paths,
+        embedded,
+        source: editable ? entries[0] : undefined,
         count,
         stem: first.slice(0, first.length - extname(first).length) || first,
         ocr,
@@ -199,8 +248,22 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
         token,
         kind,
         ocr: project.ocr,
-        items:
-          kind === 'pdf'
+        ...(editable
+          ? {
+              format:
+                extname(first).toLowerCase() === '.xlsx' ? ('xlsx' as const) : ('docx' as const),
+              ...(extname(first).toLowerCase() === '.xlsx'
+                ? { sheets: await ocrSheetNames(await readFile(paths[0]!)) }
+                : { tables: await ocrWordTables(await readFile(paths[0]!)) }),
+            }
+          : {}),
+        items: embedded
+          ? embedded.map((image, i) => ({
+              index: i + 1,
+              name: image.name,
+              location: image.location,
+            }))
+          : kind === 'pdf'
             ? Array.from({ length: count }, (_, i) => ({ index: i + 1, name: '' }))
             : entries.map((e, i) => ({ index: i + 1, name: e.file })),
       }
@@ -232,13 +295,50 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
       }
       if (runningFor(l.key, l.token))
         throw new TranslateIpcError('OCR_BUSY', 'OCR is already running for this project')
+      if (l.source) {
+        await embeddedPath(l.dir, l.source)
+        if ((await verifySource(l.dir, l.source)) !== 'ok') {
+          leases.delete(l.token)
+          throw new TranslateIpcError('SOURCE_CHANGED', 'the OCR source changed; open it again')
+        }
+      }
       l.selection = new Set(chosen)
+    },
+
+    /** Local thumbnails may be viewed before confirmation; original bytes remain gated. */
+    async preview(token: unknown, index: unknown): Promise<OcrPageImage | null> {
+      const l = lease(token)
+      if (
+        l.kind !== 'embedded' ||
+        !Number.isInteger(index) ||
+        (index as number) < 1 ||
+        (index as number) > l.count
+      )
+        throw invalid('this item has no embedded preview')
+      if (!deps.thumbnail) return null
+      await embeddedPath(l.dir, l.source!)
+      const image = await readEmbeddedImage(l.paths[0]!, l.embedded![(index as number) - 1]!)
+      // Inspect headers before the native decoder allocates a pixel buffer.
+      const size = imageSize(image.data)
+      if (!size || size.width * size.height > 16_000_000) return null
+      const data = deps.thumbnail(image.data)
+      if (!data || data.length > 64 * 1024) return null
+      return { data, mime: 'image/png' }
     },
 
     async pageImage(token: unknown, index: unknown): Promise<OcrPageImage> {
       const l = lease(token)
       if (l.selection === null || typeof index !== 'number' || !l.selection.has(index))
         throw invalid('only a confirmed page can be read')
+      if (l.kind === 'embedded') {
+        await embeddedPath(l.dir, l.source!)
+        return readEmbeddedImage(l.paths[0]!, l.embedded![index - 1]!).catch(() => {
+          throw new TranslateIpcError(
+            'SOURCE_CHANGED',
+            'the OCR image changed or could not be read',
+          )
+        })
+      }
       if (l.kind === 'pdf') {
         const data = await deps.renderPdfPage(l.paths[0]!, index)
         return { data, mime: 'image/png' }
@@ -256,7 +356,23 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
       return { data, mime }
     },
 
-    async write(token: unknown, pages: unknown): Promise<OcrWritten> {
+    async recommend(token: unknown, pages: unknown) {
+      const l = lease(token)
+      if (l.kind !== 'embedded' || !l.selection) throw invalid('confirm the OCR selection first')
+      const chosen = resolveOcrSelection({ kind: 'pages', pages }, l.count)
+      if (chosen.some((index) => !l.selection!.has(index)))
+        throw invalid('recommend only selected images')
+      const path = await embeddedPath(l.dir, l.source!)
+      if ((await verifySource(l.dir, l.source!)) !== 'ok')
+        throw new TranslateIpcError('SOURCE_CHANGED', 'the OCR source changed')
+      return recommendOcrPlacement(
+        await readFile(path),
+        extname(l.source!.file).toLowerCase() === '.xlsx' ? 'xlsx' : 'docx',
+        chosen.map((index) => l.embedded![index - 1]!),
+      )
+    },
+
+    async write(token: unknown, pages: unknown, placement?: OcrPlacement): Promise<OcrWritten> {
       const l = lease(token)
       if (l.selection === null) throw invalid('this OCR run has not started')
       if (!Array.isArray(pages) || pages.length === 0 || pages.length > l.selection.size)
@@ -294,10 +410,39 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
         footnoteLinkFailedPages: readings.filter((r) => r.footnoteLinkFailed).map((r) => r.page),
         warnings: [],
       }
+      if (l.kind === 'embedded') {
+        if (!placement) throw invalid('choose where the OCR text goes')
+        const path = await embeddedPath(l.dir, l.source!)
+        if ((await verifySource(l.dir, l.source!)) !== 'ok')
+          throw new TranslateIpcError(
+            'SOURCE_CHANGED',
+            'the source changed before placing OCR text',
+          )
+        const format = extname(l.source!.file).toLowerCase() === '.xlsx' ? 'xlsx' : 'docx'
+        const items = readings.map((r) => ({
+          index: r.page,
+          location: l.embedded![r.page - 1]!.location,
+          text: treeToMarkdown({
+            ...tree,
+            pages: tree.pages.filter((p) => p.page === r.page),
+            blocks: r.blocks,
+            footnotes: r.footnotes,
+          }).markdown,
+        }))
+        const bytes = await placeOcrText(await readFile(path), format, items, placement)
+        const outputPath = await writeNewFile(
+          join(l.dir, 'output'),
+          `${l.stem} (OCR)`,
+          `.${format}`,
+          bytes,
+        )
+        leases.delete(l.token)
+        return { outputPath }
+      }
       const docx = await deps.markdownToDocx(treeToMarkdown(tree).markdown)
-      const docxPath = await writeNewFile(join(l.dir, 'output'), `${l.stem} (OCR)`, '.docx', docx)
+      const outputPath = await writeNewFile(join(l.dir, 'output'), `${l.stem} (OCR)`, '.docx', docx)
       leases.delete(l.token)
-      return { docxPath }
+      return { outputPath }
     },
 
     async release(token: unknown): Promise<void> {

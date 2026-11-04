@@ -85,6 +85,30 @@ export const id = {
   errOcrExpired: 'Jendela OCR ini telah kedaluwarsa atau pengaturan OCR proyek berubah. Buka lagi.',
   errOcrFailed: 'OCR tidak dapat diselesaikan.',
   ocrTitle: 'Baca dengan AI (OCR)',
+  ocrRecommendation: 'Tujuan yang disarankan',
+  ocrUseRecommendation: 'Gunakan saran',
+  ocrRecommendCells: 'Gunakan sel kosong di samping gambar untuk mempertahankan isi yang ada.',
+  ocrRecommendSheet: 'Lembar baru menghindari penimpaan isi yang ada.',
+  ocrRecommendAfter: 'Tambahkan teks setelah setiap gambar dengan mempertahankan tabel dan gambar.',
+  ocrTableCell: 'Sel tabel',
+  ocrTableNumber: 'Nomor tabel',
+  ocrRow: 'Baris awal',
+  ocrColumn: 'Kolom',
+  ocrPlaceTitle: 'Di mana teks OCR ditempatkan?',
+  ocrPlaceIntro:
+    'Periksa teks dan pilih tujuannya. Salinan mempertahankan format asli. Excel memakai satu sel per gambar secara berurutan.',
+  ocrNewSheet: 'Lembar baru',
+  ocrExistingCells: 'Sel di lembar yang ada',
+  ocrSheetName: 'Nama lembar',
+  ocrStartCell: 'Sel awal',
+  ocrOverwrite: 'Izinkan mengganti isi sel yang ada',
+  ocrAfterImages: 'Setelah setiap gambar',
+  ocrDocumentEnd: 'Akhir dokumen',
+  ocrPlaceSave: 'Simpan di sini',
+  ocrReadText: 'Teks yang dikenali',
+  ocrScopePrompt: 'Baca semua {count} item atau pilih item yang ingin dibaca?',
+  ocrReadAll: 'Baca semua',
+  ocrChooseItems: 'Pilih item',
   ocrIntro:
     'Pilih halaman atau file yang akan dibaca. Hanya yang dipilih yang dikirim ke AI, satu gambar setiap kali. Teks yang terbaca disimpan sebagai dokumen Word di folder keluaran, dan dokumen itulah yang Anda terjemahkan.',
   ocrLoading: 'Mendaftar halaman…',
@@ -207,6 +231,8 @@ export const id = {
     'File acuan ({count}): {names}. Tidak ada yang memiliki teks yang dapat dipakai, jadi hanya namanya yang dikirim.',
   trConfirmSendsNamesOnly:
     'Teks dokumen dikirim ke AI ini bersama prompt terjemahan Anda, glosarium (utuh jika kecil, jika tidak hanya entri yang istilahnya muncul dalam teks), dan nama file acuan (bukan isinya).',
+  pictureHintEmbedded:
+    'Berisi {count} gambar. Teks dalam gambar tidak diterjemahkan otomatis. Gunakan OCR untuk membaca semua atau gambar yang dipilih.',
   pictureHintSource:
     'Gambar dalam dokumen ini: {count}. Teks di dalam gambar bukan bagian dari teks dokumen, jadi tidak akan diterjemahkan. Untuk membacanya diperlukan OCR, dan aplikasi tidak membaca sendiri gambar di dalam file ini: ekspor atau salin halaman yang bergambar sebagai gambar (PNG atau JPEG) atau PDF pindaian, tambahkan sebagai dokumen yang akan diterjemahkan, lalu baca dengan OCR.',
   pictureHintReference:

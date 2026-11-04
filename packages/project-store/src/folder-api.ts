@@ -809,11 +809,42 @@ export interface OpenProjectScreenArgs extends ProjectIdArgs {
   section?: ProjectScreenSection
 }
 
+/** Conversational embedded-image OCR; main resolves and authorizes the document. */
+export interface ChatOcrRequest {
+  action: 'inspect' | 'list' | 'read' | 'review' | 'propose' | 'apply' | 'cancel'
+  /** Minted by the panel once per human message, never supplied by the model. */
+  turnId: string
+  requestId?: string
+  scope?: string
+  file?: string
+  session?: string
+  pages?: number[]
+  all?: boolean
+  offset?: number
+  limit?: number
+  placement?: Record<string, unknown>
+  /** Revised transcription or translation requested by the person; propose only. */
+  texts?: { index: number; text: string }[]
+}
+
+export interface ChatOcrAnswer {
+  output: string
+  summary: string
+  isError?: boolean
+  mutated?: boolean
+  display?: {
+    kind: 'images' | 'links'
+    items?: { url: string; title?: string; thumb?: string }[]
+  }
+}
+
 /**
  * What the preload exposes to renderers. The calling window is identified by main
  * from the IPC sender; nothing here carries the window's own document path.
  */
 export interface ProjectFolderApi {
+  /** App-owned OCR stages; all user choices and agreement happen in the AI chat. */
+  ocr?(args: ChatOcrRequest): Promise<ChatOcrAnswer>
   // ---- list ----
   /** Pinned and recent projects */
   listProjects(): Promise<ProjectListItem[]>
@@ -926,6 +957,7 @@ export const PROJECT_FOLDER_EVENTS = {
 
 /** Request channels (`ipcRenderer.invoke`), one per bridge method */
 export const PROJECT_FOLDER_CHANNELS = {
+  ocr: 'projectFolder:ocr',
   listProjects: 'projectFolder:listProjects',
   addFolder: 'projectFolder:addFolder',
   getDefaultParentFolder: 'projectFolder:getDefaultParentFolder',

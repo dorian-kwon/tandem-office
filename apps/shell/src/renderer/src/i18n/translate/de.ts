@@ -91,6 +91,30 @@ export const de = {
     'Dieses OCR-Fenster ist abgelaufen oder die OCR-Einstellung des Projekts hat sich geändert. Öffnen Sie es erneut.',
   errOcrFailed: 'Die OCR konnte nicht abgeschlossen werden.',
   ocrTitle: 'Mit KI lesen (OCR)',
+  ocrRecommendation: 'Empfohlenes Ziel',
+  ocrUseRecommendation: 'Empfehlung verwenden',
+  ocrRecommendCells: 'Leere Zellen neben den Bildern erhalten die vorhandenen Inhalte.',
+  ocrRecommendSheet: 'Ein neues Blatt vermeidet das Überschreiben vorhandener Inhalte.',
+  ocrRecommendAfter: 'Text nach jedem Bild einfügen und Tabellen sowie Bilder beibehalten.',
+  ocrTableCell: 'Tabellenzelle',
+  ocrTableNumber: 'Tabellennummer',
+  ocrRow: 'Startzeile',
+  ocrColumn: 'Spalte',
+  ocrPlaceTitle: 'Wohin soll der erkannte Text?',
+  ocrPlaceIntro:
+    'Prüfen Sie den Text und wählen Sie das Ziel. Die Kopie behält das Originalformat. Excel verwendet der Reihe nach eine Zelle pro Bild.',
+  ocrNewSheet: 'Neues Blatt',
+  ocrExistingCells: 'Zellen in einem vorhandenen Blatt',
+  ocrSheetName: 'Blattname',
+  ocrStartCell: 'Startzelle',
+  ocrOverwrite: 'Vorhandene Zellinhalte ersetzen erlauben',
+  ocrAfterImages: 'Nach jedem Bild',
+  ocrDocumentEnd: 'Dokumentende',
+  ocrPlaceSave: 'Hier speichern',
+  ocrReadText: 'Erkannter Text',
+  ocrScopePrompt: 'Alle {count} Elemente lesen oder einzelne auswählen?',
+  ocrReadAll: 'Alle lesen',
+  ocrChooseItems: 'Elemente auswählen',
   ocrIntro:
     'Wählen Sie die Seiten oder Dateien, die gelesen werden sollen. Nur die gewählten werden an die KI gesendet, jeweils ein Bild nach dem anderen. Der gelesene Text wird als Word-Dokument im Ausgabeordner gespeichert, und Sie übersetzen dieses Dokument.',
   ocrLoading: 'Seiten werden aufgelistet …',
@@ -216,6 +240,8 @@ export const de = {
     'Referenzdateien ({count}): {names}. Keine hat verwendbaren Text, daher werden nur ihre Namen gesendet.',
   trConfirmSendsNamesOnly:
     'Der Text des Dokuments wird an diese KI gesendet, zusammen mit Ihren Übersetzungs-Prompts, dem Glossar (vollständig, wenn es klein ist, sonst die Einträge, deren Begriffe im Text vorkommen) und den Namen der Referenzdateien (nicht deren Inhalt).',
+  pictureHintEmbedded:
+    'Enthält {count} Bilder. Text in Bildern wird nicht automatisch übersetzt. Mit OCR können Sie alle oder ausgewählte Bilder lesen.',
   pictureHintSource:
     'Bilder in diesem Dokument: {count}. Text in einem Bild gehört nicht zum Text des Dokuments und wird daher nicht übersetzt. Zum Lesen ist OCR nötig, und die App liest Bilder in dieser Datei nicht von selbst: Exportieren oder kopieren Sie die Seiten mit Bildern als Bild (PNG oder JPEG) oder als gescanntes PDF, fügen Sie es als zu übersetzendes Dokument hinzu und lesen Sie es per OCR.',
   pictureHintReference:

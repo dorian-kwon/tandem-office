@@ -71,6 +71,8 @@ export type {
   ProjectEditor,
   ProjectFileEntry,
   ProjectFolderApi,
+  ChatOcrRequest,
+  ChatOcrAnswer,
   ProjectFolderChannel,
   ProjectFolderEventChannel,
   ProjectFolderEventMethod,

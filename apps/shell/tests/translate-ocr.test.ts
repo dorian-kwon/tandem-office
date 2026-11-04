@@ -36,7 +36,7 @@ function setup(ocr: OcrMode = { kind: 'ai', provider: 'claude' }, count = 5) {
       rendered.push(index)
       return { data: new Uint8Array([index]), mime: 'image/png' as const }
     }),
-    write: vi.fn(async () => ({ docxPath: '/p/output/scan (OCR).docx' })),
+    write: vi.fn(async () => ({ outputPath: '/p/output/scan (OCR).docx' })),
     release: vi.fn(async () => undefined),
   } satisfies OcrBridge
   const ask = vi.fn<OcrAsk>(async () => ANSWER)
@@ -150,7 +150,7 @@ describe('runOcr', () => {
       bridge,
       ask,
     })
-    expect(out.docxPath).toBe('/p/output/scan (OCR).docx')
+    expect(out.outputPath).toBe('/p/output/scan (OCR).docx')
   })
 
   it('several images are prepared together and selected by their list position', async () => {
@@ -268,5 +268,40 @@ describe('resolveOcrSelection', () => {
     expect(() => resolveOcrSelection({ kind: 'pages', pages: [] }, 3)).toThrow(
       EmptyOcrSelectionError,
     )
+  })
+})
+
+it('waits for OCR review and an explicit placement before writing an embedded result', async () => {
+  const { prepared, bridge, ask } = setup(undefined, 1)
+  prepared.kind = 'embedded'
+  prepared.format = 'xlsx'
+  bridge.write.mockResolvedValue({ outputPath: '/p/output/source (OCR).xlsx' })
+  let resolvePlacement!: (placement: any) => void
+  const choosePlacement = vi.fn(
+    () =>
+      new Promise<any>((resolve) => {
+        resolvePlacement = resolve
+      }),
+  )
+  const pending = runOcr({
+    dir: '/p',
+    source: { file: 'source.xlsx', kind: 'editable', sha256: 'x' },
+    prepared,
+    selection: { kind: 'all' },
+    confirm: async () => true,
+    bridge,
+    ask,
+    choosePlacement,
+  })
+  await vi.waitFor(() => expect(choosePlacement).toHaveBeenCalledTimes(1))
+  expect(bridge.write).not.toHaveBeenCalled()
+  resolvePlacement({ kind: 'xlsx-cells', sheet: 'Sheet1', cell: 'C7', overwrite: false })
+  const result = await pending
+  expect(result.outputPath).toMatch(/\.xlsx$/)
+  expect(bridge.write).toHaveBeenCalledWith('tok', expect.any(Array), {
+    kind: 'xlsx-cells',
+    sheet: 'Sheet1',
+    cell: 'C7',
+    overwrite: false,
   })
 })

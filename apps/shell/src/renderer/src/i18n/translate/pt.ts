@@ -87,6 +87,30 @@ export const pt = {
     'Esta janela de OCR expirou ou a configuração de OCR do projeto mudou. Abra-a novamente.',
   errOcrFailed: 'Não foi possível concluir o OCR.',
   ocrTitle: 'Ler com IA (OCR)',
+  ocrRecommendation: 'Destino recomendado',
+  ocrUseRecommendation: 'Usar recomendação',
+  ocrRecommendCells: 'Use células vazias junto às imagens para preservar o conteúdo.',
+  ocrRecommendSheet: 'Uma nova folha evita sobrepor o conteúdo existente.',
+  ocrRecommendAfter: 'Adicione texto após cada imagem, mantendo tabelas e imagens.',
+  ocrTableCell: 'Célula de tabela',
+  ocrTableNumber: 'Número da tabela',
+  ocrRow: 'Linha inicial',
+  ocrColumn: 'Coluna',
+  ocrPlaceTitle: 'Onde colocar o texto reconhecido?',
+  ocrPlaceIntro:
+    'Revise o texto e escolha o destino. A cópia mantém o formato original. O Excel usa uma célula por imagem, na ordem.',
+  ocrNewSheet: 'Nova folha',
+  ocrExistingCells: 'Células de uma folha existente',
+  ocrSheetName: 'Nome da folha',
+  ocrStartCell: 'Célula inicial',
+  ocrOverwrite: 'Permitir substituir o conteúdo das células',
+  ocrAfterImages: 'Após cada imagem',
+  ocrDocumentEnd: 'Fim do documento',
+  ocrPlaceSave: 'Guardar aqui',
+  ocrReadText: 'Texto reconhecido',
+  ocrScopePrompt: 'Ler todos os {count} itens ou escolher quais ler?',
+  ocrReadAll: 'Ler todos',
+  ocrChooseItems: 'Escolher itens',
   ocrIntro:
     'Escolha as páginas ou arquivos a ler. Somente os escolhidos são enviados à IA, uma imagem por vez. O texto lido é salvo como documento do Word na pasta de saída, e é esse documento que você traduz.',
   ocrLoading: 'Listando as páginas…',
@@ -209,6 +233,8 @@ export const pt = {
     'Arquivos de referência ({count}): {names}. Nenhum tem texto utilizável, então só os nomes são enviados.',
   trConfirmSendsNamesOnly:
     'O texto do documento é enviado a esta IA, com seus prompts de tradução, o glossário (inteiro se for pequeno; caso contrário, as entradas cujos termos aparecem no texto) e os nomes dos arquivos de referência (não o conteúdo deles).',
+  pictureHintEmbedded:
+    'Contém {count} imagens. O texto nas imagens não é traduzido automaticamente. Use OCR para ler todas as imagens ou apenas as selecionadas.',
   pictureHintSource:
     'Imagens neste documento: {count}. O texto dentro de uma imagem não faz parte do texto do documento, por isso não será traduzido. Para lê-lo é preciso OCR, e o aplicativo não lê sozinho as imagens dentro deste arquivo: exporte ou copie as páginas com imagens como imagem (PNG ou JPEG) ou PDF digitalizado, adicione-o como documento a traduzir e leia-o com OCR.',
   pictureHintReference:

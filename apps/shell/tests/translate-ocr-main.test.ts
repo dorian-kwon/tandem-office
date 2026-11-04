@@ -1,9 +1,18 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { saveProject, loadProject } from '@genoffice/translate-project'
 import { EventEmitter } from 'node:events'
+import JSZip from 'jszip'
 import {
   createTranslateHandlers,
   registerTranslateIpc,
@@ -146,7 +155,7 @@ describe('translate:ocr-* handlers', () => {
     await project([
       { file: 'scan.pdf', kind: 'scan', bytes: new Uint8Array([1]) },
       { file: 'a.png', kind: 'image', bytes: PNG },
-      { file: 'doc.docx', kind: 'editable', bytes: new Uint8Array([1]) },
+      { file: 'doc.odt', kind: 'editable', bytes: new Uint8Array([1]) },
     ])
     const h = handlers()
     expect(await codeOf(h.ocrPrepare({ dir: join(root, 'other'), files: ['scan.pdf'] }))).toBe(
@@ -156,7 +165,7 @@ describe('translate:ocr-* handlers', () => {
     expect(await codeOf(h.ocrPrepare({ dir, files: ['scan.pdf', 'a.png'] }))).toBe(
       'INVALID_ARGUMENT',
     )
-    expect(await codeOf(h.ocrPrepare({ dir, files: ['doc.docx'] }))).toBe('SOURCE_NOT_EDITABLE')
+    expect(await codeOf(h.ocrPrepare({ dir, files: ['doc.odt'] }))).toBe('SOURCE_NOT_EDITABLE')
     expect(await codeOf(h.ocrPrepare({ dir, files: [] }))).toBe('INVALID_ARGUMENT')
   })
 
@@ -209,8 +218,8 @@ describe('translate:ocr-* handlers', () => {
         { index: 1, payload: PAYLOAD('first') },
       ],
     })
-    expect(out.docxPath).toBe(join(dir, 'output', 'scan (OCR).docx'))
-    const written = readFileSync(out.docxPath, 'utf8')
+    expect(out.outputPath).toBe(join(dir, 'output', 'scan (OCR).docx'))
+    const written = readFileSync(out.outputPath, 'utf8')
     expect(written.indexOf('first')).toBeGreaterThan(-1)
     expect(written.indexOf('first')).toBeLessThan(written.indexOf('third'))
     // the lease is used up
@@ -224,7 +233,7 @@ describe('translate:ocr-* handlers', () => {
     const { token } = await h.ocrPrepare({ dir, files: ['scan.pdf'] })
     await h.ocrStart({ token, pages: [1] })
     const out = await h.ocrWrite({ token, pages: [{ index: 1, payload: PAYLOAD('x') }] })
-    expect(out.docxPath).toBe(join(dir, 'output', 'scan (OCR) (2).docx'))
+    expect(out.outputPath).toBe(join(dir, 'output', 'scan (OCR) (2).docx'))
     expect(readFileSync(join(dir, 'output', 'scan (OCR).docx'), 'utf8')).toBe('mine')
     expect(readdirSync(join(dir, 'output')).sort()).toEqual([
       'scan (OCR) (2).docx',
@@ -389,4 +398,90 @@ describe('translate:ocr-* handlers', () => {
       )
     })
   })
+})
+
+async function embeddedDoc(width = 10, height = 10) {
+  const zip = new JSZip()
+  zip.file('word/document.xml', '<w:p><a:blip r:embed="a"/></w:p><w:p><a:blip r:embed="b"/></w:p>')
+  zip.file(
+    'word/_rels/document.xml.rels',
+    '<Relationships><Relationship Id="a" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/a.png"/><Relationship Id="b" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/b.png"/></Relationships>',
+  )
+  const image = Buffer.concat([PNG, Buffer.alloc(3000, 1)])
+  image.write('IHDR', 12)
+  image.writeUInt32BE(width, 16)
+  image.writeUInt32BE(height, 20)
+  for (const name of ['a', 'b']) zip.file(`word/media/${name}.png`, image)
+  return zip.generateAsync({ type: 'nodebuffer' })
+}
+
+it('lists embedded images, previews locally and serves only confirmed selections', async () => {
+  await project([{ file: 'pictures.docx', kind: 'editable', bytes: await embeddedDoc() }])
+  const thumbnail = vi.fn(() => PNG)
+  const h = handlers({ ocr: { ...ocrDeps, thumbnail } })
+  const listing = await h.ocrPrepare({ dir, files: ['pictures.docx'] })
+  expect(listing.kind).toBe('embedded')
+  expect(listing.items.map((i) => i.name)).toEqual(['a.png', 'b.png'])
+  expect(listing.items[1]!.location).toContain('¶2')
+  expect(await codeOf(h.ocrPageImage({ token: listing.token, index: 1 }))).toBe('INVALID_ARGUMENT')
+  const preview = await h.ocrPreview({ token: listing.token, index: 2 })
+  expect(preview).toEqual({ data: PNG, mime: 'image/png' })
+  expect(thumbnail).toHaveBeenCalledTimes(1)
+  await h.ocrStart({ token: listing.token, pages: [2] })
+  expect(await codeOf(h.ocrPageImage({ token: listing.token, index: 1 }))).toBe('INVALID_ARGUMENT')
+  expect((await h.ocrPageImage({ token: listing.token, index: 2 })).data.length).toBeGreaterThan(
+    3000,
+  )
+  const result = await h.ocrWrite({
+    token: listing.token,
+    pages: [{ index: 2, payload: PAYLOAD('Menu text') }],
+    placement: { kind: 'docx-after-images' },
+  })
+  expect(result.outputPath).toContain('output')
+  expect(ocrDeps.markdownToDocx).not.toHaveBeenCalled()
+  const written = await JSZip.loadAsync(readFileSync(result.outputPath))
+  expect(await written.file('word/document.xml')!.async('string')).toContain('Menu text')
+})
+
+it('refuses changed embedded sources before serving images', async () => {
+  await project([{ file: 'pictures.docx', kind: 'editable', bytes: await embeddedDoc() }])
+  const h = handlers()
+  const listing = await h.ocrPrepare({ dir, files: ['pictures.docx'] })
+  writeFileSync(join(dir, 'source', 'pictures.docx'), 'changed')
+  expect(await codeOf(h.ocrStart({ token: listing.token, pages: [1] }))).toBe('SOURCE_CHANGED')
+  expect(await codeOf(h.ocrPrepare({ dir, files: ['pictures.docx'] }))).toBe('SOURCE_CHANGED')
+})
+
+it('refuses symlinked embedded sources even when their bytes match the original', async () => {
+  const bytes = await embeddedDoc()
+  await project([{ file: 'pictures.docx', kind: 'editable', bytes }])
+  const outside = join(root, 'outside.docx')
+  writeFileSync(outside, bytes)
+  const path = join(dir, 'source', 'pictures.docx')
+  rmSync(path)
+  symlinkSync(outside, path)
+  expect(await codeOf(handlers().ocrPrepare({ dir, files: ['pictures.docx'] }))).toBe(
+    'UNSUPPORTED_SOURCE',
+  )
+})
+
+it('refuses an image if the document changes after the selection was confirmed', async () => {
+  const bytes = await embeddedDoc()
+  await project([{ file: 'pictures.docx', kind: 'editable', bytes }])
+  const h = handlers()
+  const listing = await h.ocrPrepare({ dir, files: ['pictures.docx'] })
+  await h.ocrStart({ token: listing.token, pages: [1] })
+  const changed = Buffer.from(bytes)
+  changed[0] = 0
+  writeFileSync(join(dir, 'source', 'pictures.docx'), changed)
+  expect(await codeOf(h.ocrPageImage({ token: listing.token, index: 1 }))).toBe('SOURCE_CHANGED')
+})
+
+it('does not decode a thumbnail with excessive pixel dimensions', async () => {
+  await project([{ file: 'pictures.docx', kind: 'editable', bytes: await embeddedDoc(5000, 5000) }])
+  const thumbnail = vi.fn(() => PNG)
+  const h = handlers({ ocr: { ...ocrDeps, thumbnail } })
+  const listing = await h.ocrPrepare({ dir, files: ['pictures.docx'] })
+  expect(await h.ocrPreview({ token: listing.token, index: 1 })).toBeNull()
+  expect(thumbnail).not.toHaveBeenCalled()
 })

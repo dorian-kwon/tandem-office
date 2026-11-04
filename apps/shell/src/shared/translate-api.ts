@@ -1,5 +1,12 @@
 import type { OcrMode, ProjectFile, ReferenceStatus } from '@genoffice/translate-project'
-import type { OcrPageImage, OcrPageResult, OcrPrepared, OcrWritten } from './translate-ocr'
+import type {
+  OcrPageImage,
+  OcrPageResult,
+  OcrPrepared,
+  OcrWritten,
+  OcrPlacement,
+  OcrRecommendation,
+} from './translate-ocr'
 import type {
   TranslatePdfPrepared,
   TranslatePdfStoreAnswer,
@@ -30,6 +37,8 @@ export const TRANSLATE_CHANNELS = {
   ocrPrepare: 'translate:ocr-prepare',
   ocrStart: 'translate:ocr-start',
   ocrPageImage: 'translate:ocr-page-image',
+  ocrPreview: 'translate:ocr-preview',
+  ocrRecommend: 'translate:ocr-recommend',
   ocrWrite: 'translate:ocr-write',
   ocrRelease: 'translate:ocr-release',
   instructionsFor: 'translate:instructions-for',
@@ -297,7 +306,7 @@ export interface TranslateSetPaneHiddenArgs {
 
 export interface TranslateOcrPrepareArgs {
   dir: string
-  /** plain file names of the project's sources: one PDF, or one or more images in reading order */
+  /** Source file names: one PDF or DOCX/XLSX, or standalone images in reading order. */
   files: string[]
 }
 
@@ -312,9 +321,21 @@ export interface TranslateOcrPageImageArgs {
   index: number
 }
 
+/** Main asks the home screen to open the OCR selection popup for a project's source. */
+export interface TranslateOpenOcrEvent {
+  dir: string
+  file: string
+}
+
+/** Events main pushes to the shell renderer. */
+export const TRANSLATE_EVENTS = {
+  openOcr: 'translate:event:open-ocr',
+} as const
+
 export interface TranslateOcrWriteArgs {
   token: string
   pages: OcrPageResult[]
+  placement?: OcrPlacement
 }
 
 export interface TranslateApi {
@@ -348,6 +369,11 @@ export interface TranslateApi {
   ocrStart(args: TranslateOcrStartArgs): Promise<void>
   /** one selected page or image, for the AI call the renderer makes */
   ocrPageImage(args: TranslateOcrPageImageArgs): Promise<OcrPageImage>
+  /** A small local thumbnail of an embedded image, never the AI input. */
+  ocrPreview(args: TranslateOcrPageImageArgs): Promise<OcrPageImage | null>
+  ocrRecommend(args: TranslateOcrStartArgs): Promise<OcrRecommendation>
+  /** Subscribe to "open the OCR popup" requests; returns the unsubscribe function. */
+  onOpenOcr(listener: (event: TranslateOpenOcrEvent) => void): () => void
   /** write the readings into a new Word document in output/ (never overwriting) */
   ocrWrite(args: TranslateOcrWriteArgs): Promise<OcrWritten>
   /** drop the token (closing the dialog, stopping) */

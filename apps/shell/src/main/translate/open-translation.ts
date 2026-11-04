@@ -9,6 +9,7 @@ import {
 } from '@genoffice/translate-project'
 import { appForPath } from '../app-routing'
 import { pdfTranslationTargetOf } from '../../shared/translate-pdf'
+import { supportsEmbeddedOcr } from './embedded-images'
 import {
   TranslateIpcError,
   type TranslateOpenResultAnswer,
@@ -71,6 +72,10 @@ function isResultOf(source: SourceEntry, output: string, targetLang: string): bo
   }
   if (source.kind === 'scan' || source.kind === 'image')
     return new RegExp(`^${stem} \\(OCR\\)( \\(\\d+\\))?\\.docx$`).test(output)
+  if (source.kind === 'editable' && supportsEmbeddedOcr(source.file))
+    return new RegExp(`^${stem} \\(OCR\\)( \\(\\d+\\))?${escape(extname(source.file))}$`, 'i').test(
+      output,
+    )
   return false
 }
 

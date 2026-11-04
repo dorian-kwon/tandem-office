@@ -1,3 +1,4 @@
+import { isAdHocDir } from './adhoc-dirs'
 import { randomUUID } from 'node:crypto'
 import { rm, stat } from 'node:fs/promises'
 import { basename, isAbsolute, resolve } from 'node:path'
@@ -196,6 +197,8 @@ export function createTranslateHandlers(deps: TranslateIpcDeps) {
     ocrPrepare: guard(raw.ocrPrepare),
     ocrStart: guard(raw.ocrStart),
     ocrPageImage: guard(raw.ocrPageImage),
+    ocrPreview: guard(raw.ocrPreview),
+    ocrRecommend: guard(raw.ocrRecommend),
     ocrWrite: guard(raw.ocrWrite),
     ocrRelease: guard(raw.ocrRelease),
     ocrForgetOwner: guard(raw.ocrForgetOwner),
@@ -262,6 +265,8 @@ function createRawHandlers(deps: TranslateIpcDeps) {
 
   /** The stored spelling of `dir`, or a rejection when it is not a registered project. */
   function registeredDir(dir: unknown): string {
+    // a private OCR project the app made for one document (the sheets AI's picture OCR)
+    if (isAdHocDir(dir)) return dir as string
     if (typeof dir === 'string' && isAbsolute(dir)) {
       const entry = readTranslationProjects(deps.settingsPath()).find(
         (e) => fold(e.dir) === fold(dir),
@@ -716,8 +721,16 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       return ocr().pageImage(args?.token, args?.index)
     },
 
+    async ocrPreview(args: TranslateOcrPageImageArgs) {
+      return ocr().preview(args?.token, args?.index)
+    },
+
     async ocrWrite(args: TranslateOcrWriteArgs) {
-      return ocr().write(args?.token, args?.pages)
+      return ocr().write(args?.token, args?.pages, args?.placement)
+    },
+
+    async ocrRecommend(args: TranslateOcrStartArgs) {
+      return ocr().recommend(args?.token, args?.pages)
     },
 
     async ocrRelease(token: string): Promise<void> {
@@ -820,7 +833,9 @@ export function registerTranslateIpc(
   handle(TRANSLATE_CHANNELS.ocrPageImage, (_e, args: TranslateOcrPageImageArgs) =>
     h.ocrPageImage(args),
   )
+  handle(TRANSLATE_CHANNELS.ocrPreview, (_e, args: TranslateOcrPageImageArgs) => h.ocrPreview(args))
   handle(TRANSLATE_CHANNELS.ocrWrite, (_e, args: TranslateOcrWriteArgs) => h.ocrWrite(args))
+  handle(TRANSLATE_CHANNELS.ocrRecommend, (_e, args: TranslateOcrStartArgs) => h.ocrRecommend(args))
   handle(TRANSLATE_CHANNELS.ocrRelease, (_e, token: string) => h.ocrRelease(token))
   handle(TRANSLATE_CHANNELS.instructionsFor, (_e, args: TranslateInstructionsForArgs) =>
     h.instructionsFor(args),

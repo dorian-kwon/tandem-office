@@ -81,6 +81,30 @@ export const vi = {
   errOcrExpired: 'Cửa sổ OCR này đã hết hạn hoặc cài đặt OCR của dự án đã thay đổi. Hãy mở lại.',
   errOcrFailed: 'Không thể hoàn tất OCR.',
   ocrTitle: 'Đọc bằng AI (OCR)',
+  ocrRecommendation: 'Vị trí đề xuất',
+  ocrUseRecommendation: 'Dùng đề xuất',
+  ocrRecommendCells: 'Dùng các ô trống cạnh ảnh để giữ nội dung hiện có.',
+  ocrRecommendSheet: 'Trang tính mới tránh ghi đè nội dung hiện có.',
+  ocrRecommendAfter: 'Thêm văn bản sau mỗi ảnh và giữ nguyên bảng cùng hình ảnh.',
+  ocrTableCell: 'Ô trong bảng',
+  ocrTableNumber: 'Số bảng',
+  ocrRow: 'Hàng bắt đầu',
+  ocrColumn: 'Cột',
+  ocrPlaceTitle: 'Đặt văn bản nhận dạng ở đâu?',
+  ocrPlaceIntro:
+    'Kiểm tra văn bản và chọn vị trí. Bản sao giữ định dạng gốc. Excel dùng một ô cho mỗi ảnh theo thứ tự.',
+  ocrNewSheet: 'Trang tính mới',
+  ocrExistingCells: 'Các ô trong trang tính hiện có',
+  ocrSheetName: 'Tên trang tính',
+  ocrStartCell: 'Ô bắt đầu',
+  ocrOverwrite: 'Cho phép ghi đè nội dung ô hiện có',
+  ocrAfterImages: 'Sau mỗi ảnh',
+  ocrDocumentEnd: 'Cuối tài liệu',
+  ocrPlaceSave: 'Lưu tại đây',
+  ocrReadText: 'Văn bản đã nhận dạng',
+  ocrScopePrompt: 'Đọc tất cả {count} mục hay chọn các mục cần đọc?',
+  ocrReadAll: 'Đọc tất cả',
+  ocrChooseItems: 'Chọn mục',
   ocrIntro:
     'Chọn các trang hoặc tệp cần đọc. Chỉ những mục được chọn mới được gửi cho AI, mỗi lần một hình ảnh. Văn bản đọc được sẽ được lưu thành tài liệu Word trong thư mục kết quả, và bạn dịch tài liệu đó.',
   ocrLoading: 'Đang liệt kê các trang…',
@@ -200,6 +224,8 @@ export const vi = {
     'Tệp tham khảo ({count}): {names}. Không tệp nào có văn bản dùng được nên chỉ gửi tên.',
   trConfirmSendsNamesOnly:
     'Văn bản của tài liệu được gửi cho AI này cùng với các prompt dịch của bạn, bảng thuật ngữ (toàn bộ nếu nhỏ, nếu không thì các mục có thuật ngữ xuất hiện trong văn bản) và tên các tệp tham khảo (không gửi nội dung).',
+  pictureHintEmbedded:
+    'Có {count} hình ảnh. Văn bản trong ảnh không được dịch tự động. Dùng OCR để đọc tất cả hoặc các ảnh đã chọn.',
   pictureHintSource:
     'Hình ảnh trong tài liệu này: {count}. Chữ bên trong hình ảnh không thuộc văn bản của tài liệu nên sẽ không được dịch. Muốn đọc chữ đó cần OCR, và ứng dụng không tự đọc hình ảnh bên trong tệp này: hãy xuất hoặc sao chép các trang có hình ảnh thành ảnh (PNG hoặc JPEG) hoặc PDF quét, thêm nó làm tài liệu cần dịch rồi đọc bằng OCR.',
   pictureHintReference:

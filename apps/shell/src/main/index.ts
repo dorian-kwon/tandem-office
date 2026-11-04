@@ -137,7 +137,13 @@ import { createDefaultAppService, execFileRunner } from './default-app'
 import { registerIntegrationsIpc } from './integrations-ipc'
 import { registerResultStoreIpc } from './result-store-ipc'
 import { registerTranslateIpc } from './translate/translate-ipc'
-import { TranslateIpcError } from '../shared/translate-api'
+import { createOcrService, type OcrServiceDeps } from './translate/ocr'
+import { createOcrChatService, type OcrChatService } from './translate/ocr-chat'
+import { createChatOcrModel } from './translate/ocr-chat-model'
+import { chatOcrSourceResolver, pruneOcrWorkDir } from './translate/ocr-chat-source'
+import type { OcrMode } from '@genoffice/translate-project'
+import { createOcrPicturesHost } from './translate/ocr-pictures'
+import { TranslateIpcError, TRANSLATE_EVENTS } from '../shared/translate-api'
 import type {
   PageCountJobValue,
   PageImageJobValue,
@@ -759,6 +765,10 @@ configureSheetsRuntime({
   createDocument: createAiDocument,
   newDocumentDir: (id) => newDocumentFolderFor(id),
   writeNewDocument: (id, fileName, bytes) => writeProjectNewDocument(id, fileName, bytes),
+  ocrPictures: {
+    list: (path) => sheetsPicturesHost.list(path),
+    open: (path) => sheetsPicturesHost.open(path),
+  },
 })
 configureSlidesRuntime({
   preloadPath: join(SLIDES_OUT, 'preload', 'index.js'),
@@ -5854,6 +5864,8 @@ function trackProjectContents(contents: WebContents): void {
   })
 }
 
+let chatOcrService: OcrChatService | null = null
+
 function registerProjectFolderChannels(): void {
   projectFolderIpc = registerProjectFolderIpc({
     services: projectFolderServices,
@@ -5863,6 +5875,11 @@ function registerProjectFolderChannels(): void {
         return handler(event.sender.id, args)
       }),
     windowOf: projectWindowOf,
+    ocr: (sender, args, context) =>
+      chatOcrService
+        ? chatOcrService.execute(sender, args, context)
+        : Promise.resolve({ output: 'OCR is unavailable', summary: 'OCR', isError: true }),
+    forgetOcr: (sender) => chatOcrService?.forget(sender),
     send: (target, channel, payload) => {
       const contents = webContents.fromId(target)
       if (!contents || contents.isDestroyed()) return false
@@ -8972,6 +8989,71 @@ function translationProjects(): TranslationProjectLink {
   })
 }
 
+const translationOcrRuntime: OcrServiceDeps = {
+  pdfPageCount: async (path) =>
+    (await translateJob<PageCountJobValue>({ op: 'pageCount', source: { pdfPath: path } }))
+      .pageCount,
+  renderPdfPage: async (path, page) =>
+    (
+      await translateJob<PageImageJobValue>({
+        op: 'pageImage',
+        source: { pdfPath: path },
+        page,
+      })
+    ).png,
+  markdownToDocx: (markdown) => markdownDocxBytes(markdown),
+  thumbnail: (bytes) => {
+    const image = nativeImage.createFromBuffer(Buffer.from(bytes))
+    if (image.isEmpty()) return null
+    const size = image.getSize()
+    const scale = Math.min(160 / size.width, 100 / size.height, 1)
+    return image
+      .resize({
+        width: Math.max(1, Math.round(size.width * scale)),
+        height: Math.max(1, Math.round(size.height * scale)),
+      })
+      .toPNG()
+  },
+}
+
+const chatOcrModel = createChatOcrModel({
+  settings: readStoredAiSettings,
+  statuses: sharedSubscriptionStatuses,
+})
+const chatOcrMode = (): OcrMode => {
+  const selected = readStoredAiSettings().provider
+  const statuses = sharedSubscriptionStatuses()
+  const provider =
+    selected === 'codex' || selected === 'chatgpt'
+      ? 'chatgpt'
+      : selected === 'claude-code' || statuses['claude-code']?.state === 'ready'
+        ? 'claude'
+        : 'chatgpt'
+  return { kind: 'ai', provider }
+}
+const chatOcrWorkDir = (): string => join(app.getPath('userData'), 'ocr-chat')
+/** The sheets AI's picture OCR: list a workbook's pictures, open the OCR popup on the home tab. */
+const sheetsPicturesHost = createOcrPicturesHost({
+  workDir: chatOcrWorkDir,
+  ocrMode: chatOcrMode,
+  showOcr: (event) => {
+    revealShellWindow()
+    tabManager?.openHomeTab()
+    const contents = shellWindow?.webContents
+    if (!contents || contents.isDestroyed()) return false
+    contents.send(TRANSLATE_EVENTS.openOcr, event)
+    return true
+  },
+})
+chatOcrService = createOcrChatService({
+  ocr: createOcrService(translationOcrRuntime, Date.now, randomUUID),
+  resolve: chatOcrSourceResolver(chatOcrWorkDir, chatOcrMode),
+  route: chatOcrModel.route,
+  ask: chatOcrModel.ask,
+  now: Date.now,
+  newToken: randomUUID,
+})
+
 registerTranslateIpc(
   ipcMain,
   {
@@ -8988,20 +9070,7 @@ registerTranslateIpc(
     },
     // OCR of scanned PDFs and images: pages are rendered in a structure-job process owned
     // by the main window, the readings become .docx through the bundled CLI's converter
-    ocr: {
-      pdfPageCount: async (path) =>
-        (await translateJob<PageCountJobValue>({ op: 'pageCount', source: { pdfPath: path } }))
-          .pageCount,
-      renderPdfPage: async (path, page) =>
-        (
-          await translateJob<PageImageJobValue>({
-            op: 'pageImage',
-            source: { pdfPath: path },
-            page,
-          })
-        ).png,
-      markdownToDocx: (markdown) => markdownDocxBytes(markdown),
-    },
+    ocr: translationOcrRuntime,
     // PDF sources: scan detection, and the text PDF's translation with the PDF editor's
     // engine (tree and translated PDF in structure-job processes, the same result store)
     nonEditable: {
@@ -9216,6 +9285,8 @@ app.whenReady().then(async () => {
   }
   // first scan waits for the windows to come up; later ones follow folder changes
   setTimeout(() => ensureFileIndexer()?.refresh(), 4000)
+  // private OCR copies of documents are kept for a week at most
+  void pruneOcrWorkDir(chatOcrWorkDir(), Date.now())
   installRendererProtocol({
     docs: join(DOCS_OUT, 'renderer'),
     sheets: join(SHEETS_OUT, 'renderer'),

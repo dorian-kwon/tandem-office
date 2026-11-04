@@ -87,6 +87,30 @@ export const nl = {
     'Dit OCR-venster is verlopen of de OCR-instelling van het project is gewijzigd. Open het opnieuw.',
   errOcrFailed: 'De OCR kon niet worden voltooid.',
   ocrTitle: 'Lezen met AI (OCR)',
+  ocrRecommendation: 'Aanbevolen bestemming',
+  ocrUseRecommendation: 'Aanbeveling gebruiken',
+  ocrRecommendCells: 'Gebruik lege cellen naast de afbeeldingen om bestaande inhoud te behouden.',
+  ocrRecommendSheet: 'Een nieuw werkblad voorkomt overlap met bestaande inhoud.',
+  ocrRecommendAfter: 'Voeg tekst na elke afbeelding toe en behoud tabellen en afbeeldingen.',
+  ocrTableCell: 'Tabelcel',
+  ocrTableNumber: 'Tabelnummer',
+  ocrRow: 'Beginrij',
+  ocrColumn: 'Kolom',
+  ocrPlaceTitle: 'Waar moet de herkende tekst komen?',
+  ocrPlaceIntro:
+    'Controleer de tekst en kies de bestemming. De kopie behoudt de oorspronkelijke indeling. Excel gebruikt op volgorde één cel per afbeelding.',
+  ocrNewSheet: 'Nieuw werkblad',
+  ocrExistingCells: 'Cellen in een bestaand werkblad',
+  ocrSheetName: 'Werkbladnaam',
+  ocrStartCell: 'Begincel',
+  ocrOverwrite: 'Bestaande celinhoud vervangen toestaan',
+  ocrAfterImages: 'Na elke afbeelding',
+  ocrDocumentEnd: 'Einde van document',
+  ocrPlaceSave: 'Hier opslaan',
+  ocrReadText: 'Herkende tekst',
+  ocrScopePrompt: 'Alle {count} items lezen of kiezen welke je wilt lezen?',
+  ocrReadAll: 'Alles lezen',
+  ocrChooseItems: 'Items kiezen',
   ocrIntro:
     'Kies de pagina’s of bestanden die gelezen moeten worden. Alleen de gekozen worden naar de AI gestuurd, steeds één afbeelding. De gelezen tekst wordt als Word-document in de uitvoermap opgeslagen, en dat document vertaal je.',
   ocrLoading: 'Pagina’s worden opgesomd…',
@@ -210,6 +234,8 @@ export const nl = {
     'Referentiebestanden ({count}): {names}. Geen ervan heeft bruikbare tekst, dus alleen de namen worden verstuurd.',
   trConfirmSendsNamesOnly:
     'De tekst van het document wordt naar deze AI gestuurd, samen met je vertaalprompts, de woordenlijst (helemaal als die klein is, anders de items waarvan de termen in de tekst voorkomen) en de namen van de referentiebestanden (niet hun inhoud).',
+  pictureHintEmbedded:
+    'Bevat {count} afbeeldingen. Tekst in afbeeldingen wordt niet automatisch vertaald. Gebruik OCR om alle of geselecteerde afbeeldingen te lezen.',
   pictureHintSource:
     'Afbeeldingen in dit document: {count}. Tekst in een afbeelding hoort niet bij de tekst van het document en wordt dus niet vertaald. Om die te lezen is OCR nodig, en de app leest afbeeldingen in dit bestand niet uit zichzelf: exporteer of kopieer de pagina’s met afbeeldingen als afbeelding (PNG of JPEG) of als gescande pdf, voeg die toe als te vertalen document en lees die met OCR.',
   pictureHintReference:
