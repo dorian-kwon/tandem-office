@@ -15,8 +15,18 @@ export const CHOICE_REMEMBER_KEYS: readonly string[] = ['outputMode', 'bilingual
  * still reached the AI as the next message).
  */
 export function projectChoiceRemember(
-  getRun: () => ProjectRun | null | undefined,
+  readRun: () => ProjectRun | null | undefined,
 ): ChoiceRememberHost {
+  // The panels declare their project hook after the choice hook, so a read during that first
+  // render touches a binding that is not initialised yet (a ReferenceError that blanks the
+  // whole screen). Treat it as "no project run yet"; the next render reads it normally.
+  const getRun = (): ProjectRun | null | undefined => {
+    try {
+      return readRun()
+    } catch {
+      return null
+    }
+  }
   return {
     can: (key) => {
       const run = getRun()

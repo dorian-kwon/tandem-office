@@ -82,3 +82,13 @@ describe('projectChoiceRemember', () => {
     ).not.toThrow()
   })
 })
+
+describe('projectChoiceRemember before the project hook ran', () => {
+  it('does not throw when the reader touches an uninitialised binding', () => {
+    const host = projectChoiceRemember(() => {
+      throw new ReferenceError("Cannot access 'project' before initialization")
+    })
+    expect(host.can('outputMode')).toBe(false)
+    expect(() => host.store('outputMode', { text: 'x' } as never)).not.toThrow()
+  })
+})
