@@ -86,6 +86,7 @@ import {
   type TranslateReferenceText,
   type TranslateReferenceTextArgs,
   type TranslateRemoveArgs,
+  type TranslateRenameArgs,
   type TranslateRelocateArgs,
   type TranslateRemoveMaterialArgs,
   type TranslateSetPaneHiddenArgs,
@@ -165,13 +166,28 @@ const FILTERS: Record<TranslateMaterialKind, { name: string; extensions: string[
   glossary: [{ name: 'Glossary', extensions: ['csv', 'txt', 'xlsx'] }],
 }
 
-const SETTINGS_KEYS = ['projectPrompt', 'ocr', 'sourceLang', 'targetLang']
+const SETTINGS_KEYS = ['projectPrompt', 'ocr', 'writingStyle', 'sourceLang', 'targetLang']
+
+/** Longest custom writing-style instruction the renderer may save */
+export const WRITING_STYLE_CUSTOM_MAX = 500
 
 const KINDS: readonly TranslateMaterialKind[] = ['source', 'reference', 'glossary']
 
 function fold(path: string): string {
   const full = resolve(path)
   return process.platform === 'win32' ? full.toLowerCase() : full
+}
+
+/** Longest display name a project may get */
+export const PROJECT_NAME_MAX = 80
+
+/** A trimmed, non-empty display name without control characters, at most PROJECT_NAME_MAX. */
+function validDisplayName(value: unknown): string {
+  const name = typeof value === 'string' ? value.trim() : ''
+  // eslint-disable-next-line no-control-regex
+  if (name === '' || name.length > PROJECT_NAME_MAX || /[\u0000-\u001f\u007f]/.test(name))
+    throw new TranslateIpcError('INVALID_ARGUMENT', 'the project name is not valid')
+  return name
 }
 
 function requireString(value: unknown, what: string): string {
@@ -197,6 +213,7 @@ export function createTranslateHandlers(deps: TranslateIpcDeps) {
     setSystemPrompt: guard(raw.setSystemPrompt),
     getProject: guard(raw.getProject),
     updateSettings: guard(raw.updateSettings),
+    rename: guard(raw.rename),
     addMaterial: guard(raw.addMaterial),
     removeMaterial: guard(raw.removeMaterial),
     pickMaterials: guard(raw.pickMaterials),
@@ -527,6 +544,15 @@ function createRawHandlers(deps: TranslateIpcDeps) {
         if (typeof v !== 'string' || (key !== 'projectPrompt' && v === ''))
           throw new TranslateIpcError('INVALID_ARGUMENT', `${key} is not valid`)
       }
+      const style = fields.writingStyle
+      if (
+        style !== undefined &&
+        typeof style === 'object' &&
+        style !== null &&
+        typeof (style as { custom?: unknown }).custom === 'string' &&
+        (style as { custom: string }).custom.length > WRITING_STYLE_CUSTOM_MAX
+      )
+        throw new TranslateIpcError('INVALID_ARGUMENT', 'writingStyle.custom is too long')
       // read-modify-write under the project lock so a concurrent material change survives
       return withProjectLock(dir, async () => {
         const current = await loadProject(dir)
@@ -541,6 +567,17 @@ function createRawHandlers(deps: TranslateIpcDeps) {
         }
         await saveProject(dir, checked)
         return checked
+      })
+    },
+
+    async rename(args: TranslateRenameArgs): Promise<ProjectFile> {
+      const dir = registeredDir(args?.dir)
+      const name = validDisplayName(args.name)
+      return withProjectLock(dir, async () => {
+        const current = await loadProject(dir)
+        const next = { ...current, name }
+        await saveProject(dir, next)
+        return next
       })
     },
 
@@ -861,6 +898,7 @@ export function registerTranslateIpc(
   handle(TRANSLATE_CHANNELS.updateSettings, (_e, args: TranslateUpdateSettingsArgs) =>
     h.updateSettings(args),
   )
+  handle(TRANSLATE_CHANNELS.rename, (_e, args: TranslateRenameArgs) => h.rename(args))
   handle(TRANSLATE_CHANNELS.addMaterial, (_e, args: TranslateAddMaterialArgs) =>
     h.addMaterial(args),
   )

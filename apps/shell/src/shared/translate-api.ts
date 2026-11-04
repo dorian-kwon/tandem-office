@@ -1,4 +1,9 @@
-import type { OcrMode, ProjectFile, ReferenceStatus } from '@genoffice/translate-project'
+import type {
+  OcrMode,
+  ProjectFile,
+  ReferenceStatus,
+  WritingStyle,
+} from '@genoffice/translate-project'
 import type {
   OcrPageImage,
   OcrPageResult,
@@ -28,6 +33,7 @@ export const TRANSLATE_CHANNELS = {
   setSystemPrompt: 'translate:set-system-prompt',
   getProject: 'translate:get-project',
   updateSettings: 'translate:update-settings',
+  rename: 'translate:rename',
   addMaterial: 'translate:add-material',
   removeMaterial: 'translate:remove-material',
   pickMaterials: 'translate:pick-materials',
@@ -124,6 +130,12 @@ export interface TranslateCreateArgs {
   targetLang: string
 }
 
+/** Changes the display name only; the folder on disk keeps its name. */
+export interface TranslateRenameArgs {
+  dir: string
+  name: string
+}
+
 export interface TranslateRemoveArgs {
   dir: string
   deleteFolder: boolean
@@ -172,6 +184,7 @@ export interface TranslatePickedParentDir {
 export interface TranslateSettingsPatch {
   projectPrompt?: string
   ocr?: OcrMode
+  writingStyle?: WritingStyle
   sourceLang?: string
   targetLang?: string
 }
@@ -356,6 +369,8 @@ export interface TranslateApi {
   getProject(dir: string): Promise<ProjectFile>
   /** change only the settings fields; returns the full updated project */
   updateSettings(args: TranslateUpdateSettingsArgs): Promise<ProjectFile>
+  /** change the display name (project.json); never the folder; returns the project */
+  rename(args: TranslateRenameArgs): Promise<ProjectFile>
   addMaterial(args: TranslateAddMaterialArgs): Promise<ProjectFile>
   removeMaterial(args: TranslateRemoveMaterialArgs): Promise<ProjectFile>
   /** opens the native file dialog; null when cancelled */

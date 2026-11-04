@@ -211,6 +211,25 @@ describe('translationContextForFolder', () => {
     expect(context?.cut).toBe(false)
   })
 
+  it('sends the writing style rule with the project prompts, nothing for the default', async () => {
+    writeTranslationProjects(settingsPath, [{ dir, lastOpened: 1 }])
+    const plain = await translationContextForFolder(dir, { settingsPath })
+    expect(plain?.prompts).not.toContain('Writing style')
+    const project = await loadProject(dir)
+    await saveProject(dir, {
+      ...project,
+      writingStyle: { serialComma: 'with', quotePunctuation: 'inside', custom: 'Be brief.' },
+    })
+    const styled = await translationContextForFolder(dir, { settingsPath })
+    expect(styled?.prompts).toContain('Use the serial (Oxford) comma')
+    expect(styled?.prompts).toContain('inside the closing quotation mark')
+    expect(styled?.prompts).toContain('Custom instruction: Be brief.')
+    // the rule sits in the project block, before the editing rules
+    expect(styled?.prompts.indexOf('Writing style')).toBeLessThan(
+      styled?.prompts.indexOf('read_runs') ?? 0,
+    )
+  })
+
   it('tells the AI how to translate a Word document without losing its formatting', async () => {
     writeTranslationProjects(settingsPath, [{ dir, lastOpened: 1 }])
     writeTranslationSystemPrompt(settingsPath, 'GLOBAL')

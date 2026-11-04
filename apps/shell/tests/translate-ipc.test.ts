@@ -301,6 +301,64 @@ describe('translate IPC handlers', () => {
     expect(await h.getProject(dir)).toEqual(updated)
   })
 
+  it('rename changes only the display name, keeps the folder and other projects', async () => {
+    const h = handlers()
+    const a = await createIn(h, { name: 'Alpha', sourceLang: 'en', targetLang: 'ko' })
+    const b = await createIn(h, { name: 'Beta', sourceLang: 'en', targetLang: 'ko' })
+    const beforeB = await h.getProject(b.dir)
+    const renamed = await h.rename({ dir: a.dir, name: '  Gamma 한글  ' })
+    expect(renamed.name).toBe('Gamma 한글')
+    expect((await h.getProject(a.dir)).name).toBe('Gamma 한글')
+    expect(await h.getProject(b.dir)).toEqual(beforeB)
+    const listed = await h.list()
+    expect(listed.find((e) => e.dir === a.dir)?.name).toBe('Gamma 한글')
+    expect(listed.find((e) => e.dir === b.dir)?.name).toBe('Beta')
+    // names need not be unique
+    expect((await h.rename({ dir: a.dir, name: 'Beta' })).name).toBe('Beta')
+  })
+
+  it('rename rejects empty, too long, control characters and unregistered folders', async () => {
+    const h = handlers()
+    const { dir } = await createIn(h, { name: 'Alpha', sourceLang: 'en', targetLang: 'ko' })
+    const bad = (name: unknown) =>
+      expect(h.rename({ dir, name } as never)).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+    await bad('')
+    await bad('   ')
+    await bad('x'.repeat(81))
+    await bad('a\u0000b')
+    await bad('a\nb')
+    await bad(5)
+    expect((await h.rename({ dir, name: 'x'.repeat(80) })).name).toHaveLength(80)
+    await expect(h.rename({ dir: join(root, 'nope'), name: 'ok' })).rejects.toThrow(
+      /not a registered/,
+    )
+  })
+
+  it('update-settings saves a writing style and rejects unknown values', async () => {
+    const h = handlers()
+    const { dir } = await createIn(h, { name: 'S', sourceLang: 'en', targetLang: 'ko' })
+    expect((await h.getProject(dir)).writingStyle).toEqual({
+      serialComma: 'default',
+      quotePunctuation: 'default',
+      custom: '',
+    })
+    const style = { serialComma: 'without', quotePunctuation: 'outside', custom: 'x' } as const
+    const updated = await h.updateSettings({ dir, patch: { writingStyle: style } })
+    expect(updated.writingStyle).toEqual(style)
+    expect((await h.getProject(dir)).writingStyle).toEqual(style)
+    const bad = (writingStyle: unknown) =>
+      expect(h.updateSettings({ dir, patch: { writingStyle } } as never)).rejects.toMatchObject({
+        code: 'INVALID_ARGUMENT',
+      })
+    await bad({ ...style, serialComma: 'sometimes' })
+    await bad({ ...style, quotePunctuation: 'both' })
+    await bad({ ...style, custom: 5 })
+    await bad({ ...style, custom: 'x'.repeat(501) })
+    await bad(null)
+    await bad('with')
+    expect((await h.getProject(dir)).writingStyle).toEqual(style)
+  })
+
   it('update-settings rejects an invalid ocr, bad values and unknown keys', async () => {
     const h = handlers()
     const { dir } = await createIn(h, { name: 'S', sourceLang: 'en', targetLang: 'ko' })
