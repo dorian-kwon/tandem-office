@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execSync } from 'node:child_process'
+import { readdirSync, statSync } from 'node:fs'
 import type { ElectronApplication } from 'playwright-core'
 import { closeAndSaveVideo, launchShell } from './helpers'
 
@@ -70,8 +71,40 @@ function realAiSettingsPath(): string | null {
 
 test.skip(!REAL, 'spends the subscription; set IEUM_TRANSLATE_REAL=1')
 
+/** newest modification time (ms) of any file under `dir`, 0 when it does not exist */
+function newestMtime(dir: string): number {
+  let newest = 0
+  const walk = (d: string) => {
+    for (const entry of readdirSync(d, { withFileTypes: true })) {
+      if (entry.name === 'node_modules') continue
+      const full = join(d, entry.name)
+      if (entry.isDirectory()) walk(full)
+      else newest = Math.max(newest, statSync(full).mtimeMs)
+    }
+  }
+  if (existsSync(dir)) walk(dir)
+  return newest
+}
+
+/**
+ * The shell loads each editor from its own build output (apps/docs/out): a run
+ * against an output older than its source tests code that is no longer there
+ * (real run 4 used a docs renderer built before the notes tools existed).
+ */
+function assertBuildsAreFresh(): void {
+  for (const app of ['docs', 'shell']) {
+    const src = newestMtime(join('apps', app, 'src'))
+    const out = newestMtime(join('apps', app, 'out'))
+    if (out < src)
+      throw new Error(
+        `apps/${app}/out is older than apps/${app}/src: run "npm run build:all" before a real run`,
+      )
+  }
+}
+
 test('real translation run (the machine main AI setting)', async () => {
   test.setTimeout(RUN_TIMEOUT + 5 * 60_000)
+  assertBuildsAreFresh()
   await mkdir(OUT_DIR, { recursive: true })
   const log: Record<string, unknown> = {}
   const note = (k: string, v: unknown) => {

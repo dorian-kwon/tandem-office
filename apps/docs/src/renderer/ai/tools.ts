@@ -453,7 +453,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
   {
     name: 'edit_note',
     description:
-      "Change the text of an existing footnote or endnote in place (findReplace inside the note): the note keeps its id, reference mark and formatting. Use for a typo or a citation fix instead of delete_note + insert_footnote. Never use it to translate notes: that goes through read_runs notes:true and translate_blocks, which keep each run's formatting.",
+      "Change the text of an existing footnote or endnote in place (findReplace inside the note): the note keeps its id, reference mark and formatting. Use for a typo or a citation fix instead of delete_note + insert_footnote. Notes are translated with translate_blocks (entries with note and id from read_runs notes:true), which keeps each run's formatting.",
     inputSchema: {
       type: 'object',
       properties: {
@@ -473,7 +473,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
   {
     name: 'read_notes',
     description:
-      'List every footnote and endnote with its id, number, the block holding its reference mark and its text. To translate notes use read_runs with notes:true, not this.',
+      'List every footnote and endnote with its id, number, the block holding its reference mark and its text (long texts are clipped). This is an overview, not the translation input: to translate the notes, call read_runs with notes:true and then translate_blocks with note entries.',
     inputSchema: { type: 'object', properties: {}, required: [] },
   },
   {
@@ -2336,13 +2336,19 @@ function executeSyncTool(
     case 'read_notes': {
       const summary = t('aiSumReadNotes')
       if (!notes) return fail(summary, 'footnotes and endnotes are not available here')
+      const hasNotes = notes.list('footnote').length + notes.list('endnote').length > 0
       return {
-        output: buildNotesContext(
-          editor.state.doc,
-          notes.list('footnote'),
-          notes.list('endnote'),
-          (kind, id) => notes.protectedMarkBlock?.(kind, id) ?? null,
-        ),
+        output:
+          buildNotesContext(
+            editor.state.doc,
+            notes.list('footnote'),
+            notes.list('endnote'),
+            (kind, id) => notes.protectedMarkBlock?.(kind, id) ?? null,
+          ) +
+          (hasNotes
+            ? '\nTo translate these notes: read_runs with notes:true gives each note paragraph with its fp and segments; then call translate_blocks with entries like ' +
+              '{"note":"footnote","id":"1","fp":"<fp from read_runs>","segments":["<translated segment>", ...]} (no "index"; use "endnote" for endnotes).'
+            : ''),
         mutated: false,
         summary,
       }

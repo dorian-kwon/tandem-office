@@ -223,7 +223,7 @@ describe('translationContextForFolder', () => {
     expect(prompts).toMatch(/empty paragraphs/i)
     expect(prompts).toMatch(/footnote reference/i)
     expect(prompts).toMatch(/notes:true/)
-    expect(prompts).toMatch(/never translate[^\n]*edit_note[^\n]*apply_ops/i)
+    expect(prompts).toMatch(/translate_blocks only[^\n]*edit_note[^\n]*apply_ops/i)
     expect(prompts).toMatch(/not finished[^\n]*checkRemaining/)
   })
 

@@ -182,3 +182,10 @@ Use a project with target language German (or any of the 21 app languages except
 
 1. Translate a document with footnotes (real run): every read_runs body result and translate_blocks result states the footnote/endnote counts and what is still untranslated; the AI translates the notes without being asked and never says the document has none.
 2. In the result look for a space before `, . ) ]` and double spaces: none. French `; : ! ?` and `« »` spacing the AI wrote is left as written. The AI does not use findReplace or ask permission for spacing.
+
+## Translation follow-ups, Task 7: stale build, seam spaces, note wording
+
+1. Before any real run: `npm run build:all`. Real run 4 loaded `apps/docs/out` built before the notes tools existed (old `read_runs` schema without `notes`, old prompt line "translate footnote text with read_notes and edit_note"), which explains the unreachable notes and the missing space tidy. `e2e/translate-real-run.spec.ts` now refuses to start when `apps/docs/out` or `apps/shell/out` is older than its `src`.
+2. In the next real run on the footnote document: the AI calls `read_runs notes:true`, then `translate_blocks` entries with `note` and `id`; `read_notes` (if it calls it) ends with that exact call form. No claim that edit_note is forbidden.
+3. Look for a space before `, . ) ]` and for double spaces right after a footnote mark or where a source blank run sat between runs ("services;  in", "the score ."): none. Replaying run 4's translate_blocks inputs on its source with the current code left 6 of these (now covered by `translate-spacing-seams.test.ts`).
+4. Known gap: when the model writes no space where the source had none between two runs ("a dancer" + "in many ways"), the words run together; the tool cannot tell that from a name split across runs.

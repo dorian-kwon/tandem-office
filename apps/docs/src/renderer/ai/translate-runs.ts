@@ -66,11 +66,21 @@ interface Group {
   marks: readonly Mark[]
   /** a whitespace-only run (never a group) is all that lies between this group and the next */
   gapAfter?: boolean
+  /** a whitespace-only run touches this group's start with an inline object (a note mark) before it */
+  blankBefore?: boolean
+  /** a whitespace-only run touches this group's end with an inline object (a note mark) after it */
+  blankAfter?: boolean
 }
 
 /** the gap flags settleTexts takes, one per group */
 const gapsOf = (groups: readonly { gapAfter?: boolean }[]): boolean[] =>
   groups.map((g) => g.gapAfter === true)
+
+/** the edge flags settleTexts takes: a blank run already separates the group from an inline object */
+const edgesOf = (groups: readonly Group[]): SettleEdges => ({
+  before: groups.map((g) => g.blankBefore === true),
+  after: groups.map((g) => g.blankAfter === true),
+})
 
 const isFixed = (node: ProseMirrorNode): boolean =>
   node.marks.some((m) => FIXED_MARK_TYPES.has(m.type.name))
@@ -103,6 +113,11 @@ function groupsOf(block: ProseMirrorNode, pos: number): Group[] {
       '\uFFFC',
     )
     if (/^[^\S\t\n]+$/.test(between)) groups[i].gapAfter = true
+    else {
+      // a note mark (or other object) between: a blank run beside the mark is still the only space there
+      if (/^[^\S\t\n]/.test(between)) groups[i].blankAfter = true
+      if (/[^\S\t\n]$/.test(between)) groups[i + 1].blankBefore = true
+    }
   }
   return groups
 }
@@ -241,6 +256,12 @@ const TRAIL = /\s*$/
 const STARTS_WITH_CLOSING =
   /^[,.;:!?)\]}%\u00BB\u201D\u2019\u3001\u3002\uFF0C\uFF0E\uFF1B\uFF1A\uFF01\uFF1F\uFF09\u3011\u300D\u300F]/
 
+/** per group: a blank run already separates it from an inline object before / after it */
+export interface SettleEdges {
+  before?: readonly boolean[]
+  after?: readonly boolean[]
+}
+
 /**
  * The new texts of consecutive groups, with the edge whitespace settled: a
  * segment that brings its own leading or trailing whitespace keeps it, one
@@ -261,6 +282,7 @@ export function settleTexts(
   originals: readonly string[],
   segments: readonly string[],
   gaps: readonly boolean[] = [],
+  edges: SettleEdges = {},
 ): string[] {
   interface Piece {
     lead: string
@@ -309,6 +331,18 @@ export function settleTexts(
     const after = realAfter(i)
     if (before && before.whole === undefined) before.trail = ''
     if (after && after.whole === undefined) after.lead = ''
+  })
+  // a blank run beside a note mark is the space there: the segment adds none
+  edges.before?.forEach((flag, i) => {
+    if (flag && pieces[i] && pieces[i].whole === undefined) pieces[i].lead = ''
+  })
+  edges.after?.forEach((flag, i) => {
+    if (flag && pieces[i] && pieces[i].whole === undefined) pieces[i].trail = ''
+  })
+  // a whitespace-only segment beside a blank run would only double that space
+  pieces.forEach((piece, i) => {
+    if (piece.whole === undefined || piece.whole === '') return
+    if (gaps[i] || gaps[i - 1] || edges.before?.[i] || edges.after?.[i]) piece.whole = ''
   })
   for (let i = 0; i < pieces.length; i++) {
     const piece = pieces[i]
@@ -376,6 +410,29 @@ export function tidySpacing(texts: string[]): string[] {
     else if (next.startsWith(' ')) out[j] = next.replace(/^ +/, '')
   }
   return out
+}
+
+/**
+ * Whitespace-only runs that would leave a space before a comma, full stop or
+ * closing bracket: a run between groups (flagged in `gaps`) followed, past
+ * groups the translation emptied, by settled text that starts with such a
+ * mark. The segments cannot carry that space away, so the run itself goes.
+ * Returns the indexes `i` of the gaps (between group i and group i + 1).
+ */
+export function gapRunsBeforeClosers(
+  settled: readonly string[],
+  gaps: readonly boolean[],
+): number[] {
+  const drop: number[] = []
+  for (let j = 0; j < settled.length; j++) {
+    if (!CLOSER_AFTER_SPACE.test(settled[j])) continue
+    // the blank runs between the previous settled text and this one
+    let k = j - 1
+    while (k >= 0 && settled[k] === '') k--
+    if (k < 0 || /\s$/.test(settled[k])) continue
+    for (let g = k; g < j; g++) if (gaps[g]) drop.push(g)
+  }
+  return drop
 }
 
 /** the minimal range of a group to rewrite: shared edge whitespace stays as it is */
@@ -491,7 +548,19 @@ function planParagraph(doc: ProseMirrorNode, item: RunTranslationItem): PlanResu
     groups.map((g) => g.text),
     segments,
     gapsOf(groups),
+    edgesOf(groups),
   )
+  for (const g of gapRunsBeforeClosers(settled, gapsOf(groups))) {
+    if (g + 1 >= groups.length) continue
+    edits.push({
+      from: groups[g].to,
+      to: groups[g + 1].from,
+      text: '',
+      marks: [],
+      blockPos: block.pos,
+    })
+    report.changed++
+  }
   segments.forEach((_segment, i) => {
     const group = groups[i]
     const next = settled[i]

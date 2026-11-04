@@ -3,7 +3,7 @@ import { Editor } from '@tiptap/core'
 import { BLANK_BULLET_NUM_ID, BLANK_ORDERED_NUM_ID } from '@genoffice/docx-engine'
 import type { NoteInfo } from '@genoffice/docx-engine'
 import type { PmNode } from '../src/renderer/editor/convert'
-import { executeTool } from '../src/renderer/ai/tools'
+import { AGENT_TOOLS, executeTool } from '../src/renderer/ai/tools'
 import type { AiNotesAccess, NoteKind } from '../src/renderer/ai/note-ops'
 import { settleTexts, sourceScriptOf } from '../src/renderer/ai/translate-runs'
 
@@ -439,5 +439,110 @@ describe('completion check', () => {
     expect(sourceScriptOf('ko')?.test('한')).toBe(true)
     expect(sourceScriptOf('Japanese')?.test('かな')).toBe(true)
     expect(sourceScriptOf('French')).toBeNull()
+  })
+})
+
+/** the input shape a model sends, checked against the schema the model was shown */
+function schemaErrors(schema: Record<string, unknown>, value: unknown, path = 'input'): string[] {
+  const errors: string[] = []
+  const type = schema.type
+  if (type === 'object') {
+    if (typeof value !== 'object' || value === null || Array.isArray(value))
+      return [`${path}: not an object`]
+    const props = (schema.properties ?? {}) as Record<string, Record<string, unknown>>
+    for (const key of (schema.required ?? []) as string[])
+      if (!(key in (value as object))) errors.push(`${path}.${key}: required`)
+    for (const [key, v] of Object.entries(value as object)) {
+      if (!props[key]) errors.push(`${path}.${key}: not declared in the schema`)
+      else errors.push(...schemaErrors(props[key], v, `${path}.${key}`))
+    }
+  } else if (type === 'array') {
+    if (!Array.isArray(value)) return [`${path}: not an array`]
+    value.forEach((v, i) =>
+      errors.push(...schemaErrors(schema.items as Record<string, unknown>, v, `${path}[${i}]`)),
+    )
+  } else if (type === 'integer') {
+    if (!Number.isInteger(value)) errors.push(`${path}: not an integer`)
+  } else if (type === 'string') {
+    if (typeof value !== 'string') errors.push(`${path}: not a string`)
+    else if (schema.enum && !(schema.enum as string[]).includes(value))
+      errors.push(`${path}: not one of ${(schema.enum as string[]).join('|')}`)
+  } else if (type === 'boolean') {
+    if (typeof value !== 'boolean') errors.push(`${path}: not a boolean`)
+  }
+  return errors
+}
+const schemaOf = (name: string) =>
+  AGENT_TOOLS.find((t) => t.name === name)!.inputSchema as Record<string, unknown>
+
+describe('the model-facing tool path for notes', () => {
+  const notes = () =>
+    notesAccess([
+      richNote('1', [run('첫 '), run('각주', { italic: true }), run('입니다.')]),
+      richNote('2', [run('둘째 각주.')]),
+    ])
+
+  it('read_runs declares notes, checkRemaining and sourceLanguage, so the schema keeps them', () => {
+    // the exact input a model sent in a real run
+    const sent = {
+      startBlockIndex: 0,
+      endBlockIndex: 59,
+      notes: true,
+      checkRemaining: true,
+      sourceLanguage: 'ko',
+    }
+    expect(schemaErrors(schemaOf('read_runs'), sent)).toEqual([])
+    expect(schemaErrors(schemaOf('read_runs'), { notes: true })).toEqual([])
+  })
+
+  it('notes:true with a block range still returns the notes, not the blocks', async () => {
+    const editor = await createEditor([paragraph('본문')])
+    const read = await exec(
+      editor,
+      'read_runs',
+      { startBlockIndex: 0, endBlockIndex: 59, notes: true },
+      notes().access,
+    )
+    expect(read.isError).toBeFalsy()
+    const first = JSON.parse(read.output.split('\n')[0])
+    expect(first).toMatchObject({ note: 'footnote', id: '1' })
+  })
+
+  it('a note entry as a model writes it passes the schema and translates the note', async () => {
+    const editor = await createEditor([paragraph('본문')])
+    const { access, state } = notes()
+    const read = await exec(editor, 'read_runs', { notes: true }, access)
+    const entry = JSON.parse(read.output.split('\n')[0])
+    const input = {
+      blocks: [
+        {
+          note: 'footnote',
+          id: entry.id,
+          fp: entry.fp,
+          segments: ['First ', 'note', ' here.'],
+        },
+      ],
+    }
+    expect(schemaErrors(schemaOf('translate_blocks'), input)).toEqual([])
+    const out = await exec(editor, 'translate_blocks', input, access)
+    expect(out.isError).toBeFalsy()
+    expect(state.footnote[0].text).toBe('First note here.')
+  })
+
+  it('read_notes ends with the exact translate_blocks call for the notes', async () => {
+    const editor = await createEditor([paragraph('본문')])
+    const out = await exec(editor, 'read_notes', {}, notes().access)
+    expect(out.output).toMatch(/read_runs with notes:true/)
+    expect(out.output).toMatch(/translate_blocks with entries like \{"note":"footnote","id":"1"/)
+    const withoutNotes = await exec(editor, 'read_notes', {}, notesAccess([]).access)
+    expect(withoutNotes.output).not.toMatch(/translate_blocks/)
+  })
+
+  it('no tool text tells the model that notes cannot be translated or that edit_note is the way', () => {
+    const edit = AGENT_TOOLS.find((t) => t.name === 'edit_note')!.description
+    expect(edit).toMatch(/translate_blocks/)
+    expect(edit).not.toMatch(/never/i)
+    const read = AGENT_TOOLS.find((t) => t.name === 'read_notes')!.description
+    expect(read).toMatch(/translate_blocks/)
   })
 })
