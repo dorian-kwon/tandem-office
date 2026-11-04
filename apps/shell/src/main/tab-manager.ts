@@ -508,6 +508,13 @@ export class TabManager {
     return true
   }
 
+  /** a split whose two panes are one group: the translation view's pair */
+  private isGroupedSplit(split: SplitViewState): boolean {
+    const a = this.tabById(split.aTabId)
+    const b = this.tabById(split.bTabId)
+    return !!a?.groupId && a.groupId === b?.groupId
+  }
+
   /** the other tabs of this tab's group (empty for an ungrouped tab) */
   private groupPeers(tab: TabRecord): TabRecord[] {
     if (!tab.groupId) return []
@@ -1125,6 +1132,39 @@ export class TabManager {
     // an unloaded tab makes its editor first; a failed opener leaves the window as it was
     if (!this.loadTab(target)) return
     const previous = this.activeId
+    if (this.split && this.isGroupedSplit(this.split) && target.kind !== 'home') {
+      // A translation pair is one unit: a tab outside it never takes one of
+      // its panes (that mixed two documents on screen). Another pair's tab
+      // brings that whole pair; any other document shows alone while the
+      // pair's split stays remembered for when its tabs are selected again.
+      const outside = target.id !== this.split.aTabId && target.id !== this.split.bTabId
+      if (outside && target.kind !== 'help' && target.present !== true) {
+        const peer = this.groupPeers(target)[0]
+        if (peer?.view && target.view) {
+          const [first, second] =
+            this.tabs.indexOf(target) < this.tabs.indexOf(peer) ? [target, peer] : [peer, target]
+          this.setSplit(
+            {
+              ...this.split,
+              aTabId: first.id,
+              bTabId: second.id,
+              focus: target === first ? 'a' : 'b',
+              collapsed: null,
+            },
+            target.id,
+          )
+          return
+        }
+        if (previous !== id) this.previousActiveId = previous
+        this.activeId = id
+        this.discardSpareSheetsView()
+        this.layout()
+        this.refreshActiveTargets()
+        this.focusActiveView()
+        this.onChanged()
+        return
+      }
+    }
     if (this.split) {
       const mode = activationMode(this.split, {
         id: target.id,

@@ -268,3 +268,11 @@ Needs a rebuild of the shell app (`npm run build -w @genoffice/shell`).
 1. Project list: the title, intro and the New project / Open existing buttons sit in one header. Projects are cards (name, language pair chip, Documents and References counts, last opened time, a quiet Delete). Recent documents form one bordered list below, the global system prompt is a card at the end, and "Saved" appears as a chip beside its label. With no projects, a dashed card shows one line and the New project button.
 2. Project detail: back link, title with the language pair chip and Start translation in the header (the disabled hint sits under it). Languages, Documents to translate, Reference material, Glossary, Project prompt and OCR are one card each; Add files is in each card header with a count chip; Save as... and Open translation stay on each document row; reference states show as chips.
 3. Check light and dark themes and a narrow window (row buttons wrap under the file name), keyboard Tab focus rings on cards, rows and buttons, and a reference that needs OCR (red-tinted chip plus the note under the name).
+
+## Translation pair tabs: selecting a tab never mixes documents
+
+Needs a rebuild of the shell app (`npm run build -w @genoffice/shell`).
+
+1. Open a translation pair A, then an ordinary document B. B shows alone (full width); A's two tabs stay side by side in the strip.
+2. Click A's output, A's source, then B again. A shows its own two panes each time; B always shows alone, never beside a pane of A.
+3. Open a second translation pair B and click all four tabs in turn. Each pair shows exactly its own source and output, never one pane from each pair.
