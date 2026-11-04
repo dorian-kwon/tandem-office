@@ -270,4 +270,12 @@ export const ja = {
   exFollow: '送るルールはありません。AI が翻訳先の言語の一般的な慣例に従います。',
   styleCustomLabel: '独自の指示',
   styleCustomPlaceholder: '例: イギリス式の綴りを使う',
+  choicesTitle: '翻訳の選択',
+  choicesHint: 'このプロジェクトで保持するよう選んだ回答です。AI はそれに従い、未決定のことだけをもう一度尋ねます。',
+  choiceOutputMode: '出力方式',
+  choiceBilingual: '対訳レイアウト',
+  choiceOcrPlacement: 'OCR テキストの配置',
+  choiceUndecided: 'まだ決まっていません。AI は書き込む前に尋ねます。',
+  choiceReset: 'リセット',
+  choiceResetOne: 'リセット: {name}',
 } satisfies Record<keyof typeof zh, string>

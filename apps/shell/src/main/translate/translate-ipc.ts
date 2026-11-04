@@ -167,7 +167,14 @@ const FILTERS: Record<TranslateMaterialKind, { name: string; extensions: string[
   glossary: [{ name: 'Glossary', extensions: ['csv', 'txt', 'xlsx'] }],
 }
 
-const SETTINGS_KEYS = ['projectPrompt', 'ocr', 'writingStyle', 'sourceLang', 'targetLang']
+const SETTINGS_KEYS = [
+  'projectPrompt',
+  'ocr',
+  'writingStyle',
+  'choices',
+  'sourceLang',
+  'targetLang',
+]
 
 /** Longest custom writing-style instruction the renderer may save */
 export const WRITING_STYLE_CUSTOM_MAX = 500
@@ -550,11 +557,20 @@ function createRawHandlers(deps: TranslateIpcDeps) {
         (style as { custom: string }).custom.length > WRITING_STYLE_CUSTOM_MAX
       )
         throw new TranslateIpcError('INVALID_ARGUMENT', 'writingStyle.custom is too long')
+      // the kept answers replace the stored set as a whole: a reset sends the set without one item
+      const choices = fields.choices
+      if (
+        choices !== undefined &&
+        (typeof choices !== 'object' || choices === null || Array.isArray(choices))
+      )
+        throw new TranslateIpcError('INVALID_ARGUMENT', 'choices must be an object')
       // read-modify-write under the project lock so a concurrent material change survives
       return withProjectLock(dir, async () => {
         const current = await loadProject(dir)
         const merged = { ...current }
         for (const key of keys) (merged as Record<string, unknown>)[key] = fields[key]
+        // an empty set is no field at all: the parser drops it, the merge must not keep the old one
+        if (choices !== undefined && Object.keys(choices).length === 0) delete merged.choices
         let checked: ProjectFile
         try {
           // the same parser that reads project.json validates the new ocr value

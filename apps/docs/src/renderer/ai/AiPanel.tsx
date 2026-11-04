@@ -14,6 +14,7 @@ import {
   AiRunStatusLine,
   TranslationLockBanner,
   choiceBubbleText,
+  projectChoiceRemember,
   useAiChoice,
   useAiRunStatus,
   useTranslationLock,
@@ -575,6 +576,7 @@ export function AiPanel({
   const choice = useAiChoice({
     lang,
     busy,
+    remember: projectChoiceRemember(() => project.chat.run),
     send: (text) => {
       if (loopRef.current?.busy) return false
       runWith(text)

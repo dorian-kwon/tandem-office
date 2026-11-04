@@ -265,4 +265,12 @@ export const ar = {
   exFollow: 'لا تُرسل أي قاعدة. يتبع الذكاء الاصطناعي العرف المعتاد للغة الهدف.',
   styleCustomLabel: 'تعليمات مخصصة',
   styleCustomPlaceholder: 'مثال: استخدم الإملاء البريطاني',
+  choicesTitle: 'خيارات الترجمة',
+  choicesHint: 'إجابات طلبت الاحتفاظ بها لهذا المشروع. يتبعها الذكاء الاصطناعي ويسأل مجددًا فقط عمّا لم يُحسم.',
+  choiceOutputMode: 'وضع الإخراج',
+  choiceBilingual: 'تخطيط ثنائي اللغة',
+  choiceOcrPlacement: 'موضع نص OCR',
+  choiceUndecided: 'لم يُحسم بعد. يسأل الذكاء الاصطناعي قبل الكتابة.',
+  choiceReset: 'إعادة التعيين',
+  choiceResetOne: 'إعادة التعيين: {name}',
 } satisfies Record<keyof typeof zh, string>

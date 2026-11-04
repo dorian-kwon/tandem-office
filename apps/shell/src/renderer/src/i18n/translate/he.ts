@@ -260,4 +260,12 @@ export const he = {
   exFollow: 'לא נשלח כלל. ה-AI פועל לפי המקובל בשפת היעד.',
   styleCustomLabel: 'הנחיה מותאמת אישית',
   styleCustomPlaceholder: 'לדוגמה: להשתמש באיות בריטי',
+  choicesTitle: 'בחירות תרגום',
+  choicesHint: 'תשובות שביקשתם לשמור בפרויקט הזה. ה-AI פועל לפיהן ושואל שוב רק על מה שטרם הוחלט.',
+  choiceOutputMode: 'מצב פלט',
+  choiceBilingual: 'פריסה דו-לשונית',
+  choiceOcrPlacement: 'מיקום טקסט OCR',
+  choiceUndecided: 'עדיין לא הוחלט. ה-AI ישאל לפני הכתיבה.',
+  choiceReset: 'איפוס',
+  choiceResetOne: 'איפוס: {name}',
 } satisfies Record<keyof typeof zh, string>

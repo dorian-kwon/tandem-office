@@ -46,7 +46,15 @@ export const PROJECT_TOOLS = {
 /** The bridge calls the skill uses */
 export type ProjectSkillBridge = Pick<
   ProjectFolderApi,
-  'readContext' | 'openScope' | 'closeScope' | 'listFiles' | 'search' | 'read' | 'remember' | 'ocr'
+  | 'readContext'
+  | 'openScope'
+  | 'closeScope'
+  | 'listFiles'
+  | 'search'
+  | 'read'
+  | 'remember'
+  | 'ocr'
+  | 'rememberChoice'
 >
 
 /**
@@ -102,6 +110,11 @@ export interface ProjectRun {
   /** `.ieumoffice/` of the chosen project could not be written during this window's life */
   readonly unwritable: boolean
   /**
+   * The last request carried a translation project (kept after `finish`, so the question card
+   * shown once the run ended knows whether it may keep an answer for the project)
+   */
+  readonly translationProject?: boolean
+  /**
    * read the context and open a run scope for the request about to be sent;
    * `query`: the request text (the person's message and its selection), used
    * only to pick a translation project's glossary entries
@@ -131,6 +144,7 @@ export function createProjectRun(options: CreateProjectRunOptions): ProjectRun |
   let unwritableFor: ProjectId | null = null
   let seq = 0
   let turnId: string | undefined
+  let translationProject = false
 
   const markUnwritable = (projectId: ProjectId | null) => {
     if (!projectId || unwritableFor === projectId) return
@@ -152,6 +166,9 @@ export function createProjectRun(options: CreateProjectRunOptions): ProjectRun |
     get snapshot() {
       return snapshot
     },
+    get translationProject() {
+      return translationProject
+    },
     get unwritable() {
       const id = snapshot?.context.projectId ?? options.projectId()
       return !!id && unwritableFor === id
@@ -161,6 +178,7 @@ export function createProjectRun(options: CreateProjectRunOptions): ProjectRun |
       turnId = crypto.randomUUID()
       await closeOpen()
       const projectId = options.projectId()
+      translationProject = false
       if (!projectId) return { status: 'none' }
       if (unwritableFor && unwritableFor !== projectId) unwritableFor = null
       try {
@@ -174,6 +192,7 @@ export function createProjectRun(options: CreateProjectRunOptions): ProjectRun |
           return { status: 'failed', error: 'superseded' }
         }
         snapshot = { context: read.context, scope }
+        translationProject = read.context.translation !== undefined
         if (read.context.notices.some((n) => n.kind === 'unwritable')) markUnwritable(projectId)
         return { status: 'ok', context: read.context, notices: read.context.notices }
       } catch (err) {

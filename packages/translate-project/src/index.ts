@@ -4,6 +4,9 @@ export {
   defaultWritingStyle,
   parseProjectFile,
   serializeProjectFile,
+  TRANSLATION_CHOICE_KEYS,
+  TRANSLATION_CHOICE_MAX_CHARS,
+  withChoice,
 } from './project-file'
 export type {
   OcrMode,
@@ -12,9 +15,11 @@ export type {
   SerialComma,
   SourceEntry,
   SourceKind,
+  TranslationChoiceKey,
+  TranslationChoices,
   WritingStyle,
 } from './project-file'
-export { writingStyleRule } from './compose'
+export { translationChoicesRule, writingStyleRule } from './compose'
 export {
   DEFAULT_GLOSSARY_LIMIT,
   GlossaryFormatError,

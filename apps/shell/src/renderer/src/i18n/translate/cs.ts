@@ -271,4 +271,12 @@ export const cs = {
   exFollow: 'Neodesílá se žádné pravidlo. AI se řídí obvyklou konvencí cílového jazyka.',
   styleCustomLabel: 'Vlastní pokyn',
   styleCustomPlaceholder: 'např. používej britský pravopis',
+  choicesTitle: 'Volby překladu',
+  choicesHint: 'Odpovědi, které jste chtěli zachovat pro tento projekt. AI se jimi řídí a znovu se ptá jen na to, co není rozhodnuto.',
+  choiceOutputMode: 'Režim výstupu',
+  choiceBilingual: 'Dvojjazyčné rozvržení',
+  choiceOcrPlacement: 'Umístění textu OCR',
+  choiceUndecided: 'Zatím nerozhodnuto. AI se zeptá před zápisem.',
+  choiceReset: 'Obnovit',
+  choiceResetOne: 'Obnovit: {name}',
 } satisfies Record<keyof typeof zh, string>

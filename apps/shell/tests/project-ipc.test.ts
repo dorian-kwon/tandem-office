@@ -1041,3 +1041,36 @@ describe('conversational OCR routing', () => {
     expect(forgetOcr).toHaveBeenCalledTimes(2)
   })
 })
+
+describe('keeping an answer of the AI question card', () => {
+  it('writes into the project the calling window chose, never one named by the request', async () => {
+    const rememberChoice = vi.fn(async () => ({ ok: true as const }))
+    const test = setup({ rememberChoice })
+    const out = await test.call('rememberChoice', DOCS, {
+      key: 'outputMode',
+      value: 'Overwrite',
+      projectId: 'p-other',
+      root: '/untrusted',
+    })
+    expect(out).toEqual({ ok: true })
+    expect(rememberChoice).toHaveBeenCalledWith(ROOT, 'outputMode', 'Overwrite')
+    await expect(test.call('rememberChoice', STRANGER, { key: 'k', value: 'v' })).rejects.toThrow(
+      PROJECT_IPC_UNKNOWN_WINDOW,
+    )
+  })
+
+  it('refuses a malformed request and answers not-translation without a host', async () => {
+    const rememberChoice = vi.fn(async () => ({ ok: true as const }))
+    const test = setup({ rememberChoice })
+    expect(await test.call('rememberChoice', DOCS, { key: 1, value: 'v' })).toEqual({
+      ok: false,
+      reason: 'invalid',
+    })
+    expect(rememberChoice).not.toHaveBeenCalled()
+    const bare = setup()
+    expect(await bare.call('rememberChoice', DOCS, { key: 'outputMode', value: 'x' })).toEqual({
+      ok: false,
+      reason: 'not-translation',
+    })
+  })
+})

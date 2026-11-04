@@ -276,4 +276,12 @@ export const ru = {
   exFollow: 'Правило не отправляется. ИИ следует обычной норме языка перевода.',
   styleCustomLabel: 'Своя инструкция',
   styleCustomPlaceholder: 'напр. использовать британское написание',
+  choicesTitle: 'Выбор для перевода',
+  choicesHint: 'Ответы, которые вы попросили сохранить для этого проекта. ИИ следует им и спрашивает снова только о том, что не решено.',
+  choiceOutputMode: 'Режим вывода',
+  choiceBilingual: 'Двуязычная раскладка',
+  choiceOcrPlacement: 'Размещение текста OCR',
+  choiceUndecided: 'Пока не решено. ИИ спросит перед записью.',
+  choiceReset: 'Сбросить',
+  choiceResetOne: 'Сбросить: {name}',
 } satisfies Record<keyof typeof zh, string>

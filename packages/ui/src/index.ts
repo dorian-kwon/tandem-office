@@ -297,6 +297,7 @@ export {
   type ChoiceRemember,
 } from './ai-choice'
 export { AI_CHOICE_LABELS, type AiChoiceLabels } from './strings-ai-choice'
+export { CHOICE_REMEMBER_KEYS, projectChoiceRemember } from './project-choice'
 export { useAiRunStatus, type AiRunStatusController } from './use-ai-run-status'
 export {
   TRANSLATION_LOCK_IDLE_MS,

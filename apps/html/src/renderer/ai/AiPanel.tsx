@@ -91,6 +91,7 @@ import {
   AiQueueStrip,
   AiRunStatusLine,
   choiceBubbleText,
+  projectChoiceRemember,
   useAiChoice,
   useAiRunStatus,
   AI_QUEUE_LABELS,
@@ -476,6 +477,7 @@ export function AiPanel({
   const choice = useAiChoice({
     lang,
     busy,
+    remember: projectChoiceRemember(() => projectChat.run),
     send: (text) => {
       return send(text)
     },

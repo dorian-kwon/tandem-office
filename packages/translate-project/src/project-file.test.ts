@@ -4,6 +4,8 @@ import {
   defaultProjectFile,
   parseProjectFile,
   serializeProjectFile,
+  TRANSLATION_CHOICE_MAX_CHARS,
+  withChoice,
 } from './project-file'
 
 describe('project file', () => {
@@ -107,6 +109,58 @@ describe('project file', () => {
         quotePunctuation: 'default',
         custom: '',
       })
+    })
+  })
+
+  describe('choices (answers kept for the rest of the project)', () => {
+    it('is absent on a new project and on an old file', () => {
+      expect(defaultProjectFile('x', 'ko', 'en').choices).toBeUndefined()
+      const raw = JSON.stringify(defaultProjectFile('x', 'ko', 'en'))
+      expect(raw).not.toContain('choices')
+      expect(parseProjectFile(raw).choices).toBeUndefined()
+    })
+
+    it('roundtrips stored answers', () => {
+      const p = {
+        ...defaultProjectFile('x', 'ko', 'en'),
+        choices: { outputMode: 'Keep the original', bilingual: 'Two columns' },
+      }
+      expect(parseProjectFile(serializeProjectFile(p))).toEqual(p)
+    })
+
+    it('drops unknown keys, blank and non-string values, and trims', () => {
+      const raw = JSON.stringify({
+        ...defaultProjectFile('x', 'ko', 'en'),
+        choices: { outputMode: '  Overwrite  ', bilingual: '', ocrPlacement: 4, other: 'x' },
+      })
+      expect(parseProjectFile(raw).choices).toEqual({ outputMode: 'Overwrite' })
+    })
+
+    it('reads an empty or malformed value as none instead of failing the project', () => {
+      for (const choices of [{}, [], 'x', null, 7]) {
+        const raw = JSON.stringify({ ...defaultProjectFile('x', 'ko', 'en'), choices })
+        expect(parseProjectFile(raw).choices).toBeUndefined()
+      }
+    })
+
+    it('cuts an overlong answer', () => {
+      const raw = JSON.stringify({
+        ...defaultProjectFile('x', 'ko', 'en'),
+        choices: { bilingual: 'a'.repeat(TRANSLATION_CHOICE_MAX_CHARS + 50) },
+      })
+      expect(parseProjectFile(raw).choices?.bilingual).toHaveLength(TRANSLATION_CHOICE_MAX_CHARS)
+    })
+
+    it('withChoice sets and clears one answer and leaves the rest', () => {
+      const p = defaultProjectFile('x', 'ko', 'en')
+      const a = withChoice(p, 'outputMode', 'Overwrite')
+      expect(a.choices).toEqual({ outputMode: 'Overwrite' })
+      const b = withChoice(a, 'bilingual', 'Two columns')
+      expect(b.choices).toEqual({ outputMode: 'Overwrite', bilingual: 'Two columns' })
+      const c = withChoice(b, 'outputMode', null)
+      expect(c.choices).toEqual({ bilingual: 'Two columns' })
+      expect(withChoice(c, 'bilingual', null).choices).toBeUndefined()
+      expect(p.choices).toBeUndefined()
     })
   })
 })

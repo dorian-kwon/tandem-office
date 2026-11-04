@@ -275,4 +275,12 @@ export const ms = {
   exFollow: 'Tiada peraturan dihantar. AI mengikut konvensyen biasa bahasa sasaran.',
   styleCustomLabel: 'Arahan khas',
   styleCustomPlaceholder: 'cth. Guna ejaan British',
+  choicesTitle: 'Pilihan terjemahan',
+  choicesHint: 'Jawapan yang anda minta disimpan untuk projek ini. AI mengikutinya dan hanya bertanya semula tentang perkara yang belum diputuskan.',
+  choiceOutputMode: 'Mod output',
+  choiceBilingual: 'Susun atur dwibahasa',
+  choiceOcrPlacement: 'Penempatan teks OCR',
+  choiceUndecided: 'Belum diputuskan. AI bertanya sebelum menulis.',
+  choiceReset: 'Tetapkan semula',
+  choiceResetOne: 'Tetapkan semula: {name}',
 } satisfies Record<keyof typeof zh, string>

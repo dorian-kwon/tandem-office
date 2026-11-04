@@ -253,4 +253,12 @@ export const zh = {
   exFollow: '不发送任何规则。AI 遵循目标语言的惯例。',
   styleCustomLabel: '自定义说明',
   styleCustomPlaceholder: '例如：使用英式拼写',
+  choicesTitle: '翻译选择',
+  choicesHint: '你要求在本项目中保留的回答。AI 会遵循它们，只对尚未决定的事再次询问。',
+  choiceOutputMode: '输出方式',
+  choiceBilingual: '双语排版',
+  choiceOcrPlacement: 'OCR 文字位置',
+  choiceUndecided: '尚未决定。AI 会在写入前先询问。',
+  choiceReset: '重置',
+  choiceResetOne: '重置：{name}',
 }

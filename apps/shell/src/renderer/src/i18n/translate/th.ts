@@ -261,4 +261,12 @@ export const th = {
   exFollow: 'ไม่มีการส่งกฎ AI จะทำตามธรรมเนียมทั่วไปของภาษาปลายทาง',
   styleCustomLabel: 'คำสั่งที่กำหนดเอง',
   styleCustomPlaceholder: 'เช่น ใช้การสะกดแบบอังกฤษ',
+  choicesTitle: 'ตัวเลือกการแปล',
+  choicesHint: 'คำตอบที่คุณขอให้เก็บไว้สำหรับโปรเจกต์นี้ AI จะทำตามและถามซ้ำเฉพาะเรื่องที่ยังไม่ได้ตัดสินใจ',
+  choiceOutputMode: 'รูปแบบผลลัพธ์',
+  choiceBilingual: 'รูปแบบสองภาษา',
+  choiceOcrPlacement: 'ตำแหน่งข้อความ OCR',
+  choiceUndecided: 'ยังไม่ได้ตัดสินใจ AI จะถามก่อนเขียน',
+  choiceReset: 'รีเซ็ต',
+  choiceResetOne: 'รีเซ็ต: {name}',
 } satisfies Record<keyof typeof zh, string>

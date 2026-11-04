@@ -270,4 +270,12 @@ export const en = {
   exFollow: 'No rule is sent. The AI follows the target language’s usual convention.',
   styleCustomLabel: 'Custom instruction',
   styleCustomPlaceholder: 'e.g. Use British spelling',
+  choicesTitle: 'Translation choices',
+  choicesHint: 'Answers you asked to keep for this project. The AI follows them and asks again only for what is not decided.',
+  choiceOutputMode: 'Output mode',
+  choiceBilingual: 'Bilingual layout',
+  choiceOcrPlacement: 'OCR placement',
+  choiceUndecided: 'Not decided yet. The AI asks before writing.',
+  choiceReset: 'Reset',
+  choiceResetOne: 'Reset: {name}',
 } satisfies Record<keyof typeof zh, string>

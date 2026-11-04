@@ -277,4 +277,12 @@ export const nl = {
   exFollow: 'Er wordt geen regel meegestuurd. De AI volgt de gebruikelijke conventie van de doeltaal.',
   styleCustomLabel: 'Eigen instructie',
   styleCustomPlaceholder: 'bijv. Britse spelling gebruiken',
+  choicesTitle: 'Vertaalkeuzes',
+  choicesHint: 'Antwoorden die u voor dit project wilde bewaren. De AI volgt ze en vraagt alleen opnieuw wat nog niet is beslist.',
+  choiceOutputMode: 'Uitvoermodus',
+  choiceBilingual: 'Tweetalige opmaak',
+  choiceOcrPlacement: 'Plaatsing van OCR-tekst',
+  choiceUndecided: 'Nog niet beslist. De AI vraagt het voordat hij schrijft.',
+  choiceReset: 'Herstellen',
+  choiceResetOne: 'Herstellen: {name}',
 } satisfies Record<keyof typeof zh, string>

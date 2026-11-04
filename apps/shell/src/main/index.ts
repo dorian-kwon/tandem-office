@@ -141,6 +141,7 @@ import { registerResultStoreIpc } from './result-store-ipc'
 import { registerTranslateIpc } from './translate/translate-ipc'
 import { createOcrService, type OcrServiceDeps } from './translate/ocr'
 import { createOcrChatService, type OcrChatService } from './translate/ocr-chat'
+import { rememberTranslationChoice } from './translate/choices'
 import { createChatOcrModel } from './translate/ocr-chat-model'
 import { chatOcrSourceResolver, pruneOcrWorkDir } from './translate/ocr-chat-source'
 import type { OcrMode } from '@genoffice/translate-project'
@@ -5890,6 +5891,8 @@ function registerProjectFolderChannels(): void {
         ? chatOcrService.execute(sender, args, context)
         : Promise.resolve({ output: 'OCR is unavailable', summary: 'OCR', isError: true }),
     forgetOcr: (sender) => chatOcrService?.forget(sender),
+    rememberChoice: (root, key, value) =>
+      rememberTranslationChoice(APP_SETTINGS_PATH(), root, key, value),
     send: (target, channel, payload) => {
       const contents = webContents.fromId(target)
       if (!contents || contents.isDestroyed()) return false

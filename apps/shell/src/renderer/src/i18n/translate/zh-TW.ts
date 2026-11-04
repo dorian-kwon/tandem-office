@@ -254,4 +254,12 @@ export const zhTW = {
   exFollow: '不送出任何規則。AI 遵循目標語言的慣例。',
   styleCustomLabel: '自訂說明',
   styleCustomPlaceholder: '例如：使用英式拼寫',
+  choicesTitle: '翻譯選擇',
+  choicesHint: '你要求在本專案中保留的回答。AI 會遵循它們，只對尚未決定的事再次詢問。',
+  choiceOutputMode: '輸出方式',
+  choiceBilingual: '雙語排版',
+  choiceOcrPlacement: 'OCR 文字位置',
+  choiceUndecided: '尚未決定。AI 會在寫入前先詢問。',
+  choiceReset: '重設',
+  choiceResetOne: '重設：{name}',
 } satisfies Record<keyof typeof zh, string>

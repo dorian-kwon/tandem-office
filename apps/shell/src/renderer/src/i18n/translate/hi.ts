@@ -273,4 +273,12 @@ export const hi = {
   exFollow: 'कोई नियम नहीं भेजा जाता। AI लक्ष्य भाषा की सामान्य परिपाटी का पालन करता है।',
   styleCustomLabel: 'अपना निर्देश',
   styleCustomPlaceholder: 'जैसे: ब्रिटिश वर्तनी का उपयोग करें',
+  choicesTitle: 'अनुवाद के विकल्प',
+  choicesHint: 'वे उत्तर जिन्हें आपने इस प्रोजेक्ट के लिए रखने को कहा। AI इनका पालन करता है और केवल उन्हीं बातों पर दोबारा पूछता है जो तय नहीं हैं।',
+  choiceOutputMode: 'आउटपुट मोड',
+  choiceBilingual: 'द्विभाषी लेआउट',
+  choiceOcrPlacement: 'OCR पाठ की जगह',
+  choiceUndecided: 'अभी तय नहीं। AI लिखने से पहले पूछेगा।',
+  choiceReset: 'रीसेट करें',
+  choiceResetOne: 'रीसेट करें: {name}',
 } satisfies Record<keyof typeof zh, string>

@@ -19,6 +19,7 @@ import {
   DEFAULT_REFERENCE_CHARS,
   loadProject,
   saveProject,
+  translationChoicesRule,
   type GlossaryEntry,
 } from '@genoffice/translate-project'
 import { writeTranslationProjects, writeTranslationSystemPrompt } from '../src/main/app-settings'
@@ -154,7 +155,10 @@ describe('buildTranslationInstructions', () => {
     writeFileSync(ref, 'x')
     await addReference(dir, ref)
     const built = await buildTranslationInstructions(dir, '', { settingsPath })
-    expect(built.promptText).toBe('GLOBAL\n\nPROJECT\n번역: en → ko')
+    // an undecided project also tells the AI which questions to ask before writing
+    expect(built.promptText).toBe(
+      `GLOBAL\n\nPROJECT\n번역: en → ko\n${translationChoicesRule(undefined)}`,
+    )
     expect(built.materialText).toBe('단어집:\nengine → 엔진\n\n참고자료:\n- style.pdf')
     expect(`${built.promptText}\n\n${built.materialText}`).toBe(built.text)
   })

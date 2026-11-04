@@ -12,6 +12,7 @@ import {
   AiQueueStrip,
   AiRunStatusLine,
   choiceBubbleText,
+  projectChoiceRemember,
   useAiChoice,
   useAiRunStatus,
   AiScopeQuote,
@@ -242,6 +243,7 @@ export function AiPanel({
   const choice = useAiChoice({
     lang,
     busy,
+    remember: projectChoiceRemember(() => project.chat.run),
     send: (text) => {
       return send(text)
     },

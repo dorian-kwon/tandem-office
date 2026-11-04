@@ -277,4 +277,12 @@ export const it = {
   exFollow: 'Nessuna regola viene inviata. L’IA segue la convenzione abituale della lingua di destinazione.',
   styleCustomLabel: 'Istruzione personalizzata',
   styleCustomPlaceholder: 'es. usa l’ortografia britannica',
+  choicesTitle: 'Scelte di traduzione',
+  choicesHint: 'Risposte che hai chiesto di conservare per questo progetto. L’IA le segue e richiede solo ciò che non è deciso.',
+  choiceOutputMode: 'Modalità di output',
+  choiceBilingual: 'Layout bilingue',
+  choiceOcrPlacement: 'Posizione del testo OCR',
+  choiceUndecided: 'Non ancora deciso. L’IA chiede prima di scrivere.',
+  choiceReset: 'Ripristina',
+  choiceResetOne: 'Ripristina: {name}',
 } satisfies Record<keyof typeof zh, string>

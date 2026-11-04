@@ -263,4 +263,68 @@ describe('composeContext reference chunks', () => {
       expect(text.indexOf('번역: ko → en')).toBeLessThan(text.indexOf('Writing style'))
     })
   })
+
+  describe('translation choices', () => {
+    const withChoices = (choices: Record<string, string>) => project({ choices })
+
+    it('asks first for the output mode and the layout when nothing is decided', () => {
+      const { text } = composeContext({ ...base, project: project() })
+      expect(text).toContain('Translation choices')
+      expect(text).toContain('ask with ask_choice before writing')
+      expect(text).toContain('"outputMode"')
+      expect(text).toContain('"bilingual"')
+      expect(text).toContain('ocrPlacement')
+      expect(text).not.toContain('Output mode:')
+    })
+
+    it('states a stored output mode and no longer asks for it', () => {
+      const { text } = composeContext({
+        ...base,
+        project: withChoices({ outputMode: 'Keep the original and add the translation' }),
+      })
+      expect(text).toContain('- Output mode: Keep the original and add the translation')
+      expect(text).not.toContain('remember key "outputMode"')
+      // the layout depends on the mode, so it is still asked when the mode keeps the original
+      expect(text).toContain('remember key "bilingual"')
+    })
+
+    it('states every stored answer and asks for nothing when all are decided', () => {
+      const { text } = composeContext({
+        ...base,
+        project: withChoices({
+          outputMode: 'Overwrite',
+          bilingual: 'Two columns',
+          ocrPlacement: 'Column B',
+        }),
+      })
+      expect(text).toContain('- Output mode: Overwrite')
+      expect(text).toContain('- Bilingual layout: Two columns')
+      expect(text).toContain('- OCR placement: Column B')
+      expect(text).not.toContain('ask with ask_choice')
+    })
+
+    it('keeps each answer on one line', () => {
+      const { text } = composeContext({
+        ...base,
+        project: withChoices({ outputMode: 'a\nb', bilingual: 'x', ocrPlacement: 'y' }),
+      })
+      expect(text).toContain('- Output mode: a b')
+    })
+
+    it('sits in the project block after the language line and the writing style', () => {
+      const { text } = composeContext({
+        ...base,
+        project: project({
+          writingStyle: { serialComma: 'with', quotePunctuation: 'default', custom: '' },
+        }),
+      })
+      expect(text.indexOf('Writing style')).toBeLessThan(text.indexOf('Translation choices'))
+    })
+
+    it('is a small block (the context has a length cap)', () => {
+      const { text } = composeContext({ ...base, project: project() })
+      const block = text.slice(text.indexOf('Translation choices'))
+      expect(block.length).toBeLessThan(1200)
+    })
+  })
 })

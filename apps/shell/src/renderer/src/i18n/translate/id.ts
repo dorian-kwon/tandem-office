@@ -274,4 +274,12 @@ export const id = {
   exFollow: 'Tidak ada aturan yang dikirim. AI mengikuti kebiasaan umum bahasa target.',
   styleCustomLabel: 'Instruksi khusus',
   styleCustomPlaceholder: 'mis. Gunakan ejaan Inggris Britania',
+  choicesTitle: 'Pilihan terjemahan',
+  choicesHint: 'Jawaban yang Anda minta disimpan untuk proyek ini. AI mengikutinya dan hanya bertanya lagi untuk hal yang belum diputuskan.',
+  choiceOutputMode: 'Mode keluaran',
+  choiceBilingual: 'Tata letak dwibahasa',
+  choiceOcrPlacement: 'Penempatan teks OCR',
+  choiceUndecided: 'Belum diputuskan. AI bertanya sebelum menulis.',
+  choiceReset: 'Atur ulang',
+  choiceResetOne: 'Atur ulang: {name}',
 } satisfies Record<keyof typeof zh, string>

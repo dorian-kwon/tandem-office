@@ -1163,4 +1163,37 @@ describe('ProjectDetail table and settings', () => {
       'Not saved',
     )
   })
+
+  it('translation choices: an undecided project shows that the AI will ask, with no Reset', async () => {
+    await render(ProjectDetail, props())
+    const card = host.querySelector('[data-choices-card]') as HTMLElement
+    expect(card.querySelector('h3')?.textContent).toBe('Translation choices')
+    expect(card.querySelectorAll('[data-choice]')).toHaveLength(3)
+    for (const row of card.querySelectorAll('[data-choice]')) {
+      expect(row.textContent).toContain('Not decided yet')
+      expect(row.querySelector('button')).toBeNull()
+    }
+  })
+
+  it('translation choices: a kept answer shows and Reset forgets only that one', async () => {
+    api.getProject.mockResolvedValue(
+      project({ choices: { outputMode: 'Keep the original', bilingual: 'Two columns' } }),
+    )
+    await render(ProjectDetail, props())
+    const card = host.querySelector('[data-choices-card]') as HTMLElement
+    expect(card.querySelector('[data-choice="outputMode"]')?.textContent).toContain(
+      'Keep the original',
+    )
+    expect(card.querySelector('[data-choice="ocrPlacement"] button')).toBeNull()
+    await click(card.querySelector('[data-choice="outputMode"] button')!)
+    expect(api.updateSettings).toHaveBeenCalledWith({
+      dir: '/p/a',
+      patch: { choices: { bilingual: 'Two columns' } },
+    })
+    const after = host.querySelector('[data-choices-card]') as HTMLElement
+    expect(after.querySelector('[data-choice="outputMode"]')?.textContent).toContain(
+      'Not decided yet',
+    )
+    expect(after.querySelector('[data-choice="bilingual"]')?.textContent).toContain('Two columns')
+  })
 })

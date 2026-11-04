@@ -7,6 +7,7 @@ import {
   READ_CONTEXT_QUERY_MAX_CHARS,
   READ_CONTEXT_CONVERSATION_ID_MAX_CHARS,
   type ChatOcrAnswer,
+  type RememberChoiceResult,
   type ChatOcrRequest,
   type AddFolderResult,
   type AppendProjectChatArgs,
@@ -154,6 +155,11 @@ export interface ProjectIpcDeps {
     context: { docPath: string | null; projectRoot: string | null },
   ) => Promise<ChatOcrAnswer>
   forgetOcr?: (sender: number) => void
+  /**
+   * Keep an answer of the AI's question card in the translation project at `root` (the folder
+   * of the project the calling window's panel has chosen); absent: nothing is kept.
+   */
+  rememberChoice?: (root: string, key: string, value: string) => Promise<RememberChoiceResult>
   platform?: NodeJS.Platform
 }
 
@@ -441,10 +447,33 @@ export function registerProjectFolderIpc(deps: ProjectIpcDeps): ProjectIpcContro
     return result
   }
 
+  /** the project this window's AI panel has chosen now; null for none or a foreign window */
+  const windowProjectId = async (sender: number): Promise<ProjectId | null> => {
+    const win = deps.windowOf(sender)
+    if (!win) return null
+    if (chosen.has(sender)) return chosen.get(sender) ?? null
+    try {
+      return (await svc().guide.getSelection(await targetOf(sender, win))).projectId
+    } catch {
+      return null
+    }
+  }
+
   // ── handlers: one per bridge request (a missing one is a type error) ──
   const handlers: {
     [K in keyof typeof C]: (sender: number, raw: unknown) => unknown
   } = {
+    rememberChoice: async (sender, raw): Promise<RememberChoiceResult> => {
+      windowOf(sender)
+      const args = record(raw)
+      if (typeof args.key !== 'string' || typeof args.value !== 'string') {
+        return { ok: false, reason: 'invalid' }
+      }
+      const id = await windowProjectId(sender)
+      const root = id ? svc().guide.projectRoot(id) : null
+      if (!root || !deps.rememberChoice) return { ok: false, reason: 'not-translation' }
+      return deps.rememberChoice(root, args.key, args.value)
+    },
     ocr: async (sender, raw): Promise<ChatOcrAnswer> => {
       const win = windowOf(sender)
       const id = record(raw).scope === undefined ? null : svc().scopes.projectOf(sender, raw)
@@ -795,16 +824,7 @@ export function registerProjectFolderIpc(deps: ProjectIpcDeps): ProjectIpcContro
     forget,
     reset,
     untitledProject: (sender) => untitled.get(sender) ?? null,
-    windowProject: async (sender) => {
-      const win = deps.windowOf(sender)
-      if (!win) return null
-      if (chosen.has(sender)) return chosen.get(sender) ?? null
-      try {
-        return (await svc().guide.getSelection(await targetOf(sender, win))).projectId
-      } catch {
-        return null
-      }
-    },
+    windowProject: windowProjectId,
   }
 }
 

@@ -57,6 +57,10 @@ describe('conversational document OCR', () => {
     expect(skill.systemPrompt).toMatch(/apply.*explicit confirmation.*later human turn/i)
     expect(skill.systemPrompt).toMatch(/DOCX.*XLSX/)
     expect(skill.systemPrompt).toMatch(/never.*modal/i)
+    // the placement question goes through the shared numbered card, never prose
+    expect(skill.systemPrompt).toMatch(/ask_choice.*ocrPlacement/s)
+    expect(skill.systemPrompt).toMatch(/recommended placement first/i)
+    expect(skill.systemPrompt).toMatch(/reference.*cancel.*do not apply/is)
     const schema = skill.tools[0]!.inputSchema
     expect(schema.properties).not.toHaveProperty('turnId')
     expect(schema.properties).not.toHaveProperty('requestId')

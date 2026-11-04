@@ -300,3 +300,14 @@ Needs a rebuild of the shell app (`npm run build -w @genoffice/shell`). Check in
 6. Click a document's name in "Documents to translate": the translation view opens (same as the arrow button). A PDF scan still shows the OCR confirmation; with several documents "Start translation" stays disabled and shows the hint.
 7. Writing style card: choose "With Oxford comma" and "Inside the quotes": "Saved" appears. Open the translation view and ask the AI panel to show its instructions (or read `.tandem/project.json`): the Writing style rule is in the project context, and not there when both are "Follow the target language's usual convention". Type a custom instruction, leave the field: it is saved and sent as "Custom instruction: ...".
 8. An existing project made before this change opens with both writing style options on "Follow the target language's usual convention".
+
+## Translation project: kept answers and the three questions
+
+Needs a rebuild of the shell app (`npm run build -w @genoffice/shell`). Uses real AI turns (your subscription limit).
+
+1. New translation project, open a document and ask the AI to translate it. Before writing, the AI should ask the output mode as a numbered card (1 overwrite the output copy, 2 keep the original and add the translation beside it) with "Use this for the rest of the project" ticked-able. Pick 2 with the box ticked: the AI then asks the bilingual layout (parentheses after the term, translation after the paragraph, two columns or adjacent cell, adapted to the editor) and only then writes.
+2. Ask for another translation in the same project: neither question comes again. Open the project screen: the "Translation choices" card lists the output mode and the layout. Reset one item: only that row goes back to "Not decided yet", and the next translation asks that question again.
+3. Open an ordinary (non-translation) document and trigger a question: the card has no "rest of the project" box.
+4. A scan or picture OCR run in the chat (Word or any non-sheets editor): after you reviewed the recognised text the AI asks where it goes as a numbered card, the recommended place first and "Only keep the text as reference" last; choosing the reference option writes nothing into the document. In the sheets AI panel the picture OCR still opens its popup with its own placement dialog (unchanged).
+5. Look at the card in light and dark themes and a narrow window (the answer text moves under the name).
+

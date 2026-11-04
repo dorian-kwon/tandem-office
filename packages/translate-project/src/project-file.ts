@@ -13,6 +13,20 @@ export type WritingStyle = {
   custom: string
 }
 
+/**
+ * Answers the person gave to the AI's numbered questions and asked to keep for the whole
+ * project. The value is the chosen option's text or what they typed; absent means "not decided
+ * yet", and the AI must ask (ask_choice) before writing.
+ * - outputMode: overwrite the output copy, or keep the original and add the translation beside it
+ * - bilingual: the layout of the added translation (only when the original is kept)
+ * - ocrPlacement: where text read from pictures goes
+ */
+export const TRANSLATION_CHOICE_KEYS = ['outputMode', 'bilingual', 'ocrPlacement'] as const
+export type TranslationChoiceKey = (typeof TRANSLATION_CHOICE_KEYS)[number]
+export type TranslationChoices = Partial<Record<TranslationChoiceKey, string>>
+/** Longest stored answer; a longer one is cut when read */
+export const TRANSLATION_CHOICE_MAX_CHARS = 300
+
 export type SourceKind = 'editable' | 'pdf' | 'scan' | 'image'
 
 export type SourceEntry = { file: string; sha256: string; kind: SourceKind }
@@ -26,6 +40,8 @@ export type ProjectFile = {
   ocr: OcrMode
   /** absent in files written before this field existed; read as the default style */
   writingStyle: WritingStyle
+  /** absent until the person keeps an answer; absent and empty mean the same */
+  choices?: TranslationChoices
   sources: SourceEntry[]
   references: string[]
   glossaryFiles: string[]
@@ -124,6 +140,32 @@ function parseWritingStyle(v: unknown): WritingStyle {
   return out
 }
 
+function parseChoices(v: unknown): TranslationChoices | undefined {
+  // a malformed value must not make the whole project unreadable: it reads as none
+  if (!isRecord(v)) return undefined
+  const out: TranslationChoices = {}
+  for (const key of TRANSLATION_CHOICE_KEYS) {
+    const value = v[key]
+    if (typeof value !== 'string') continue
+    const text = value.replace(/\s+/g, ' ').trim().slice(0, TRANSLATION_CHOICE_MAX_CHARS)
+    if (text !== '') out[key] = text
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
+/** A copy of `p` with one answer set, or cleared with `null` (an empty set is dropped) */
+export function withChoice(
+  p: ProjectFile,
+  key: TranslationChoiceKey,
+  value: string | null,
+): ProjectFile {
+  const next: TranslationChoices = { ...p.choices }
+  if (value === null || value.trim() === '') delete next[key]
+  else next[key] = value
+  const { choices: _old, ...rest } = p
+  return Object.keys(next).length > 0 ? { ...rest, choices: next } : rest
+}
+
 function parseSource(v: unknown): SourceEntry {
   if (!isRecord(v)) throw new ProjectFileError('source entry must be an object')
   const kind = str(v, 'kind', 'source ')
@@ -146,6 +188,7 @@ export function parseProjectFile(json: string): ProjectFile {
   if (!isRecord(raw)) throw new ProjectFileError('root must be an object')
   if (raw.version !== 1) throw new ProjectFileError(`unsupported version: ${String(raw.version)}`)
   if (!Array.isArray(raw.sources)) throw new ProjectFileError('sources must be an array')
+  const choices = parseChoices(raw.choices)
   return {
     version: 1,
     name: str(raw, 'name'),
@@ -154,6 +197,7 @@ export function parseProjectFile(json: string): ProjectFile {
     projectPrompt: str(raw, 'projectPrompt'),
     ocr: parseOcr(raw.ocr),
     writingStyle: parseWritingStyle(raw.writingStyle),
+    ...(choices ? { choices } : {}),
     sources: raw.sources.map(parseSource),
     references: strList(raw, 'references'),
     glossaryFiles: strList(raw, 'glossaryFiles'),

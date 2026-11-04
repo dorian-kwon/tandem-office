@@ -2,6 +2,7 @@ import type {
   OcrMode,
   ProjectFile,
   ReferenceStatus,
+  TranslationChoices,
   WritingStyle,
 } from '@genoffice/translate-project'
 import type {
@@ -185,6 +186,8 @@ export interface TranslateSettingsPatch {
   projectPrompt?: string
   ocr?: OcrMode
   writingStyle?: WritingStyle
+  /** the answers kept for the project, as a whole set (a reset sends it without one item) */
+  choices?: TranslationChoices
   sourceLang?: string
   targetLang?: string
 }

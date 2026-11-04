@@ -259,4 +259,12 @@ export const ko = {
   exFollow: '보내는 규칙이 없습니다. AI가 번역 언어의 일반적인 관례를 따릅니다.',
   styleCustomLabel: '직접 쓰는 지침',
   styleCustomPlaceholder: '예: 영국식 철자를 쓴다',
+  choicesTitle: '번역 선택',
+  choicesHint: '이 프로젝트에서 계속 쓰기로 한 답입니다. AI는 이 답을 따르고, 정하지 않은 것만 다시 묻습니다.',
+  choiceOutputMode: '출력 방식',
+  choiceBilingual: '병기 배치',
+  choiceOcrPlacement: 'OCR 글 위치',
+  choiceUndecided: '아직 정하지 않았습니다. AI가 쓰기 전에 먼저 묻습니다.',
+  choiceReset: '되돌리기',
+  choiceResetOne: '되돌리기: {name}',
 } satisfies Record<keyof typeof zh, string>

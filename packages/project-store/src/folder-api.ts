@@ -838,6 +838,19 @@ export interface ChatOcrAnswer {
   }
 }
 
+/** The person kept an answer of the AI's question card for the rest of the translation project. */
+export interface RememberChoiceArgs {
+  /** the answer's name in the project file (`outputMode`, `bilingual`, `ocrPlacement`) */
+  key: string
+  /** the chosen option's text or what the person typed */
+  value: string
+}
+
+export type RememberChoiceResult =
+  | { ok: true }
+  /** `not-translation`: this window's project is not a translation project, nothing was written */
+  | { ok: false; reason: 'not-translation' | 'invalid' | 'failed' }
+
 /**
  * What the preload exposes to renderers. The calling window is identified by main
  * from the IPC sender; nothing here carries the window's own document path.
@@ -845,6 +858,11 @@ export interface ChatOcrAnswer {
 export interface ProjectFolderApi {
   /** App-owned OCR stages; all user choices and agreement happen in the AI chat. */
   ocr?(args: ChatOcrRequest): Promise<ChatOcrAnswer>
+  /**
+   * Keep an answer of the AI's question card in this window's translation project. Main takes
+   * the project from the calling window's panel selection, never from the request.
+   */
+  rememberChoice?(args: RememberChoiceArgs): Promise<RememberChoiceResult>
   // ---- list ----
   /** Pinned and recent projects */
   listProjects(): Promise<ProjectListItem[]>
@@ -958,6 +976,7 @@ export const PROJECT_FOLDER_EVENTS = {
 /** Request channels (`ipcRenderer.invoke`), one per bridge method */
 export const PROJECT_FOLDER_CHANNELS = {
   ocr: 'projectFolder:ocr',
+  rememberChoice: 'projectFolder:rememberChoice',
   listProjects: 'projectFolder:listProjects',
   addFolder: 'projectFolder:addFolder',
   getDefaultParentFolder: 'projectFolder:getDefaultParentFolder',

@@ -274,4 +274,12 @@ export const pl = {
   exFollow: 'Żadna reguła nie jest wysyłana. AI stosuje zwykłą konwencję języka docelowego.',
   styleCustomLabel: 'Własna instrukcja',
   styleCustomPlaceholder: 'np. używaj pisowni brytyjskiej',
+  choicesTitle: 'Wybory tłumaczenia',
+  choicesHint: 'Odpowiedzi, które chcesz zachować w tym projekcie. AI ich przestrzega i pyta ponownie tylko o to, co nie zostało ustalone.',
+  choiceOutputMode: 'Tryb wyjścia',
+  choiceBilingual: 'Układ dwujęzyczny',
+  choiceOcrPlacement: 'Miejsce tekstu OCR',
+  choiceUndecided: 'Jeszcze nie ustalono. AI zapyta przed zapisem.',
+  choiceReset: 'Resetuj',
+  choiceResetOne: 'Resetuj: {name}',
 } satisfies Record<keyof typeof zh, string>

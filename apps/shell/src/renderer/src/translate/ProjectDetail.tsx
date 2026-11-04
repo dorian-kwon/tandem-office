@@ -25,6 +25,7 @@ import {
 } from './icons'
 import { saveAsNoticeFor, type SaveAsNotice } from './save-as-action'
 import { DEFAULT_WRITING_STYLE, WritingStyleCard } from './WritingStyleCard'
+import { TranslationChoicesCard } from './TranslationChoicesCard'
 import { languageName, makeText, translateErrorText } from './shared'
 import '../projects-panel.css'
 import './translate.css'
@@ -192,14 +193,18 @@ export function ProjectDetail({
   const adoptSettings = (next: ProjectFile) => {
     const base = latest.current
     if (!base) return
-    adopt({
+    const merged: ProjectFile = {
       ...base,
       projectPrompt: next.projectPrompt,
       ocr: next.ocr,
       writingStyle: next.writingStyle,
       sourceLang: next.sourceLang,
       targetLang: next.targetLang,
-    })
+    }
+    // absent means "nothing kept": a reset must not leave the old set behind
+    if (next.choices) merged.choices = next.choices
+    else delete merged.choices
+    adopt(merged)
   }
 
   const adoptLists = (next: ProjectFile) => {
@@ -692,6 +697,12 @@ export function ProjectDetail({
               style={project.writingStyle ?? DEFAULT_WRITING_STYLE}
               s={s}
               onSave={(writingStyle) => save({ writingStyle })}
+            />
+
+            <TranslationChoicesCard
+              choices={project.choices}
+              s={s}
+              onSave={(choices) => save({ choices })}
             />
           </>
         )}

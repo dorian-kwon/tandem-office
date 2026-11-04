@@ -267,4 +267,12 @@ export const vi = {
   exFollow: 'Không có quy tắc nào được gửi. AI theo quy ước thông thường của ngôn ngữ đích.',
   styleCustomLabel: 'Hướng dẫn riêng',
   styleCustomPlaceholder: 'vd: dùng chính tả Anh',
+  choicesTitle: 'Lựa chọn dịch',
+  choicesHint: 'Những câu trả lời bạn đã yêu cầu giữ cho dự án này. AI làm theo và chỉ hỏi lại điều chưa quyết định.',
+  choiceOutputMode: 'Chế độ đầu ra',
+  choiceBilingual: 'Bố cục song ngữ',
+  choiceOcrPlacement: 'Vị trí văn bản OCR',
+  choiceUndecided: 'Chưa quyết định. AI sẽ hỏi trước khi ghi.',
+  choiceReset: 'Đặt lại',
+  choiceResetOne: 'Đặt lại: {name}',
 } satisfies Record<keyof typeof zh, string>

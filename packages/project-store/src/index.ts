@@ -73,6 +73,8 @@ export type {
   ProjectFolderApi,
   ChatOcrRequest,
   ChatOcrAnswer,
+  RememberChoiceArgs,
+  RememberChoiceResult,
   ProjectFolderChannel,
   ProjectFolderEventChannel,
   ProjectFolderEventMethod,

@@ -1082,3 +1082,46 @@
   align-items: flex-start;
   gap: 10px;
 }
+
+/* Translation choices card: one row per kept answer (name, value, Reset). Tokens only. */
+.tt-choices {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.tt-choice {
+  display: grid;
+  grid-template-columns: minmax(110px, 160px) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.tt-choice-name {
+  font-weight: 600;
+}
+
+.tt-choice-value {
+  overflow-wrap: anywhere;
+}
+
+.tt-choice-value.is-undecided {
+  color: var(--color-text-secondary);
+}
+
+@media (max-width: 560px) {
+  .tt-choice {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .tt-choice-value {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}

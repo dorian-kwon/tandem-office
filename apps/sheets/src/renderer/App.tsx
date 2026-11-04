@@ -102,6 +102,7 @@ import {
   placeRemoteEntries,
   useProjectPanel,
   TranslationLockBanner,
+  projectChoiceRemember,
   useAiChoice,
   useAiRunStatus,
   useTranslationLock,
@@ -1314,6 +1315,7 @@ export function App({
   const choice = useAiChoice({
     lang: getLang(),
     busy: aiBusy,
+    remember: projectChoiceRemember(() => project.chat.run),
     send: (text) => {
       if (agentLoopRef.current?.busy) return false
       handleSend(text)

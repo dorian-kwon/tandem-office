@@ -1,6 +1,6 @@
 import { DEFAULT_GLOSSARY_LIMIT, selectGlossary } from './glossary'
 import type { GlossaryEntry } from './glossary'
-import type { ProjectFile, WritingStyle } from './project-file'
+import type { ProjectFile, TranslationChoices, WritingStyle } from './project-file'
 import type { ReferenceChunk } from './reference-index'
 
 export type ComposedItemKind = 'system' | 'project' | 'glossary' | 'reference'
@@ -38,7 +38,10 @@ export function composeContext(input: {
   const projectPrompt = project.projectPrompt.trim()
   const languageLine = `번역: ${project.sourceLang} → ${project.targetLang}`
   const styleRule = writingStyleRule(project.writingStyle)
-  const projectText = [projectPrompt, languageLine, styleRule].filter((s) => s !== '').join('\n')
+  const choicesRule = translationChoicesRule(project.choices)
+  const projectText = [projectPrompt, languageLine, styleRule, choicesRule]
+    .filter((s) => s !== '')
+    .join('\n')
 
   const selected = selectGlossary(
     input.glossary,
@@ -124,6 +127,39 @@ export function writingStyleRule(style: WritingStyle | undefined): string {
   const custom = oneLine(style.custom ?? '')
   if (custom !== '') lines.push(`- Custom instruction: ${custom}`)
   return lines.length === 0 ? '' : `Writing style:\n${lines.join('\n')}`
+}
+
+/**
+ * The answers the person kept for this project (output mode, bilingual layout, OCR
+ * placement) as short rules, and for every question not answered yet one line telling the
+ * AI to ask with ask_choice before writing. The layout line is conditional because only the
+ * output mode "keep the original" needs a layout. Always non-empty: an undecided project
+ * must make the AI ask.
+ */
+export function translationChoicesRule(choices: TranslationChoices | undefined): string {
+  const c = choices ?? {}
+  const decided: string[] = []
+  if (c.outputMode) decided.push(`- Output mode: ${oneLine(c.outputMode)}`)
+  if (c.bilingual) decided.push(`- Bilingual layout: ${oneLine(c.bilingual)}`)
+  if (c.ocrPlacement) decided.push(`- OCR placement: ${oneLine(c.ocrPlacement)}`)
+  const ask: string[] = []
+  if (!c.outputMode)
+    ask.push(
+      '- Output mode is not decided: ask with ask_choice before writing (remember key "outputMode"): overwrite the output copy\'s text with the translation, or keep the original and add the translation beside it.',
+    )
+  if (!c.bilingual)
+    ask.push(
+      '- Bilingual layout is not decided: if the output mode keeps the original, ask with ask_choice before writing (remember key "bilingual"): original in parentheses after the translated term, translation after the original paragraph, or two columns / adjacent cell; adapt the options to this editor.',
+    )
+  if (!c.ocrPlacement)
+    ask.push(
+      '- OCR placement is not decided: after reading text from pictures, ask with ask_choice where it goes (remember key "ocrPlacement"); never place it without an answer.',
+    )
+  const head =
+    decided.length > 0
+      ? 'Translation choices (decided by the person; follow them, never invent your own):'
+      : 'Translation choices (none decided yet):'
+  return [head, ...decided, ...ask].join('\n')
 }
 
 /** Collapses any whitespace run containing a line break so a value stays on one prompt line. */

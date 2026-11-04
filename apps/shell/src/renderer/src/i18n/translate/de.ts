@@ -283,4 +283,12 @@ export const de = {
   exFollow: 'Es wird keine Regel gesendet. Die KI folgt dem üblichen Brauch der Zielsprache.',
   styleCustomLabel: 'Eigene Anweisung',
   styleCustomPlaceholder: 'z. B. britische Schreibweise verwenden',
+  choicesTitle: 'Übersetzungsentscheidungen',
+  choicesHint: 'Antworten, die Sie für dieses Projekt behalten wollten. Die KI befolgt sie und fragt nur nach, was noch nicht entschieden ist.',
+  choiceOutputMode: 'Ausgabemodus',
+  choiceBilingual: 'Zweisprachiges Layout',
+  choiceOcrPlacement: 'Platzierung des OCR-Texts',
+  choiceUndecided: 'Noch nicht entschieden. Die KI fragt, bevor sie schreibt.',
+  choiceReset: 'Zurücksetzen',
+  choiceResetOne: 'Zurücksetzen: {name}',
 } satisfies Record<keyof typeof zh, string>
