@@ -27,6 +27,8 @@ export const zh = {
   deleteFolderConfirmButton: '永久删除文件夹',
   recentTitle: '最近的文档',
   recentUnavailable: '文件夹或文件已不存在',
+  countSources: '文档 {n}',
+  countReferences: '参考资料 {n}',
   backToList: '所有项目',
   loading: '正在加载…',
   sourcesTitle: '待翻译的文档',

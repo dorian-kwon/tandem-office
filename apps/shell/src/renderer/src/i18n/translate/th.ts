@@ -28,6 +28,8 @@ export const th = {
   deleteFolderConfirmButton: 'ลบโฟลเดอร์อย่างถาวร',
   recentTitle: 'เอกสารล่าสุด',
   recentUnavailable: 'ไม่พบโฟลเดอร์หรือไฟล์',
+  countSources: 'เอกสาร {n}',
+  countReferences: 'เอกสารอ้างอิง {n}',
   backToList: 'โปรเจกต์ทั้งหมด',
   loading: 'กำลังโหลด…',
   sourcesTitle: 'เอกสารที่จะแปล',

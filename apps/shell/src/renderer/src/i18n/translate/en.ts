@@ -29,6 +29,8 @@ export const en = {
   deleteFolderConfirmButton: 'Delete folder permanently',
   recentTitle: 'Recent documents',
   recentUnavailable: 'Folder or file is missing',
+  countSources: 'Documents: {n}',
+  countReferences: 'References: {n}',
   backToList: 'All projects',
   loading: 'Loading...',
   sourcesTitle: 'Documents to translate',

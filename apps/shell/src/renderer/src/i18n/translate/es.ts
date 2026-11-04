@@ -29,6 +29,8 @@ export const es = {
   deleteFolderConfirmButton: 'Eliminar la carpeta de forma permanente',
   recentTitle: 'Documentos recientes',
   recentUnavailable: 'Falta la carpeta o el archivo',
+  countSources: 'Documentos: {n}',
+  countReferences: 'Referencias: {n}',
   backToList: 'Todos los proyectos',
   loading: 'Cargando…',
   sourcesTitle: 'Documentos para traducir',

@@ -30,6 +30,8 @@ export const de = {
   deleteFolderConfirmButton: 'Ordner endgültig löschen',
   recentTitle: 'Zuletzt geöffnete Dokumente',
   recentUnavailable: 'Ordner oder Datei fehlt',
+  countSources: 'Dokumente: {n}',
+  countReferences: 'Referenzen: {n}',
   backToList: 'Alle Projekte',
   loading: 'Wird geladen …',
   sourcesTitle: 'Zu übersetzende Dokumente',

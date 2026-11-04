@@ -29,6 +29,8 @@ export const it = {
   deleteFolderConfirmButton: 'Elimina definitivamente la cartella',
   recentTitle: 'Documenti recenti',
   recentUnavailable: 'Cartella o file mancante',
+  countSources: 'Documenti: {n}',
+  countReferences: 'Riferimenti: {n}',
   backToList: 'Tutti i progetti',
   loading: 'Caricamento…',
   sourcesTitle: 'Documenti da tradurre',

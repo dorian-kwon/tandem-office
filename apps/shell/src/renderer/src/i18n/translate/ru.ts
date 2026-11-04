@@ -30,6 +30,8 @@ export const ru = {
   deleteFolderConfirmButton: 'Удалить папку без возможности восстановления',
   recentTitle: 'Недавние документы',
   recentUnavailable: 'Папка или файл не найдены',
+  countSources: 'Документы: {n}',
+  countReferences: 'Справочные материалы: {n}',
   backToList: 'Все проекты',
   loading: 'Загрузка…',
   sourcesTitle: 'Документы для перевода',

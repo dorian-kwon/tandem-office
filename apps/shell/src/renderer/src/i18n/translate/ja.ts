@@ -28,6 +28,8 @@ export const ja = {
   deleteFolderConfirmButton: 'フォルダーを完全に削除',
   recentTitle: '最近の文書',
   recentUnavailable: 'フォルダーまたはファイルが見つかりません',
+  countSources: '文書 {n}',
+  countReferences: '参考資料 {n}',
   backToList: 'すべてのプロジェクト',
   loading: '読み込み中…',
   sourcesTitle: '翻訳する文書',

@@ -96,7 +96,16 @@ describe('translate IPC handlers', () => {
     })
     const list = await h.list()
     expect(list).toEqual([
-      { dir, name: 'P1', status: 'ok', sourceLang: 'en', targetLang: 'ko', lastOpened: 1000 },
+      {
+        dir,
+        name: 'P1',
+        status: 'ok',
+        sourceLang: 'en',
+        targetLang: 'ko',
+        lastOpened: 1000,
+        sourceCount: 0,
+        referenceCount: 0,
+      },
     ])
   })
 

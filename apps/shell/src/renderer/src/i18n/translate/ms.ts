@@ -30,6 +30,8 @@ export const ms = {
   deleteFolderConfirmButton: 'Padam folder secara kekal',
   recentTitle: 'Dokumen terkini',
   recentUnavailable: 'Folder atau fail tidak ditemui',
+  countSources: 'Dokumen: {n}',
+  countReferences: 'Rujukan: {n}',
   backToList: 'Semua projek',
   loading: 'Memuatkan…',
   sourcesTitle: 'Dokumen untuk diterjemah',

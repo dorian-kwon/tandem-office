@@ -30,6 +30,8 @@ export const id = {
   deleteFolderConfirmButton: 'Hapus folder secara permanen',
   recentTitle: 'Dokumen terbaru',
   recentUnavailable: 'Folder atau berkas tidak ditemukan',
+  countSources: 'Dokumen: {n}',
+  countReferences: 'Referensi: {n}',
   backToList: 'Semua proyek',
   loading: 'Memuat…',
   sourcesTitle: 'Dokumen yang akan diterjemahkan',

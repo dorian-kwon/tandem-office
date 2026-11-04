@@ -29,6 +29,8 @@ export const pl = {
   deleteFolderConfirmButton: 'Usuń folder trwale',
   recentTitle: 'Ostatnie dokumenty',
   recentUnavailable: 'Brak folderu lub pliku',
+  countSources: 'Dokumenty: {n}',
+  countReferences: 'Materiały: {n}',
   backToList: 'Wszystkie projekty',
   loading: 'Ładowanie…',
   sourcesTitle: 'Dokumenty do przetłumaczenia',
