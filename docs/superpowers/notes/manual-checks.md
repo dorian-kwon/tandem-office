@@ -236,3 +236,13 @@ Needs a rebuild of the shell app (`npm run build:all`): main, preload, the docs 
 5. An ordinary document (not opened from a translation project) with the AI running is never locked and shows no banner. The source pane keeps its own read-only guard.
 6. Leave a run silent for 5 minutes (for example by pulling the network mid-run): the lock lets go on its own.
 
+
+## Translation view: AI assistant open/closed per pane
+
+Needs a rebuild of the shell app (`npm run build:all`): main, preload, the docs and sheets renderers and the shared UI changed.
+
+1. Open a `.docx` translation. The output pane (editable) shows its AI assistant open; the source pane (read-only) shows only the small AI icon.
+2. Click into the source text, then back into the output: the source assistant never opens by itself, and the output assistant stays open the whole time (it no longer folds to the icon when the source has focus).
+3. Press the AI icon (or the ribbon AI Assistant button) in the source pane: the assistant opens. Press it in the output pane while the source has focus: the output gets focus and its panel stays open. Close the output panel with its own button: it stays closed through focus switches.
+4. Repeat with an `.xlsx` translation (copilot panel). Also check an ordinary split of two documents: the unfocused pane still folds to the icon as before.
+5. Known limit: the read-only guard blocks typing in the source pane, so its opened assistant cannot take typed text; use the output pane to chat.

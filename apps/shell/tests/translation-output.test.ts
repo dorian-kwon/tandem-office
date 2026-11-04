@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { isTranslationOutputTab, TRANSLATION_OUTPUT_CHANNEL } from '../src/main/translation-output'
+import {
+  isTranslationOutputTab,
+  isTranslationSourceTab,
+  TRANSLATION_OUTPUT_CHANNEL,
+  TRANSLATION_SOURCE_CHANNEL,
+} from '../src/main/translation-output'
 
 const split = { aTabId: 'src', bTabId: 'out' }
 const readOnly = (id: string) => id === 'src'
@@ -20,5 +25,21 @@ describe('isTranslationOutputTab', () => {
   })
   it('uses a channel the editors can name', () => {
     expect(TRANSLATION_OUTPUT_CHANNEL).toBe('app:is-translation-output')
+  })
+})
+
+describe('isTranslationSourceTab', () => {
+  it('is the read-only pane of the split, on either side', () => {
+    expect(isTranslationSourceTab('src', split, readOnly)).toBe(true)
+    expect(isTranslationSourceTab('src', { aTabId: 'out', bTabId: 'src' }, readOnly)).toBe(true)
+  })
+  it('is not the output, an ordinary split, or a tab outside the split', () => {
+    expect(isTranslationSourceTab('out', split, readOnly)).toBe(false)
+    expect(isTranslationSourceTab('src', split, () => false)).toBe(false)
+    expect(isTranslationSourceTab('src', null, readOnly)).toBe(false)
+    expect(isTranslationSourceTab('other', split, () => true)).toBe(false)
+  })
+  it('uses a channel the editors can name', () => {
+    expect(TRANSLATION_SOURCE_CHANNEL).toBe('app:is-translation-source')
   })
 })

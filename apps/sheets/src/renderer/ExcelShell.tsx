@@ -622,12 +622,14 @@ export function ExcelShell({
   )
   // the sidebar switch is a soft hide; it closes the panel when it turns off
   const aiSidebarEnabled = useAiSidebarEnabled(setIsCopilotOpen)
-  useEffect(() => {
-    rememberAiPanelOpen('ai-sheets-show-ai', isCopilotOpen)
-  }, [isCopilotOpen])
   // Split panes (decision 0036): as the secondary pane the dock is forced to
   // the rail, and the rail's click asks the shell to focus this pane first.
   const aiDock = useAiDock(isCopilotOpen, setIsCopilotOpen)
+  useEffect(() => {
+    // the translation source pane's closed default must not leak into the shared memory
+    if (aiDock.paneKind === 'source') return
+    rememberAiPanelOpen('ai-sheets-show-ai', isCopilotOpen)
+  }, [isCopilotOpen, aiDock.paneKind])
   // the "show the AI sidebar" setting off hides the copilot rail (soft hide):
   // an explicit AI action (ribbon run, toggle) still opens the panel, and
   // closing it returns to hidden — no dead affordances, no invisible runs

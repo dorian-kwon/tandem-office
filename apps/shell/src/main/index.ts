@@ -516,7 +516,12 @@ import {
 import { PROJECT_UNAVAILABLE, ProjectFolderTools, type DownloadAsk } from './projects/project-tools'
 import { runHeadlessExport, type HeadlessExporters } from './headless-export'
 import { TabManager, canonicalPath, type DetachedTab } from './tab-manager'
-import { isTranslationOutputTab, TRANSLATION_OUTPUT_CHANNEL } from './translation-output'
+import {
+  isTranslationOutputTab,
+  isTranslationSourceTab,
+  TRANSLATION_OUTPUT_CHANNEL,
+  TRANSLATION_SOURCE_CHANNEL,
+} from './translation-output'
 import { tabMenuTemplate, type TabMenuActions, isProgramFile } from './tab-menu'
 import { runTabDocumentAction, type TabDocumentAction } from './tab-document-actions'
 import { duplicateDocumentFile } from './tab-duplicate'
@@ -6451,6 +6456,17 @@ function registerHomeIpc(): void {
     const manager = tabManager
     if (!manager) return false
     return isTranslationOutputTab(
+      manager.tabIdForWebContents(event.sender.id),
+      manager.splitState(),
+      (id) => manager.isReadOnlyTab(id),
+    )
+  })
+
+  // an editor asks whether it is the translation view's read-only source pane
+  ipcMain.handle(TRANSLATION_SOURCE_CHANNEL, (event): boolean => {
+    const manager = tabManager
+    if (!manager) return false
+    return isTranslationSourceTab(
       manager.tabIdForWebContents(event.sender.id),
       manager.splitState(),
       (id) => manager.isReadOnlyTab(id),

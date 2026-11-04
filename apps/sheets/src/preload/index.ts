@@ -165,6 +165,7 @@ const desktopApi: DesktopApi = {
   },
   getAutoSaveDefault: () => ipcRenderer.invoke('app:get-auto-save-default'),
   isTranslationOutput: () => ipcRenderer.invoke('app:is-translation-output'),
+  isTranslationSource: () => ipcRenderer.invoke('app:is-translation-source'),
   onAutoSaveDefaultChanged(handler) {
     const listener = (_event: Electron.IpcRendererEvent, value: AutoSaveDefault) => handler(value)
     ipcRenderer.on('app:auto-save-default-changed', listener)

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 /** What a pane is for; "no role" (standalone editor, no split) is null. */
 export type SplitPaneRole = 'focus' | 'secondary'
@@ -99,8 +99,79 @@ export function useSplitPaneFocusPing(): void {
  * the rail so only the focus pane's panel is out; everywhere else the panel's
  * own open state stands.
  */
-export function effectiveAiPanelOpen(localOpen: boolean, role: SplitPaneRole | null): boolean {
+export function effectiveAiPanelOpen(
+  localOpen: boolean,
+  role: SplitPaneRole | null,
+  kind: TranslationPaneKind = null,
+): boolean {
+  // the translation output keeps its panel through a focus switch to the source
+  if (kind === 'output') return localOpen
   return role === 'secondary' ? false : localOpen
+}
+
+/** Which half of the translation view this window is; null outside one. */
+export type TranslationPaneKind = 'source' | 'output' | null
+
+/** The shell questions an editor's preload exposes for the translation view. */
+export interface TranslationPaneProbes {
+  readonly isSource?: (() => Promise<boolean>) | undefined
+  readonly isOutput?: (() => Promise<boolean>) | undefined
+}
+
+/** Source wins over output; a failing or missing probe counts as "no". */
+export async function probeTranslationPaneKind(
+  probes: TranslationPaneProbes,
+): Promise<TranslationPaneKind> {
+  const ask = async (fn?: () => Promise<boolean>) => {
+    try {
+      return fn ? (await fn()) === true : false
+    } catch {
+      return false
+    }
+  }
+  if (await ask(probes.isSource)) return 'source'
+  if (await ask(probes.isOutput)) return 'output'
+  return null
+}
+
+/**
+ * The AI dock for editors that can sit in the translation view. Source pane:
+ * its panel starts closed and never opens from focus alone, only from a press
+ * on the AI button or rail. Output pane: its panel is not forced to the rail
+ * when the source has focus. Both are re-probed whenever the split role changes.
+ */
+export function useTranslationAiDock(
+  localOpen: boolean,
+  setLocalOpen: (open: boolean) => void,
+  probes: TranslationPaneProbes,
+): { open: boolean; onExpand: () => void; paneKind: TranslationPaneKind } {
+  const { role, requestFocus } = useSplitPaneRole()
+  const [paneKind, setPaneKind] = useState<TranslationPaneKind>(null)
+  const probesRef = useRef(probes)
+  probesRef.current = probes
+  useEffect(() => {
+    if (role === null) {
+      setPaneKind(null)
+      return undefined
+    }
+    let live = true
+    void probeTranslationPaneKind(probesRef.current).then((k) => {
+      if (live) setPaneKind(k)
+    })
+    return () => {
+      live = false
+    }
+  }, [role])
+  const wasSource = useRef(false)
+  useEffect(() => {
+    if (paneKind === 'source' && !wasSource.current) setLocalOpen(false)
+    wasSource.current = paneKind === 'source'
+  }, [paneKind, setLocalOpen])
+  return {
+    open: effectiveAiPanelOpen(localOpen, role, paneKind),
+    onExpand: () => onAiRailClick(role, localOpen, setLocalOpen, requestFocus),
+    paneKind,
+  }
 }
 
 /**

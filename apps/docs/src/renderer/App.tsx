@@ -1601,8 +1601,10 @@ export function App() {
   }, [])
 
   useEffect(() => {
+    // the translation source pane's closed default must not leak into the shared memory
+    if (aiDock.paneKind === 'source') return
     rememberAiPanelOpen('aidocs.showAi', showAi)
-  }, [showAi])
+  }, [showAi, aiDock.paneKind])
 
   useEffect(() => {
     localStorage.setItem('aidocs.showNav', showNav ? '1' : '0')

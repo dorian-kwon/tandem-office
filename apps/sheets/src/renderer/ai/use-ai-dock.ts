@@ -4,22 +4,23 @@
  * that rail asks the shell to focus this pane first, so the panel it opens is
  * the visible one. Without the bridge (a standalone editor) nothing changes.
  */
-import { effectiveAiPanelOpen, onAiRailClick, useSplitPaneRole } from '@genoffice/ui'
+import { useTranslationAiDock, type TranslationPaneKind } from '@genoffice/ui'
 
 export interface AiDockState {
   /** what the dock renders: a secondary pane's panel is forced to the rail */
   open: boolean
   /** a click on the collapsed rail: focus this pane first where the shell split it */
   onExpand: () => void
+  /** source: panel starts closed, opens only on a press; output: kept open on blur */
+  paneKind: TranslationPaneKind
 }
 
 export function useAiDock(
   localOpen: boolean,
   setLocalOpen: (open: boolean) => void,
 ): AiDockState {
-  const { role, requestFocus } = useSplitPaneRole()
-  return {
-    open: effectiveAiPanelOpen(localOpen, role),
-    onExpand: () => onAiRailClick(role, localOpen, setLocalOpen, requestFocus),
-  }
+  return useTranslationAiDock(localOpen, setLocalOpen, {
+    isSource: () => window.desktopApi?.isTranslationSource?.() ?? Promise.resolve(false),
+    isOutput: () => window.desktopApi?.isTranslationOutput?.() ?? Promise.resolve(false),
+  })
 }
