@@ -26,6 +26,53 @@ export function sortProjects(
     .map((x) => x.entry)
 }
 
+/** Rows per page of the project list. */
+export const PROJECT_PAGE_SIZE = 10
+
+/**
+ * The entries whose name, folder or language pair contains every word of `query`
+ * (case-insensitive); an empty query keeps all. `pairText` gives the pair's display text.
+ */
+export function filterProjects(
+  list: readonly TranslateProjectListEntry[],
+  query: string,
+  pairText: (entry: TranslateProjectListEntry) => string,
+): TranslateProjectListEntry[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean)
+  if (words.length === 0) return [...list]
+  return list.filter((entry) => {
+    const hay = `${entry.name}\n${entry.dir}\n${pairText(entry)}`.toLowerCase()
+    return words.every((word) => hay.includes(word))
+  })
+}
+
+export interface PageSlice<T> {
+  items: T[]
+  /** the page actually shown, 0-based, clamped into range */
+  page: number
+  pageCount: number
+  /** 1-based inclusive range of the shown items; 0 when empty */
+  from: number
+  to: number
+  total: number
+}
+
+/** One page of `list`; a page past the end (after a search or a delete) clamps to the last. */
+export function paginate<T>(list: readonly T[], page: number, size: number): PageSlice<T> {
+  const total = list.length
+  const pageCount = Math.max(1, Math.ceil(total / size))
+  const at = Math.min(Math.max(0, page), pageCount - 1)
+  const items = list.slice(at * size, at * size + size)
+  return {
+    items,
+    page: at,
+    pageCount,
+    from: total === 0 ? 0 : at * size + 1,
+    to: at * size + items.length,
+    total,
+  }
+}
+
 /** `text` cut to `max` characters with an ellipsis in the middle (both ends stay readable). */
 export function middleEllipsis(text: string, max: number): string {
   if (text.length <= max || max < 5) return text

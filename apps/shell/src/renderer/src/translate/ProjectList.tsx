@@ -11,7 +11,10 @@ import { normalizeProjectName } from '../../../shared/project-name'
 import { InlineName } from './InlineName'
 import { FileIcon, glyphForFile, ProjectIcon, SortChevron } from './icons'
 import {
+  filterProjects,
   middleEllipsis,
+  paginate,
+  PROJECT_PAGE_SIZE,
   moveRowFocus,
   readSessionSort,
   sortProjects,
@@ -73,6 +76,8 @@ export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
   /** the project whose name is being edited in its row */
   const [renaming, setRenaming] = useState<string | null>(null)
   const [sort, setSort] = useState<SortState>(readSessionSort)
+  const [query, setQuery] = useState('')
+  const [page, setPage] = useState(0)
   /** an added folder whose AI context is not linked (foreign instructions or memory) */
   const [notLinked, setNotLinked] = useState(false)
 
@@ -338,7 +343,14 @@ export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
     )
   }
 
-  const sortedProjects = projects ? sortProjects(projects, sort, lang) : []
+  const matched = projects
+    ? filterProjects(
+        sortProjects(projects, sort, lang),
+        query,
+        (entry) => `${languageName(lang, entry.sourceLang)} ${languageName(lang, entry.targetLang)}`,
+      )
+    : []
+  const slice = paginate(matched, page, PROJECT_PAGE_SIZE)
 
   const languageSelect = (value: string, label: string, set: (code: string) => void) => (
     <label className="projects-field">
@@ -497,6 +509,34 @@ export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
           </div>
         )}
         {projects !== null && projects.length > 0 && (
+          <div className="tt-toolbar">
+            <input
+              type="search"
+              className="tt-search"
+              data-project-search
+              value={query}
+              placeholder={s('searchProjects')}
+              aria-label={s('searchProjects')}
+              onChange={(e) => {
+                setQuery(e.target.value)
+                setPage(0)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape' && query) {
+                  e.stopPropagation()
+                  setQuery('')
+                  setPage(0)
+                }
+              }}
+            />
+          </div>
+        )}
+        {projects !== null && projects.length > 0 && matched.length === 0 && (
+          <p className="translate-lede" role="status" data-no-matches>
+            {s('noMatches', { query: query.trim() })}
+          </p>
+        )}
+        {projects !== null && matched.length > 0 && (
           <div
             role="table"
             className="tt tt-projects"
@@ -517,8 +557,31 @@ export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
               {sortHeader('lastOpened', s('colLastOpened'), ' tt-time')}
               <div role="columnheader" className="tt-col tt-actions" aria-hidden="true" />
             </div>
-            {sortedProjects.map(renderRow)}
+            {slice.items.map(renderRow)}
           </div>
+        )}
+        {slice.pageCount > 1 && (
+          <nav className="tt-pager" aria-label={s('title')} data-project-pager>
+            <span className="tt-pager-status" role="status">
+              {s('pageStatus', { from: slice.from, to: slice.to, total: slice.total })}
+            </span>
+            <button
+              type="button"
+              className="projects-ghost"
+              disabled={slice.page === 0}
+              onClick={() => setPage(slice.page - 1)}
+            >
+              {s('pagePrev')}
+            </button>
+            <button
+              type="button"
+              className="projects-ghost"
+              disabled={slice.page >= slice.pageCount - 1}
+              onClick={() => setPage(slice.page + 1)}
+            >
+              {s('pageNext')}
+            </button>
+          </nav>
         )}
 
         {recent.length > 0 && (

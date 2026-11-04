@@ -28,7 +28,7 @@
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   background: var(--surface);
-  color: var(--text);
+  color: var(--text-primary);
   font: inherit;
   font-size: 14px;
 }
@@ -909,7 +909,7 @@
   border: none;
   border-radius: 6px;
   background: none;
-  color: var(--text);
+  color: var(--text-primary);
   font: inherit;
   font-size: 14px;
   text-align: start;
@@ -1216,4 +1216,35 @@
     grid-column: 1 / -1;
     grid-row: 2;
   }
+}
+
+.tt-toolbar {
+  display: flex;
+  margin: 0 0 8px;
+}
+.tt-search {
+  width: 100%;
+  max-width: 320px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-primary);
+  font: inherit;
+}
+.tt-search:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.tt-pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 8px 0 0;
+}
+.tt-pager-status {
+  margin-right: auto;
+  color: var(--text-muted);
+  font-size: 12px;
 }
