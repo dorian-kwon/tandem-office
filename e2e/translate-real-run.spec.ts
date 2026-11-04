@@ -13,7 +13,8 @@ import { closeAndSaveVideo, launchShell } from './helpers'
  * IEUM_TRANSLATE_REAL=1. Not part of the suite.
  */
 const REAL = process.env.IEUM_TRANSLATE_REAL === '1'
-const SRC_PROJECT = '/Users/dorian/Documents/tandem office/test/번역프로젝트'
+const SRC_PROJECT =
+  process.env.REAL_RUN_SRC ?? '/Users/dorian/Documents/tandem office/test/번역프로젝트'
 const DOC = '공간 속의 기호_도록용_이민수.docx'
 const OUT_DIR =
   process.env.REAL_RUN_OUT ??
@@ -224,6 +225,15 @@ test('real translation run (the machine main AI setting)', async () => {
     await page.screenshot({ path: join(OUT_DIR, '02-split.png') })
 
     const composer = editor.locator('.ai-composer textarea')
+    if (!(await composer.isVisible().catch(() => false))) {
+      // the panel can start collapsed to an icon: open it from the ribbon button
+      await editor
+        .getByRole('button', { name: 'AI Assistant' })
+        .first()
+        .click({ timeout: 10_000 })
+        .catch(() => undefined)
+      await composer.waitFor({ timeout: 10_000 }).catch(() => undefined)
+    }
     if (!(await composer.isVisible().catch(() => false))) {
       note('composerHidden', 'AI panel composer not visible in output pane')
       await editor.screenshot({ path: join(OUT_DIR, '02b-no-composer.png') })
