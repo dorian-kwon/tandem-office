@@ -5703,21 +5703,21 @@
   },
   {
     "date": "2026-11-04",
-    "totalDownloads": 44208,
+    "totalDownloads": 44284,
     "installs": {
-      "windows": 32400,
-      "macos": 9874,
-      "linux": 1934
+      "windows": 32452,
+      "macos": 9894,
+      "linux": 1938
     },
-    "updateChecks": 70739,
+    "updateChecks": 71655,
     "releaseCount": 11,
-    "stars": 744,
+    "stars": 745,
     "forks": 136,
     "releases": [
       {
         "tag": "v0.12.10",
         "publishedAt": "2026-11-01T06:38:02Z",
-        "downloads": 7256
+        "downloads": 7332
       },
       {
         "tag": "v0.12.9",
@@ -5774,12 +5774,12 @@
       {
         "release": "v0.12.10",
         "asset": "IeumOffice-0.12.10-arm64-mac.zip",
-        "downloads": 151
+        "downloads": 154
       },
       {
         "release": "v0.12.10",
         "asset": "IeumOffice-0.12.10-arm64.dmg",
-        "downloads": 1091
+        "downloads": 1106
       },
       {
         "release": "v0.12.10",
@@ -5789,12 +5789,12 @@
       {
         "release": "v0.12.10",
         "asset": "IeumOffice-0.12.10-x64.dmg",
-        "downloads": 133
+        "downloads": 135
       },
       {
         "release": "v0.12.10",
         "asset": "IeumOffice-0.12.10.AppImage",
-        "downloads": 174
+        "downloads": 177
       },
       {
         "release": "v0.12.10",
@@ -5804,27 +5804,27 @@
       {
         "release": "v0.12.10",
         "asset": "IeumOffice-Setup-0.12.10.exe",
-        "downloads": 5603
+        "downloads": 5655
       },
       {
         "release": "v0.12.10",
         "asset": "ieumoffice_0.12.10_amd64.deb",
-        "downloads": 52
+        "downloads": 53
       },
       {
         "release": "v0.12.10",
         "asset": "latest-linux.yml",
-        "downloads": 303
+        "downloads": 313
       },
       {
         "release": "v0.12.10",
         "asset": "latest-mac.yml",
-        "downloads": 8641
+        "downloads": 9188
       },
       {
         "release": "v0.12.10",
         "asset": "latest.yml",
-        "downloads": 9015
+        "downloads": 9374
       },
       {
         "release": "v0.12.9",
