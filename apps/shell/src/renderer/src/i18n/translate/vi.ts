@@ -83,6 +83,8 @@ export const vi = {
   errOcrExpired: 'Cửa sổ OCR này đã hết hạn hoặc cài đặt OCR của dự án đã thay đổi. Hãy mở lại.',
   errOcrFailed: 'Không thể hoàn tất OCR.',
   ocrTitle: 'Đọc bằng AI (OCR)',
+  ocrPopupIntro:
+    'Chọn các hình ảnh cần đọc. Không có gì được gửi đi trước khi bạn xác nhận. Vị trí đặt văn bản sẽ được quyết định sau cùng với AI trong cuộc trò chuyện.',
   ocrRecommendation: 'Vị trí đề xuất',
   ocrUseRecommendation: 'Dùng đề xuất',
   ocrRecommendCells: 'Dùng các ô trống cạnh ảnh để giữ nội dung hiện có.',
@@ -199,7 +201,8 @@ export const vi = {
     'Không đọc được tệp bảng thuật ngữ. Hãy dùng tệp CSV, TXT phân tách bằng tab hoặc XLSX có thuật ngữ ở cột đầu tiên và bản dịch ở cột thứ hai.',
   saveAsTranslation: 'Lưu thành…',
   saveAsDone: 'Đã lưu bản dịch.',
-  saveAsUnsaved: 'Bản dịch có thay đổi chưa lưu. Hãy lưu trong trình soạn thảo trước, rồi chọn lại «Lưu thành…».',
+  saveAsUnsaved:
+    'Bản dịch có thay đổi chưa lưu. Hãy lưu trong trình soạn thảo trước, rồi chọn lại «Lưu thành…».',
   errOutputMissing: 'Chưa có bản dịch để lưu. Hãy mở bản dịch trước.',
   errExportRefused:
     'Hãy chọn nơi khác. Không thể dùng thư mục nguồn của dự án hoặc chính tệp bản dịch.',
@@ -268,7 +271,8 @@ export const vi = {
   styleCustomLabel: 'Hướng dẫn riêng',
   styleCustomPlaceholder: 'vd: dùng chính tả Anh',
   choicesTitle: 'Lựa chọn dịch',
-  choicesHint: 'Những câu trả lời bạn đã yêu cầu giữ cho dự án này. AI làm theo và chỉ hỏi lại điều chưa quyết định.',
+  choicesHint:
+    'Những câu trả lời bạn đã yêu cầu giữ cho dự án này. AI làm theo và chỉ hỏi lại điều chưa quyết định.',
   choiceOutputMode: 'Chế độ đầu ra',
   choiceBilingual: 'Bố cục song ngữ',
   choiceOcrPlacement: 'Vị trí văn bản OCR',

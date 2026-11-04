@@ -28,6 +28,7 @@ import {
   type ReferenceConverter,
 } from '@genoffice/translate-project'
 import { convertReference } from './reference-convert'
+import { checkOcrPopupResult, type OcrPopupResult } from '../../shared/ocr-popup'
 import { createPictureInfo } from './picture-info'
 import { PickAllowlist } from './pick-allowlist'
 import { createOcrService, type OcrService, type OcrServiceDeps } from './ocr'
@@ -119,8 +120,10 @@ export interface TranslateIpcDeps {
   projects?: TranslationProjectLink
   /** page rendering and the .docx conversion for OCR (main/translate/ocr.ts); absent: no OCR */
   ocr?: OcrServiceDeps
-  /** the OCR popup closed: the sheets AI panel that opened it stops showing "waiting" */
-  onOcrPopupClosed?: () => void
+  /** the OCR popup (sender id) was dismissed: the asking AI panel stops showing "waiting" */
+  onOcrPopupClosed?: (senderId: number) => void
+  /** the OCR popup (sender id) finished reading: its text goes to the asking AI panel */
+  onOcrPopupResult?: (senderId: number, result: OcrPopupResult) => void
   /** the save dialog, the editor's unsaved state and Documents folder for exporting a translation */
   exportTranslation?: ExportTranslationDeps
   /**
@@ -232,6 +235,7 @@ export function createTranslateHandlers(deps: TranslateIpcDeps) {
     ocrWrite: guard(raw.ocrWrite),
     ocrRelease: guard(raw.ocrRelease),
     ocrPopupClosed: guard(raw.ocrPopupClosed),
+    ocrPopupResult: guard(raw.ocrPopupResult),
     exportTranslation: guard(raw.exportTranslation),
     ocrForgetOwner: guard(raw.ocrForgetOwner),
     instructionsFor: guard(raw.instructionsFor),
@@ -835,8 +839,12 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       return exportTranslation(dir, entry, args.output, project.targetLang, exporter)
     },
 
-    async ocrPopupClosed(): Promise<void> {
-      deps.onOcrPopupClosed?.()
+    async ocrPopupClosed(senderId: number): Promise<void> {
+      deps.onOcrPopupClosed?.(senderId)
+    },
+
+    async ocrPopupResult(senderId: number, result: unknown): Promise<void> {
+      deps.onOcrPopupResult?.(senderId, checkOcrPopupResult(result))
     },
 
     async ocrRelease(token: string): Promise<void> {
@@ -944,7 +952,10 @@ export function registerTranslateIpc(
   handle(TRANSLATE_CHANNELS.ocrWrite, (_e, args: TranslateOcrWriteArgs) => h.ocrWrite(args))
   handle(TRANSLATE_CHANNELS.ocrRecommend, (_e, args: TranslateOcrStartArgs) => h.ocrRecommend(args))
   handle(TRANSLATE_CHANNELS.ocrRelease, (_e, token: string) => h.ocrRelease(token))
-  handle(TRANSLATE_CHANNELS.ocrPopupClosed, () => h.ocrPopupClosed())
+  handle(TRANSLATE_CHANNELS.ocrPopupClosed, (e) => h.ocrPopupClosed((e.sender as OcrSender).id))
+  handle(TRANSLATE_CHANNELS.ocrPopupResult, (e, result: unknown) =>
+    h.ocrPopupResult((e.sender as OcrSender).id, result),
+  )
   handle(TRANSLATE_CHANNELS.exportTranslation, (_e, args: TranslateExportArgs) =>
     h.exportTranslation(args),
   )

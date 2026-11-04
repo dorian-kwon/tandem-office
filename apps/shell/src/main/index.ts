@@ -146,6 +146,8 @@ import { createChatOcrModel } from './translate/ocr-chat-model'
 import { chatOcrSourceResolver, pruneOcrWorkDir } from './translate/ocr-chat-source'
 import type { OcrMode } from '@genoffice/translate-project'
 import { createOcrPicturesHost } from './translate/ocr-pictures'
+import { createOcrPopupHost } from './translate/ocr-popup-host'
+import { mountOcrPopupView } from './translate/ocr-popup-view'
 import { TranslateIpcError, TRANSLATE_EVENTS } from '../shared/translate-api'
 import type {
   PageCountJobValue,
@@ -260,7 +262,7 @@ import {
   setSheetsHostWindowHook,
   setSheetsPasswordPrompt,
   setSheetsShellWindow,
-  notifyOcrPopupClosed,
+  notifyOcrPopupOutcome,
   setSheetsWorkbookOpenedHook,
   startSheetsCaptureServer,
   stopSheetsSidecar,
@@ -778,7 +780,7 @@ configureSheetsRuntime({
   writeNewDocument: (id, fileName, bytes) => writeProjectNewDocument(id, fileName, bytes),
   ocrPictures: {
     list: (path) => sheetsPicturesHost.list(path),
-    open: (path) => sheetsPicturesHost.open(path),
+    open: (path, asker) => sheetsPicturesHost.open(path, asker),
   },
 })
 configureSlidesRuntime({
@@ -9095,18 +9097,44 @@ const chatOcrMode = (): OcrMode => {
   return { kind: 'ai', provider }
 }
 const chatOcrWorkDir = (): string => join(app.getPath('userData'), 'ocr-chat')
-/** The sheets AI's picture OCR: list a workbook's pictures, open the OCR popup on the home tab. */
+/**
+ * The window an asking editor's webContents lives in: its detached window, or the shell window
+ * when it is one of the shell's tabs. Null when neither can host an overlay.
+ */
+function askingWindow(wcId: number): BrowserWindow | null {
+  const detachedWin = detachedWindowForWebContents(wcId)
+  if (detachedWin) return detachedWin
+  if (shellWindow && !shellWindow.isDestroyed() && tabManager?.tabIdForWebContents(wcId))
+    return shellWindow
+  return null
+}
+/**
+ * The OCR selection popup the sheets AI opens: an overlay view mounted on the asking window
+ * (never a tab switch, a screen or another window). Main owns its lifecycle: it ends when the
+ * person finishes or cancels, or when the asking window closes.
+ */
+const ocrPopupHost = createOcrPopupHost({
+  mount: (asker, target) => {
+    const win = askingWindow(asker)
+    if (!win) return null
+    const view = mountOcrPopupView({
+      window: win,
+      target,
+      preloadPath: join(__dirname, '../preload/index.js'),
+      onGone: (popupId) => ocrPopupHost.viewGone(popupId),
+    })
+    // the asking tab or window closing takes the popup (and its running read) with it
+    const contents = webContents.fromId(asker)
+    contents?.once('destroyed', () => ocrPopupHost.askerGone(asker))
+    return view
+  },
+  deliver: (asker, outcome) => notifyOcrPopupOutcome(asker, outcome),
+})
+/** The sheets AI's picture OCR: list a workbook's pictures, open the OCR popup overlay. */
 const sheetsPicturesHost = createOcrPicturesHost({
   workDir: chatOcrWorkDir,
   ocrMode: chatOcrMode,
-  showOcr: (event) => {
-    revealShellWindow()
-    tabManager?.openHomeTab()
-    const contents = shellWindow?.webContents
-    if (!contents || contents.isDestroyed()) return false
-    contents.send(TRANSLATE_EVENTS.openOcr, event)
-    return true
-  },
+  openPopup: (asker, target) => ocrPopupHost.open(asker, target),
 })
 chatOcrService = createOcrChatService({
   ocr: createOcrService(translationOcrRuntime, Date.now, randomUUID),
@@ -9134,7 +9162,8 @@ registerTranslateIpc(
     // OCR of scanned PDFs and images: pages are rendered in a structure-job process owned
     // by the main window, the readings become .docx through the bundled CLI's converter
     ocr: translationOcrRuntime,
-    onOcrPopupClosed: () => notifyOcrPopupClosed(),
+    onOcrPopupClosed: (senderId) => void ocrPopupHost.cancel(senderId),
+    onOcrPopupResult: (senderId, result) => void ocrPopupHost.complete(senderId, result),
     // exporting a translation: the native save dialog, the editor's unsaved state, Documents
     exportTranslation: {
       showSaveDialog: (options) => {
@@ -9176,8 +9205,11 @@ registerTranslateIpc(
         isInsideRoot(dir, path),
       ),
   },
-  // the home screen, its dialogs and the tab strip live in the shell window only
-  (sender) => !!shellWindow && !shellWindow.isDestroyed() && sender === shellWindow.webContents,
+  // the home screen, its dialogs and the tab strip live in the shell window only; the OCR
+  // popup overlay main mounted on an editor window may use the same channels
+  (sender) =>
+    (!!shellWindow && !shellWindow.isDestroyed() && sender === shellWindow.webContents) ||
+    ocrPopupHost.isPopupSender((sender as WebContents).id),
 )
 registerTabsIpc()
 registerSplitIpc()

@@ -1,3 +1,4 @@
+import type { OcrPopupResult } from './ocr-popup'
 import type {
   OcrMode,
   ProjectFile,
@@ -49,6 +50,7 @@ export const TRANSLATE_CHANNELS = {
   ocrWrite: 'translate:ocr-write',
   ocrRelease: 'translate:ocr-release',
   ocrPopupClosed: 'translate:ocr-popup-closed',
+  ocrPopupResult: 'translate:ocr-popup-result',
   exportTranslation: 'translate:export-translation',
   instructionsFor: 'translate:instructions-for',
   pdfPrepare: 'translate:pdf-prepare',
@@ -342,15 +344,8 @@ export interface TranslateOcrPageImageArgs {
   index: number
 }
 
-/** Main asks the home screen to open the OCR selection popup for a project's source. */
-export interface TranslateOpenOcrEvent {
-  dir: string
-  file: string
-}
-
 /** Events main pushes to the shell renderer. */
 export const TRANSLATE_EVENTS = {
-  openOcr: 'translate:event:open-ocr',
   /** a translation output tab's Save As (tab menu) asks the shell screen to run Save as */
   saveAsRequested: 'translate:event:save-as-requested',
 } as const
@@ -397,16 +392,16 @@ export interface TranslateApi {
   /** A small local thumbnail of an embedded image, never the AI input. */
   ocrPreview(args: TranslateOcrPageImageArgs): Promise<OcrPageImage | null>
   ocrRecommend(args: TranslateOcrStartArgs): Promise<OcrRecommendation>
-  /** Subscribe to "open the OCR popup" requests; returns the unsubscribe function. */
-  onOpenOcr(listener: (event: TranslateOpenOcrEvent) => void): () => void
   /** the tab menu's Save As on a translation output tab: run "Save as…" for that output file */
   onSaveAsRequested(listener: (args: { outputPath: string }) => void): () => void
   /** write the readings into a new Word document in output/ (never overwriting) */
   ocrWrite(args: TranslateOcrWriteArgs): Promise<OcrWritten>
   /** drop the token (closing the dialog, stopping) */
   ocrRelease(token: string): Promise<void>
-  /** The OCR selection popup closed (finished or dismissed); lets a waiting AI panel carry on. */
+  /** The OCR popup overlay was dismissed; the asking AI panel stops waiting. */
   ocrPopupClosed(): Promise<void>
+  /** The OCR popup overlay read the pictures: their text goes to the asking AI panel. */
+  ocrPopupResult(result: OcrPopupResult): Promise<void>
   /** copy the current saved translation to a place the person picks (native save dialog) */
   exportTranslation(args: TranslateExportArgs): Promise<TranslateExportResult>
   /**

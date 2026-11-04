@@ -84,6 +84,8 @@ export const en = {
   errOcrExpired: "This OCR window has expired or the project's OCR setting changed. Open it again.",
   errOcrFailed: 'OCR could not be completed.',
   ocrTitle: 'Read with AI (OCR)',
+  ocrPopupIntro:
+    'Choose the pictures to read. Nothing is sent before you confirm. Where the text goes is decided with the AI in the chat afterwards.',
   ocrRecommendation: 'Recommended destination',
   ocrUseRecommendation: 'Use recommendation',
   ocrRecommendCells: 'Use empty cells beside the images to preserve existing contents.',
@@ -202,7 +204,8 @@ export const en = {
     'The glossary file could not be read. Use a CSV, a tab-separated TXT or an XLSX file with the term in the first column and its translation in the second.',
   saveAsTranslation: 'Save as…',
   saveAsDone: 'Translation saved.',
-  saveAsUnsaved: 'The translation has unsaved changes. Save it in the editor first, then use Save as… again.',
+  saveAsUnsaved:
+    'The translation has unsaved changes. Save it in the editor first, then use Save as… again.',
   errOutputMissing: 'There is no translation to save yet. Open the translation first.',
   errExportRefused:
     "Choose another place. The project's source folder and the translated file itself cannot be used.",
@@ -271,7 +274,8 @@ export const en = {
   styleCustomLabel: 'Custom instruction',
   styleCustomPlaceholder: 'e.g. Use British spelling',
   choicesTitle: 'Translation choices',
-  choicesHint: 'Answers you asked to keep for this project. The AI follows them and asks again only for what is not decided.',
+  choicesHint:
+    'Answers you asked to keep for this project. The AI follows them and asks again only for what is not decided.',
   choiceOutputMode: 'Output mode',
   choiceBilingual: 'Bilingual layout',
   choiceOcrPlacement: 'OCR placement',

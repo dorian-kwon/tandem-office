@@ -2389,3 +2389,9 @@ html[dir='rtl'] .quick-title-row {
 .kb-ask-assistant a:hover {
   text-decoration: underline;
 }
+
+/* the OCR popup overlay view: its page is transparent so the editor below shows through the dim layer */
+html.ocr-popup-root,
+html.ocr-popup-root body {
+  background: transparent;
+}

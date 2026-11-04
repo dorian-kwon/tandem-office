@@ -88,6 +88,8 @@ export const ms = {
     'Tetingkap OCR ini telah tamat tempoh atau tetapan OCR projek telah berubah. Buka semula.',
   errOcrFailed: 'OCR tidak dapat disiapkan.',
   ocrTitle: 'Baca dengan AI (OCR)',
+  ocrPopupIntro:
+    'Pilih gambar untuk dibaca. Tiada apa-apa dihantar sebelum anda mengesahkan. Tempat teks diletakkan ditentukan kemudian bersama AI dalam sembang.',
   ocrRecommendation: 'Destinasi disyorkan',
   ocrUseRecommendation: 'Gunakan cadangan',
   ocrRecommendCells: 'Gunakan sel kosong di sebelah imej untuk mengekalkan kandungan sedia ada.',
@@ -207,7 +209,8 @@ export const ms = {
     'Fail glosari tidak dapat dibaca. Gunakan fail CSV, TXT yang dipisahkan tab atau XLSX dengan istilah dalam lajur pertama dan terjemahannya dalam lajur kedua.',
   saveAsTranslation: 'Simpan sebagai…',
   saveAsDone: 'Terjemahan telah disimpan.',
-  saveAsUnsaved: 'Terjemahan mempunyai perubahan yang belum disimpan. Simpan dahulu dalam editor, kemudian pilih «Simpan sebagai…» semula.',
+  saveAsUnsaved:
+    'Terjemahan mempunyai perubahan yang belum disimpan. Simpan dahulu dalam editor, kemudian pilih «Simpan sebagai…» semula.',
   errOutputMissing: 'Belum ada terjemahan untuk disimpan. Buka terjemahan dahulu.',
   errExportRefused:
     'Pilih lokasi lain. Folder sumber projek dan fail terjemahan itu sendiri tidak boleh digunakan.',
@@ -260,7 +263,8 @@ export const ms = {
   renameInvalid: 'Masukkan nama projek 1 hingga 80 aksara tanpa pemisah baris.',
   statusReady: 'Sedia',
   styleTitle: 'Gaya penulisan',
-  styleHint: 'Dihantar bersama setiap permintaan supaya AI menterjemah secara konsisten. Disimpan apabila anda mengubahnya.',
+  styleHint:
+    'Dihantar bersama setiap permintaan supaya AI menterjemah secara konsisten. Disimpan apabila anda mengubahnya.',
   serialCommaLabel: 'Koma bersiri (koma Oxford)',
   quoteLabel: 'Koma dan noktah dengan tanda petikan',
   styleFollow: 'Ikut konvensyen biasa bahasa sasaran',
@@ -276,7 +280,8 @@ export const ms = {
   styleCustomLabel: 'Arahan khas',
   styleCustomPlaceholder: 'cth. Guna ejaan British',
   choicesTitle: 'Pilihan terjemahan',
-  choicesHint: 'Jawapan yang anda minta disimpan untuk projek ini. AI mengikutinya dan hanya bertanya semula tentang perkara yang belum diputuskan.',
+  choicesHint:
+    'Jawapan yang anda minta disimpan untuk projek ini. AI mengikutinya dan hanya bertanya semula tentang perkara yang belum diputuskan.',
   choiceOutputMode: 'Mod output',
   choiceBilingual: 'Susun atur dwibahasa',
   choiceOcrPlacement: 'Penempatan teks OCR',

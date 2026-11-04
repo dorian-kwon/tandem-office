@@ -79,6 +79,8 @@ export const zh = {
   errOcrExpired: '此 OCR 窗口已过期，或项目的 OCR 设置已更改。请重新打开。',
   errOcrFailed: 'OCR 未能完成。',
   ocrTitle: '用 AI 读取（OCR）',
+  ocrPopupIntro:
+    '请选择要读取的图片。确认之前不会发送任何内容。文字放到哪里，读取之后在聊天中与 AI 商定。',
   ocrRecommendation: '推荐位置',
   ocrUseRecommendation: '使用推荐位置',
   ocrRecommendCells: '使用图片旁的空单元格，保留现有内容。',

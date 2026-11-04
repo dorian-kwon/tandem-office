@@ -31,8 +31,6 @@ import './translate-global'
  */
 
 export interface TranslationPanelProps {
-  /** a request to open one source's OCR selection popup (the sheets AI's picture OCR) */
-  ocrRequest?: { dir: string; file: string; seq: number } | null
   /** the AI settings as last read; null until they are (Home owns them) */
   aiSettings?: AiSettings | null
   /** the live subscription connection (AppFrame owns the one instance) */
@@ -139,32 +137,7 @@ export function TranslationPanel(props: TranslationPanelProps = {}) {
     await handleOpened(dir, file, result)
   }
 
-  const requestSeq = useRef(0)
-  // the private project the sheets AI's popup opened: it is not in the list, so closing the
-  // popup returns to the project list instead of leaving its detail screen showing
-  const privateDir = useRef<string | null>(null)
-  const ocrRequest = props.ocrRequest
-  useEffect(() => {
-    if (!ocrRequest || ocrRequest.seq === requestSeq.current) return
-    requestSeq.current = ocrRequest.seq
-    current.current = ocrRequest.dir
-    privateDir.current = ocrRequest.dir
-    setOpenDir(ocrRequest.dir)
-    setNotice(null)
-    void startOcr(ocrRequest.dir, ocrRequest.file)
-    // startOcr only reads refs and setters; the request's sequence number is the trigger
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ocrRequest])
-
-  const close = () => {
-    // the sheets AI panel that asked for this popup is waiting for the person to finish here
-    if (flow?.kind === 'ocr') void window.translateApi?.ocrPopupClosed?.()
-    if (flow && privateDir.current && flow.dir === privateDir.current) {
-      privateDir.current = null
-      setOpenDir(null)
-    }
-    setFlow(null)
-  }
+  const close = () => setFlow(null)
   const connection = props.connection
   const aiSettings = props.aiSettings ?? null
   const openAiSettings = props.onOpenAiSettings ?? (() => undefined)

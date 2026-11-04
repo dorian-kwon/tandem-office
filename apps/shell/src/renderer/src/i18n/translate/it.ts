@@ -90,6 +90,8 @@ export const it = {
     'Questa finestra OCR è scaduta oppure l’impostazione OCR del progetto è cambiata. Aprila di nuovo.',
   errOcrFailed: 'Non è stato possibile completare l’OCR.',
   ocrTitle: 'Leggi con l’IA (OCR)',
+  ocrPopupIntro:
+    'Scegli le immagini da leggere. Non viene inviato nulla prima della tua conferma. Dove inserire il testo lo deciderai dopo con l’IA nella chat.',
   ocrRecommendation: 'Destinazione consigliata',
   ocrUseRecommendation: 'Usa il consiglio',
   ocrRecommendCells: 'Usa celle vuote accanto alle immagini per conservare il contenuto.',
@@ -209,7 +211,8 @@ export const it = {
     'Impossibile leggere il file del glossario. Usa un file CSV, TXT separato da tabulazioni o XLSX con il termine nella prima colonna e la traduzione nella seconda.',
   saveAsTranslation: 'Salva con nome…',
   saveAsDone: 'Traduzione salvata.',
-  saveAsUnsaved: "La traduzione ha modifiche non salvate. Salvala prima nell'editor, poi scegli di nuovo «Salva con nome…».",
+  saveAsUnsaved:
+    "La traduzione ha modifiche non salvate. Salvala prima nell'editor, poi scegli di nuovo «Salva con nome…».",
   errOutputMissing: "Non c'è ancora nessuna traduzione da salvare. Apri prima la traduzione.",
   errExportRefused:
     'Scegli un altro percorso. La cartella dei sorgenti del progetto e il file tradotto stesso non sono utilizzabili.',
@@ -262,7 +265,8 @@ export const it = {
   renameInvalid: 'Inserisci un nome di progetto da 1 a 80 caratteri, senza a capo.',
   statusReady: 'Pronto',
   styleTitle: 'Stile di scrittura',
-  styleHint: 'Inviato con ogni richiesta perché l’IA traduca in modo coerente. Salvato quando lo modifichi.',
+  styleHint:
+    'Inviato con ogni richiesta perché l’IA traduca in modo coerente. Salvato quando lo modifichi.',
   serialCommaLabel: 'Virgola seriale (virgola di Oxford)',
   quoteLabel: 'Virgole e punti con le virgolette',
   styleFollow: 'Segui la convenzione abituale della lingua di destinazione',
@@ -274,11 +278,13 @@ export const it = {
   exSerialWithout: 'mele, carote e pere',
   exQuoteOutside: '"mele", "carote"',
   exQuoteInside: '"mele," "carote,"',
-  exFollow: 'Nessuna regola viene inviata. L’IA segue la convenzione abituale della lingua di destinazione.',
+  exFollow:
+    'Nessuna regola viene inviata. L’IA segue la convenzione abituale della lingua di destinazione.',
   styleCustomLabel: 'Istruzione personalizzata',
   styleCustomPlaceholder: 'es. usa l’ortografia britannica',
   choicesTitle: 'Scelte di traduzione',
-  choicesHint: 'Risposte che hai chiesto di conservare per questo progetto. L’IA le segue e richiede solo ciò che non è deciso.',
+  choicesHint:
+    'Risposte che hai chiesto di conservare per questo progetto. L’IA le segue e richiede solo ciò che non è deciso.',
   choiceOutputMode: 'Modalità di output',
   choiceBilingual: 'Layout bilingue',
   choiceOcrPlacement: 'Posizione del testo OCR',

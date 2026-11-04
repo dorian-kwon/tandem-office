@@ -88,6 +88,8 @@ export const pl = {
     'To okno OCR wygasło lub zmieniło się ustawienie OCR projektu. Otwórz je ponownie.',
   errOcrFailed: 'Nie udało się dokończyć OCR.',
   ocrTitle: 'Odczyt przez AI (OCR)',
+  ocrPopupIntro:
+    'Wybierz obrazy do odczytania. Nic nie jest wysyłane przed potwierdzeniem. Gdzie trafi tekst, ustalisz potem z AI na czacie.',
   ocrRecommendation: 'Zalecane miejsce',
   ocrUseRecommendation: 'Użyj zalecenia',
   ocrRecommendCells: 'Puste komórki obok obrazów pozwalają zachować istniejącą zawartość.',
@@ -206,7 +208,8 @@ export const pl = {
     'Nie można odczytać pliku glosariusza. Użyj pliku CSV, TXT rozdzielanego tabulatorami lub XLSX z terminem w pierwszej kolumnie i tłumaczeniem w drugiej.',
   saveAsTranslation: 'Zapisz jako…',
   saveAsDone: 'Tłumaczenie zapisane.',
-  saveAsUnsaved: 'Tłumaczenie ma niezapisane zmiany. Najpierw zapisz je w edytorze, a potem ponownie wybierz «Zapisz jako…».',
+  saveAsUnsaved:
+    'Tłumaczenie ma niezapisane zmiany. Najpierw zapisz je w edytorze, a potem ponownie wybierz «Zapisz jako…».',
   errOutputMissing: 'Nie ma jeszcze tłumaczenia do zapisania. Najpierw otwórz tłumaczenie.',
   errExportRefused:
     'Wybierz inne miejsce. Folder źródeł projektu i sam plik tłumaczenia nie są dozwolone.',
@@ -275,7 +278,8 @@ export const pl = {
   styleCustomLabel: 'Własna instrukcja',
   styleCustomPlaceholder: 'np. używaj pisowni brytyjskiej',
   choicesTitle: 'Wybory tłumaczenia',
-  choicesHint: 'Odpowiedzi, które chcesz zachować w tym projekcie. AI ich przestrzega i pyta ponownie tylko o to, co nie zostało ustalone.',
+  choicesHint:
+    'Odpowiedzi, które chcesz zachować w tym projekcie. AI ich przestrzega i pyta ponownie tylko o to, co nie zostało ustalone.',
   choiceOutputMode: 'Tryb wyjścia',
   choiceBilingual: 'Układ dwujęzyczny',
   choiceOcrPlacement: 'Miejsce tekstu OCR',

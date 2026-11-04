@@ -80,6 +80,8 @@ export const zhTW = {
   errOcrExpired: '此 OCR 視窗已過期，或專案的 OCR 設定已變更。請重新開啟。',
   errOcrFailed: 'OCR 未能完成。',
   ocrTitle: '用 AI 讀取（OCR）',
+  ocrPopupIntro:
+    '請選擇要讀取的圖片。確認之前不會傳送任何內容。文字放到哪裡，讀取之後在聊天中與 AI 商定。',
   ocrRecommendation: '建議位置',
   ocrUseRecommendation: '使用建議位置',
   ocrRecommendCells: '使用圖片旁的空白儲存格，保留現有內容。',

@@ -1123,24 +1123,6 @@ export function Home({
       }),
     [],
   )
-  // the sheets AI's picture OCR asks for its selection popup: the translation screen shows it
-  const [ocrRequest, setOcrRequest] = useState<{ dir: string; file: string; seq: number } | null>(
-    null,
-  )
-  useEffect(() => {
-    const api = window.translateApi
-    if (typeof api?.onOpenOcr !== 'function') return undefined
-    let seq = 0
-    return api.onOpenOcr((event) => {
-      seq += 1
-      setTranslateMode(true)
-      setProjectsMode(false)
-      setAskMode(false)
-      setDriveMode(false)
-      setSelectedFolder(null)
-      setOcrRequest({ dir: event.dir, file: event.file, seq })
-    })
-  }, [])
   const [filter, setFilter] = useState('all')
   // ── Starred groups (named buckets the Starred view can filter on) ──
   // groups that currently have at least one starred file (drives the pills)
@@ -3576,7 +3558,6 @@ export function Home({
         />
       ) : translateMode && translateOffered ? (
         <TranslationPanel
-          ocrRequest={ocrRequest}
           aiSettings={aiSettings}
           connection={connection}
           onNoticeNeeded={() => setTranslateNoticeAsked(true)}

@@ -90,6 +90,8 @@ export const fr = {
   errOcrExpired: 'Cette fenêtre d’OCR a expiré ou le réglage OCR du projet a changé. Rouvrez-la.',
   errOcrFailed: 'L’OCR n’a pas pu être menée à terme.',
   ocrTitle: 'Lire avec l’IA (OCR)',
+  ocrPopupIntro:
+    'Choisissez les images à lire. Rien n’est envoyé avant votre confirmation. L’emplacement du texte se décide ensuite avec l’IA, dans le chat.',
   ocrRecommendation: 'Emplacement conseillé',
   ocrUseRecommendation: 'Utiliser ce conseil',
   ocrRecommendCells: 'Utilisez des cellules vides à côté des images pour conserver le contenu.',
@@ -210,8 +212,10 @@ export const fr = {
     'Le fichier de glossaire est illisible. Utilisez un fichier CSV, TXT séparé par des tabulations ou XLSX, avec le terme dans la première colonne et sa traduction dans la deuxième.',
   saveAsTranslation: 'Enregistrer sous…',
   saveAsDone: 'Traduction enregistrée.',
-  saveAsUnsaved: "La traduction contient des modifications non enregistrées. Enregistrez-la d'abord dans l'éditeur, puis choisissez à nouveau « Enregistrer sous… ».",
-  errOutputMissing: "Il n'y a pas encore de traduction à enregistrer. Ouvrez d'abord la traduction.",
+  saveAsUnsaved:
+    "La traduction contient des modifications non enregistrées. Enregistrez-la d'abord dans l'éditeur, puis choisissez à nouveau « Enregistrer sous… ».",
+  errOutputMissing:
+    "Il n'y a pas encore de traduction à enregistrer. Ouvrez d'abord la traduction.",
   errExportRefused:
     'Choisissez un autre emplacement. Le dossier des sources du projet et le fichier traduit lui-même ne conviennent pas.',
   ctxTitle: 'Envoyé avec chaque requête de ce projet :',
@@ -263,7 +267,8 @@ export const fr = {
   renameInvalid: 'Saisissez un nom de projet de 1 à 80 caractères, sans retour à la ligne.',
   statusReady: 'Prêt',
   styleTitle: 'Style d’écriture',
-  styleHint: 'Envoyé avec chaque demande pour que l’IA traduise de façon cohérente. Enregistré dès que vous le modifiez.',
+  styleHint:
+    'Envoyé avec chaque demande pour que l’IA traduise de façon cohérente. Enregistré dès que vous le modifiez.',
   serialCommaLabel: 'Virgule de série (virgule d’Oxford)',
   quoteLabel: 'Virgules et points avec les guillemets',
   styleFollow: 'Suivre l’usage habituel de la langue cible',
@@ -279,7 +284,8 @@ export const fr = {
   styleCustomLabel: 'Consigne personnalisée',
   styleCustomPlaceholder: 'p. ex. Utiliser l’orthographe britannique',
   choicesTitle: 'Choix de traduction',
-  choicesHint: 'Réponses que vous avez demandé de garder pour ce projet. L’IA les suit et ne redemande que ce qui n’est pas décidé.',
+  choicesHint:
+    'Réponses que vous avez demandé de garder pour ce projet. L’IA les suit et ne redemande que ce qui n’est pas décidé.',
   choiceOutputMode: 'Mode de sortie',
   choiceBilingual: 'Disposition bilingue',
   choiceOcrPlacement: 'Placement du texte OCR',

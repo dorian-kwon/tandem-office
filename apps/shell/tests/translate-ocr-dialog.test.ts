@@ -294,3 +294,67 @@ describe('OcrSelectDialog', () => {
     expect(api.ocrRelease).toHaveBeenCalledWith('tok')
   })
 })
+
+describe('OcrSelectDialog selectOnly (the popup overlay)', () => {
+  const XLSX: SourceEntry = { file: 'webtoon.xlsx', kind: 'editable', sha256: 'x' }
+  beforeEach(() => {
+    prepared = {
+      token: 'tok',
+      kind: 'embedded',
+      format: 'xlsx',
+      ocr: { kind: 'ai', provider: 'claude' },
+      items: [
+        { index: 1, name: 'a.png', location: 'Sheet1 · A7' },
+        { index: 2, name: 'b.png', location: 'Sheet1 · A8' },
+      ],
+    }
+    api.ocrRecommend = vi.fn(async () => ({
+      placement: { kind: 'xlsx', sheet: 'Sheet1', column: 'B' },
+      reason: 'empty-cells',
+    }))
+  })
+
+  it('says the destination is decided in the chat, not here', async () => {
+    await render({ sources: [XLSX], selectOnly: true }, undefined, true)
+    await click(button('Choose items'))
+    expect(host.textContent).toContain('decided with the AI in the chat')
+  })
+
+  it('hands the recognised text and the local recommendation back and never writes or places', async () => {
+    const onRecognised = vi.fn()
+    const onFinished = vi.fn()
+    await render({ sources: [XLSX], selectOnly: true, onRecognised, onFinished }, undefined, true)
+    await click(button('Read all'))
+    await click(button('Start'))
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0))
+    })
+    expect(onRecognised).toHaveBeenCalledTimes(1)
+    const result = onRecognised.mock.calls[0]![0] as {
+      pages: { index: number; location: string; text: string }[]
+      recommendation: { reason: string }
+    }
+    expect(result.pages.map((p) => [p.index, p.location, p.text])).toEqual([
+      [1, 'Sheet1 · A7', 'Text'],
+      [2, 'Sheet1 · A8', 'Text'],
+    ])
+    expect(result.recommendation.reason).toBe('empty-cells')
+    expect(api.ocrWrite).not.toHaveBeenCalled()
+    expect(onFinished).not.toHaveBeenCalled()
+    expect(host.querySelector('[data-step="place"]')).toBeNull()
+    expect(host.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  it('cancelling before the start sends nothing and hands nothing back', async () => {
+    const onRecognised = vi.fn()
+    const onClose = vi.fn()
+    await render({ sources: [XLSX], selectOnly: true, onRecognised, onClose }, undefined, true)
+    await click(button('Read all'))
+    await click(button('Cancel'))
+    expect(onClose).toHaveBeenCalled()
+    expect(onRecognised).not.toHaveBeenCalled()
+    expect(ask).not.toHaveBeenCalled()
+    expect(api.ocrStart).not.toHaveBeenCalled()
+    expect(api.ocrWrite).not.toHaveBeenCalled()
+  })
+})

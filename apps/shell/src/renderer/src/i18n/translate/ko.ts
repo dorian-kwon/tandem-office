@@ -80,6 +80,8 @@ export const ko = {
   errOcrExpired: 'OCR 창이 만료되었거나 프로젝트의 OCR 설정이 바뀌었습니다. 다시 여세요.',
   errOcrFailed: 'OCR을 마치지 못했습니다.',
   ocrTitle: 'AI로 읽기(OCR)',
+  ocrPopupIntro:
+    '읽을 그림을 고르세요. 확인하기 전에는 아무것도 전송되지 않습니다. 글을 어디에 넣을지는 읽은 뒤 채팅에서 AI와 정합니다.',
   ocrRecommendation: '추천 위치',
   ocrUseRecommendation: '추천 위치 사용',
   ocrRecommendCells: '이미지 옆의 빈 셀에 넣어 기존 내용을 보존합니다.',
@@ -192,9 +194,11 @@ export const ko = {
     '단어집 파일을 읽을 수 없습니다. 첫째 열에 원어, 둘째 열에 번역어가 있는 CSV, 탭으로 나눈 TXT, XLSX 파일을 쓰세요.',
   saveAsTranslation: '다른 이름으로 저장…',
   saveAsDone: '번역본을 저장했습니다.',
-  saveAsUnsaved: "번역본에 저장하지 않은 변경이 있습니다. 편집기에서 먼저 저장한 뒤 다시 '다른 이름으로 저장'을 누르세요.",
+  saveAsUnsaved:
+    "번역본에 저장하지 않은 변경이 있습니다. 편집기에서 먼저 저장한 뒤 다시 '다른 이름으로 저장'을 누르세요.",
   errOutputMissing: '아직 저장할 번역본이 없습니다. 먼저 번역을 여세요.',
-  errExportRefused: '다른 위치를 고르세요. 프로젝트의 원문 폴더와 번역 파일 자체에는 저장할 수 없습니다.',
+  errExportRefused:
+    '다른 위치를 고르세요. 프로젝트의 원문 폴더와 번역 파일 자체에는 저장할 수 없습니다.',
   ctxTitle: '이 프로젝트에서 요청마다 함께 보내는 것:',
   ctxSystemOn: '모든 프로젝트에 쓰는 시스템 프롬프트: 보냄',
   ctxSystemOff: '모든 프로젝트에 쓰는 시스템 프롬프트: 없음(비어 있음)',
@@ -260,7 +264,8 @@ export const ko = {
   styleCustomLabel: '직접 쓰는 지침',
   styleCustomPlaceholder: '예: 영국식 철자를 쓴다',
   choicesTitle: '번역 선택',
-  choicesHint: '이 프로젝트에서 계속 쓰기로 한 답입니다. AI는 이 답을 따르고, 정하지 않은 것만 다시 묻습니다.',
+  choicesHint:
+    '이 프로젝트에서 계속 쓰기로 한 답입니다. AI는 이 답을 따르고, 정하지 않은 것만 다시 묻습니다.',
   choiceOutputMode: '출력 방식',
   choiceBilingual: '병기 배치',
   choiceOcrPlacement: 'OCR 글 위치',

@@ -89,6 +89,8 @@ export const pt = {
     'Esta janela de OCR expirou ou a configuração de OCR do projeto mudou. Abra-a novamente.',
   errOcrFailed: 'Não foi possível concluir o OCR.',
   ocrTitle: 'Ler com IA (OCR)',
+  ocrPopupIntro:
+    'Escolha as imagens a ler. Nada é enviado antes de você confirmar. Onde o texto vai é decidido depois com a IA, no chat.',
   ocrRecommendation: 'Destino recomendado',
   ocrUseRecommendation: 'Usar recomendação',
   ocrRecommendCells: 'Use células vazias junto às imagens para preservar o conteúdo.',
@@ -208,7 +210,8 @@ export const pt = {
     'Não foi possível ler o arquivo do glossário. Use um arquivo CSV, TXT separado por tabulações ou XLSX com o termo na primeira coluna e a tradução na segunda.',
   saveAsTranslation: 'Salvar como…',
   saveAsDone: 'Tradução salva.',
-  saveAsUnsaved: 'A tradução tem alterações não salvas. Salve-a primeiro no editor e escolha «Salvar como…» de novo.',
+  saveAsUnsaved:
+    'A tradução tem alterações não salvas. Salve-a primeiro no editor e escolha «Salvar como…» de novo.',
   errOutputMissing: 'Ainda não há tradução para salvar. Abra primeiro a tradução.',
   errExportRefused:
     'Escolha outro local. A pasta de originais do projeto e o próprio arquivo traduzido não podem ser usados.',
@@ -261,7 +264,8 @@ export const pt = {
   renameInvalid: 'Digite um nome de projeto com 1 a 80 caracteres, sem quebras de linha.',
   statusReady: 'Pronto',
   styleTitle: 'Estilo de escrita',
-  styleHint: 'Enviado com cada pedido para que a IA traduza de forma consistente. Salvo ao alterar.',
+  styleHint:
+    'Enviado com cada pedido para que a IA traduza de forma consistente. Salvo ao alterar.',
   serialCommaLabel: 'Vírgula serial (vírgula de Oxford)',
   quoteLabel: 'Vírgulas e pontos com aspas',
   styleFollow: 'Seguir a convenção habitual do idioma de destino',
@@ -277,7 +281,8 @@ export const pt = {
   styleCustomLabel: 'Instrução personalizada',
   styleCustomPlaceholder: 'ex.: usar ortografia britânica',
   choicesTitle: 'Escolhas de tradução',
-  choicesHint: 'Respostas que pediu para manter neste projeto. A IA segue-as e só volta a perguntar o que não está decidido.',
+  choicesHint:
+    'Respostas que pediu para manter neste projeto. A IA segue-as e só volta a perguntar o que não está decidido.',
   choiceOutputMode: 'Modo de saída',
   choiceBilingual: 'Layout bilingue',
   choiceOcrPlacement: 'Posição do texto OCR',

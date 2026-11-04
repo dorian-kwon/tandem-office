@@ -1,6 +1,6 @@
 import { extname } from 'node:path'
 import type { OcrMode } from '@genoffice/translate-project'
-import type { TranslateOpenOcrEvent } from '../../shared/translate-api'
+import type { OcrPopupTarget } from './ocr-popup-host'
 import { allowAdHocDir } from './adhoc-dirs'
 import { listEmbeddedImages, supportsEmbeddedOcr } from './embedded-images'
 import { chatOcrSourceResolver } from './ocr-chat-source'
@@ -22,15 +22,18 @@ export interface OcrPicturesDeps {
   workDir: () => string
   /** the OCR choice a private project starts with */
   ocrMode: () => OcrMode
-  /** show the OCR selection popup in the shell; false when no window could show it */
-  showOcr: (event: TranslateOpenOcrEvent) => boolean
+  /**
+   * mount the OCR selection popup as an overlay on the asking window (never a tab switch or a
+   * screen); `unavailable` when no window could show it
+   */
+  openPopup: (asker: number, target: OcrPopupTarget) => 'opened' | 'already-open' | 'unavailable'
 }
 
 const CELL = /^[A-Z]{1,3}\d+$/
 
 /**
  * Local, read-only access to a workbook's pictures for the sheets AI, and the request that
- * opens the shell's OCR selection popup for it. Nothing here reads an image's bytes, calls an
+ * opens the OCR selection popup overlay for it. Nothing here reads an image's bytes, calls an
  * AI provider or changes the workbook: recognition only starts after the popup's own
  * confirmation, and the result goes through its placement confirmation.
  */
@@ -58,7 +61,7 @@ export function createOcrPicturesHost(deps: OcrPicturesDeps) {
         }),
       }
     },
-    async open(path: string): Promise<{ opened: boolean }> {
+    async open(path: string, asker: number): Promise<{ opened: boolean; alreadyOpen: boolean }> {
       requireWorkbook(path)
       const target = await resolve(
         0,
@@ -67,7 +70,8 @@ export function createOcrPicturesHost(deps: OcrPicturesDeps) {
       )
       if (!('dir' in target)) throw new Error('This workbook is not a source of its project')
       allowAdHocDir(target.dir)
-      return { opened: deps.showOcr({ dir: target.dir, file: target.file }) }
+      const outcome = deps.openPopup(asker, { dir: target.dir, file: target.file })
+      return { opened: outcome !== 'unavailable', alreadyOpen: outcome === 'already-open' }
     },
   }
 }

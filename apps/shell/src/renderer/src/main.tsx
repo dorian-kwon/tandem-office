@@ -50,14 +50,28 @@ void Promise.all([
   // is, and the screen plus its stylesheet are only ever wanted on the other
   // one. A static import meant Home's first paint paid for a manual nobody had
   // opened.
-  const isHelp = new URLSearchParams(location.search).get('mode') === 'help'
+  const query = new URLSearchParams(location.search)
+  const isHelp = query.get('mode') === 'help'
+  // the OCR popup overlay main mounts over an editor window (a view, not a screen)
+  const ocrPopup =
+    query.get('mode') === 'ocr-popup' && query.get('dir') && query.get('file')
+      ? { dir: query.get('dir') as string, file: query.get('file') as string }
+      : null
+  if (ocrPopup) document.documentElement.classList.add('ocr-popup-root')
+  const OcrPopupScreen = React.lazy(() =>
+    import('./translate/OcrPopupScreen').then((m) => ({ default: m.OcrPopupScreen })),
+  )
   const HelpScreen = React.lazy(() =>
     import('./i18n/help/HelpScreen').then((m) => ({ default: m.HelpScreen })),
   )
   createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
       <LocaleProvider initial={lang}>
-        {isHelp ? (
+        {ocrPopup ? (
+          <React.Suspense fallback={null}>
+            <OcrPopupScreen dir={ocrPopup.dir} file={ocrPopup.file} />
+          </React.Suspense>
+        ) : isHelp ? (
           <React.Suspense fallback={<div className="boot" />}>
             <HelpScreen />
           </React.Suspense>

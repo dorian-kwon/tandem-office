@@ -89,6 +89,8 @@ export const nl = {
     'Dit OCR-venster is verlopen of de OCR-instelling van het project is gewijzigd. Open het opnieuw.',
   errOcrFailed: 'De OCR kon niet worden voltooid.',
   ocrTitle: 'Lezen met AI (OCR)',
+  ocrPopupIntro:
+    'Kies de afbeeldingen die gelezen moeten worden. Er wordt niets verzonden voordat u bevestigt. Waar de tekst komt, bepaalt u daarna met de AI in de chat.',
   ocrRecommendation: 'Aanbevolen bestemming',
   ocrUseRecommendation: 'Aanbeveling gebruiken',
   ocrRecommendCells: 'Gebruik lege cellen naast de afbeeldingen om bestaande inhoud te behouden.',
@@ -209,7 +211,8 @@ export const nl = {
     'Het woordenlijstbestand kan niet worden gelezen. Gebruik een CSV-, door tabs gescheiden TXT- of XLSX-bestand met de term in de eerste kolom en de vertaling in de tweede.',
   saveAsTranslation: 'Opslaan als…',
   saveAsDone: 'Vertaling opgeslagen.',
-  saveAsUnsaved: 'De vertaling heeft niet-opgeslagen wijzigingen. Sla hem eerst op in de editor en kies daarna opnieuw «Opslaan als…».',
+  saveAsUnsaved:
+    'De vertaling heeft niet-opgeslagen wijzigingen. Sla hem eerst op in de editor en kies daarna opnieuw «Opslaan als…».',
   errOutputMissing: 'Er is nog geen vertaling om op te slaan. Open eerst de vertaling.',
   errExportRefused:
     'Kies een andere plek. De bronmap van het project en het vertaalde bestand zelf kunnen niet worden gebruikt.',
@@ -262,7 +265,8 @@ export const nl = {
   renameInvalid: 'Voer een projectnaam van 1 tot 80 tekens in, zonder regeleinden.',
   statusReady: 'Klaar',
   styleTitle: 'Schrijfstijl',
-  styleHint: 'Wordt met elk verzoek meegestuurd zodat de AI consequent vertaalt. Opgeslagen zodra u het wijzigt.',
+  styleHint:
+    'Wordt met elk verzoek meegestuurd zodat de AI consequent vertaalt. Opgeslagen zodra u het wijzigt.',
   serialCommaLabel: 'Seriekomma (Oxford-komma)',
   quoteLabel: 'Komma’s en punten bij aanhalingstekens',
   styleFollow: 'De gebruikelijke conventie van de doeltaal volgen',
@@ -274,11 +278,13 @@ export const nl = {
   exSerialWithout: 'appels, wortels en peren',
   exQuoteOutside: '"appels", "wortels"',
   exQuoteInside: '"appels," "wortels,"',
-  exFollow: 'Er wordt geen regel meegestuurd. De AI volgt de gebruikelijke conventie van de doeltaal.',
+  exFollow:
+    'Er wordt geen regel meegestuurd. De AI volgt de gebruikelijke conventie van de doeltaal.',
   styleCustomLabel: 'Eigen instructie',
   styleCustomPlaceholder: 'bijv. Britse spelling gebruiken',
   choicesTitle: 'Vertaalkeuzes',
-  choicesHint: 'Antwoorden die u voor dit project wilde bewaren. De AI volgt ze en vraagt alleen opnieuw wat nog niet is beslist.',
+  choicesHint:
+    'Antwoorden die u voor dit project wilde bewaren. De AI volgt ze en vraagt alleen opnieuw wat nog niet is beslist.',
   choiceOutputMode: 'Uitvoermodus',
   choiceBilingual: 'Tweetalige opmaak',
   choiceOcrPlacement: 'Plaatsing van OCR-tekst',

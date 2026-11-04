@@ -87,6 +87,8 @@ export const id = {
   errOcrExpired: 'Jendela OCR ini telah kedaluwarsa atau pengaturan OCR proyek berubah. Buka lagi.',
   errOcrFailed: 'OCR tidak dapat diselesaikan.',
   ocrTitle: 'Baca dengan AI (OCR)',
+  ocrPopupIntro:
+    'Pilih gambar yang akan dibaca. Tidak ada yang dikirim sebelum Anda mengonfirmasi. Tempat teks ditentukan setelahnya bersama AI di obrolan.',
   ocrRecommendation: 'Tujuan yang disarankan',
   ocrUseRecommendation: 'Gunakan saran',
   ocrRecommendCells: 'Gunakan sel kosong di samping gambar untuk mempertahankan isi yang ada.',
@@ -206,7 +208,8 @@ export const id = {
     'File glosarium tidak dapat dibaca. Gunakan file CSV, TXT yang dipisahkan tab, atau XLSX dengan istilah di kolom pertama dan terjemahannya di kolom kedua.',
   saveAsTranslation: 'Simpan sebagai…',
   saveAsDone: 'Terjemahan disimpan.',
-  saveAsUnsaved: 'Terjemahan memiliki perubahan yang belum disimpan. Simpan dulu di editor, lalu pilih «Simpan sebagai…» lagi.',
+  saveAsUnsaved:
+    'Terjemahan memiliki perubahan yang belum disimpan. Simpan dulu di editor, lalu pilih «Simpan sebagai…» lagi.',
   errOutputMissing: 'Belum ada terjemahan untuk disimpan. Buka terjemahan terlebih dahulu.',
   errExportRefused:
     'Pilih lokasi lain. Folder sumber proyek dan file terjemahan itu sendiri tidak dapat digunakan.',
@@ -259,7 +262,8 @@ export const id = {
   renameInvalid: 'Masukkan nama proyek 1 sampai 80 karakter tanpa pemisah baris.',
   statusReady: 'Siap',
   styleTitle: 'Gaya penulisan',
-  styleHint: 'Dikirim bersama setiap permintaan agar AI menerjemahkan secara konsisten. Disimpan saat Anda mengubahnya.',
+  styleHint:
+    'Dikirim bersama setiap permintaan agar AI menerjemahkan secara konsisten. Disimpan saat Anda mengubahnya.',
   serialCommaLabel: 'Koma serial (koma Oxford)',
   quoteLabel: 'Koma dan titik dengan tanda kutip',
   styleFollow: 'Ikuti kebiasaan umum bahasa target',
@@ -275,7 +279,8 @@ export const id = {
   styleCustomLabel: 'Instruksi khusus',
   styleCustomPlaceholder: 'mis. Gunakan ejaan Inggris Britania',
   choicesTitle: 'Pilihan terjemahan',
-  choicesHint: 'Jawaban yang Anda minta disimpan untuk proyek ini. AI mengikutinya dan hanya bertanya lagi untuk hal yang belum diputuskan.',
+  choicesHint:
+    'Jawaban yang Anda minta disimpan untuk proyek ini. AI mengikutinya dan hanya bertanya lagi untuk hal yang belum diputuskan.',
   choiceOutputMode: 'Mode keluaran',
   choiceBilingual: 'Tata letak dwibahasa',
   choiceOcrPlacement: 'Penempatan teks OCR',

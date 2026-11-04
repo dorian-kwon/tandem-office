@@ -88,6 +88,8 @@ export const es = {
     'Esta ventana de OCR ha caducado o ha cambiado el ajuste de OCR del proyecto. Ábrela de nuevo.',
   errOcrFailed: 'No se pudo completar el OCR.',
   ocrTitle: 'Leer con IA (OCR)',
+  ocrPopupIntro:
+    'Elija las imágenes que se leerán. No se envía nada antes de que confirme. Dónde va el texto se decide después con la IA en el chat.',
   ocrRecommendation: 'Destino recomendado',
   ocrUseRecommendation: 'Usar recomendación',
   ocrRecommendCells: 'Use celdas vacías junto a las imágenes para conservar el contenido.',
@@ -207,7 +209,8 @@ export const es = {
     'No se pudo leer el archivo del glosario. Usa un archivo CSV, TXT separado por tabulaciones o XLSX con el término en la primera columna y su traducción en la segunda.',
   saveAsTranslation: 'Guardar como…',
   saveAsDone: 'Traducción guardada.',
-  saveAsUnsaved: 'La traducción tiene cambios sin guardar. Guárdala primero en el editor y vuelve a elegir «Guardar como…».',
+  saveAsUnsaved:
+    'La traducción tiene cambios sin guardar. Guárdala primero en el editor y vuelve a elegir «Guardar como…».',
   errOutputMissing: 'Todavía no hay una traducción para guardar. Abre primero la traducción.',
   errExportRefused:
     'Elige otro lugar. No se puede usar la carpeta de originales del proyecto ni el propio archivo traducido.',
@@ -260,7 +263,8 @@ export const es = {
   renameInvalid: 'Escribe un nombre de proyecto de 1 a 80 caracteres, sin saltos de línea.',
   statusReady: 'Listo',
   styleTitle: 'Estilo de escritura',
-  styleHint: 'Se envía con cada solicitud para que la IA traduzca de forma coherente. Se guarda al cambiarlo.',
+  styleHint:
+    'Se envía con cada solicitud para que la IA traduzca de forma coherente. Se guarda al cambiarlo.',
   serialCommaLabel: 'Coma de serie (coma de Oxford)',
   quoteLabel: 'Comas y puntos con comillas',
   styleFollow: 'Seguir la convención habitual del idioma de destino',
@@ -276,7 +280,8 @@ export const es = {
   styleCustomLabel: 'Instrucción personalizada',
   styleCustomPlaceholder: 'p. ej. Usar ortografía británica',
   choicesTitle: 'Decisiones de traducción',
-  choicesHint: 'Respuestas que pidió conservar para este proyecto. La IA las sigue y solo vuelve a preguntar lo que no está decidido.',
+  choicesHint:
+    'Respuestas que pidió conservar para este proyecto. La IA las sigue y solo vuelve a preguntar lo que no está decidido.',
   choiceOutputMode: 'Modo de salida',
   choiceBilingual: 'Diseño bilingüe',
   choiceOcrPlacement: 'Ubicación del texto OCR',

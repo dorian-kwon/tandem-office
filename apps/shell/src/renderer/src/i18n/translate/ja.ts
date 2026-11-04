@@ -86,6 +86,8 @@ export const ja = {
     'このOCRのウィンドウは期限切れか、プロジェクトのOCR設定が変更されました。もう一度開いてください。',
   errOcrFailed: 'OCRを完了できませんでした。',
   ocrTitle: 'AIで読み取る（OCR）',
+  ocrPopupIntro:
+    '読み取る画像を選んでください。確認するまでは何も送信されません。テキストの置き場所は、読み取りのあとにチャットでAIと決めます。',
   ocrRecommendation: 'おすすめの配置先',
   ocrUseRecommendation: 'おすすめを使う',
   ocrRecommendCells: '画像の隣の空セルに入れ、既存の内容を保ちます。',
@@ -203,9 +205,11 @@ export const ja = {
     '用語集ファイルを読み取れませんでした。1 列目に原語、2 列目に訳語がある CSV、タブ区切りの TXT、または XLSX ファイルを使ってください。',
   saveAsTranslation: '名前を付けて保存…',
   saveAsDone: '訳文を保存しました。',
-  saveAsUnsaved: '訳文に保存していない変更があります。先にエディターで保存してから、もう一度「名前を付けて保存」を選んでください。',
+  saveAsUnsaved:
+    '訳文に保存していない変更があります。先にエディターで保存してから、もう一度「名前を付けて保存」を選んでください。',
   errOutputMissing: '保存できる訳文がまだありません。先に翻訳を開いてください。',
-  errExportRefused: '別の場所を選んでください。プロジェクトの原文フォルダーと訳文ファイル自体には保存できません。',
+  errExportRefused:
+    '別の場所を選んでください。プロジェクトの原文フォルダーと訳文ファイル自体には保存できません。',
   ctxTitle: 'このプロジェクトから毎回のリクエストに付けて送るもの:',
   ctxSystemOn: 'すべてのプロジェクト共通のシステムプロンプト: 送る',
   ctxSystemOff: 'すべてのプロジェクト共通のシステムプロンプト: なし（空）',
@@ -255,7 +259,8 @@ export const ja = {
   renameInvalid: '改行を含まない1〜80文字のプロジェクト名を入力してください。',
   statusReady: '準備完了',
   styleTitle: '書き方のルール',
-  styleHint: 'すべての依頼に付けて送り、AI が一貫して翻訳するようにします。変更すると保存されます。',
+  styleHint:
+    'すべての依頼に付けて送り、AI が一貫して翻訳するようにします。変更すると保存されます。',
   serialCommaLabel: '連続コンマ(オックスフォードコンマ)',
   quoteLabel: '引用符とコンマ・ピリオド',
   styleFollow: '翻訳先の言語の一般的な慣例に従う',
@@ -271,7 +276,8 @@ export const ja = {
   styleCustomLabel: '独自の指示',
   styleCustomPlaceholder: '例: イギリス式の綴りを使う',
   choicesTitle: '翻訳の選択',
-  choicesHint: 'このプロジェクトで保持するよう選んだ回答です。AI はそれに従い、未決定のことだけをもう一度尋ねます。',
+  choicesHint:
+    'このプロジェクトで保持するよう選んだ回答です。AI はそれに従い、未決定のことだけをもう一度尋ねます。',
   choiceOutputMode: '出力方式',
   choiceBilingual: '対訳レイアウト',
   choiceOcrPlacement: 'OCR テキストの配置',

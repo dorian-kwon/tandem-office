@@ -86,6 +86,8 @@ export const cs = {
     'Toto okno OCR vypršelo nebo se změnilo nastavení OCR projektu. Otevřete ho znovu.',
   errOcrFailed: 'OCR se nepodařilo dokončit.',
   ocrTitle: 'Čtení pomocí AI (OCR)',
+  ocrPopupIntro:
+    'Vyberte obrázky ke čtení. Před potvrzením se nic neodesílá. Kam text půjde, určíte potom s AI v chatu.',
   ocrRecommendation: 'Doporučené umístění',
   ocrUseRecommendation: 'Použít doporučení',
   ocrRecommendCells: 'Prázdné buňky vedle obrázků zachovají stávající obsah.',
@@ -203,7 +205,8 @@ export const cs = {
     'Soubor glosáře nelze přečíst. Použijte soubor CSV, TXT oddělený tabulátory nebo XLSX s termínem v prvním sloupci a překladem ve druhém.',
   saveAsTranslation: 'Uložit jako…',
   saveAsDone: 'Překlad byl uložen.',
-  saveAsUnsaved: 'Překlad má neuložené změny. Nejprve ho uložte v editoru a pak znovu zvolte «Uložit jako…».',
+  saveAsUnsaved:
+    'Překlad má neuložené změny. Nejprve ho uložte v editoru a pak znovu zvolte «Uložit jako…».',
   errOutputMissing: 'Zatím není co uložit. Nejprve otevřete překlad.',
   errExportRefused:
     'Vyberte jiné místo. Složku zdrojů projektu ani samotný přeložený soubor nelze použít.',
@@ -272,7 +275,8 @@ export const cs = {
   styleCustomLabel: 'Vlastní pokyn',
   styleCustomPlaceholder: 'např. používej britský pravopis',
   choicesTitle: 'Volby překladu',
-  choicesHint: 'Odpovědi, které jste chtěli zachovat pro tento projekt. AI se jimi řídí a znovu se ptá jen na to, co není rozhodnuto.',
+  choicesHint:
+    'Odpovědi, které jste chtěli zachovat pro tento projekt. AI se jimi řídí a znovu se ptá jen na to, co není rozhodnuto.',
   choiceOutputMode: 'Režim výstupu',
   choiceBilingual: 'Dvojjazyčné rozvržení',
   choiceOcrPlacement: 'Umístění textu OCR',

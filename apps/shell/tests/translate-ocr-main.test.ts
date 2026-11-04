@@ -486,11 +486,27 @@ it('does not decode a thumbnail with excessive pixel dimensions', async () => {
   expect(thumbnail).not.toHaveBeenCalled()
 })
 
-describe('ocrPopupClosed', () => {
-  it('tells the host the popup closed, and is harmless without a listener', async () => {
+describe('ocr popup bridge', () => {
+  it('tells the host which popup closed, and is harmless without a listener', async () => {
     const onOcrPopupClosed = vi.fn()
-    await handlers({ onOcrPopupClosed }).ocrPopupClosed()
-    expect(onOcrPopupClosed).toHaveBeenCalledTimes(1)
-    await expect(handlers().ocrPopupClosed()).resolves.toBeUndefined()
+    await handlers({ onOcrPopupClosed }).ocrPopupClosed(42)
+    expect(onOcrPopupClosed).toHaveBeenCalledWith(42)
+    await expect(handlers().ocrPopupClosed(42)).resolves.toBeUndefined()
+  })
+
+  it('passes a checked result, and refuses anything that is not plain bounded text', async () => {
+    const onOcrPopupResult = vi.fn()
+    const h = handlers({ onOcrPopupResult })
+    const good = { pages: [{ index: 1, location: 'S · A7', text: 'hi' }] }
+    await h.ocrPopupResult(42, good)
+    expect(onOcrPopupResult).toHaveBeenCalledWith(42, good)
+    await expect(
+      h.ocrPopupResult(42, { pages: [{ index: 0, location: '', text: '' }] }),
+    ).rejects.toThrow()
+    await expect(h.ocrPopupResult(42, { pages: 'x' })).rejects.toThrow()
+    await expect(
+      h.ocrPopupResult(42, { pages: [{ index: 1, location: 'a', text: 'x'.repeat(200_001) }] }),
+    ).rejects.toThrow()
+    expect(onOcrPopupResult).toHaveBeenCalledTimes(1)
   })
 })

@@ -856,48 +856,6 @@ describe('changed-source notice in the tab strip', () => {
   })
 })
 
-describe('TranslationPanel (the sheets AI asks for the OCR popup)', () => {
-  const connection = {
-    statuses: { 'claude-code': { state: 'ready' } },
-    busy: false,
-    failed: {},
-    codexImageAvailable: false,
-  } as never
-  const settings = { provider: 'auto', providers: {} } as never
-
-  async function openRequested() {
-    api.getProject.mockResolvedValue(
-      project({ sources: [{ file: 'a.xlsx', sha256: 'x', kind: 'editable' }] }),
-    )
-    Object.assign(api, {
-      ocrPrepare: vi.fn(async () => ({
-        token: 't',
-        kind: 'embedded',
-        ocr: { kind: 'ai', provider: 'claude' },
-        items: [],
-      })),
-      ocrRelease: vi.fn(async () => undefined),
-      ocrPreview: vi.fn(async () => null),
-    })
-    await render(TranslationPanel, {
-      connection,
-      aiSettings: settings,
-      ocrRequest: { dir: '/work/private', file: 'a.xlsx', seq: 1 },
-    })
-  }
-
-  it('shows the popup for the private project and returns to the project list when it closes', async () => {
-    await openRequested()
-    expect(host.querySelector('.translate-ocr')).not.toBeNull()
-    expect(host.textContent).toContain('a.xlsx')
-    await click(buttonByText('Cancel'))
-    expect(host.querySelector('.translate-ocr')).toBeNull()
-    // not the hidden project's detail screen: the list is back
-    expect(host.querySelector('[data-action="embedded-ocr"]')).toBeNull()
-    expect(host.textContent).not.toContain('a.xlsx')
-  })
-})
-
 describe('ProjectList table', () => {
   const names = () =>
     [...host.querySelectorAll('[role="row"][data-project-dir] .tt-title')].map((e) => e.textContent)

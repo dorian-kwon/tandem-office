@@ -64,7 +64,7 @@ import { MCP_SERVERS_CHANNELS, MCP_SERVERS_SETTINGS_KEY } from '../shared/mcp-se
 import type { McpServersApi, McpServersSettingsView } from '../shared/mcp-servers-api'
 import type { ResultStoreApi } from '../shared/result-store-api'
 import { TRANSLATE_CHANNELS, TRANSLATE_EVENTS } from '../shared/translate-api'
-import type { TranslateApi, TranslateOpenOcrEvent } from '../shared/translate-api'
+import type { TranslateApi } from '../shared/translate-api'
 import type { TabsApi, TabSummary } from '../shared/tabs-api'
 import { TABS_CHANNELS } from '../shared/tabs-api'
 import { SPLIT_TABS_CHANNELS } from '../shared/split-view-api'
@@ -723,13 +723,6 @@ const translateApi: TranslateApi = {
   ocrPageImage: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrPageImage, args),
   ocrPreview: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrPreview, args),
   ocrRecommend: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrRecommend, args),
-  onOpenOcr: (listener) => {
-    const handler = (_event: unknown, payload: TranslateOpenOcrEvent): void => listener(payload)
-    ipcRenderer.on(TRANSLATE_EVENTS.openOcr, handler)
-    return () => {
-      ipcRenderer.removeListener(TRANSLATE_EVENTS.openOcr, handler)
-    }
-  },
   onSaveAsRequested: (listener) => {
     const handler = (_event: unknown, payload: { outputPath: string }): void => listener(payload)
     ipcRenderer.on(TRANSLATE_EVENTS.saveAsRequested, handler)
@@ -740,6 +733,7 @@ const translateApi: TranslateApi = {
   ocrWrite: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrWrite, args),
   ocrRelease: (token) => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrRelease, token),
   ocrPopupClosed: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrPopupClosed),
+  ocrPopupResult: (result) => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrPopupResult, result),
   exportTranslation: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.exportTranslation, args),
   instructionsFor: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.instructionsFor, args),
   pdfPrepare: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.pdfPrepare, args),

@@ -93,6 +93,8 @@ export const de = {
     'Dieses OCR-Fenster ist abgelaufen oder die OCR-Einstellung des Projekts hat sich geändert. Öffnen Sie es erneut.',
   errOcrFailed: 'Die OCR konnte nicht abgeschlossen werden.',
   ocrTitle: 'Mit KI lesen (OCR)',
+  ocrPopupIntro:
+    'Wählen Sie die Bilder zum Lesen aus. Vor Ihrer Bestätigung wird nichts gesendet. Wohin der Text kommt, klären Sie danach im Chat mit der KI.',
   ocrRecommendation: 'Empfohlenes Ziel',
   ocrUseRecommendation: 'Empfehlung verwenden',
   ocrRecommendCells: 'Leere Zellen neben den Bildern erhalten die vorhandenen Inhalte.',
@@ -215,8 +217,10 @@ export const de = {
     'Die Glossardatei konnte nicht gelesen werden. Verwenden Sie eine CSV-, eine tabulatorgetrennte TXT- oder eine XLSX-Datei mit dem Begriff in der ersten und der Übersetzung in der zweiten Spalte.',
   saveAsTranslation: 'Speichern unter…',
   saveAsDone: 'Übersetzung gespeichert.',
-  saveAsUnsaved: 'Die Übersetzung hat ungespeicherte Änderungen. Speichern Sie sie zuerst im Editor und wählen Sie dann erneut „Speichern unter…“.',
-  errOutputMissing: 'Es gibt noch keine Übersetzung zum Speichern. Öffnen Sie zuerst die Übersetzung.',
+  saveAsUnsaved:
+    'Die Übersetzung hat ungespeicherte Änderungen. Speichern Sie sie zuerst im Editor und wählen Sie dann erneut „Speichern unter…“.',
+  errOutputMissing:
+    'Es gibt noch keine Übersetzung zum Speichern. Öffnen Sie zuerst die Übersetzung.',
   errExportRefused:
     'Wählen Sie einen anderen Ort. Der Quellordner des Projekts und die übersetzte Datei selbst sind nicht zulässig.',
   ctxTitle: 'Wird mit jeder Anfrage aus diesem Projekt gesendet:',
@@ -268,7 +272,8 @@ export const de = {
   renameInvalid: 'Geben Sie einen Projektnamen mit 1 bis 80 Zeichen ohne Zeilenumbruch ein.',
   statusReady: 'Bereit',
   styleTitle: 'Schreibstil',
-  styleHint: 'Wird mit jeder Anfrage gesendet, damit die KI einheitlich übersetzt. Wird bei Änderung gespeichert.',
+  styleHint:
+    'Wird mit jeder Anfrage gesendet, damit die KI einheitlich übersetzt. Wird bei Änderung gespeichert.',
   serialCommaLabel: 'Serienkomma (Oxford-Komma)',
   quoteLabel: 'Kommas und Punkte bei Anführungszeichen',
   styleFollow: 'Üblicher Brauch der Zielsprache',
@@ -284,7 +289,8 @@ export const de = {
   styleCustomLabel: 'Eigene Anweisung',
   styleCustomPlaceholder: 'z. B. britische Schreibweise verwenden',
   choicesTitle: 'Übersetzungsentscheidungen',
-  choicesHint: 'Antworten, die Sie für dieses Projekt behalten wollten. Die KI befolgt sie und fragt nur nach, was noch nicht entschieden ist.',
+  choicesHint:
+    'Antworten, die Sie für dieses Projekt behalten wollten. Die KI befolgt sie und fragt nur nach, was noch nicht entschieden ist.',
   choiceOutputMode: 'Ausgabemodus',
   choiceBilingual: 'Zweisprachiges Layout',
   choiceOcrPlacement: 'Platzierung des OCR-Texts',

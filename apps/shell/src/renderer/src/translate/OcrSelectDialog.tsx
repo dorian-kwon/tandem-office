@@ -24,6 +24,7 @@ import { ocrRoute, type OcrRoute } from './ocr-route'
 import { makeText, translateErrorText } from './shared'
 import { OcrImagePreview } from './OcrImagePreview'
 import { OcrPlacementDialog } from './OcrPlacementDialog'
+import { ocrPayloadPlainText, type OcrPopupResult } from '../../../shared/ocr-popup'
 
 /**
  * The translation OCR window (spec 6.5): pick the pages of a scanned PDF or
@@ -59,6 +60,13 @@ export interface OcrSelectDialogProps {
   onFinished?: (result: RunOcrResult) => void
   /** open the written document (shown as a button when given) */
   onOpenResult?: (outputPath: string) => void
+  /**
+   * Picking only: after the confirmed start and the reading, hand the recognised text to
+   * `onRecognised` and stop. Nothing is placed or written here; where the text goes is
+   * decided with the person in the AI chat that asked for this popup.
+   */
+  selectOnly?: boolean
+  onRecognised?: (result: OcrPopupResult) => void
   onClose: () => void
   /** the bridge; default window.translateApi (tests pass a fake) */
   api?: TranslateApi
@@ -113,6 +121,8 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
   const askRef = useRef<OcrAsk | null>(null)
   const runRef = useRef<AbortController | null>(null)
   const tokenRef = useRef<string | null>(null)
+  /** selectOnly: the readings were handed over, so the run's own stop is not an error */
+  const recognisedRef = useRef(false)
 
   const route =
     prepared?.ocr.kind === 'ai'
@@ -197,9 +207,9 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
       },
       signal: controller.signal,
       onProgress: (progress) => setStep({ kind: 'running', progress }),
-      ...(prepared.kind === 'embedded'
+      ...(prepared.kind === 'embedded' && props.selectOnly
         ? {
-            choosePlacement: async (pages: OcrPageResult[], error?: unknown) => {
+            choosePlacement: async (pages: OcrPageResult[]) => {
               const recommendation =
                 typeof api.ocrRecommend === 'function'
                   ? await api.ocrRecommend({
@@ -208,19 +218,43 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
                     })
                   : undefined
               if (controller.signal.aborted) return null
-              return new Promise<OcrPlacement | null>((resolve) => {
-                placementRef.current = resolve
-                setStep({
-                  kind: 'place',
-                  pages,
-                  busy: false,
-                  ...(error !== undefined ? { error } : {}),
-                  ...(recommendation ? { recommendation } : {}),
-                })
+              recognisedRef.current = true
+              propsRef.current.onRecognised?.({
+                pages: pages.map((p) => ({
+                  index: p.index,
+                  location: items[p.index - 1]?.location ?? '',
+                  text: ocrPayloadPlainText(p.payload),
+                })),
+                ...(recommendation ? { recommendation } : {}),
               })
+              // no destination here: ending the run releases the lease without writing
+              return null
             },
           }
-        : {}),
+        : prepared.kind === 'embedded'
+          ? {
+              choosePlacement: async (pages: OcrPageResult[], error?: unknown) => {
+                const recommendation =
+                  typeof api.ocrRecommend === 'function'
+                    ? await api.ocrRecommend({
+                        token: prepared.token,
+                        pages: pages.map((p) => p.index),
+                      })
+                    : undefined
+                if (controller.signal.aborted) return null
+                return new Promise<OcrPlacement | null>((resolve) => {
+                  placementRef.current = resolve
+                  setStep({
+                    kind: 'place',
+                    pages,
+                    busy: false,
+                    ...(error !== undefined ? { error } : {}),
+                    ...(recommendation ? { recommendation } : {}),
+                  })
+                })
+              },
+            }
+          : {}),
     }).then(
       (result) => {
         runRef.current = null
@@ -231,6 +265,7 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
       },
       (err: unknown) => {
         runRef.current = null
+        if (recognisedRef.current) return
         if (err instanceof OcrCancelledError && backRef.current) {
           setStep({ kind: backStepRef.current })
           return
@@ -327,7 +362,15 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
         )}
         {step.kind === 'pick' && (
           <>
-            <p>{s(prepared?.kind === 'embedded' ? 'ocrPlaceIntro' : 'ocrIntro')}</p>
+            <p>
+              {s(
+                props.selectOnly
+                  ? 'ocrPopupIntro'
+                  : prepared?.kind === 'embedded'
+                    ? 'ocrPlaceIntro'
+                    : 'ocrIntro',
+              )}
+            </p>
             <div className="translate-ocr-tools">
               <button
                 type="button"

@@ -62,7 +62,7 @@ async function workbook(name: string, rows: number[]): Promise<string> {
 const deps = (over: Record<string, unknown> = {}) => ({
   workDir: () => join(dir, 'work'),
   ocrMode: () => ({ kind: 'ai', provider: 'claude' }) as never,
-  showOcr: vi.fn(() => true),
+  openPopup: vi.fn(() => 'opened' as const),
   ...over,
 })
 
@@ -85,23 +85,23 @@ it('reads only: listing never changes the file and never asks the shell to show 
   await createOcrPicturesHost(d).list(path)
   const after = await stat(path)
   expect(after.mtimeMs).toBe(before.mtimeMs)
-  expect(d.showOcr).not.toHaveBeenCalled()
+  expect(d.openPopup).not.toHaveBeenCalled()
 })
 
 it('refuses formats that cannot hold pictures to read', async () => {
   const host = createOcrPicturesHost(deps())
   await expect(host.list(join(dir, 'a.csv'))).rejects.toThrow()
-  await expect(host.open(join(dir, 'a.csv'))).rejects.toThrow()
+  await expect(host.open(join(dir, 'a.csv'), 7)).rejects.toThrow()
 })
 
 it('opens the OCR popup for a workbook outside any project through a private project copy', async () => {
   const path = await workbook('owner.xlsx', [6, 81])
   const d = deps()
   const host = createOcrPicturesHost(d)
-  const result = await host.open(path)
+  const result = await host.open(path, 7)
   expect(result.opened).toBe(true)
-  expect(d.showOcr).toHaveBeenCalledTimes(1)
-  const event = (d.showOcr.mock.calls[0] as unknown[])[0] as { dir: string; file: string }
+  expect(d.openPopup).toHaveBeenCalledTimes(1)
+  const event = (d.openPopup.mock.calls[0] as unknown[])[1] as { dir: string; file: string }
   expect(event.file).toBe('owner.xlsx')
   expect(event.dir.startsWith(join(dir, 'work'))).toBe(true)
   // the private project is allowed for the OCR channels without being a listed project
@@ -114,26 +114,26 @@ it('opens the popup on the project of a workbook that is already a project sourc
   const d = deps()
   const host = createOcrPicturesHost(d)
   const first = await workbook('x.xlsx', [6])
-  await host.open(first)
-  const { dir: projectDir } = (d.showOcr.mock.calls[0] as unknown[])[0] as { dir: string }
+  await host.open(first, 7)
+  const { dir: projectDir } = (d.openPopup.mock.calls[0] as unknown[])[1] as { dir: string }
   const second = join(projectDir, 'source', 'x.xlsx')
   const d2 = deps()
-  await createOcrPicturesHost(d2).open(second)
-  expect((d2.showOcr.mock.calls[0] as unknown[])[0]).toEqual({ dir: projectDir, file: 'x.xlsx' })
+  await createOcrPicturesHost(d2).open(second, 7)
+  expect((d2.openPopup.mock.calls[0] as unknown[])[1]).toEqual({ dir: projectDir, file: 'x.xlsx' })
 })
 
 it('reports that the shell could not show the popup', async () => {
   const path = await workbook('a.xlsx', [6])
-  const host = createOcrPicturesHost(deps({ showOcr: () => false }))
-  expect((await host.open(path)).opened).toBe(false)
+  const host = createOcrPicturesHost(deps({ openPopup: () => 'unavailable' as const }))
+  expect((await host.open(path, 7)).opened).toBe(false)
 })
 
 it('lets the translation channels read a private OCR project but no other unlisted folder', async () => {
   const { createTranslateHandlers } = await import('../src/main/translate/translate-ipc')
   const path = await workbook('a.xlsx', [6])
   const d = deps()
-  await createOcrPicturesHost(d).open(path)
-  const { dir: projectDir } = (d.showOcr.mock.calls[0] as unknown[])[0] as { dir: string }
+  await createOcrPicturesHost(d).open(path, 7)
+  const { dir: projectDir } = (d.openPopup.mock.calls[0] as unknown[])[1] as { dir: string }
   const handlers = createTranslateHandlers({
     settingsPath: () => join(dir, 'app-settings.json'),
     now: () => 0,
@@ -169,6 +169,6 @@ it('prunes old copies when a new private copy is made', async () => {
   await mkdir(join(work, 'stale'), { recursive: true })
   const at = new Date(Date.now() - 9 * 24 * 60 * 60 * 1000)
   await utimes(join(work, 'stale'), at, at)
-  await createOcrPicturesHost(deps()).open(path)
+  await createOcrPicturesHost(deps()).open(path, 7)
   await expect(stat(join(work, 'stale'))).rejects.toThrow()
 })
