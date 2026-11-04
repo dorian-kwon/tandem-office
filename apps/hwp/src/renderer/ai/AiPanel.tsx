@@ -10,6 +10,8 @@ import {
   type AiModelPickerBridge,
   AiPanelSideButton,
   AiQueueStrip,
+  AiRunStatusLine,
+  useAiRunStatus,
   AiScopeQuote,
   type AiScopeQuoteData,
   AiSubscriptionUsageLine,
@@ -233,6 +235,7 @@ export function AiPanel({
   chatNowRef.current = chat
   const [prompt, setPrompt] = useState('')
   const [busy, setBusy] = useState(false)
+  const runStatus = useAiRunStatus(busy)
 
   // a request handed over by the document check: it waits in the input box for the user
   useEffect(() => {
@@ -756,7 +759,7 @@ export function AiPanel({
         ...panelProjectSkill({ run: project.chat.run, lang: () => langRef.current }),
       ]),
       systemSuffix: () => aiLangDirective(langRef.current),
-      events: {
+      events: runStatus.wrap({
         onText: (text) => patchLast({ text }),
         onToolStart: (call) => {
           // Live "running" chip: replaced in place by onToolExecuted
@@ -842,7 +845,7 @@ export function AiPanel({
           setBusy(false)
           projectRef.current?.finishSend()
         },
-      },
+      }),
     })
   }
 
@@ -1478,6 +1481,7 @@ export function AiPanel({
         {attachNotice && <div className="ai-attach-notice">{attachNotice}</div>}
         {/* Above the input card, not inside its footer: the reset time is long and
             would otherwise squeeze the attach/send buttons in a narrow panel. */}
+        <AiRunStatusLine state={runStatus.state} lang={lang} />
         <AiSubscriptionUsageLine usage={subscriptionUsage} lang={lang} />
         <AiComposer
           queueStrip={

@@ -101,6 +101,7 @@ import {
   type ProjectMemoryLine,
   placeRemoteEntries,
   useProjectPanel,
+  useAiRunStatus,
   type ProjectPanel,
 } from '@genoffice/ui'
 
@@ -1305,6 +1306,7 @@ export function App({
   /** cause of the failed turn, handed over by the transport right before the loop reports it */
   const streamErrorRef = useRef<IpcStreamError | null>(null)
   const [aiBusy, setAiBusy] = useState(false)
+  const aiRunStatus = useAiRunStatus(aiBusy)
   // Display history survives restarts via localStorage; the AgentLoop's model
   // context does not, so restored turns are read-only transcript.
   const [chat, setChat] = useState<readonly AiChatMessage[]>([])
@@ -1737,7 +1739,7 @@ export function App({
         // no document_ocr here: this panel opens the app's OCR popup through ocr_pictures
         ...panelProjectSkill({ run: project.chat.run, lang: getLang, ocrChat: false }),
       ]),
-      events: {
+      events: aiRunStatus.wrap({
         onText: (text) => {
           if (text) runLastTextRef.current = text
           // Status bar (and the ribbon-row status span) show a short state only;
@@ -1887,7 +1889,7 @@ export function App({
           projectRef.current?.finishSend()
           void autoSaveCompletedAiRun().finally(() => setAiBusy(false))
         },
-      },
+      }),
     })
   }
 
@@ -5538,6 +5540,7 @@ export function App({
         recoveryNotice={recoveryNotice}
         onDismissRecoveryNotice={() => setRecoveryNotice(null)}
         aiBusy={aiBusy}
+        aiRunStatus={aiRunStatus.state}
         {...(sessionUsage !== undefined ? { sessionUsage } : {})}
         aiSubscription={{
           settings: sendGate.settings,

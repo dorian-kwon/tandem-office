@@ -20,6 +20,7 @@ import {
   type OnTemplateSkill,
   type SkillUse,
   type AiComposerDocs,
+  type RunStatusState,
 } from '@genoffice/ui'
 
 import {
@@ -259,6 +260,7 @@ interface ExcelShellProps {
   readonly sheetHasContent: boolean
   /// true while the real LLM agent is running (composer disabled meanwhile).
   readonly aiBusy: boolean
+  readonly aiRunStatus: RunStatusState
   /** tokens billed across the session, shown beside the composer */
   readonly sessionUsage?: AiTokenUsageView
   /** subscription connection as the AI panel shows it */
@@ -504,6 +506,7 @@ export function ExcelShell({
   formatPainterActive,
   sheetHasContent,
   aiBusy,
+  aiRunStatus,
   sessionUsage,
   aiSubscription,
   chat,
@@ -1053,6 +1056,7 @@ export function ExcelShell({
           prompt={prompt}
           preview={preview}
           aiBusy={aiBusy}
+          aiRunStatus={aiRunStatus}
           sessionUsage={sessionUsage}
           subscription={aiSubscription}
           onPromptChange={onPromptChange}

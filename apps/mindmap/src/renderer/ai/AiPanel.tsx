@@ -23,6 +23,8 @@ import {
   AiToolsUnsupportedNotice,
   type AiModelPickerBridge,
   AiQueueStrip,
+  AiRunStatusLine,
+  useAiRunStatus,
   AI_QUEUE_LABELS,
   AiSubscriptionUsageLine,
   aiSubscriptionText,
@@ -417,6 +419,7 @@ export function AiPanel({
   const [chat, setChat] = useState<ChatEntry[]>([])
   const [prompt, setPrompt] = useState('')
   const [busy, setBusy] = useState(false)
+  const runStatus = useAiRunStatus(busy)
   /** Claude / Codex connection: live statuses and the connect-card actions */
   const subscription = useSubscriptionConnection()
   /** the shared AI settings as last read; null until the first read answered */
@@ -892,7 +895,7 @@ export function AiPanel({
       // the run's one undo point: the loop hands it back with the first tool that changed the map
       captureSnapshot: () => (turnRef.current ??= new MapTurn()),
       systemSuffix: () => aiLangDirective(langRef.current),
-      events: {
+      events: runStatus.wrap({
         onText: (text) => patchLast({ text }),
         onToolStart: (call) => {
           patchLast((last) => ({
@@ -990,7 +993,7 @@ export function AiPanel({
           // a failed make writes nothing: the map stays untitled
           handedRunRef.current.settle(false)
         },
-      },
+      }),
     })
   }
 
@@ -1988,6 +1991,7 @@ export function AiPanel({
         {projectLines}
         {/* Above the input card, not inside its footer: the reset time is long and
             would otherwise squeeze the attach/send buttons in a narrow panel. */}
+        <AiRunStatusLine state={runStatus.state} lang={lang} />
         <AiSubscriptionUsageLine usage={subscriptionUsage} lang={lang} />
         <AiComposer
           queueStrip={

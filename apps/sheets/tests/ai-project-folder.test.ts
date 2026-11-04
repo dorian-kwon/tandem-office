@@ -219,7 +219,7 @@ describe('sheets App wiring of the project folder', () => {
   it('puts the project skill in the same skill list as the person’s skills', () => {
     const list = app.slice(app.indexOf("composeWithDrive('sheets+files'"))
     // the list ends where the loop's events begin
-    const end = list.indexOf('events: {')
+    const end = list.search(/events: (?:\w+\.wrap\()?\{/)
     expect(list.indexOf('...panelUserSkills(')).toBeGreaterThan(0)
     expect(list.indexOf('...panelProjectSkill({ run: project.chat.run')).toBeGreaterThan(0)
     expect(list.indexOf('...panelProjectSkill(')).toBeLessThan(end)

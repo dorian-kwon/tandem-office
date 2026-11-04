@@ -1,0 +1,84 @@
+/* Persistent run status line above the AI composer (see AiRunStatusLine.tsx).
+   Colors come from the shared tokens only. */
+.ai-run-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 8px 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-8);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.ai-run-status .ai-run-status-marker {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+}
+
+.ai-run-status[data-phase='running'] .ai-run-status-marker {
+  background: var(--color-brand-secondary);
+  animation: ai-run-status-pulse 1.2s ease-in-out infinite;
+}
+
+.ai-run-status[data-phase='waiting'] {
+  border-color: var(--color-border-brand);
+  color: var(--text);
+}
+
+.ai-run-status[data-phase='waiting'] .ai-run-status-marker {
+  background: var(--color-ai-action);
+  animation: ai-run-status-pulse 2s ease-in-out infinite;
+}
+
+.ai-run-status[data-phase='done'] .ai-run-status-marker {
+  background: var(--success);
+}
+
+.ai-run-status[data-phase='error'] {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.ai-run-status[data-phase='error'] .ai-run-status-marker {
+  background: var(--danger);
+}
+
+.ai-run-status .ai-run-status-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-run-status .ai-run-status-elapsed {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+}
+
+@keyframes ai-run-status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.75);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-run-status[data-phase] .ai-run-status-marker {
+    animation: none;
+  }
+}

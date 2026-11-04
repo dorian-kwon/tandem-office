@@ -111,6 +111,8 @@ import {
 import { useI18n, t as tGlobal, aiLangDirective, getLang, type TFunc } from '../i18n/locale'
 import {
   AiQueueStrip,
+  AiRunStatusLine,
+  useAiRunStatus,
   AI_QUEUE_LABELS,
   AiScopeQuote,
   AiUsageChip,
@@ -531,6 +533,7 @@ export function AiPanel({
   // must honor it like the shared AiComposer does.
   const { spellcheck } = useAiPanelPrefs()
   const [busy, setBusy] = useState(false)
+  const runStatus = useAiRunStatus(busy)
   /** messages queued while a reply runs; the pump re-runs them through runWith on settle */
   const msgQueue = useChatRunQueue<{
     attachments: AttachmentMeta[]
@@ -1712,7 +1715,7 @@ export function AiPanel({
         // the chosen project folder: its context in the system prompt, project_* tools (app-run)
         ...panelProjectSkill({ run: projectPanel.chat.run, lang: () => langRef.current }),
       ]),
-      events: {
+      events: runStatus.wrap({
         onText: (text) => {
           streamedTextRef.current = text
           patchLastAssistant({ text })
@@ -1855,7 +1858,7 @@ export function AiPanel({
             resolveQueueRun?.(false)
           })
         },
-      },
+      }),
     })
   }
 
@@ -2921,6 +2924,7 @@ export function AiPanel({
             <AiToolsUnsupportedNotice lang={lang} />
           )}
           {projectPanel.notices}
+          <AiRunStatusLine state={runStatus.state} lang={lang} />
           <AiSubscriptionUsageLine usage={subscriptionUsage} lang={lang} />
           <TemplatePicker
             deckEmpty={deckEmpty ?? false}

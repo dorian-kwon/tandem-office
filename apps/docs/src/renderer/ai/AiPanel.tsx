@@ -11,6 +11,8 @@ import {
   AiToolsUnsupportedNotice,
   type AiModelPickerBridge,
   AiQueueStrip,
+  AiRunStatusLine,
+  useAiRunStatus,
   AI_QUEUE_LABELS,
   AiSubscriptionUsageLine,
   AiUsageChip,
@@ -557,6 +559,7 @@ export function AiPanel({
   const isRtl = lang === 'ar' || lang === 'he'
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
+  const runStatus = useAiRunStatus(busy)
   /** messages queued while a reply runs; the pump re-runs them through runWith on settle */
   const msgQueue = useChatRunQueue<{
     attachments: AttachmentMeta[]
@@ -1199,7 +1202,7 @@ export function AiPanel({
         ...panelProjectSkill({ run: project.chat.run, lang: () => langRef.current }),
       ]),
       captureSnapshot: () => captureRollbackSnapshot(editorRef.current),
-      events: {
+      events: runStatus.wrap({
         onText: (text) => patchLastAssistant({ text }),
         onToolStart: (call) => {
           // Live "running" chip: replaced in place by onToolExecuted
@@ -1324,7 +1327,7 @@ export function AiPanel({
           // a failed make writes nothing: the copy stays untitled
           handedRunRef.current.settle(false)
         },
-      },
+      }),
     })
   }
 
@@ -2195,6 +2198,7 @@ export function AiPanel({
         />
         {/* Above the input card, not inside its footer: the reset time is long and
             would otherwise squeeze the attach/send buttons in a narrow panel. */}
+        <AiRunStatusLine state={runStatus.state} lang={lang} />
         <AiSubscriptionUsageLine usage={subscriptionUsage} lang={lang} />
         <AiComposer
           queueStrip={

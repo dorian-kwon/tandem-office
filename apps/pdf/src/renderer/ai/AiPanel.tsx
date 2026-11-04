@@ -29,6 +29,8 @@ import {
   AiMark,
   AiToolsUnsupportedNotice,
   AiQueueStrip,
+  AiRunStatusLine,
+  useAiRunStatus,
   AI_QUEUE_LABELS,
   AiScopeQuote,
   AiSubscriptionUsageLine,
@@ -221,6 +223,7 @@ export function AiPanel({
   const [chat, setChat] = useState<ChatEntry[]>([])
   const [prompt, setPrompt] = useState('')
   const [busy, setBusy] = useState(false)
+  const runStatus = useAiRunStatus(busy)
   /** messages queued while a reply runs; the pump re-runs them through send on settle */
   const msgQueueRef = useRef<ChatRunQueue<{ skillUse: SkillUse }> | null>(null)
   const msgQueue = useChatRunQueue<{ skillUse: SkillUse }>({
@@ -753,7 +756,7 @@ export function AiPanel({
         ...panelProjectSkill({ run: projectPanel.chat.run, lang: () => langRef.current }),
       ]),
       systemSuffix: () => aiLangDirective(langRef.current),
-      events: {
+      events: runStatus.wrap({
         onText: (text) => {
           setPhase('replying')
           segTextRef.current = text
@@ -858,7 +861,7 @@ export function AiPanel({
           projectPanelRef.current.finishSend()
           setBusy(false)
         },
-      },
+      }),
     })
   }
 
@@ -1343,6 +1346,7 @@ export function AiPanel({
         {projectPanel.hint}
         {/* Above the input card, not inside its footer: the reset time is long and
             would otherwise squeeze the attach/send buttons in a narrow panel. */}
+        <AiRunStatusLine state={runStatus.state} lang={lang} />
         <AiSubscriptionUsageLine
           usage={subscriptionUsage.filter(
             (entry) => providerChoice?.connected && entry.provider === providerChoice.provider,

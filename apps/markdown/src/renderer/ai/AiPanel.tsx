@@ -34,6 +34,8 @@ import { localModelCapabilities } from '@genoffice/ai-provider/browser'
 import {
   AiComposer,
   AiQueueStrip,
+  AiRunStatusLine,
+  useAiRunStatus,
   AI_QUEUE_LABELS,
   AiScopeQuote,
   AiTypingIndicator,
@@ -275,6 +277,7 @@ export function AiPanel({
   const writerEpochRef = useRef(0)
   const [prompt, setPrompt] = useState('')
   const [busy, setBusy] = useState(false)
+  const runStatus = useAiRunStatus(busy)
   /** messages queued while a reply runs; the pump re-runs them through send on settle */
   const msgQueue = useChatRunQueue<{ skillUse: SkillUse }>({
     busy,
@@ -696,7 +699,7 @@ export function AiPanel({
       ]),
       captureSnapshot: () => depsRef.current.getSnapshot(),
       systemSuffix: () => aiLangDirective(langRef.current),
-      events: {
+      events: runStatus.wrap({
         onText: (text) => patchLast({ text }),
         onToolStart: (call) => {
           // Live "running" chip: replaced in place by onToolExecuted
@@ -801,7 +804,7 @@ export function AiPanel({
           projectPanelRef.current.finishSend()
           setBusy(false)
         },
-      },
+      }),
     })
   }
 
@@ -1582,6 +1585,7 @@ export function AiPanel({
         {projectPanel.hint}
         {/* Above the input card, not inside its footer: the reset time is long and
             would otherwise squeeze the footer controls in a narrow panel. */}
+        <AiRunStatusLine state={runStatus.state} lang={lang} />
         <AiSubscriptionUsageLine usage={subscriptionUsage} lang={lang} />
         <AiComposer
           queueStrip={

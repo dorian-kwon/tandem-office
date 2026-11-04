@@ -55,7 +55,7 @@ import type { AiBlockedRun } from './subscription-state'
 import type { ChangePlan } from '@genoffice/xlsx-gateway/domain/workbook.types'
 import { ATTACHMENT_IMAGE_EXTS, type AttachmentMeta } from '../../shared/desktop-api'
 import { useI18n, type TFunc } from '../i18n/locale'
-import { createFileNav, Markdown } from '@genoffice/ui'
+import { AiRunStatusLine, createFileNav, Markdown, type RunStatusState } from '@genoffice/ui'
 import { SHEET_NAV_SCHEME } from './sheet-nav'
 import sendEnterOn from '../assets/send-enter-on.png'
 import sendEnterOff from '../assets/send-enter-off.png'
@@ -356,6 +356,7 @@ export function AiChatPanel({
   prompt,
   preview,
   aiBusy,
+  aiRunStatus,
   sessionUsage,
   subscription,
   onPromptChange,
@@ -404,6 +405,7 @@ export function AiChatPanel({
   readonly prompt: string
   readonly preview: ChangePlan | null
   readonly aiBusy: boolean
+  readonly aiRunStatus?: RunStatusState
   /** tokens billed across the session, shown beside the composer */
   readonly sessionUsage?: AiTokenUsageView | undefined
   readonly subscription: AiPanelSubscription
@@ -1001,6 +1003,7 @@ export function AiChatPanel({
         {attachNotice && <div className="ai-attach-notice">{attachNotice}</div>}
         {/* Above the input card, not inside its footer: the reset time is long and
             would otherwise squeeze the attach/send buttons in a narrow panel. */}
+        {aiRunStatus && <AiRunStatusLine state={aiRunStatus} lang={lang} />}
         <AiSubscriptionUsageLine usage={subscription.usage} lang={lang} />
         <AiComposer
           queueStrip={

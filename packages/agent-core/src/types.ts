@@ -94,6 +94,14 @@ export interface ToolExecution {
    * Ignored when tool results are assembled into an AgentMessage.
    */
   display?: ToolDisplay
+  /**
+   * The tool opened something the person must act on (a popup the AI itself
+   * requested) and its output tells the model to stop and wait. UI only: the
+   * panel's run status line shows "waiting for you" until the person answers.
+   */
+  awaitingUser?: boolean
+  /** One-line remaining summary for the run status line ("Nothing is left"). UI only. */
+  runNote?: string
 }
 
 // ---- run phase (drives the in-progress status line in chat UIs) ----
