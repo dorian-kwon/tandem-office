@@ -133,3 +133,39 @@ describe('a read-only tab (translation source pane)', () => {
     },
   )
 })
+
+describe('Save as on the translation view output tab', () => {
+  it('asks for the translation Save as copy instead of the editor Save As, which would retarget the pane', () => {
+    const { deps, contents } = fixture('docs')
+    const translationSaveAs = vi.fn()
+    const withTranslation: TabDocumentActionDeps = {
+      ...deps,
+      tabs: { ...deps.tabs, isTranslationOutput: (id) => id === 'clicked' },
+      translationSaveAs,
+    }
+    runTabDocumentAction(withTranslation, 'clicked', 'saveAs')
+    expect(translationSaveAs).toHaveBeenCalledWith('/docs/clicked.pdf')
+    expect(contents.send).not.toHaveBeenCalled()
+  })
+
+  it('leaves plain Save and every ordinary tab alone', () => {
+    const { deps, contents } = fixture('docs')
+    const translationSaveAs = vi.fn()
+    const withTranslation: TabDocumentActionDeps = {
+      ...deps,
+      tabs: { ...deps.tabs, isTranslationOutput: (id) => id === 'clicked' },
+      translationSaveAs,
+    }
+    runTabDocumentAction(withTranslation, 'clicked', 'save')
+    expect(contents.send).toHaveBeenCalledWith('menu:command', 'save')
+    const ordinary: TabDocumentActionDeps = {
+      ...deps,
+      tabs: { ...deps.tabs, isTranslationOutput: () => false },
+      translationSaveAs,
+    }
+    runTabDocumentAction(ordinary, 'clicked', 'saveAs')
+    expect(translationSaveAs).not.toHaveBeenCalled()
+    expect(contents.send).toHaveBeenCalledWith('menu:command', 'save-as')
+  })
+})
+

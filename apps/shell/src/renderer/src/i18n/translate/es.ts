@@ -203,11 +203,10 @@ export const es = {
     'Hay documentos de este proyecto abiertos. Cierra sus pestañas y ventanas y luego elimina la carpeta.',
   errGlossaryInvalid:
     'No se pudo leer el archivo del glosario. Usa un archivo CSV, TXT separado por tabulaciones o XLSX con el término en la primera columna y su traducción en la segunda.',
-  exportTranslation: 'Exportar traducción',
-  exportDone: 'Traducción exportada.',
-  exportUnsaved:
-    'La traducción tiene cambios sin guardar. Guárdala primero en el editor y vuelve a exportar.',
-  errOutputMissing: 'Todavía no hay una traducción para exportar. Abre primero la traducción.',
+  saveAsTranslation: 'Guardar como…',
+  saveAsDone: 'Traducción guardada.',
+  saveAsUnsaved: 'La traducción tiene cambios sin guardar. Guárdala primero en el editor y vuelve a elegir «Guardar como…».',
+  errOutputMissing: 'Todavía no hay una traducción para guardar. Abre primero la traducción.',
   errExportRefused:
     'Elige otro lugar. No se puede usar la carpeta de originales del proyecto ni el propio archivo traducido.',
   ctxTitle: 'Se envía con cada solicitud de este proyecto:',

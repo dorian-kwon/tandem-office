@@ -86,3 +86,5 @@
 - `tests/editors-consistency.test.ts`는 저장소의 `apps/*` 소스를 읽는다. 에디터의 패널·리본 파일을 옮기거나 이름을 바꾸면 이 테스트의 `EDITORS` 표도 함께 고친다. 이 패키지만 떼어 놓고는 돌릴 수 없다.
 - 바꾸면 반드시 테스트하는 것: `aiSendGate`의 네 결과(`run`, `checking`, `notice`, `connect`)와 붙잡힌 요청의 전이, 설정이나 상태가 아직 없을 때(`null`), `auto`에서 한쪽만 확인이 끝났을 때, 모델 선택기 목록이 `selectAiProvider`를 통과하는 항목만 담는지, 프로그램의 모델 목록이 있을 때와 없을 때의 항목과 칩 글, 계정과 계정 버튼이 요청받은 카드에만 나오는지, 새 문자열 키가 21개 언어에 있고 `{name}` 자리 표시가 언어마다 같은지, 연결 상태 기계가 다리 없음·변경 알림·로그인 뒤 초점 확인·새로 고침 모드·도움말 대체 경로를 지키는지(`tests/use-subscription-connection.test.ts`).
 - 토큰 변경은 자동 검사가 없다. 밝은 테마, 어두운 테마, 시스템 모드 세 경우를 실제 화면으로 확인한다.
+- 번역 보기의 출력 창 잠금: `useTranslationLock`(`use-translation-lock.ts`)이 `useAiRunStatus`의 상태 하나로 잠금을 정한다. `running`일 때만 잠기고, `waiting`(AI가 사용자의 팝업을 기다림)·`done`·`stopped`·`error`·`idle`은 풀린다. 번역 출력 창인지는 실행이 시작될 때 껍데기 앱에 `app:is-translation-output`로 묻는다(분할의 읽기 전용 원본 옆 편집 창). 풀림 장치 둘: 배너의 "잠금 해제"(잠금을 풀고 실행을 멈춘다), 5분 동안 실행 이벤트가 없으면 스스로 푸는 감시(`TRANSLATION_LOCK_IDLE_MS`). 잠금 방식은 편집기가 정한다: 워드는 `editor.setEditable`, 엑셀은 격자 `inert`.
+

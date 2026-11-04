@@ -101,7 +101,9 @@ import {
   type ProjectMemoryLine,
   placeRemoteEntries,
   useProjectPanel,
+  TranslationLockBanner,
   useAiRunStatus,
+  useTranslationLock,
   type ProjectPanel,
 } from '@genoffice/ui'
 
@@ -1307,6 +1309,20 @@ export function App({
   const streamErrorRef = useRef<IpcStreamError | null>(null)
   const [aiBusy, setAiBusy] = useState(false)
   const aiRunStatus = useAiRunStatus(aiBusy)
+  // The translation view's output pane is locked while the AI translates: `inert` on the
+  // grid blocks every pointer and key edit there, while the AI's own writes go through the
+  // workbook API and are unaffected. The Unlock button also stops the run.
+  const translationLock = useTranslationLock({
+    state: aiRunStatus.state,
+    probe: () => window.desktopApi?.isTranslationOutput?.() ?? Promise.resolve(false),
+    onStop: () => agentLoopRef.current?.cancel(),
+  })
+  useEffect(() => {
+    const host = document.getElementById('univer-container')
+    if (!host) return undefined
+    host.toggleAttribute('inert', translationLock.locked)
+    return () => host.removeAttribute('inert')
+  }, [translationLock.locked])
   // the OCR popup the AI opened was finished or dismissed: stop showing "waiting for you"
   useEffect(
     () =>
@@ -5417,6 +5433,9 @@ export function App({
   return (
     <>
       <ToastHost />
+      {translationLock.locked && (
+        <TranslationLockBanner lang={getLang()} onUnlock={translationLock.unlock} />
+      )}
       {fullLoadPrompt && (
         <div className="dialog-backdrop">
           <div

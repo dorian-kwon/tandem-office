@@ -10,7 +10,7 @@ import type {
 } from '../../../shared/translate-api'
 import { useI18n } from '../locale'
 import type { TranslateStringKey } from '../i18n/strings-translate'
-import { exportNoticeFor, type ExportNotice } from './export-action'
+import { saveAsNoticeFor, type SaveAsNotice } from './save-as-action'
 import { languageName, makeText, translateErrorText } from './shared'
 import '../projects-panel.css'
 import './translate.css'
@@ -85,7 +85,7 @@ export function ProjectDetail({
   const [prompt, setPrompt] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [exportMessage, setExportMessage] = useState<ExportNotice | null>(null)
+  const [exportMessage, setExportMessage] = useState<SaveAsNotice | null>(null)
   const [promptFailed, setPromptFailed] = useState(false)
   const [promptSaved, setPromptSaved] = useState(false)
   // the newest project object, so a blur-save never writes a stale list over an upload
@@ -335,9 +335,9 @@ export function ProjectDetail({
   )
 
   /** copy this source's saved translation to a place the person picks */
-  const exportSource = async (file: string): Promise<void> => {
+  const saveAsSource = async (file: string): Promise<void> => {
     if (!api) return
-    const notice = await exportNoticeFor(lang, api, { dir, file })
+    const notice = await saveAsNoticeFor(lang, api, { dir, file })
     setExportMessage(notice)
   }
 
@@ -466,12 +466,12 @@ export function ProjectDetail({
                             <button
                               type="button"
                               className="projects-small"
-                              data-action="export-translation"
-                              aria-label={`${s('exportTranslation')}: ${file}`}
+                              data-action="save-as-translation"
+                              aria-label={`${s('saveAsTranslation')}: ${file}`}
                               disabled={busy}
-                              onClick={() => void exportSource(file)}
+                              onClick={() => void saveAsSource(file)}
                             >
-                              {s('exportTranslation')}
+                              {s('saveAsTranslation')}
                             </button>
                           )}
                           {kind === 'source' && (

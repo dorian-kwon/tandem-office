@@ -89,6 +89,7 @@ import { dropGenerateHandoff, queueGenerateHandoffFor } from './generate/handoff
 import type { ConvertedDocument } from './generate/convert'
 import { queueConvertedContent } from './generate/converted-tab'
 import { installReadOnlyGuard } from './read-only-guard'
+import { isTranslationOutputTab } from './translation-output'
 import { releaseClosedRenderer } from './renderer-disposal'
 import type { SessionStripState } from './session-record'
 
@@ -494,6 +495,11 @@ export class TabManager {
     tab.readOnly = true
     this.onChanged()
     return true
+  }
+
+  /** the tab is the editable pane beside the translation view's read-only source */
+  isTranslationOutput(id: string): boolean {
+    return isTranslationOutputTab(id, this.split, (tabId) => this.isReadOnlyTab(tabId))
   }
 
   isReadOnlyTab(id: string): boolean {

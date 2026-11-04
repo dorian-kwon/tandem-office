@@ -516,6 +516,7 @@ import {
 import { PROJECT_UNAVAILABLE, ProjectFolderTools, type DownloadAsk } from './projects/project-tools'
 import { runHeadlessExport, type HeadlessExporters } from './headless-export'
 import { TabManager, canonicalPath, type DetachedTab } from './tab-manager'
+import { isTranslationOutputTab, TRANSLATION_OUTPUT_CHANNEL } from './translation-output'
 import { tabMenuTemplate, type TabMenuActions, isProgramFile } from './tab-menu'
 import { runTabDocumentAction, type TabDocumentAction } from './tab-document-actions'
 import { duplicateDocumentFile } from './tab-duplicate'
@@ -6445,6 +6446,17 @@ function registerHomeIpc(): void {
   ipcMain.handle(HOME_CHANNELS.getAutoSaveDefault, (): AutoSaveDefault => currentAutoSaveDefault())
   ipcMain.handle('app:get-auto-save-default', (): AutoSaveDefault => currentAutoSaveDefault())
 
+  // an editor asks whether it is the translation view's output pane (the AI run lock)
+  ipcMain.handle(TRANSLATION_OUTPUT_CHANNEL, (event): boolean => {
+    const manager = tabManager
+    if (!manager) return false
+    return isTranslationOutputTab(
+      manager.tabIdForWebContents(event.sender.id),
+      manager.splitState(),
+      (id) => manager.isReadOnlyTab(id),
+    )
+  })
+
   ipcMain.handle(HOME_CHANNELS.setAutoSaveDefault, (_event, on: unknown) => {
     if (typeof on !== 'boolean') return
     if (on === currentAutoSaveDefault().on) return
@@ -7394,6 +7406,11 @@ function tabMenuActions(): TabMenuActions {
     runTabDocumentAction(
       {
         tabs: tabManager,
+        translationSaveAs: (outputPath) => {
+          const contents = shellWindow?.webContents
+          if (contents && !contents.isDestroyed())
+            contents.send(TRANSLATE_EVENTS.saveAsRequested, { outputPath })
+        },
         savePdf: (contents) => {
           void flushPdfSave(contents)
         },

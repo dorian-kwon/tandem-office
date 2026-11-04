@@ -332,6 +332,8 @@ export interface TranslateOpenOcrEvent {
 /** Events main pushes to the shell renderer. */
 export const TRANSLATE_EVENTS = {
   openOcr: 'translate:event:open-ocr',
+  /** a translation output tab's Save As (tab menu) asks the shell screen to run Save as */
+  saveAsRequested: 'translate:event:save-as-requested',
 } as const
 
 export interface TranslateOcrWriteArgs {
@@ -376,6 +378,8 @@ export interface TranslateApi {
   ocrRecommend(args: TranslateOcrStartArgs): Promise<OcrRecommendation>
   /** Subscribe to "open the OCR popup" requests; returns the unsubscribe function. */
   onOpenOcr(listener: (event: TranslateOpenOcrEvent) => void): () => void
+  /** the tab menu's Save As on a translation output tab: run "Save as…" for that output file */
+  onSaveAsRequested(listener: (args: { outputPath: string }) => void): () => void
   /** write the readings into a new Word document in output/ (never overwriting) */
   ocrWrite(args: TranslateOcrWriteArgs): Promise<OcrWritten>
   /** drop the token (closing the dialog, stopping) */

@@ -202,11 +202,10 @@ export const pl = {
     'Dokumenty z tego projektu są otwarte. Zamknij ich karty i okna, a potem usuń folder.',
   errGlossaryInvalid:
     'Nie można odczytać pliku glosariusza. Użyj pliku CSV, TXT rozdzielanego tabulatorami lub XLSX z terminem w pierwszej kolumnie i tłumaczeniem w drugiej.',
-  exportTranslation: 'Eksportuj tłumaczenie',
-  exportDone: 'Tłumaczenie wyeksportowane.',
-  exportUnsaved:
-    'Tłumaczenie ma niezapisane zmiany. Najpierw zapisz je w edytorze, a potem wyeksportuj ponownie.',
-  errOutputMissing: 'Nie ma jeszcze tłumaczenia do wyeksportowania. Najpierw otwórz tłumaczenie.',
+  saveAsTranslation: 'Zapisz jako…',
+  saveAsDone: 'Tłumaczenie zapisane.',
+  saveAsUnsaved: 'Tłumaczenie ma niezapisane zmiany. Najpierw zapisz je w edytorze, a potem ponownie wybierz «Zapisz jako…».',
+  errOutputMissing: 'Nie ma jeszcze tłumaczenia do zapisania. Najpierw otwórz tłumaczenie.',
   errExportRefused:
     'Wybierz inne miejsce. Folder źródeł projektu i sam plik tłumaczenia nie są dozwolone.',
   ctxTitle: 'Wysyłane z każdym żądaniem z tego projektu:',

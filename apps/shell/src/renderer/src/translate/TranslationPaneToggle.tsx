@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { SplitViewState } from '../../../shared/split-view-api'
 import type { TabSummary } from '../../../shared/tabs-api'
 import { useI18n } from '../locale'
-import { exportNoticeFor, type ExportNotice } from './export-action'
+import { saveAsNoticeFor, type SaveAsNotice } from './save-as-action'
 import { makeText } from './shared'
 import { dismissSourceChanged, useChangedSources } from './source-change-notice'
 import './translate.css'
 import './translate-global'
+
+const basenameOf = (path: string): string => path.split(/[\\/]/).pop() ?? path
 
 export interface TranslationPaneToggleProps {
   split: SplitViewState | null
@@ -26,7 +28,7 @@ export function TranslationPaneToggle({ split, tabs }: TranslationPaneToggleProp
   const { lang } = useI18n()
   const s = makeText(lang)
   const changedSources = useChangedSources()
-  const [exportNotice, setExportNotice] = useState<ExportNotice | null>(null)
+  const [exportNotice, setExportNotice] = useState<SaveAsNotice | null>(null)
   const [exporting, setExporting] = useState(false)
   // the result of an export stays on the strip for a few seconds
   useEffect(() => {
@@ -35,6 +37,25 @@ export function TranslationPaneToggle({ split, tabs }: TranslationPaneToggleProp
     return () => clearTimeout(timer)
   }, [exportNotice])
   const api = window.translateApi
+  const savingRef = useRef(false)
+  const runSaveAs = (outputPath: string) => {
+    if (!api || savingRef.current) return
+    savingRef.current = true
+    setExporting(true)
+    void saveAsNoticeFor(lang, api, { outputPath })
+      .then(setExportNotice)
+      .finally(() => {
+        savingRef.current = false
+        setExporting(false)
+      })
+  }
+  const runSaveAsRef = useRef(runSaveAs)
+  runSaveAsRef.current = runSaveAs
+  // the tab menu's Save As on the output tab lands here, so it copies instead of retargeting the pane
+  useEffect(
+    () => api?.onSaveAsRequested?.(({ outputPath }) => runSaveAsRef.current(outputPath)),
+    [api],
+  )
   if (!split || !api) return null
   const readOnlyOf = (id: string) => tabs.find((t) => t.id === id)?.readOnly === true
   if (!readOnlyOf(split.aTabId) && !readOnlyOf(split.bTabId)) return null
@@ -66,13 +87,6 @@ export function TranslationPaneToggle({ split, tabs }: TranslationPaneToggleProp
   const sourceTabId = readOnlyOf(split.aTabId) ? split.aTabId : split.bTabId
   const outputTabId = sourceTabId === split.aTabId ? split.bTabId : split.aTabId
   const outputPath = tabs.find((t) => t.id === outputTabId)?.filePath
-  const exportOutput = () => {
-    if (!outputPath || exporting) return
-    setExporting(true)
-    void exportNoticeFor(lang, api, { outputPath })
-      .then(setExportNotice)
-      .finally(() => setExporting(false))
-  }
   return (
     <>
       {changedSources.has(sourceTabId) && (
@@ -96,12 +110,12 @@ export function TranslationPaneToggle({ split, tabs }: TranslationPaneToggleProp
           <button
             type="button"
             className="translate-pane-toggle-btn"
-            data-action="export-translation"
+            data-action="save-as-translation"
             disabled={exporting}
-            title={s('exportTranslation')}
-            onClick={exportOutput}
+            title={outputPath ? `${s('saveAsTranslation')} ${basenameOf(outputPath)}` : s('saveAsTranslation')}
+            onClick={() => outputPath && runSaveAs(outputPath)}
           >
-            {s('exportTranslation')}
+            {s('saveAsTranslation')}
           </button>
         )}
       </div>

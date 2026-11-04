@@ -211,13 +211,28 @@ Needs a rebuild of the shell app (`npm run build:all`): main, preload and the sh
 2. Finish or cancel the popup on the home tab, then return to the sheets tab: the waiting line is gone (it clears when the popup closes, even if the sheets tab was in the background).
 3. Run any other AI request: the status line shows running, then finished, as before.
 
-## Translation: export the translated document
+## Translation: Save as… (a copy of the translated document)
 
 Needs a rebuild of the shell app (`npm run build:all`): main, preload and the shell renderer changed.
 
-1. Open a translation of a `.docx` (then the same for `.xlsx`, `.md`, `.html`): the tab strip shows "Export translation" next to the hide/show buttons. Click it: a native save dialog opens in the project folder with the name `<original name> (<target language code>)` and the original extension.
-2. Save it elsewhere (for example the Desktop) and open it in Word or Excel: it is the translated document in the same format, equal to the output file. A "Translation exported." line shows on the strip for a few seconds.
+1. Open a translation of a `.docx` (then the same for `.xlsx`, `.md`, `.html`): the tab strip shows "Save as…" next to the hide/show buttons. Click it: a native save dialog opens in the project folder with the name `<original name> (<target language code>)` and the original extension.
+2. Save it elsewhere (for example the Desktop) and open it in Word or Excel: it is the translated document in the same format, equal to the output file. A "Translation saved." line shows on the strip for a few seconds.
 3. Cancel the dialog: nothing is written and no message shows. Pick a name that exists: the dialog's own overwrite question appears first.
-4. Edit the translation without saving, then click Export: no dialog; the strip says to save in the editor first. Save with Ctrl+S, export again: the saved content is exported.
+4. Edit the translation without saving, then click Save as…: no dialog; the strip says to save in the editor first. Save with Ctrl+S, use Save as… again: the saved content is copied.
 5. In the save dialog go into the project's `source` folder and save: the app refuses with a plain message and writes nothing. Choosing the project's `output` file itself is refused as well.
-6. Project detail screen: each source row has "Export translation". Before the translation was ever opened it says there is no translation to export yet. For a text PDF translated earlier it exports the newest translated PDF as a PDF; for an OCR result it exports the Word document.
+6. Project detail screen: each source row has "Save as…". Before the translation was ever opened it says there is no translation to save yet. For a text PDF translated earlier it saves a copy of the newest translated PDF as a PDF; for an OCR result it saves the Word document.
+7. The strip button is the only Save as… for the translation; the old "Export translation" wording is gone in your screen language. Hover the button: its tooltip names the output file.
+8. Right-click the output tab and choose Save As: the same copy dialog opens (not the editor's own Save As), and the pane stays on the project's output file afterwards. The same menu entry on the source tab does nothing.
+9. Known gap: the editor's own File > Save As inside the output pane still behaves as in a normal document (the pane moves to the copy, and can pick a format such as ODT). Use the strip button or the tab menu for a safe copy; check whether this gap bothers you.
+
+## Translation: output is read-only while the AI translates
+
+Needs a rebuild of the shell app (`npm run build:all`): main, preload, the docs and sheets renderers and the shared UI changed.
+
+1. Open a translation of a `.docx`, ask the AI in the output pane to translate. While it runs a banner "The AI is translating; editing is locked until it finishes" shows at the bottom of the output pane and typing or clicking in the text does nothing (docs: the editor is read-only; the AI's own edits still appear). When the run ends the banner goes and typing works.
+2. Same for an `.xlsx` translation: cells cannot be selected or edited while the AI runs (the grid is inert), the AI's writes still land, and the grid is editable again afterwards.
+3. Press Stop in the AI panel mid-run: the lock lifts at once. Start another run and press "Unlock" on the banner: the run stops and the pane is editable. Cause an error (disconnect the subscription program): the lock lifts.
+4. Ask the sheets AI to OCR a picture so the OCR popup opens: while it waits for you the sheet is editable (waiting is not locked); once the AI carries on it locks again. The AI re-reads paragraph fingerprints, so an edit you made in the waiting time is refused rather than overwritten.
+5. An ordinary document (not opened from a translation project) with the AI running is never locked and shows no banner. The source pane keeps its own read-only guard.
+6. Leave a run silent for 5 minutes (for example by pulling the network mid-run): the lock lets go on its own.
+

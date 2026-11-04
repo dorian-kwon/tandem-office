@@ -277,6 +277,13 @@ export {
 export { AiTypingIndicator } from './AiTypingIndicator'
 export { AiRunStatusLine } from './AiRunStatusLine'
 export { useAiRunStatus, type AiRunStatusController } from './use-ai-run-status'
+export {
+  TRANSLATION_LOCK_IDLE_MS,
+  translationLockWanted,
+  useTranslationLock,
+  type TranslationLockController,
+} from './use-translation-lock'
+export { TranslationLockBanner } from './TranslationLockBanner'
 export { IDLE_RUN_STATUS, reduceRunStatus, type RunStatusState } from './ai-run-status'
 export { IconSend, IconStop, type IconProps } from './icons'
 export { AiMark, type AiMarkProps } from './AiMark'

@@ -12,7 +12,9 @@ import {
   type AiModelPickerBridge,
   AiQueueStrip,
   AiRunStatusLine,
+  TranslationLockBanner,
   useAiRunStatus,
+  useTranslationLock,
   AI_QUEUE_LABELS,
   AiSubscriptionUsageLine,
   AiUsageChip,
@@ -489,6 +491,11 @@ interface AiPanelProps {
   onExpand?: () => void
   /** collapse the panel to the sidebar rail */
   onCollapse?: () => void
+  /**
+   * The translation view's output is locked while the AI translates (the editor
+   * is switched read-only by the App); false on every other document.
+   */
+  onTranslationLockChange?: (locked: boolean) => void
   /** Absolute path of the currently open file (used for chat-history persistence) */
   filePath?: string | null
   /** queued selection-scoped edits (owned by App, which also owns the anchors) */
@@ -535,6 +542,7 @@ export function AiPanel({
   hideRail = false,
   onExpand,
   onCollapse,
+  onTranslationLockChange,
   filePath,
   editQueue = [],
   onQueueEditInstruction,
@@ -559,7 +567,20 @@ export function AiPanel({
   const isRtl = lang === 'ar' || lang === 'he'
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
+  const cancelRef = useRef<() => void>(() => undefined)
   const runStatus = useAiRunStatus(busy)
+  const translationLock = useTranslationLock({
+    state: runStatus.state,
+    probe: () => window.desktop?.isTranslationOutput?.() ?? Promise.resolve(false),
+    onStop: () => cancelRef.current(),
+  })
+  const onTranslationLockChangeRef = useRef(onTranslationLockChange)
+  onTranslationLockChangeRef.current = onTranslationLockChange
+  useEffect(() => {
+    onTranslationLockChangeRef.current?.(translationLock.locked)
+  }, [translationLock.locked])
+  // a panel that goes away never leaves the editor locked
+  useEffect(() => () => onTranslationLockChangeRef.current?.(false), [])
   /** messages queued while a reply runs; the pump re-runs them through runWith on settle */
   const msgQueue = useChatRunQueue<{
     attachments: AttachmentMeta[]
@@ -1579,6 +1600,7 @@ export function AiPanel({
     if (pendingSendRef.current) pendingSendRef.current.aborted = true
     loopRef.current?.cancel()
   }
+  cancelRef.current = cancel
 
   /** submit every still-anchored queued edit as one batch run */
   const sendQueue = () => {
@@ -2198,6 +2220,9 @@ export function AiPanel({
         />
         {/* Above the input card, not inside its footer: the reset time is long and
             would otherwise squeeze the attach/send buttons in a narrow panel. */}
+        {translationLock.locked && (
+          <TranslationLockBanner lang={lang} onUnlock={translationLock.unlock} />
+        )}
         <AiRunStatusLine state={runStatus.state} lang={lang} />
         <AiSubscriptionUsageLine usage={subscriptionUsage} lang={lang} />
         <AiComposer

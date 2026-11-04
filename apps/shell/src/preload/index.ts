@@ -729,6 +729,13 @@ const translateApi: TranslateApi = {
       ipcRenderer.removeListener(TRANSLATE_EVENTS.openOcr, handler)
     }
   },
+  onSaveAsRequested: (listener) => {
+    const handler = (_event: unknown, payload: { outputPath: string }): void => listener(payload)
+    ipcRenderer.on(TRANSLATE_EVENTS.saveAsRequested, handler)
+    return () => {
+      ipcRenderer.removeListener(TRANSLATE_EVENTS.saveAsRequested, handler)
+    }
+  },
   ocrWrite: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrWrite, args),
   ocrRelease: (token) => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrRelease, token),
   ocrPopupClosed: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrPopupClosed),

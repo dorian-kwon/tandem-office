@@ -188,13 +188,11 @@ export const ko = {
   errProjectInUse: '이 프로젝트의 문서가 열려 있습니다. 그 탭과 창을 닫은 뒤 폴더를 지우세요.',
   errGlossaryInvalid:
     '단어집 파일을 읽을 수 없습니다. 첫째 열에 원어, 둘째 열에 번역어가 있는 CSV, 탭으로 나눈 TXT, XLSX 파일을 쓰세요.',
-  exportTranslation: '번역본 내보내기',
-  exportDone: '번역본을 내보냈습니다.',
-  exportUnsaved:
-    '번역본에 저장하지 않은 변경이 있습니다. 편집기에서 먼저 저장한 뒤 다시 내보내세요.',
-  errOutputMissing: '아직 내보낼 번역본이 없습니다. 먼저 번역을 여세요.',
-  errExportRefused:
-    '다른 위치를 고르세요. 프로젝트의 원문 폴더와 번역 파일 자체에는 내보낼 수 없습니다.',
+  saveAsTranslation: '다른 이름으로 저장…',
+  saveAsDone: '번역본을 저장했습니다.',
+  saveAsUnsaved: "번역본에 저장하지 않은 변경이 있습니다. 편집기에서 먼저 저장한 뒤 다시 '다른 이름으로 저장'을 누르세요.",
+  errOutputMissing: '아직 저장할 번역본이 없습니다. 먼저 번역을 여세요.',
+  errExportRefused: '다른 위치를 고르세요. 프로젝트의 원문 폴더와 번역 파일 자체에는 저장할 수 없습니다.',
   ctxTitle: '이 프로젝트에서 요청마다 함께 보내는 것:',
   ctxSystemOn: '모든 프로젝트에 쓰는 시스템 프롬프트: 보냄',
   ctxSystemOff: '모든 프로젝트에 쓰는 시스템 프롬프트: 없음(비어 있음)',

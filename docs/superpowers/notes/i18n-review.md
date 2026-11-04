@@ -24,3 +24,6 @@ Added with reference material as markdown (2026-11-04, same 19 drafted languages
 Not reviewed here: the product name, which is still open.
 
 Added with translation export (2026-11-05, same 19 drafted languages): `apps/shell/src/renderer/src/i18n/translate/<lang>.ts` new keys `exportTranslation`, `exportDone`, `exportUnsaved`, `errOutputMissing`, `errExportRefused`.
+
+Added with the translation Save as… rename and the output lock (2026-11-05, same 19 drafted languages): `apps/shell/src/renderer/src/i18n/translate/<lang>.ts` keys `exportTranslation`/`exportDone`/`exportUnsaved` renamed to `saveAsTranslation`/`saveAsDone`/`saveAsUnsaved` with new wording, `errOutputMissing` and (ko, ja, zh, zh-TW) `errExportRefused` reworded from export to save; `packages/ui/src/strings-translation-lock.ts` (banner and Unlock button).
+

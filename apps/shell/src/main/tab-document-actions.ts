@@ -10,7 +10,14 @@ export interface TabDocumentActionDeps {
     activateTab(id: string): void
     canDetachTab(id: string): boolean
     webContentsForTab(id: string): WebContents | undefined
+    /** the tab is the translation view's output pane */
+    isTranslationOutput?(id: string): boolean
   }
+  /**
+   * Save as for a translation output: copy its saved file to a place the person picks,
+   * leaving the pane on the project's output file (the editor's own Save As would move it).
+   */
+  translationSaveAs?(outputPath: string): void
   savePdf(contents: WebContents): void
   savePdfAs(target: TabDocumentTarget): void
   printPdf(contents: WebContents): void
@@ -39,6 +46,16 @@ export function runTabDocumentAction(
     return
   // the translation view's source pane is never saved (Save As included)
   if (tab.readOnly && action !== 'print') return
+  if (
+    action === 'saveAs' &&
+    tab.filePath &&
+    deps.translationSaveAs &&
+    deps.tabs.isTranslationOutput?.(id)
+  ) {
+    deps.tabs.activateTab(id)
+    deps.translationSaveAs(tab.filePath)
+    return
+  }
   deps.tabs.activateTab(id)
   const command = action === 'saveAs' ? 'save-as' : action
   switch (tab.kind) {

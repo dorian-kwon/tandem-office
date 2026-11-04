@@ -202,11 +202,10 @@ export const id = {
     'Dokumen dari proyek ini sedang terbuka. Tutup tab dan jendelanya, lalu hapus folder.',
   errGlossaryInvalid:
     'File glosarium tidak dapat dibaca. Gunakan file CSV, TXT yang dipisahkan tab, atau XLSX dengan istilah di kolom pertama dan terjemahannya di kolom kedua.',
-  exportTranslation: 'Ekspor terjemahan',
-  exportDone: 'Terjemahan diekspor.',
-  exportUnsaved:
-    'Terjemahan memiliki perubahan yang belum disimpan. Simpan dulu di editor, lalu ekspor lagi.',
-  errOutputMissing: 'Belum ada terjemahan untuk diekspor. Buka terjemahan terlebih dahulu.',
+  saveAsTranslation: 'Simpan sebagai…',
+  saveAsDone: 'Terjemahan disimpan.',
+  saveAsUnsaved: 'Terjemahan memiliki perubahan yang belum disimpan. Simpan dulu di editor, lalu pilih «Simpan sebagai…» lagi.',
+  errOutputMissing: 'Belum ada terjemahan untuk disimpan. Buka terjemahan terlebih dahulu.',
   errExportRefused:
     'Pilih lokasi lain. Folder sumber proyek dan file terjemahan itu sendiri tidak dapat digunakan.',
   ctxTitle: 'Dikirim bersama setiap permintaan dari proyek ini:',

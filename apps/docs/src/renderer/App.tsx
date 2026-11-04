@@ -976,6 +976,7 @@ export function App() {
   const closeNav = useCallback(() => setShowNav(false), [])
   const [viewMode, setViewMode] = useState<ViewMode>('print')
   const [readMode, setReadMode] = useState(false)
+  const [translationLocked, setTranslationLocked] = useState(false)
   /** F5: Read Mode in fullscreen, with the status bar hidden (presentation) */
   const [presenting, setPresenting] = useState(false)
   /** cancels a pending page-fit when the show ends before its timer runs */
@@ -1898,14 +1899,15 @@ export function App() {
   // StreamingTailGuardExtension; saves wait for the full content).
   useEffect(() => {
     if (!editor) return
-    editor.setEditable(!readMode && !isProtected)
+    // translationLocked: the AI is translating in the translation view's output pane
+    editor.setEditable(!readMode && !isProtected && !translationLocked)
     if (!readMode) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setReadMode(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [editor, readMode, isProtected])
+  }, [editor, readMode, isProtected, translationLocked])
 
   // Track Changes: the recorder plugin reads its toggle from extension storage
   useEffect(() => {
@@ -7595,6 +7597,7 @@ export function App() {
               hideRail={!aiSidebarEnabled}
               onExpand={aiDock.onExpand}
               onCollapse={() => setShowAi(false)}
+              onTranslationLockChange={setTranslationLocked}
               filePath={doc?.filePath ?? null}
               editQueue={editQueue}
               onQueueEditInstruction={queueUpdate}
