@@ -74,6 +74,7 @@ export const he = {
   aiToolReadFile: 'קריאת {name}',
   aiToolWebSearch: 'חיפוש באינטרנט',
   aiToolWebSearchDone: 'בוצע חיפוש "{query}" ({count} תוצאות)',
+  aiOcrResultDisplay: 'ה-OCR הסתיים: נקראו {count} תמונות',
   aiToolOcrPictures: 'חיפוש תמונות',
   aiToolOcrPicturesDone: 'נמצאו {count} תמונות',
   aiToolOcrPicturesOpened: 'חלון OCR נפתח',

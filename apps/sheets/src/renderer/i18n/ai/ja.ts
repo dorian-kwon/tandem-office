@@ -77,6 +77,7 @@ export const ja = {
   aiToolReadFile: '{name} を読み取り',
   aiToolWebSearch: 'ウェブ検索',
   aiToolWebSearchDone: '「{query}」を検索（{count} 件）',
+  aiOcrResultDisplay: 'OCR 完了：画像 {count} 枚を読み取りました',
   aiToolOcrPictures: '画像を探す',
   aiToolOcrPicturesDone: '画像 {count} 枚を確認',
   aiToolOcrPicturesOpened: 'OCR ウィンドウを開きました',

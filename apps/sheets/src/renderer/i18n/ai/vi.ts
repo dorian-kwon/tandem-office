@@ -77,6 +77,7 @@ export const vi = {
   aiToolReadFile: 'Đọc {name}',
   aiToolWebSearch: 'Tìm kiếm trên web',
   aiToolWebSearchDone: 'Đã tìm kiếm "{query}" ({count} kết quả)',
+  aiOcrResultDisplay: 'OCR hoàn tất: đã đọc {count} hình ảnh',
   aiToolOcrPictures: 'Tìm hình ảnh',
   aiToolOcrPicturesDone: 'Tìm thấy {count} hình ảnh',
   aiToolOcrPicturesOpened: 'Đã mở cửa sổ OCR',

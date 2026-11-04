@@ -1663,7 +1663,7 @@ interface SheetsRuntimeConfig {
       total: number
       pictures: { index: number; sheet: string; cell: string }[]
     }>
-    open: (path: string) => Promise<{ opened: boolean }>
+    open: (path: string, asker: number) => Promise<{ opened: boolean; alreadyOpen: boolean }>
   }
 }
 
@@ -1913,12 +1913,18 @@ function broadcastSidecarCrash(client: XlsxSidecarClient): void {
   }
 }
 
-/** The shell's OCR popup closed: tell every sheets tab so a panel waiting on it can carry on. */
-export function notifyOcrPopupClosed(): void {
-  for (const entry of sheetsTabs.values()) {
-    if (entry.webContents.isDestroyed()) continue
-    entry.webContents.send(IPC_CHANNELS.ocrPopupClosed)
-  }
+/**
+ * The OCR popup overlay that one sheets tab asked for ended: tell that tab (only it) how.
+ * A result carries the recognised text for the AI; a close carries nothing.
+ */
+export function notifyOcrPopupOutcome(
+  asker: number,
+  outcome: { kind: 'result'; result: unknown } | { kind: 'closed' },
+): void {
+  const entry = sheetsTabs.get(asker)
+  if (!entry || entry.webContents.isDestroyed()) return
+  if (outcome.kind === 'result') entry.webContents.send(IPC_CHANNELS.ocrPopupResult, outcome.result)
+  else entry.webContents.send(IPC_CHANNELS.ocrPopupClosed)
 }
 
 function registerSheetsSession(webContents: WebContents, client: XlsxSidecarClient): void {
@@ -3170,7 +3176,8 @@ export function registerSheetsIpc(): void {
         return { ok: false, error: 'Picture OCR needs a saved .xlsx workbook without a password.' }
       try {
         if (request.action === 'list') return { ok: true, ...(await host.list(session.path)) }
-        if (request.action === 'open') return { ok: true, ...(await host.open(session.path)) }
+        if (request.action === 'open')
+          return { ok: true, ...(await host.open(session.path, event.sender.id)) }
         return { ok: false, error: 'Unknown picture OCR action.' }
       } catch (err) {
         return { ok: false, error: err instanceof Error ? err.message : 'Picture OCR failed.' }

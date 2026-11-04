@@ -190,25 +190,30 @@ Use a project with target language German (or any of the 21 app languages except
 3. Look for a space before `, . ) ]` and for double spaces right after a footnote mark or where a source blank run sat between runs ("services;  in", "the score ."): none. Replaying run 4's translate_blocks inputs on its source with the current code left 6 of these (now covered by `translate-spacing-seams.test.ts`).
 4. Known gap: when the model writes no space where the source had none between two runs ("a dancer" + "in many ways"), the words run together; the tool cannot tell that from a name split across runs.
 
-## Sheets AI: OCR of a workbook's own pictures opens the OCR popup
+## Sheets AI: OCR of a workbook's own pictures (popup overlay, then placement in the chat)
 
-Needs a rebuild of the shell app (`npm run build:all`): main, preload and both renderers changed.
+Needs a rebuild of the shell app (`npm run build:all`): main, preload and both renderers changed. No real AI is used by the automated tests; steps 4 to 9 spend a little of your subscription quota.
 
-1. Open a workbook with floating pictures (for example the webtoon sheet: headers image / OCR / translation, pictures anchored in column A from row 7, columns B and C empty). In the sheets AI panel ask "OCR the pictures in this workbook".
-2. The AI calls `ocr_pictures` (chat line "N pictures found"), then says in one or two sentences how many pictures it found and where they are anchored, that it will propose a destination next to them, and that nothing is sent until you confirm. It does not ask you to attach, unzip, rename, save or order pictures, and does not point you to the agent window.
-3. The app switches to the home tab and the OCR selection popup shows the pictures with local previews (check the count and the anchor cells in the list against the sheet). Nothing is sent to the AI provider yet; confirm the start (the existing quota confirmation) and later the placement dialog, which should recommend the empty column beside each picture (column B).
-4. The original workbook is unchanged (the result is a new file). A workbook opened from a project source/output folder uses that project; any other workbook uses a private copy under `<userData>/ocr-chat`. An unsaved new workbook, a password-protected one, a CSV or a converted .xls is refused with a plain message in the chat.
-5. Pictures added since the last save are not listed (the popup reads the saved file); the AI says so.
-6. With unsaved edits in the workbook, ask for the OCR again: the AI does not open the popup, offers to save first, and opens it after you save and say so.
-7. Close the popup (Cancel) for a workbook outside any project: the home tab shows the translation project list, not a project detail screen for a hidden folder.
-8. Copies under `<userData>/ocr-chat` older than 7 days are removed at the next app start or the next private copy. The sheets AI panel never mentions a "document_ocr" chat flow (only the popup).
+Webtoon scenario (`US_마계의 달!_22화 2.xlsx`: header A1 이미지 / B1 OCR / C1 번역, 36 pictures from A7 downward, B and C empty beside each):
+
+1. Open the workbook (save it first if it is new) and, in the sheets AI panel, ask "OCR the pictures in this workbook". The AI calls `ocr_pictures` (list), then says in one or two sentences how many pictures it found and where they are anchored, that a popup lets you choose them and confirm the start, and that nothing is sent before you confirm. It does not ask where the text should go yet, and never asks you to attach, unzip, rename, save or order pictures.
+2. A dim overlay appears over the sheets window itself. Check: the active tab is still the sheet (no Home tab, no project detail screen, no project list), the number of tabs and windows is unchanged (no extra window), and the status line says it is waiting for you.
+3. In the overlay choose "Read all" (or pick some pictures; previews are local and the list shows each anchor cell, for example Sheet1 · A7). Switch to another tab and back: the overlay is still there. Press Start in the confirmation (the existing quota confirmation: count, AI, "pictures are sent").
+4. When reading ends the overlay closes by itself and you are on the same sheet. A short line "OCR finished: 36 pictures read" appears as your message and the AI continues: it shows a short preview of what was recognised (count, the first lines, sound effects such as "툭").
+5. The AI asks where the text goes with a numbered card (ask_choice): the first option is marked recommended and reads like "put each picture's text in column B on the picture's anchor row, one cell per picture"; other placements follow (another empty column, a new sheet), "Only keep the text as reference" is last, and you can type your own wording.
+6. If the text suggests it, it asks one follow-up at a time: one cell per picture or one row per speech bubble, include sound effects or not, bubble reading order, and whether to fill column C with the translation. It does not ask what the header row already tells it (B1 is OCR, C1 is 번역).
+7. Pick the recommended option. The AI reads the target cells first; they are empty, so it writes column B on each picture's anchor row (B7, B82, ...) and reports the count. Column A pictures and every other cell are unchanged; Undo reverts the whole write.
+8. Repeat the request and answer "Only keep the text as reference": nothing is written. Repeat once more with a filled cell in column B: the AI shows the filled cells and asks overwrite / skip / another column before writing anything.
+9. Ask again and press Cancel (or close the sheets tab) while the overlay or the reading is open: the status line stops waiting, nothing is written, and (Activity Monitor / Task Manager) no claude or codex child process stays running.
+10. Asking twice while the overlay is open does not create a second overlay. A workbook opened from a project's source/output folder uses that project; any other workbook uses a private copy under `<userData>/ocr-chat`, which never appears in the translation project list. An unsaved new workbook, a password-protected one, a CSV or a converted .xls is refused with a plain message. With unsaved edits the AI offers to save first and opens the overlay only after you say so.
+11. Copies under `<userData>/ocr-chat` older than 7 days are removed at the next app start or the next private copy. A sheets window that is a detached window gets the overlay over that window; the main window is not raised.
 
 ## Sheets AI: waiting state while the OCR popup is open
 
 Needs a rebuild of the shell app (`npm run build:all`): main, preload and the sheets and shell renderers changed.
 
 1. In the sheets AI panel ask to OCR the workbook's pictures. After the AI opens the popup, the panel's status line says it is waiting for you (not "finished").
-2. Finish or cancel the popup on the home tab, then return to the sheets tab: the waiting line is gone (it clears when the popup closes, even if the sheets tab was in the background).
+2. Finish or cancel the overlay: the waiting line is gone (on Cancel at once; after a finished reading the AI's next turn starts and the line shows running).
 3. Run any other AI request: the status line shows running, then finished, as before.
 
 ## Translation: Save as… (a copy of the translated document)

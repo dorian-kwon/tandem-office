@@ -78,6 +78,7 @@ export const cs = {
   aiToolReadFile: 'Načtení souboru {name}',
   aiToolWebSearch: 'Hledání na webu',
   aiToolWebSearchDone: 'Vyhledáno „{query}“ (výsledků: {count})',
+  aiOcrResultDisplay: 'OCR dokončeno: přečteno {count} obrázků',
   aiToolOcrPictures: 'Najít obrázky',
   aiToolOcrPicturesDone: 'Nalezeno obrázků: {count}',
   aiToolOcrPicturesOpened: 'Okno OCR otevřeno',

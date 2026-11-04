@@ -78,6 +78,7 @@ export const it = {
   aiToolReadFile: 'Lettura di {name}',
   aiToolWebSearch: 'Ricerca sul web',
   aiToolWebSearchDone: 'Ricerca di "{query}" ({count} risultati)',
+  aiOcrResultDisplay: 'OCR completato: {count} immagini lette',
   aiToolOcrPictures: 'Cerca immagini',
   aiToolOcrPicturesDone: '{count} immagini trovate',
   aiToolOcrPicturesOpened: 'Finestra OCR aperta',

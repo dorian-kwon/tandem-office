@@ -78,6 +78,7 @@ export const ms = {
   aiToolReadFile: 'Baca {name}',
   aiToolWebSearch: 'Carian web',
   aiToolWebSearchDone: 'Mencari "{query}" ({count} hasil)',
+  aiOcrResultDisplay: 'OCR selesai: {count} gambar dibaca',
   aiToolOcrPictures: 'Cari gambar',
   aiToolOcrPicturesDone: '{count} gambar ditemui',
   aiToolOcrPicturesOpened: 'Tetingkap OCR dibuka',

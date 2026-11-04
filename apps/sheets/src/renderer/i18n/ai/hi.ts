@@ -78,6 +78,7 @@ export const hi = {
   aiToolReadFile: '{name} पढ़ें',
   aiToolWebSearch: 'वेब खोज',
   aiToolWebSearchDone: '"{query}" खोजा गया ({count} परिणाम)',
+  aiOcrResultDisplay: 'OCR पूरा हुआ: {count} चित्र पढ़े गए',
   aiToolOcrPictures: 'चित्र खोजें',
   aiToolOcrPicturesDone: '{count} चित्र मिले',
   aiToolOcrPicturesOpened: 'OCR विंडो खोली गई',

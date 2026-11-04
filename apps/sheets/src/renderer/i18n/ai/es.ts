@@ -80,6 +80,7 @@ export const es = {
   aiToolReadFile: 'Leer {name}',
   aiToolWebSearch: 'Búsqueda web',
   aiToolWebSearchDone: 'Se buscó "{query}" ({count} resultados)',
+  aiOcrResultDisplay: 'OCR terminado: {count} imágenes leídas',
   aiToolOcrPictures: 'Buscar imágenes',
   aiToolOcrPicturesDone: '{count} imágenes encontradas',
   aiToolOcrPicturesOpened: 'Ventana de OCR abierta',

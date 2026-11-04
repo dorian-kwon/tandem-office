@@ -73,6 +73,7 @@ export const zh = {
   aiToolReadFile: '读取 {name}',
   aiToolWebSearch: '联网搜索',
   aiToolWebSearchDone: '搜索 "{query}"（{count} 条结果）',
+  aiOcrResultDisplay: 'OCR 完成：已读取 {count} 张图片',
   aiToolOcrPictures: '查找图片',
   aiToolOcrPicturesDone: '找到 {count} 张图片',
   aiToolOcrPicturesOpened: '已打开 OCR 窗口',

@@ -153,6 +153,48 @@ describe('ocr_pictures prompt wording', () => {
   })
 })
 
+describe('ocr_pictures in-chat placement flow', () => {
+  const prompt = String(createOcrPicturesSkill(() => 's').systemPrompt)
+
+  it('the popup is only for choosing pictures and the start confirmation, never for the destination', () => {
+    expect(prompt).toMatch(/do not ask where the text should go yet/i)
+    expect(prompt).not.toMatch(/the app will offer a destination/i)
+  })
+
+  it('decides the placement in the chat with ask_choice, recommended first, reference-only last', () => {
+    expect(prompt).toContain('[ocr:result]')
+    expect(prompt).toMatch(/ask_choice \(id ocrPlacement/)
+    expect(prompt).toMatch(/recommended placement first and marked/i)
+    expect(prompt).toMatch(/"Only keep the text as reference \(do not write it\)" last/i)
+    expect(prompt).toMatch(/never ask what the sheet layout already answers/i)
+  })
+
+  it('follow-up questions cover the webtoon cases and never overwrite silently', () => {
+    expect(prompt).toMatch(/one cell per picture or one row per speech bubble/i)
+    expect(prompt).toMatch(/sound effects/i)
+    expect(prompt).toMatch(/reading order/i)
+    expect(prompt).toMatch(/translation column/i)
+    expect(prompt).toMatch(/read_cells on every target cell/i)
+    expect(prompt).toMatch(/never overwrite[^.]*silently/i)
+    expect(prompt).toMatch(/never into source\//i)
+    expect(prompt).toMatch(/propose_operations/)
+  })
+
+  it('a dismissed popup writes nothing', () => {
+    expect(prompt).toMatch(/dismissed[^.]*nothing was read/i)
+  })
+
+  it('opening twice reports the popup as already open and keeps waiting', async () => {
+    vi.stubGlobal('window', {
+      desktopApi: { ocrPictures: vi.fn(async () => ({ ok: true, opened: true, alreadyOpen: true })) },
+    })
+    const result = await createOcrPicturesSkill(() => 's').executeTool(call({ action: 'open' }))
+    expect(result.output).toMatch(/already open/i)
+    expect(result.awaitingUser).toBe(true)
+    expect(result.isError).toBeFalsy()
+  })
+})
+
 describe('ocr_pictures chat lines', () => {
   it('exist in the key set shard', () => {
     for (const key of [

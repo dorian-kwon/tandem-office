@@ -79,6 +79,7 @@ export const nl = {
   aiToolReadFile: '{name} lezen',
   aiToolWebSearch: 'Zoeken op internet',
   aiToolWebSearchDone: 'Gezocht naar "{query}" ({count} resultaten)',
+  aiOcrResultDisplay: 'OCR voltooid: {count} afbeeldingen gelezen',
   aiToolOcrPictures: 'Afbeeldingen zoeken',
   aiToolOcrPicturesDone: '{count} afbeeldingen gevonden',
   aiToolOcrPicturesOpened: 'OCR-venster geopend',

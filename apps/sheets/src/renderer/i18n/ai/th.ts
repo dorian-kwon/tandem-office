@@ -77,6 +77,7 @@ export const th = {
   aiToolReadFile: 'อ่าน {name}',
   aiToolWebSearch: 'ค้นหาเว็บ',
   aiToolWebSearchDone: 'ค้นหา "{query}" ({count} ผลลัพธ์)',
+  aiOcrResultDisplay: 'OCR เสร็จสิ้น: อ่านรูปภาพแล้ว {count} รูป',
   aiToolOcrPictures: 'ค้นหารูปภาพ',
   aiToolOcrPicturesDone: 'พบรูปภาพ {count} รูป',
   aiToolOcrPicturesOpened: 'เปิดหน้าต่าง OCR แล้ว',

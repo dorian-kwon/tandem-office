@@ -44,8 +44,15 @@ export interface OcrPicturesRequest {
 }
 export type OcrPicturesResponse =
   | { ok: true; total: number; pictures: { index: number; sheet: string; cell: string }[] }
-  | { ok: true; opened: boolean }
+  | { ok: true; opened: boolean; alreadyOpen?: boolean }
   | { ok: false; error: string }
+
+/** What the OCR popup read, as the shell hands it to the asking panel (plain text only). */
+export interface OcrPopupResult {
+  pages: { index: number; location: string; text: string }[]
+  /** the local placement analysis; absent when none was made */
+  recommendation?: { placement: unknown; reason: 'empty-cells' | 'new-sheet' | 'after-images' }
+}
 
 // edit schemas shared with the xlsx gateway package; re-exported so IPC consumers keep one import site
 export {
@@ -3100,6 +3107,8 @@ export interface DesktopApi {
   ocrPictures(request: OcrPicturesRequest): Promise<OcrPicturesResponse>
   /** The OCR popup the AI opened for this app closed (finished or dismissed). Returns an unsubscribe. */
   onOcrPopupClosed(callback: () => void): () => void
+  /** The OCR popup finished reading: its text for the AI to place. Returns an unsubscribe. */
+  onOcrPopupResult(callback: (result: OcrPopupResult) => void): () => void
   /// Web search (main-process Serper/DuckDuckGo, shared with docs/slides)
   webSearch(query: string, maxResults?: number): Promise<WebSearchResult>
   /// Read one web page as text (shared ai:read-url handler), paged by character offset

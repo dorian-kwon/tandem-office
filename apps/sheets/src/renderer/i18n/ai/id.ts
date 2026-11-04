@@ -77,6 +77,7 @@ export const id = {
   aiToolReadFile: 'Baca {name}',
   aiToolWebSearch: 'Pencarian web',
   aiToolWebSearchDone: 'Mencari "{query}" ({count} hasil)',
+  aiOcrResultDisplay: 'OCR selesai: {count} gambar dibaca',
   aiToolOcrPictures: 'Cari gambar',
   aiToolOcrPicturesDone: '{count} gambar ditemukan',
   aiToolOcrPicturesOpened: 'Jendela OCR dibuka',

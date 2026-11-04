@@ -313,11 +313,13 @@ import { mergeAttachedWorkbooks } from './merge-workbooks'
 import { createSearchSkill } from './ai/search-skill'
 import { createImageSkill } from './ai/image-skill'
 import { createOcrPicturesSkill } from './ai/ocr-pictures-skill'
+import { formatOcrResultMessage } from './ai/ocr-result-message'
 import { ATTACHMENT_IMAGE_EXTS } from '../shared/desktop-api'
 import type {
   AttachmentAddResult,
   AttachmentMeta,
   MenuAction,
+  OcrPopupResult,
   WorkbookFile,
   WorkbookVisualObject,
 } from '../shared/desktop-api'
@@ -1337,10 +1339,29 @@ export function App({
   }, [translationLock.locked])
   // the OCR popup the AI opened was finished or dismissed: stop showing "waiting for you"
   useEffect(
-    () =>
-      window.desktopApi?.onOcrPopupClosed?.(() => aiRunStatus.resolveWaiting()) ?? undefined,
+    () => window.desktopApi?.onOcrPopupClosed?.(() => aiRunStatus.resolveWaiting()) ?? undefined,
     [aiRunStatus.resolveWaiting],
   )
+  // The OCR popup finished reading: its text becomes the next message to the AI (the bubble
+  // shows only a short line), sent as soon as the panel is idle so the AI can show what was
+  // recognised and ask where it goes. Dismissing the popup sends nothing.
+  const [ocrResult, setOcrResult] = useState<OcrPopupResult | null>(null)
+  useEffect(
+    () => window.desktopApi?.onOcrPopupResult?.((result) => setOcrResult(result)) ?? undefined,
+    [],
+  )
+  useEffect(() => {
+    if (!ocrResult || aiBusy) return
+    setOcrResult(null)
+    aiRunStatus.resolveWaiting()
+    const message = formatOcrResultMessage(ocrResult)
+    handleSend(t('aiOcrResultDisplay', { count: message.count }), undefined, undefined, {
+      text: `\n\n${message.text}`,
+      chips: [],
+    })
+    // handleSend belongs to this render; the result and the busy flag are the triggers
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ocrResult, aiBusy])
   // Display history survives restarts via localStorage; the AgentLoop's model
   // context does not, so restored turns are read-only transcript.
   const [chat, setChat] = useState<readonly AiChatMessage[]>([])

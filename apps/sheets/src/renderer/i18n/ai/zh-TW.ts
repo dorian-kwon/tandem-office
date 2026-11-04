@@ -74,6 +74,7 @@ export const zhTW = {
   aiToolReadFile: '讀取 {name}',
   aiToolWebSearch: '網路搜尋',
   aiToolWebSearchDone: '搜尋 "{query}"（{count} 筆結果）',
+  aiOcrResultDisplay: 'OCR 完成：已讀取 {count} 張圖片',
   aiToolOcrPictures: '尋找圖片',
   aiToolOcrPicturesDone: '找到 {count} 張圖片',
   aiToolOcrPicturesOpened: '已開啟 OCR 視窗',

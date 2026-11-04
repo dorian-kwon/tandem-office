@@ -78,6 +78,7 @@ export const en = {
   aiToolReadFile: 'Read {name}',
   aiToolWebSearch: 'Web search',
   aiToolWebSearchDone: 'Searched "{query}" ({count} results)',
+  aiOcrResultDisplay: 'OCR finished: {count} pictures read',
   aiToolOcrPictures: 'Find pictures',
   aiToolOcrPicturesDone: '{count} pictures found',
   aiToolOcrPicturesOpened: 'Opened the OCR popup',

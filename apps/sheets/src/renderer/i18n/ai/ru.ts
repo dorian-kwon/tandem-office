@@ -78,6 +78,7 @@ export const ru = {
   aiToolReadFile: 'Чтение {name}',
   aiToolWebSearch: 'Поиск в Интернете',
   aiToolWebSearchDone: 'Поиск «{query}» ({count} результатов)',
+  aiOcrResultDisplay: 'OCR завершено: прочитано изображений — {count}',
   aiToolOcrPictures: 'Поиск изображений',
   aiToolOcrPicturesDone: 'Найдено изображений: {count}',
   aiToolOcrPicturesOpened: 'Окно OCR открыто',

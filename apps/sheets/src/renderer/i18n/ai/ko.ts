@@ -76,6 +76,7 @@ export const ko = {
   aiToolReadFile: '{name} 읽기',
   aiToolWebSearch: '웹 검색',
   aiToolWebSearchDone: '"{query}" 검색({count}건)',
+  aiOcrResultDisplay: 'OCR 완료: 그림 {count}개를 읽었습니다',
   aiToolOcrPictures: '그림 찾기',
   aiToolOcrPicturesDone: '그림 {count}개 확인',
   aiToolOcrPicturesOpened: 'OCR 창을 열었습니다',

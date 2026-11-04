@@ -647,6 +647,13 @@ const desktopApi: DesktopApi = {
     ipcRenderer.on(IPC_CHANNELS.ocrPopupClosed, listener)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.ocrPopupClosed, listener)
   },
+  onOcrPopupResult(callback) {
+    const listener = (_event: unknown, result: unknown): void => {
+      if (isRecord(result) && Array.isArray(result.pages)) callback(result as never)
+    }
+    ipcRenderer.on(IPC_CHANNELS.ocrPopupResult, listener)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.ocrPopupResult, listener)
+  },
   async webSearch(query, maxResults) {
     if (typeof query !== 'string' || !query.trim() || query.length > 512) {
       throw new Error('Invalid search query.')
