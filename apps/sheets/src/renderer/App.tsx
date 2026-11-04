@@ -83,6 +83,7 @@ import {
   skillChipRefsOf,
   panelUserSkills,
   panelProjectSkill,
+  ocrDisplayOf,
   useSkillProposals,
   useSkillTemplates,
   templateDocumentOf,
@@ -731,6 +732,8 @@ export function App({
   const [_revision, setRevision] = useState(0)
   const [workbookFile, setWorkbookFile] = useState<WorkbookFile | null>(null)
   const [pendingEdits, setPendingEdits] = useState(0)
+  const pendingEditsRef = useRef(0)
+  pendingEditsRef.current = pendingEdits
   /// Whether any cell in the workbook has content — the ribbon's one-click AI
   /// action buttons are greyed out on a fully empty sheet.
   const [sheetHasContent, setSheetHasContent] = useState(false)
@@ -1710,7 +1713,10 @@ export function App({
           () => availableAttachments(),
         ),
         // the workbook's own pictures: list them, then open the app's OCR popup
-        createOcrPicturesSkill(() => lazyWorkbookRef.current?.file.sessionId),
+        createOcrPicturesSkill(
+          () => lazyWorkbookRef.current?.file.sessionId,
+          () => pendingEditsRef.current > 0 || lazyWorkbookRef.current?.file.unsavedNew === true,
+        ),
         // the person's skills: use_skill, read_skill_file, propose_skill (app-run tools)
         ...panelUserSkills({
           lang: getLang,
@@ -1728,7 +1734,8 @@ export function App({
           },
         }),
         // the chosen project folder: its context and its four app-run tools (spec 5.4, 5.5)
-        ...panelProjectSkill({ run: project.chat.run, lang: getLang }),
+        // no document_ocr here: this panel opens the app's OCR popup through ocr_pictures
+        ...panelProjectSkill({ run: project.chat.run, lang: getLang, ocrChat: false }),
       ]),
       events: {
         onText: (text) => {
@@ -1758,6 +1765,7 @@ export function App({
         },
         onToolExecuted: ({ call, execution }) => {
           if (execution.mutated) runMutatedRef.current = true
+          const ocrDisplay = ocrDisplayOf(call.name, execution.display)
           const input = safeJsonInput(call.input)
           const output = execution.output
             ? execution.output.slice(0, PERSIST_TOOL_FIELD_MAX)
@@ -1775,6 +1783,7 @@ export function App({
             if (tools.at(-1)?.running) tools.pop()
             return {
               ...entry,
+              ...(ocrDisplay ? { ocrDisplays: [...(entry.ocrDisplays ?? []), ocrDisplay] } : {}),
               tools: [
                 ...tools,
                 {

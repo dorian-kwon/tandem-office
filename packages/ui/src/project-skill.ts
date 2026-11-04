@@ -12,6 +12,7 @@ import type {
   ProjectNotice,
   ToolActivity,
 } from '@genoffice/project-store'
+import { ocrChatSkill } from './ocr-chat-skill'
 import { projectChatText } from './strings-project-chat'
 
 /**
@@ -45,7 +46,7 @@ export const PROJECT_TOOLS = {
 /** The bridge calls the skill uses */
 export type ProjectSkillBridge = Pick<
   ProjectFolderApi,
-  'readContext' | 'openScope' | 'closeScope' | 'listFiles' | 'search' | 'read' | 'remember'
+  'readContext' | 'openScope' | 'closeScope' | 'listFiles' | 'search' | 'read' | 'remember' | 'ocr'
 >
 
 /**
@@ -94,6 +95,8 @@ export interface ProjectRunSnapshot {
 export interface ProjectRun {
   /** the bridge the tools call */
   readonly bridge: ProjectSkillBridge
+  /** One trusted id per human message; stable throughout the agent loop. */
+  readonly turnId?: string | undefined
   /** the snapshot of the request in flight; null outside prepare → finish */
   readonly snapshot: ProjectRunSnapshot | null
   /** `.ieumoffice/` of the chosen project could not be written during this window's life */
@@ -127,6 +130,7 @@ export function createProjectRun(options: CreateProjectRunOptions): ProjectRun |
   /** the project whose folder could not be written (cleared when another is chosen) */
   let unwritableFor: ProjectId | null = null
   let seq = 0
+  let turnId: string | undefined
 
   const markUnwritable = (projectId: ProjectId | null) => {
     if (!projectId || unwritableFor === projectId) return
@@ -142,6 +146,9 @@ export function createProjectRun(options: CreateProjectRunOptions): ProjectRun |
 
   return {
     bridge,
+    get turnId() {
+      return turnId
+    },
     get snapshot() {
       return snapshot
     },
@@ -151,6 +158,7 @@ export function createProjectRun(options: CreateProjectRunOptions): ProjectRun |
     },
     async prepare(query) {
       const mine = ++seq
+      turnId = crypto.randomUUID()
       await closeOpen()
       const projectId = options.projectId()
       if (!projectId) return { status: 'none' }
@@ -174,6 +182,7 @@ export function createProjectRun(options: CreateProjectRunOptions): ProjectRun |
     },
     async finish() {
       seq++
+      turnId = undefined
       await closeOpen()
     },
     markUnwritable() {
@@ -547,13 +556,18 @@ export interface PanelProjectSkillOptions {
   lang: () => Lang
   /** a memory entry was added, changed or removed: show its line */
   onMemoryEdit?: ((line: ProjectMemoryLine) => void) | undefined
+  /**
+   * Register the conversational `document_ocr` skill (default true). An editor with its
+   * own OCR path (the sheets panel opens the app's OCR popup) passes false, so the panel
+   * never carries two OCR prompts that contradict each other.
+   */
+  ocrChat?: boolean | undefined
 }
 
 /**
- * The project folder capability for an AI panel's composeSkills list: one
- * skill, or none when the window has no project folder bridge. The skill
- * adds nothing (no prompt, no tools) unless `run.prepare()` found a chosen
- * project for the request being sent.
+ * Shared AI panel capabilities, or none without the project folder bridge.
+ * The folder skill needs a chosen project; conversational OCR, when exposed
+ * by main, also works with the current document without a selected project.
  */
 export function panelProjectSkill(options: PanelProjectSkillOptions): AgentSkill[] {
   const run = options.run
@@ -743,5 +757,5 @@ export function panelProjectSkill(options: PanelProjectSkillOptions): AgentSkill
       }
     },
   }
-  return [skill]
+  return run.bridge.ocr && options.ocrChat !== false ? [skill, ocrChatSkill(run)] : [skill]
 }

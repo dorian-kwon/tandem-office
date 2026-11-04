@@ -1,3 +1,4 @@
+import { OcrChatPreview, type OcrChatDisplay } from '@genoffice/ui'
 import {
   aiPanelWidthAtPointer,
   AiPanelSideButton,
@@ -245,6 +246,7 @@ interface QueuedMeta {
 }
 
 export interface AiChatMessage {
+  readonly ocrDisplays?: readonly OcrChatDisplay[]
   readonly role: 'user' | 'assistant'
   readonly text: string
   readonly tools: readonly AiToolChip[]
@@ -799,6 +801,7 @@ export function AiChatPanel({
                   <SentAttachments atts={entry.attachments} previews={attachmentPreviews} />
                 )}
                 {entry.tools.length > 0 && <ToolChipList tools={entry.tools} />}
+                <OcrChatPreview displays={entry.ocrDisplays} />
                 <SkillUsedNotes tools={entry.tools} />
                 {project?.messageParts(entry)}
                 {entry.skillProposals?.map((key) => renderSkillCard?.(key))}
@@ -852,6 +855,7 @@ export function AiChatPanel({
             ) : (
               <>
                 {entry.tools.length > 0 && <ToolChipList tools={entry.tools} />}
+                <OcrChatPreview displays={entry.ocrDisplays} />
                 <SkillUsedNotes tools={entry.tools} />
                 {project?.messageParts(entry)}
                 {entry.skillProposals?.map((key) => renderSkillCard?.(key))}

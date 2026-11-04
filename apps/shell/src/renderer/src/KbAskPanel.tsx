@@ -1,3 +1,4 @@
+import { OcrChatPreview, ocrDisplayOf, type OcrChatDisplay } from '@genoffice/ui'
 import { useEffect, useRef, useState } from 'react'
 import {
   AgentLoop,
@@ -134,6 +135,7 @@ import sendStop from './assets/send-stop.png'
 const HOME_EDITOR: ProjectEditor = 'home'
 
 interface AskMessage {
+  ocrDisplays?: OcrChatDisplay[]
   role: 'user' | 'assistant'
   text: string
   toolNotes: ToolNote[]
@@ -505,6 +507,9 @@ export function KbAskPanel({
           }))
         },
         onToolExecuted: ({ call, execution }) => {
+          const ocrDisplay = ocrDisplayOf(call.name, execution.display)
+          if (ocrDisplay)
+            patchLast((last) => ({ ocrDisplays: [...(last.ocrDisplays ?? []), ocrDisplay] }))
           if (runActiveRef.current) runToolsRef.current.push(toolRecordOf(call, execution))
           if (call.name === CREATE_DOCUMENT_TOOL) {
             // saved into the chosen project's folder: the step is done and says where
@@ -1057,6 +1062,7 @@ export function KbAskPanel({
             {m.role === 'user' && (
               <SentSkillChips lang={lang} chips={m.skills} isAvailable={skills.isAvailable} />
             )}
+            <OcrChatPreview displays={m.ocrDisplays} />
             {m.role === 'assistant' && m.toolNotes.length > 0 && (
               <div className="kb-ask-tools">
                 {m.toolNotes.map((note, j) => (

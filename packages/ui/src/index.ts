@@ -585,3 +585,5 @@ export type {
 } from './use-project-panel'
 export type { ProjectChatStringKey } from './strings-project-chat'
 export { useScrollWindow } from './scroll-window'
+
+export { OcrChatPreview, ocrDisplayOf, type OcrChatDisplay } from './OcrChatPreview'

@@ -1,3 +1,4 @@
+import { OcrChatPreview, ocrDisplayOf, type OcrChatDisplay } from '@genoffice/ui'
 import {
   aiPanelWidthAtPointer,
   AiBlockedNotice,
@@ -218,6 +219,7 @@ function safeJsonInput(input: unknown): string | undefined {
 }
 
 interface ChatEntry {
+  ocrDisplays?: OcrChatDisplay[]
   role: 'user' | 'assistant'
   text: string
   error?: string
@@ -1219,6 +1221,7 @@ export function AiPanel({
           // mind maps ride the UI-only display side channel onto the message
           const display = execution.display
           const mindmap = display?.kind === 'mindmap' ? display.tree : undefined
+          const ocrDisplay = ocrDisplayOf(call.name, display)
           runToolsRef.current.push({
             name: call.name,
             summary: execution.summary,
@@ -1245,6 +1248,7 @@ export function AiPanel({
                 },
               ],
               ...(mindmap ? { mindmap } : {}),
+              ...(ocrDisplay ? { ocrDisplays: [...(last.ocrDisplays ?? []), ocrDisplay] } : {}),
             }
           })
         },
@@ -2003,6 +2007,7 @@ export function AiPanel({
                 </div>
               )}
               {entry.tools && entry.tools.length > 0 && <ToolChipList tools={entry.tools} />}
+              <OcrChatPreview displays={entry.ocrDisplays} />
               {entry.mindmap && (
                 <MindMapCard
                   tree={entry.mindmap}
