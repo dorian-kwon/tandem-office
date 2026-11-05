@@ -930,9 +930,10 @@ config.dmg.sign = false
 // the arm64 name stays the one the site and the README point at.
 config.dmg.artifactName = `${PRODUCT_FILE_NAME}-\${version}-\${arch}.\${ext}`
 
-// Auto-update feed: the releases of the public repository. Always configured,
-// so every installer carries an app-update.yml and can update itself — the
-// repository is public, which is why no token or feed URL has to be injected.
+// Auto-update feed: the releases of the private repository. Always configured,
+// so every installer carries an app-update.yml and can update itself. No token is
+// baked in: the app reads the person's own `gh` login at run time (update-auth.ts),
+// so only people with access to the repository can update.
 // This only names the feed. Whether a build also uploads is the --publish
 // flag's business: pass `--publish never` to package without creating a
 // release (electron-builder would otherwise try to on a tagged CI build).
@@ -941,6 +942,7 @@ config.publish = [
     provider: 'github',
     owner: REPO_OWNER,
     repo: REPO_NAME,
+    private: true,
   },
 ]
 

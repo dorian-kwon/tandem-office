@@ -87,6 +87,7 @@ vi.mock('electron-updater', () => ({
     on: (event: string, listener: Listener) => {
       updaterState.listeners.set(event, listener)
     },
+    setFeedURL: vi.fn(),
     checkForUpdates: () => checkForUpdates(),
     downloadUpdate: (token?: FakeCancellationToken) => downloadUpdate(token),
     quitAndInstall: (...args: unknown[]) => quitAndInstall(...(args as [boolean, boolean])),
@@ -150,6 +151,11 @@ const pushUpdateState = vi.fn<(patch: Partial<UpdateUiState>) => void>()
 const closeUpdateWindow = vi.fn(() => {
   updateWindow.open = false
 })
+
+// the feed's gh login is not read in tests: a fixed token, so checks start at once
+vi.mock('../src/main/update-auth', () => ({
+  createFeedAuth: () => ({ peek: () => 'test-token', token: async () => 'test-token' }),
+}))
 
 vi.mock('../src/main/update-attempt', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/main/update-attempt')>()),

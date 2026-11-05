@@ -18,7 +18,13 @@ import type { UpdateLogger } from './update-log'
 import { reopenedByInstaller, requestUpdateRestart, updateRestartRequested } from './update-restart'
 import type { UpdateInfo } from 'electron-updater'
 import { createI18n, getUiLang, htmlLang } from '@genoffice/i18n'
-import { GITHUB_LATEST_RELEASE_URL, githubReleaseTagUrl } from '@genoffice/electron-utils'
+import {
+  GITHUB_LATEST_RELEASE_URL,
+  GITHUB_REPO_NAME,
+  GITHUB_REPO_OWNER,
+  githubReleaseTagUrl,
+} from '@genoffice/electron-utils'
+import { createFeedAuth } from './update-auth'
 import type {
   UpdateChannel,
   UpdatePhase,
@@ -37,14 +43,14 @@ import {
 import { normalizeReleaseNotes } from './update-notes'
 
 /**
- * Full-package auto-update from the GitHub Releases of the product's public
- * repository.
+ * Full-package auto-update from the GitHub Releases of the product's private
+ * repository, read with the token of the person's own `gh` login (update-auth.ts).
  *
  * A release carries the versioned installer and its `latest.yml`
  * (docs/releasing.ko.md is the procedure). The packaged app reads the
  * repository from resources/app-update.yml, which electron-builder bakes in
  * from the `publish` config in apps/shell/electron-builder.cjs (provider
- * `github`); nothing is injected at build time and no token is involved. A
+ * `github`, private); no token is baked in: it is read at run time. A
  * repository without any release, an unreachable network, or any other
  * failed check is passed over quietly: nothing is shown and the next check
  * runs as scheduled.
@@ -680,6 +686,38 @@ const NO_RELEASE_ERROR_CODES = new Set([
   'HTTP_ERROR_404',
 ])
 
+// The repository is private: the feed is read with the token of the person's own `gh` login
+// (update-auth.ts). It is read before every check and handed to electron-updater, which then
+// reads the release through the GitHub API; no token means the feed answers 404 and the check
+// is passed over like any other failed one.
+const feedAuth = createFeedAuth()
+let feedToken: string | null = null
+
+function applyFeedToken(token: string | null): void {
+  if (!token || token === feedToken) return
+  feedToken = token
+  autoUpdater.setFeedURL({
+    provider: 'github',
+    owner: GITHUB_REPO_OWNER,
+    repo: GITHUB_REPO_NAME,
+    private: true,
+    token,
+  })
+}
+
+function checkFeed(): ReturnType<typeof autoUpdater.checkForUpdates> {
+  const known = feedAuth.peek()
+  // a settled answer starts the check at once; only the first look (or a retry) waits for gh
+  if (known !== undefined) {
+    applyFeedToken(known)
+    return autoUpdater.checkForUpdates()
+  }
+  return feedAuth.token().then((token) => {
+    applyFeedToken(token)
+    return autoUpdater.checkForUpdates()
+  })
+}
+
 function isNoReleaseError(err: unknown): boolean {
   const code = (err as { code?: unknown } | null)?.code
   return typeof code === 'string' && NO_RELEASE_ERROR_CODES.has(code)
@@ -773,7 +811,7 @@ export function applyUpdateChannel(channel: UpdateChannel): void {
   resetDownloadFlow?.()
   selectChannel(channel)
   log('channel switched:', channel)
-  autoUpdater.checkForUpdates().catch((err) => log('check failed:', err?.message ?? err))
+  checkFeed().catch((err) => log('check failed:', err?.message ?? err))
 }
 
 /** User-triggered check (☰ > Check for Updates…, Help on macOS, or the About
@@ -809,15 +847,18 @@ export async function checkForUpdatesNow(): Promise<void> {
     dismissedVersion = null
     let result
     try {
-      result = await autoUpdater.checkForUpdates()
+      result = await checkFeed()
       if (result === null) throw new Error('Update check was skipped')
     } catch (err) {
       log('manual check failed:', (err as Error)?.message ?? err)
-      if (!isNoReleaseError(err)) {
+      // a private repository answers 404 without a login: that is a failure, not "up to date"
+      if (!isNoReleaseError(err) || !feedToken) {
+        // no `gh` login: say how to get one (the command is the same in every language)
+        const hint = feedToken ? '' : '\n\ngh auth login'
         await dialog.showMessageBox({
           type: 'warning',
           title: tUpd(lang, 'updTitle'),
-          message: tUpd(lang, 'updCheckFailed'),
+          message: tUpd(lang, 'updCheckFailed') + hint,
           buttons: ['OK'],
           defaultId: 0,
           cancelId: 0,
@@ -1132,7 +1173,7 @@ export function initAutoUpdater(
   const check = (): void => {
     // turned off: only an explicit check (Help › Check for Updates…, a channel switch) asks the feed
     if (!autoCheckEnabled()) return
-    autoUpdater.checkForUpdates().catch((err) => log('check failed:', err?.message ?? err))
+    checkFeed().catch((err) => log('check failed:', err?.message ?? err))
   }
   setTimeout(check, FIRST_CHECK_DELAY_MS)
   setInterval(check, RECHECK_INTERVAL_MS)
