@@ -43,6 +43,7 @@ export interface TranslationPanelProps {
 
 type Flow =
   | { kind: 'choose'; dir: string; file: string; existing: string }
+  | { kind: 'adopt'; dir: string; file: string }
   | { kind: 'pdf'; dir: string; file: string; existing: string | null }
   | { kind: 'ocr'; dir: string; source: SourceEntry }
 
@@ -94,6 +95,11 @@ export function TranslationPanel(props: TranslationPanelProps = {}) {
     result: TranslateOpenTranslationResult,
   ): Promise<void> => {
     try {
+      if (result.flow === 'source-missing') {
+        // only the translation is left: ask before copying it in as the original
+        if (current.current === dir) setFlow({ kind: 'adopt', dir, file: result.file })
+        return
+      }
       if (result.flow === 'edit') {
         // the tab strip shows it over the split; the detail screen keeps it too
         if (result.hashStatus === 'changed') markSourceChanged(result.sourceTabId)
@@ -168,6 +174,44 @@ export function TranslationPanel(props: TranslationPanelProps = {}) {
         startNotice={notice}
         listsVersion={listsVersion}
       />
+      {flow?.kind === 'adopt' && (
+        <div className="modal-overlay">
+          <div
+            className="modal translate-existing"
+            role="dialog"
+            aria-modal="true"
+            aria-label={s('adoptTitle')}
+          >
+            <h3>{s('adoptTitle')}</h3>
+            <p data-adopt={flow.file}>{s('adoptText', { file: flow.file })}</p>
+            <div className="modal-buttons">
+              <button type="button" className="btn btn-secondary" onClick={close}>
+                {s('cancel')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                data-action="adopt"
+                autoFocus
+                onClick={() => {
+                  const { dir, file } = flow
+                  setFlow(null)
+                  void (async () => {
+                    try {
+                      await window.translateApi?.adoptOutputAsSource({ dir, file })
+                      await startTranslation(dir, file)
+                    } catch (err) {
+                      fail(dir, err)
+                    }
+                  })()
+                }}
+              >
+                {s('adoptConfirm')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {flow?.kind === 'choose' && (
         <div className="modal-overlay">
           <div

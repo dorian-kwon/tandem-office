@@ -105,9 +105,11 @@ export async function listRecentDocuments(
       sourceLang = project.sourceLang
       targetLang = project.targetLang
       // what the click does: open the project's source entry `file` through the normal path
+      // the original may be gone while the translation is left: the open then offers to use it
+      const isFile = async (path: string) => (await stat(path).catch(() => null))?.isFile() === true
       available =
         project.sources.some((src) => src.file === e.file) &&
-        (await stat(join(dir, 'source', e.file))).isFile()
+        ((await isFile(join(dir, 'source', e.file))) || (await isFile(join(dir, 'output', e.output))))
     } catch {
       // the folder or the project file is gone: shown, but not openable
     }

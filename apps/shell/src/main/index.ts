@@ -1055,6 +1055,22 @@ function currentDocTheme(): DocTheme {
 
 let cachedAutoSaveDefault: AutoSaveDefault | null = null
 
+/** The autosave answer for one editor: always on (and locked) in the translation output pane. */
+function autoSaveFor(webContentsId: number): AutoSaveDefault {
+  const base = currentAutoSaveDefault()
+  const manager = tabManager
+  if (
+    manager &&
+    isTranslationOutputTab(
+      manager.tabIdForWebContents(webContentsId),
+      manager.splitState(),
+      (id) => manager.isReadOnlyTab(id),
+    )
+  )
+    return { ...base, on: true, locked: true }
+  return base
+}
+
 function currentAutoSaveDefault(): AutoSaveDefault {
   if (cachedAutoSaveDefault) return cachedAutoSaveDefault
   const saved = readAppSettings(APP_SETTINGS_PATH())
@@ -6457,8 +6473,14 @@ function registerHomeIpc(): void {
     return authorNameSetting()
   })
 
-  ipcMain.handle(HOME_CHANNELS.getAutoSaveDefault, (): AutoSaveDefault => currentAutoSaveDefault())
-  ipcMain.handle('app:get-auto-save-default', (): AutoSaveDefault => currentAutoSaveDefault())
+  ipcMain.handle(
+    HOME_CHANNELS.getAutoSaveDefault,
+    (event): AutoSaveDefault => autoSaveFor(event.sender.id),
+  )
+  ipcMain.handle(
+    'app:get-auto-save-default',
+    (event): AutoSaveDefault => autoSaveFor(event.sender.id),
+  )
 
   // an editor asks whether it is the translation view's output pane (the AI run lock)
   ipcMain.handle(TRANSLATION_OUTPUT_CHANNEL, (event): boolean => {
@@ -6510,7 +6532,7 @@ function registerHomeIpc(): void {
     for (const wc of webContents.getAllWebContents()) {
       // a read-only view (translation source) keeps autosave off (read-only-guard.ts)
       if (tabManager?.isReadOnlyWebContents(wc.id)) continue
-      wc.send('app:auto-save-default-changed', next)
+      wc.send('app:auto-save-default-changed', autoSaveFor(wc.id))
     }
   })
 
@@ -7211,6 +7233,8 @@ function notifySplitRoles(manager: TabManager): void {
     const wc = manager.webContentsForTab(tab.id)
     if (!wc || wc.isDestroyed()) continue
     wc.send(SPLIT_PANE_CHANNELS.roleChanged, manager.splitRoleOf(wc.id))
+    // the translation output pane always autosaves; a pane that left that role gets the default back
+    if (!manager.isReadOnlyTab(tab.id)) wc.send('app:auto-save-default-changed', autoSaveFor(wc.id))
   }
 }
 

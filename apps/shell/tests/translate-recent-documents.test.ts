@@ -85,11 +85,21 @@ describe('recent translation documents', () => {
     expect((await listRecentDocuments(settingsPath))[0].available).toBe(true)
   })
 
-  it('is unavailable when the source copy is missing', async () => {
+  it('is unavailable when both the source copy and the output are missing', async () => {
     await withSource('a.md')
     rmSync(join(dir, 'source', 'a.md'))
+    rmSync(join(dir, 'output', 'a.md'))
     recordRecentDocument(settingsPath, { dir, file: 'a.md', output: 'a.md' }, 100)
     expect((await listRecentDocuments(settingsPath))[0].available).toBe(false)
+  })
+
+  it('stays available when only the translation is left (the open offers to use it as original)', async () => {
+    await withSource('a.md')
+    rmSync(join(dir, 'source', 'a.md'))
+    mkdirSync(join(dir, 'output'), { recursive: true })
+    writeFileSync(join(dir, 'output', 'a.md'), 'x')
+    recordRecentDocument(settingsPath, { dir, file: 'a.md', output: 'a.md' }, 100)
+    expect((await listRecentDocuments(settingsPath))[0].available).toBe(true)
   })
 
   it('is unavailable when the source entry is no longer listed in the project', async () => {

@@ -144,8 +144,15 @@ export async function openTranslation(
 
   const sourcePath = join(dir, 'source', source.file)
   const hashStatus = await verifySource(dir, source)
-  if (hashStatus === 'missing')
+  if (hashStatus === 'missing') {
+    // only the translation is left: offer to use it as the original instead of failing
+    const outputInfo =
+      source.kind === 'editable'
+        ? await stat(join(dir, 'output', source.file)).catch(() => null)
+        : null
+    if (outputInfo?.isFile()) return { flow: 'source-missing', file: source.file }
     throw new TranslateIpcError('SOURCE_MISSING', 'the copy in the source folder is missing')
+  }
 
   if (source.kind === 'pdf')
     return {

@@ -705,6 +705,7 @@ contextBridge.exposeInMainWorld('aiOfficeResultStore', resultStoreApi)
 const translateApi: TranslateApi = {
   list: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.list),
   recent: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.recent),
+  adoptOutputAsSource: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.adoptOutputAsSource, args),
   forgetRecent: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.forgetRecent, args),
   create: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.create, args),
   remove: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.remove, args),

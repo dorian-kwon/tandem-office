@@ -37,3 +37,12 @@ describe('resolveAutoSave', () => {
     expect(resolveAutoSave(globalOff, '[true]')).toBe(false)
   })
 })
+
+describe('locked autosave (translation output pane)', () => {
+  it('forces on whatever the stored override says', async () => {
+    const { resolveAutoSave } = await import('../src/auto-save-pref')
+    const locked = { on: true, updatedAt: 5, locked: true }
+    expect(resolveAutoSave(locked, '0')).toBe(true)
+    expect(resolveAutoSave(locked, JSON.stringify({ on: false, base: 5 }))).toBe(true)
+  })
+})

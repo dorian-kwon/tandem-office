@@ -28,6 +28,7 @@ export {
 } from './glossary'
 export type { GlossaryEntry } from './glossary'
 export {
+  adoptOutputAsSource,
   EDITABLE_SOURCE_EXTENSIONS,
   IMAGE_SOURCE_EXTENSIONS,
   UnsupportedSourceError,

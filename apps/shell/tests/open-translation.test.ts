@@ -128,6 +128,30 @@ describe('openTranslation', () => {
     expect(existsSync(join(dir, 'output', 'a.md'))).toBe(false)
   })
 
+  it('offers to use the translation as the original when only the translation is left', async () => {
+    const entry = await addSource('a.md', '# hello')
+    mkdirSync(join(dir, 'output'), { recursive: true })
+    writeFileSync(join(dir, 'output', 'a.md'), '# translated')
+    rmSync(join(dir, 'source', 'a.md'))
+    const result = await openTranslation(dir, entry, deps)
+    expect(result).toEqual({ flow: 'source-missing', file: 'a.md' })
+    expect(opened).toEqual([])
+    expect(existsSync(join(dir, 'source', 'a.md'))).toBe(false)
+  })
+
+  it('adoptOutputAsSource copies the translation in, never over an existing original', async () => {
+    const { adoptOutputAsSource, verifySource } = await import('@genoffice/translate-project')
+    const entry = await addSource('a.md', '# hello')
+    mkdirSync(join(dir, 'output'), { recursive: true })
+    writeFileSync(join(dir, 'output', 'a.md'), '# translated')
+    rmSync(join(dir, 'source', 'a.md'))
+    const sha256 = await adoptOutputAsSource(dir, 'a.md')
+    expect(readFileSync(join(dir, 'source', 'a.md'), 'utf8')).toBe('# translated')
+    expect(readFileSync(join(dir, 'output', 'a.md'), 'utf8')).toBe('# translated')
+    expect(await verifySource(dir, { ...entry, sha256 })).toBe('ok')
+    await expect(adoptOutputAsSource(dir, 'a.md')).rejects.toThrow()
+  })
+
   it('routes a text PDF to the translation job and opens nothing', async () => {
     const entry = await addSource('a.pdf', '%PDF-1.4')
     expect(await openTranslation(dir, entry, deps)).toEqual({

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from 'react'
 export interface AutoSaveDefault {
   on: boolean
   updatedAt: number
+  /** the shell forces this value for this window (the translation output pane): no override counts */
+  locked?: boolean
 }
 
 export interface AutoSaveDefaultApi {
@@ -19,6 +21,7 @@ export const NO_AUTO_SAVE_DEFAULT: AutoSaveDefault = { on: false, updatedAt: 0 }
  * even for editors that were not running at the time.
  */
 export function resolveAutoSave(global: AutoSaveDefault, storedRaw: string | null): boolean {
+  if (global.locked) return global.on
   if (storedRaw === '1' || storedRaw === '0') {
     return global.updatedAt === 0 ? storedRaw === '1' : global.on
   }
@@ -91,6 +94,7 @@ export function useAutoSavePref(
 
   const setAutoSave = useCallback(
     (on: boolean) => {
+      if (global.locked) return
       localStorage.setItem(storageKey, encodeAutoSaveOverride(on, global))
       setAutoSaveState(on)
     },

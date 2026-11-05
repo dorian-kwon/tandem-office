@@ -119,6 +119,19 @@ export async function importSource(projectDir: string, originalPath: string): Pr
   return { file, sha256: await hashFile(join(dir, file)), kind }
 }
 
+/**
+ * The source copy is gone but the translation in `output/` is there: copy that file into
+ * `source/` under the same name (never over an existing file) and return its fresh hash, so
+ * the translation can serve as the original. The output file itself is left as it is.
+ */
+export async function adoptOutputAsSource(projectDir: string, file: string): Promise<string> {
+  const from = join(projectDir, 'output', file)
+  const to = join(projectDir, 'source', file)
+  await mkdir(join(projectDir, 'source'), { recursive: true })
+  await copyFile(from, to, constants.COPYFILE_EXCL)
+  return hashFile(to)
+}
+
 /** Compare the copy in source/ against the recorded hash. */
 export async function verifySource(
   projectDir: string,

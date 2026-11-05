@@ -63,6 +63,7 @@ export const TRANSLATE_CHANNELS = {
   pickExisting: 'translate:pick-existing',
   relocate: 'translate:relocate',
   recent: 'translate:recent',
+  adoptOutputAsSource: 'translate:adopt-output-as-source',
   forgetRecent: 'translate:forget-recent',
   referenceStatus: 'translate:reference-status',
   referenceText: 'translate:reference-text',
@@ -235,6 +236,11 @@ export type TranslateOpenTranslationResult =
       hashStatus: TranslateSourceHashStatus
     }
   | {
+      /** the source copy is gone but the translation exists: the screen asks to use it as the original */
+      flow: 'source-missing'
+      file: string
+    }
+  | {
       flow: 'translate-pdf'
       file: string
       hashStatus: TranslateSourceHashStatus
@@ -381,6 +387,8 @@ export interface TranslateApi {
   pickParentDir(): Promise<TranslatePickedParentDir | null>
   /** the translation view: the source copy read-only on the left, the output copy on the right */
   openTranslation(args: TranslateOpenTranslationArgs): Promise<TranslateOpenTranslationResult>
+  /** after the person agreed: copy the translation into source/ as the original, then open again */
+  adoptOutputAsSource(args: { dir: string; file: string }): Promise<void>
   /** hide or show one pane of the translation view (only one can be hidden) */
   setPaneHidden(args: TranslateSetPaneHiddenArgs): Promise<void>
   /**

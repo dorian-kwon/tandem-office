@@ -73,6 +73,8 @@ export interface AuthorNameSetting {
 export interface AutoSaveDefault {
   on: boolean
   updatedAt: number
+  /** forced for this window (the translation output pane) */
+  locked?: boolean
 }
 
 /** local MCP server state (persisted in userData/app-settings.json) */

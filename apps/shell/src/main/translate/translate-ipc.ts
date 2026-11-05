@@ -23,6 +23,8 @@ import {
   removeReference,
   removeSource,
   saveProject,
+  adoptOutputAsSource,
+  verifySource,
   withProjectLock,
   type ProjectFile,
   type ReferenceConverter,
@@ -214,6 +216,7 @@ export function createTranslateHandlers(deps: TranslateIpcDeps) {
   return {
     list: guard(raw.list),
     recent: guard(raw.recent),
+    adoptOutputAsSource: guard(raw.adoptOutputAsSource),
     forgetRecent: guard(raw.forgetRecent),
     create: guard(raw.create),
     remove: guard(raw.remove),
@@ -677,6 +680,26 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       return listRecentDocuments(deps.settingsPath())
     },
 
+    /** The translation becomes the original: copied into source/, its hash recorded. */
+    async adoptOutputAsSource(args: { dir: string; file: string }): Promise<void> {
+      const dir = registeredDir(args?.dir)
+      const file = requireString(args.file, 'file')
+      if (!plainFileName(file)) throw new TranslateIpcError('INVALID_ARGUMENT', 'bad file name')
+      await withProjectLock(dir, async () => {
+        const current = await loadProject(dir)
+        const entry = current.sources.find((src) => src.file === file)
+        if (!entry || entry.kind !== 'editable')
+          throw new TranslateIpcError('INVALID_ARGUMENT', 'not an editable source of the project')
+        if ((await verifySource(dir, entry)) !== 'missing')
+          throw new TranslateIpcError('INVALID_ARGUMENT', 'the original is not missing')
+        const sha256 = await adoptOutputAsSource(dir, file)
+        await saveProject(dir, {
+          ...current,
+          sources: current.sources.map((src) => (src.file === file ? { ...src, sha256 } : src)),
+        })
+      })
+    },
+
     /** Only the list entry goes; the project and its files are never touched. */
     async forgetRecent(args: { dir: string; file: string }): Promise<void> {
       if (typeof args?.dir !== 'string' || typeof args?.file !== 'string') return
@@ -928,6 +951,9 @@ export function registerTranslateIpc(
   }
   handle(TRANSLATE_CHANNELS.list, () => h.list())
   handle(TRANSLATE_CHANNELS.recent, () => h.recent())
+  handle(TRANSLATE_CHANNELS.adoptOutputAsSource, (_e, args: { dir: string; file: string }) =>
+    h.adoptOutputAsSource(args),
+  )
   handle(TRANSLATE_CHANNELS.forgetRecent, (_e, args: { dir: string; file: string }) =>
     h.forgetRecent(args),
   )
