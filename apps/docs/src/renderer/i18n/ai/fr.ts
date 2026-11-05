@@ -190,6 +190,13 @@ export const fr = {
   aiCmdToc: 'Table des matières insérée ({count} entrées)',
   aiCmdSkipped: ' ({count} bloc(s) protégé(s) ignoré(s))',
   aiStarterMindMap: 'Générer une carte mentale de ce document',
+  aiEmptyTranslateTitle: 'Confiez la traduction à l’IA',
+  aiEmptyTranslateBody1: 'Indiquez la portée et le ton, ou posez directement une question.',
+  aiEmptyTranslateBody2: 'Si vous sélectionnez du texte, les consignes de traduction s’appliquent à la sélection.',
+  aiStarterTranslateAll: 'Traduire tout le document',
+  aiStarterTranslateRest: 'Trouver et traduire les passages restés non traduits',
+  aiStarterTranslateTerms: 'Vérifier la cohérence des termes et du ton',
+  aiStarterTranslateNatural: 'Rendre les phrases traduites maladroites plus naturelles',
   aiMindMapBtn: 'Carte mentale IA',
   aiMindMapPrompt:
     'Génère une carte mentale de ce document en organisant les thèmes principaux et les concepts clés selon sa structure de sections',

@@ -186,6 +186,13 @@ export const hi = {
   aiCmdToc: 'विषय-सूची सम्मिलित की गई ({count} प्रविष्टियाँ)',
   aiCmdSkipped: ' ({count} सुरक्षित ब्लॉक छोड़े गए)',
   aiStarterMindMap: 'इस दस्तावेज़ का माइंड मैप बनाएँ',
+  aiEmptyTranslateTitle: 'अनुवाद का काम AI को सौंपें',
+  aiEmptyTranslateBody1: 'अनुवाद की सीमा और लहजा बताएँ, या सीधे सवाल पूछें।',
+  aiEmptyTranslateBody2: 'टेक्स्ट चुनने पर अनुवाद के निर्देश चुने हुए हिस्से पर लागू होते हैं।',
+  aiStarterTranslateAll: 'पूरे दस्तावेज़ का अनुवाद करें',
+  aiStarterTranslateRest: 'जो हिस्से अनुवाद से छूट गए हैं उन्हें खोजकर अनुवाद करें',
+  aiStarterTranslateTerms: 'जाँचें कि शब्दावली और लहजा एक जैसे हैं',
+  aiStarterTranslateNatural: 'अटपटे अनूदित वाक्यों को और स्वाभाविक बनाएँ',
   aiMindMapBtn: 'AI माइंड मैप',
   aiMindMapPrompt:
     'इस दस्तावेज़ का माइंड मैप बनाएँ और मुख्य विषयों तथा प्रमुख अवधारणाओं को अनुभाग संरचना के अनुसार व्यवस्थित करें',

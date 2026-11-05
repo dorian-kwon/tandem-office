@@ -189,6 +189,13 @@ export const pl = {
   aiCmdToc: 'Wstawiono spis treści (pozycji: {count})',
   aiCmdSkipped: ' (pominięto chronione bloki: {count})',
   aiStarterMindMap: 'Wygeneruj mapę myśli tego dokumentu',
+  aiEmptyTranslateTitle: 'Powierz tłumaczenie AI',
+  aiEmptyTranslateBody1: 'Podaj zakres i ton albo po prostu zadaj pytanie.',
+  aiEmptyTranslateBody2: 'Po zaznaczeniu tekstu polecenia tłumaczenia dotyczą zaznaczenia.',
+  aiStarterTranslateAll: 'Przetłumacz cały dokument',
+  aiStarterTranslateRest: 'Znajdź i przetłumacz fragmenty, które pozostały nieprzetłumaczone',
+  aiStarterTranslateTerms: 'Sprawdź, czy terminy i ton są spójne',
+  aiStarterTranslateNatural: 'Spraw, by niezgrabne tłumaczenia brzmiały naturalniej',
   aiMindMapBtn: 'Mapa myśli AI',
   aiMindMapPrompt:
     'Wygeneruj mapę myśli tego dokumentu, porządkując główne tematy i kluczowe pojęcia według struktury sekcji',

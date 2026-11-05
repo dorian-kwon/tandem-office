@@ -184,6 +184,13 @@ export const ko = {
   aiCmdToc: '목차를 삽입했습니다({count}개 항목)',
   aiCmdSkipped: ' (보호된 블록 {count}개 건너뜀)',
   aiStarterMindMap: '이 문서의 마인드맵 생성',
+  aiEmptyTranslateTitle: 'AI에게 번역을 맡겨 보세요',
+  aiEmptyTranslateBody1: '번역할 범위와 말투를 알려 주거나 바로 질문할 수 있습니다.',
+  aiEmptyTranslateBody2: '텍스트를 선택하면 번역 지시는 선택 영역에 적용됩니다.',
+  aiStarterTranslateAll: '문서 전체를 번역해 줘',
+  aiStarterTranslateRest: '번역되지 않고 남은 부분을 찾아 번역해 줘',
+  aiStarterTranslateTerms: '용어와 말투가 일관되는지 점검해 줘',
+  aiStarterTranslateNatural: '어색한 번역 문장을 더 자연스럽게 다듬어 줘',
   aiMindMapBtn: 'AI 마인드맵',
   aiMindMapPrompt:
     '이 문서의 마인드맵을 생성하고, 장 구조에 따라 주요 주제와 핵심 개념을 정리해 주세요',

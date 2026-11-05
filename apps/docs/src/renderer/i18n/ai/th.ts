@@ -184,6 +184,13 @@ export const th = {
   aiCmdToc: 'แทรกสารบัญแล้ว ({count} รายการ)',
   aiCmdSkipped: ' (ข้ามบล็อกที่ได้รับการป้องกัน {count} บล็อก)',
   aiStarterMindMap: 'สร้างแผนที่ความคิดของเอกสารนี้',
+  aiEmptyTranslateTitle: 'มอบหมายงานแปลให้ AI',
+  aiEmptyTranslateBody1: 'บอกขอบเขตและน้ำเสียง หรือถามได้ทันที',
+  aiEmptyTranslateBody2: 'เมื่อเลือกข้อความ คำสั่งแปลจะใช้กับส่วนที่เลือก',
+  aiStarterTranslateAll: 'แปลทั้งเอกสาร',
+  aiStarterTranslateRest: 'ค้นหาและแปลส่วนที่ยังไม่ได้แปล',
+  aiStarterTranslateTerms: 'ตรวจว่าคำศัพท์และน้ำเสียงสอดคล้องกัน',
+  aiStarterTranslateNatural: 'ปรับประโยคที่แปลแล้วฟังขัดให้เป็นธรรมชาติขึ้น',
   aiMindMapBtn: 'แผนที่ความคิด AI',
   aiMindMapPrompt:
     'สร้างแผนที่ความคิดของเอกสารนี้ โดยจัดเรียงหัวข้อหลักและแนวคิดสำคัญตามโครงสร้างส่วนต่างๆ',

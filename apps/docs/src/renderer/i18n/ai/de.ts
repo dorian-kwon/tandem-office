@@ -192,6 +192,13 @@ export const de = {
   aiCmdToc: 'Inhaltsverzeichnis eingefügt ({count} Einträge)',
   aiCmdSkipped: ' ({count} geschützte Blöcke übersprungen)',
   aiStarterMindMap: 'Mindmap zu diesem Dokument erstellen',
+  aiEmptyTranslateTitle: 'Überlassen Sie die Übersetzung der KI',
+  aiEmptyTranslateBody1: 'Nennen Sie Umfang und Ton oder stellen Sie direkt eine Frage.',
+  aiEmptyTranslateBody2: 'Wenn Sie Text markieren, gelten Übersetzungsanweisungen für die Auswahl.',
+  aiStarterTranslateAll: 'Das gesamte Dokument übersetzen',
+  aiStarterTranslateRest: 'Noch nicht übersetzte Stellen finden und übersetzen',
+  aiStarterTranslateTerms: 'Prüfen, ob Begriffe und Ton einheitlich sind',
+  aiStarterTranslateNatural: 'Holprige Übersetzungen natürlicher formulieren',
   aiMindMapBtn: 'KI-Mindmap',
   aiMindMapPrompt:
     'Erstelle eine Mindmap zu diesem Dokument und ordne die Hauptthemen und Schlüsselkonzepte nach seiner Abschnittsstruktur',

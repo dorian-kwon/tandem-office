@@ -184,6 +184,13 @@ export const ar = {
   aiCmdToc: 'تم إدراج جدول محتويات ({count} إدخالًا)',
   aiCmdSkipped: ' (تم تخطي {count} كتلة محمية)',
   aiStarterMindMap: 'إنشاء خريطة ذهنية لهذا المستند',
+  aiEmptyTranslateTitle: 'اترك الترجمة للذكاء الاصطناعي',
+  aiEmptyTranslateBody1: 'حدّد النطاق والنبرة، أو اطرح سؤالاً مباشرة.',
+  aiEmptyTranslateBody2: 'إذا حدّدت نصاً فستُطبَّق تعليمات الترجمة على التحديد.',
+  aiStarterTranslateAll: 'ترجمة المستند كاملاً',
+  aiStarterTranslateRest: 'العثور على الأجزاء غير المترجمة وترجمتها',
+  aiStarterTranslateTerms: 'التحقق من اتساق المصطلحات والنبرة',
+  aiStarterTranslateNatural: 'جعل الجمل المترجمة الركيكة أكثر طبيعية',
   aiMindMapBtn: 'خريطة ذهنية بالذكاء الاصطناعي',
   aiMindMapPrompt:
     'أنشئ خريطة ذهنية لهذا المستند، ونظّم المواضيع الرئيسية والمفاهيم الأساسية وفق بنية أقسامه',

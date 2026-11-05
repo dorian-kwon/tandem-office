@@ -187,6 +187,13 @@ export const en = {
   aiCmdToc: 'Inserted a table of contents ({count} entries)',
   aiCmdSkipped: ' ({count} protected block(s) skipped)',
   aiStarterMindMap: 'Generate a mind map of this document',
+  aiEmptyTranslateTitle: 'Let AI handle the translation',
+  aiEmptyTranslateBody1: 'Tell it the range and tone, or just ask a question.',
+  aiEmptyTranslateBody2: 'If you select text, translation instructions apply to the selection.',
+  aiStarterTranslateAll: 'Translate the whole document',
+  aiStarterTranslateRest: 'Find and translate the parts left untranslated',
+  aiStarterTranslateTerms: 'Check that terms and tone are consistent',
+  aiStarterTranslateNatural: 'Make awkward translated sentences sound more natural',
   aiMindMapBtn: 'AI Mind Map',
   aiMindMapPrompt:
     'Generate a mind map of this document, organizing the main topics and key concepts by its section structure',

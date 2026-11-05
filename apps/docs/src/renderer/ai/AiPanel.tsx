@@ -317,6 +317,13 @@ const EDIT_STARTER_PROMPTS: StringKey[] = [
   'aiStarterFillTemplate',
   'aiStarterMindMap',
 ]
+/** the translation view's output pane gets translation starters instead */
+const TRANSLATE_STARTER_PROMPTS: StringKey[] = [
+  'aiStarterTranslateAll',
+  'aiStarterTranslateRest',
+  'aiStarterTranslateTerms',
+  'aiStarterTranslateNatural',
+]
 
 /** resizable panel width: persisted, clamped so neither pane collapses */
 const PANEL_WIDTH_KEY = 'docs-ai-panel-width'
@@ -587,6 +594,18 @@ export function AiPanel({
     probe: () => window.desktop?.isTranslationOutput?.() ?? Promise.resolve(false),
     onStop: () => cancelRef.current(),
   })
+  // the empty state reads differently in the translation output pane
+  const [isTranslationOutput, setIsTranslationOutput] = useState(false)
+  useEffect(() => {
+    let alive = true
+    window.desktop
+      ?.isTranslationOutput?.()
+      .then((v) => alive && setIsTranslationOutput(v === true))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
   const onTranslationLockChangeRef = useRef(onTranslationLockChange)
   onTranslationLockChangeRef.current = onTranslationLockChange
   useEffect(() => {
@@ -1971,17 +1990,40 @@ export function AiPanel({
         {chat.length === 0 && historicChat.length === 0 && (
           <div className="ai-chat-empty">
             <div className="ai-chat-empty-title">
-              {t(docEmpty ? 'aiEmptyDraftTitle' : 'aiEmptyTitle')}
+              {t(
+                isTranslationOutput
+                  ? 'aiEmptyTranslateTitle'
+                  : docEmpty
+                    ? 'aiEmptyDraftTitle'
+                    : 'aiEmptyTitle',
+              )}
             </div>
             <div className="ai-chat-empty-body">
-              {t(docEmpty ? 'aiEmptyDraftBody1' : 'aiEmptyBody1')}
+              {t(
+                isTranslationOutput
+                  ? 'aiEmptyTranslateBody1'
+                  : docEmpty
+                    ? 'aiEmptyDraftBody1'
+                    : 'aiEmptyBody1',
+              )}
               <br />
-              {t(docEmpty ? 'aiEmptyDraftBody2' : 'aiEmptyBody2')}
+              {t(
+                isTranslationOutput
+                  ? 'aiEmptyTranslateBody2'
+                  : docEmpty
+                    ? 'aiEmptyDraftBody2'
+                    : 'aiEmptyBody2',
+              )}
             </div>
             {/* the other editors honour "hide from AI"; this one sends the text as written (docs/security.md) */}
             <div className="ai-chat-empty-note">{t('aiNoHidingNote')}</div>
             <div className="ai-starter-list">
-              {(docEmpty ? DRAFT_STARTER_PROMPTS : EDIT_STARTER_PROMPTS).map((p) => (
+              {(isTranslationOutput
+                ? TRANSLATE_STARTER_PROMPTS
+                : docEmpty
+                  ? DRAFT_STARTER_PROMPTS
+                  : EDIT_STARTER_PROMPTS
+              ).map((p) => (
                 <button
                   key={p}
                   className="ai-starter"

@@ -191,6 +191,13 @@ export const pt = {
   aiCmdToc: 'Sumário inserido ({count} entradas)',
   aiCmdSkipped: ' ({count} bloco(s) protegido(s) ignorado(s))',
   aiStarterMindMap: 'Gerar um mapa mental deste documento',
+  aiEmptyTranslateTitle: 'Deixe a tradução com a IA',
+  aiEmptyTranslateBody1: 'Diga o trecho e o tom, ou faça uma pergunta diretamente.',
+  aiEmptyTranslateBody2: 'Ao selecionar texto, as instruções de tradução valem para a seleção.',
+  aiStarterTranslateAll: 'Traduzir o documento inteiro',
+  aiStarterTranslateRest: 'Encontrar e traduzir as partes que ficaram sem tradução',
+  aiStarterTranslateTerms: 'Verificar se os termos e o tom estão consistentes',
+  aiStarterTranslateNatural: 'Deixar mais naturais as frases traduzidas desajeitadas',
   aiMindMapBtn: 'Mapa mental IA',
   aiMindMapPrompt:
     'Gere um mapa mental deste documento, organizando os temas principais e conceitos-chave pela estrutura de seções',

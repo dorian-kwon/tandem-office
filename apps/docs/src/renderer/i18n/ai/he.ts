@@ -181,6 +181,13 @@ export const he = {
   aiCmdToc: 'הוסף תוכן עניינים ({count} ערכים)',
   aiCmdSkipped: ' (דולגו {count} בלוקים מוגנים)',
   aiStarterMindMap: 'צור מפת חשיבה של המסמך הזה',
+  aiEmptyTranslateTitle: 'תנו ל-AI לתרגם',
+  aiEmptyTranslateBody1: 'ציינו את ההיקף והנימה, או שאלו שאלה ישירות.',
+  aiEmptyTranslateBody2: 'אם תבחרו טקסט, הוראות התרגום יחולו על הבחירה.',
+  aiStarterTranslateAll: 'תרגם את המסמך כולו',
+  aiStarterTranslateRest: 'מצא ותרגם חלקים שנשארו ללא תרגום',
+  aiStarterTranslateTerms: 'בדוק שהמונחים והנימה עקביים',
+  aiStarterTranslateNatural: 'הפוך משפטים מתורגמים מסורבלים לטבעיים יותר',
   aiMindMapBtn: 'מפת חשיבה AI',
   aiMindMapPrompt:
     'צור מפת חשיבה של המסמך הזה וארגן את הנושאים המרכזיים והמושגים המפתח לפי מבח הסעיפים',

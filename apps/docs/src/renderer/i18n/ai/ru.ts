@@ -188,6 +188,13 @@ export const ru = {
   aiCmdToc: 'Вставлено оглавление (элементов: {count})',
   aiCmdSkipped: ' (пропущено защищенных блоков: {count})',
   aiStarterMindMap: 'Создать ментальную карту документа',
+  aiEmptyTranslateTitle: 'Поручите перевод ИИ',
+  aiEmptyTranslateBody1: 'Укажите объём и тон или сразу задайте вопрос.',
+  aiEmptyTranslateBody2: 'Если выделить текст, указания по переводу применяются к выделенному.',
+  aiStarterTranslateAll: 'Перевести весь документ',
+  aiStarterTranslateRest: 'Найти и перевести непереведённые фрагменты',
+  aiStarterTranslateTerms: 'Проверить единообразие терминов и тона',
+  aiStarterTranslateNatural: 'Сделать неуклюжие переводы более естественными',
   aiMindMapBtn: 'ИИ-ментальная карта',
   aiMindMapPrompt:
     'Создай ментальную карту этого документа, организовав основные темы и ключевые понятия по структуре разделов',

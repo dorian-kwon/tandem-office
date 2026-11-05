@@ -187,6 +187,13 @@ export const vi = {
   aiCmdToc: 'Đã chèn mục lục ({count} mục)',
   aiCmdSkipped: ' (đã bỏ qua {count} khối được bảo vệ)',
   aiStarterMindMap: 'Tạo bản đồ tư duy cho tài liệu này',
+  aiEmptyTranslateTitle: 'Giao việc dịch cho AI',
+  aiEmptyTranslateBody1: 'Hãy nói phạm vi và giọng văn, hoặc hỏi ngay.',
+  aiEmptyTranslateBody2: 'Nếu bạn chọn văn bản, chỉ dẫn dịch sẽ áp dụng cho phần đã chọn.',
+  aiStarterTranslateAll: 'Dịch toàn bộ tài liệu',
+  aiStarterTranslateRest: 'Tìm và dịch những phần còn chưa được dịch',
+  aiStarterTranslateTerms: 'Kiểm tra thuật ngữ và giọng văn có nhất quán không',
+  aiStarterTranslateNatural: 'Chỉnh các câu dịch gượng gạo cho tự nhiên hơn',
   aiMindMapBtn: 'Bản đồ tư duy AI',
   aiMindMapPrompt:
     'Tạo bản đồ tư duy cho tài liệu này, sắp xếp các chủ đề chính và khái niệm then chốt theo cấu trúc các phần',

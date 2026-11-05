@@ -190,6 +190,13 @@ export const nl = {
   aiCmdToc: 'Inhoudsopgave ingevoegd ({count} vermeldingen)',
   aiCmdSkipped: ' ({count} beveiligde blok(ken) overgeslagen)',
   aiStarterMindMap: 'Maak een mindmap van dit document',
+  aiEmptyTranslateTitle: 'Laat de AI het vertalen doen',
+  aiEmptyTranslateBody1: 'Geef het bereik en de toon aan, of stel gewoon een vraag.',
+  aiEmptyTranslateBody2: 'Als u tekst selecteert, gelden vertaalinstructies voor de selectie.',
+  aiStarterTranslateAll: 'Het hele document vertalen',
+  aiStarterTranslateRest: 'Onvertaalde delen zoeken en vertalen',
+  aiStarterTranslateTerms: 'Controleren of termen en toon consistent zijn',
+  aiStarterTranslateNatural: 'Onhandige vertaalde zinnen natuurlijker maken',
   aiMindMapBtn: 'AI-mindmap',
   aiMindMapPrompt:
     'Maak een mindmap van dit document en orden de hoofdonderwerpen en kernconcepten naar de sectiestructuur',

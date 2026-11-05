@@ -188,6 +188,13 @@ export const cs = {
   aiCmdToc: 'Vložen obsah ({count} položek)',
   aiCmdSkipped: ' (přeskočeno {count} chráněných bloků)',
   aiStarterMindMap: 'Vytvořit myšlenkovou mapu tohoto dokumentu',
+  aiEmptyTranslateTitle: 'Svěřte překlad umělé inteligenci',
+  aiEmptyTranslateBody1: 'Zadejte rozsah a tón, nebo se rovnou zeptejte.',
+  aiEmptyTranslateBody2: 'Pokud označíte text, pokyny k překladu se použijí na výběr.',
+  aiStarterTranslateAll: 'Přeložit celý dokument',
+  aiStarterTranslateRest: 'Najít a přeložit části, které zůstaly nepřeložené',
+  aiStarterTranslateTerms: 'Zkontrolovat, zda jsou termíny a tón jednotné',
+  aiStarterTranslateNatural: 'Upravit neobratné překlady, aby zněly přirozeněji',
   aiMindMapBtn: 'Myšlenková mapa AI',
   aiMindMapPrompt:
     'Vytvoř myšlenkovou mapu tohoto dokumentu a uspořádej hlavní témata a klíčové pojmy podle struktury sekcí',

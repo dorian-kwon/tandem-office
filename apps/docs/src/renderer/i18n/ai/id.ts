@@ -186,6 +186,13 @@ export const id = {
   aiCmdToc: 'Daftar isi disisipkan ({count} entri)',
   aiCmdSkipped: ' ({count} blok terlindungi dilewati)',
   aiStarterMindMap: 'Buat peta pikiran dari dokumen ini',
+  aiEmptyTranslateTitle: 'Serahkan terjemahan kepada AI',
+  aiEmptyTranslateBody1: 'Sebutkan cakupan dan nadanya, atau langsung ajukan pertanyaan.',
+  aiEmptyTranslateBody2: 'Jika Anda memilih teks, instruksi terjemahan berlaku pada bagian yang dipilih.',
+  aiStarterTranslateAll: 'Terjemahkan seluruh dokumen',
+  aiStarterTranslateRest: 'Temukan dan terjemahkan bagian yang belum diterjemahkan',
+  aiStarterTranslateTerms: 'Periksa apakah istilah dan nadanya konsisten',
+  aiStarterTranslateNatural: 'Buat kalimat terjemahan yang kaku terdengar lebih alami',
   aiMindMapBtn: 'Peta Pikiran AI',
   aiMindMapPrompt:
     'Buat peta pikiran dari dokumen ini, susun topik utama dan konsep kunci menurut struktur bagiannya',

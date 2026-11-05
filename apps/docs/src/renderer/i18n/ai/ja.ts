@@ -188,6 +188,13 @@ export const ja = {
   aiCmdToc: '目次を挿入しました({count} 項目)',
   aiCmdSkipped: '({count} 個の保護されたブロックをスキップ)',
   aiStarterMindMap: 'このドキュメントのマインドマップを生成',
+  aiEmptyTranslateTitle: 'AIに翻訳を任せましょう',
+  aiEmptyTranslateBody1: '翻訳する範囲や文体を伝えるか、そのまま質問できます。',
+  aiEmptyTranslateBody2: 'テキストを選択すると、翻訳の指示は選択範囲に適用されます。',
+  aiStarterTranslateAll: 'ドキュメント全体を翻訳して',
+  aiStarterTranslateRest: '翻訳されずに残っている部分を探して翻訳して',
+  aiStarterTranslateTerms: '用語と文体が統一されているか確認して',
+  aiStarterTranslateNatural: '不自然な訳文をより自然に整えて',
   aiMindMapBtn: 'AI マインドマップ',
   aiMindMapPrompt:
     'このドキュメントのマインドマップを生成し、章構成に沿って主要トピックとキーワードを整理してください',
