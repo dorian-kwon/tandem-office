@@ -73,6 +73,17 @@ export function recordRecentDocument(
   writeAppSetting(settingsPath, RECENT_DOCUMENTS_KEY, next)
 }
 
+/** Drop one project+file entry from the list; nothing on disk changes. */
+export function forgetRecentDocument(
+  settingsPath: string,
+  doc: { dir: string; file: string },
+): void {
+  const probe: StoredRecent = { ...doc, output: '', openedAt: 0 }
+  const current = normalize(readAppSettings(settingsPath)[RECENT_DOCUMENTS_KEY])
+  const next = current.filter((e) => !sameDoc(e, probe))
+  if (next.length !== current.length) writeAppSetting(settingsPath, RECENT_DOCUMENTS_KEY, next)
+}
+
 /** The recent documents of projects still registered, newest first, at most 10. */
 export async function listRecentDocuments(
   settingsPath: string,

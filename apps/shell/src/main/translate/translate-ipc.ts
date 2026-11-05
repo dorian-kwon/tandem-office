@@ -47,7 +47,7 @@ import {
 } from './open-translation'
 import { exportTranslation, type ExportTranslationDeps } from './export-translation'
 import { normalizeProjectName } from '../../shared/project-name'
-import { listRecentDocuments, recordRecentDocument } from './recent-documents'
+import { forgetRecentDocument, listRecentDocuments, recordRecentDocument } from './recent-documents'
 import type { TranslationProjectLink } from './project-link'
 import {
   readTranslationProjects,
@@ -214,6 +214,7 @@ export function createTranslateHandlers(deps: TranslateIpcDeps) {
   return {
     list: guard(raw.list),
     recent: guard(raw.recent),
+    forgetRecent: guard(raw.forgetRecent),
     create: guard(raw.create),
     remove: guard(raw.remove),
     getSystemPrompt: guard(raw.getSystemPrompt),
@@ -676,6 +677,12 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       return listRecentDocuments(deps.settingsPath())
     },
 
+    /** Only the list entry goes; the project and its files are never touched. */
+    async forgetRecent(args: { dir: string; file: string }): Promise<void> {
+      if (typeof args?.dir !== 'string' || typeof args?.file !== 'string') return
+      forgetRecentDocument(deps.settingsPath(), { dir: args.dir, file: args.file })
+    },
+
     async setSourceKind(args: TranslateSetSourceKindArgs): Promise<ProjectFile> {
       const dir = registeredDir(args?.dir)
       return nonEditable().setKind(dir, args.file, args.kind)
@@ -921,6 +928,9 @@ export function registerTranslateIpc(
   }
   handle(TRANSLATE_CHANNELS.list, () => h.list())
   handle(TRANSLATE_CHANNELS.recent, () => h.recent())
+  handle(TRANSLATE_CHANNELS.forgetRecent, (_e, args: { dir: string; file: string }) =>
+    h.forgetRecent(args),
+  )
   handle(TRANSLATE_CHANNELS.create, (_e, args: TranslateCreateArgs) => h.create(args))
   handle(TRANSLATE_CHANNELS.remove, (_e, args: TranslateRemoveArgs) => h.remove(args))
   handle(TRANSLATE_CHANNELS.getSystemPrompt, () => h.getSystemPrompt())

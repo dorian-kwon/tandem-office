@@ -63,6 +63,7 @@ export const TRANSLATE_CHANNELS = {
   pickExisting: 'translate:pick-existing',
   relocate: 'translate:relocate',
   recent: 'translate:recent',
+  forgetRecent: 'translate:forget-recent',
   referenceStatus: 'translate:reference-status',
   referenceText: 'translate:reference-text',
   pictureInfo: 'translate:picture-info',
@@ -361,6 +362,8 @@ export interface TranslateApi {
   list(): Promise<TranslateProjectListEntry[]>
   /** documents opened lately, newest first, at most 10 */
   recent(): Promise<TranslateRecentDocument[]>
+  /** drop one entry from the recent list (the document itself is untouched) */
+  forgetRecent(args: { dir: string; file: string }): Promise<void>
   create(args: TranslateCreateArgs): Promise<{ dir: string }>
   remove(args: TranslateRemoveArgs): Promise<void>
   getSystemPrompt(): Promise<string>

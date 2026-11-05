@@ -190,6 +190,16 @@ export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
     }
   }
 
+  const forgetRecent = async (dir: string, file: string) => {
+    setRecent((list) => list.filter((d) => !(d.dir === dir && d.file === file)))
+    try {
+      await api.forgetRecent({ dir, file })
+    } catch (err) {
+      fail(err)
+    }
+    api.recent().then(setRecent, () => undefined)
+  }
+
   const chooseSort = (key: SortKey) => {
     // the same column again flips the direction; a new column starts newest/A first
     const next: SortState =
@@ -606,6 +616,7 @@ export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
                 <div role="columnheader" className="tt-col tt-time">
                   {s('colLastOpened')}
                 </div>
+                <div role="columnheader" className="tt-col tt-actions" aria-hidden="true" />
               </div>
               {recent.map((doc) => (
                 <div
@@ -661,6 +672,18 @@ export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
                   </div>
                   <div role="cell" className="tt-cell tt-time">
                     {relativeTime(lang, doc.openedAt, Date.now())}
+                  </div>
+                  <div role="cell" className="tt-cell tt-actions">
+                    <RowMenu
+                      label={s('moreActions', { name: doc.file })}
+                      items={[
+                        {
+                          key: 'forget',
+                          label: s('removeFromList'),
+                          onSelect: () => void forgetRecent(doc.dir, doc.file),
+                        },
+                      ]}
+                    />
                   </div>
                 </div>
               ))}

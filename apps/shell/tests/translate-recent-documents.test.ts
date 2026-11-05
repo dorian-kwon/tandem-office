@@ -132,3 +132,29 @@ describe('recent translation documents', () => {
     expect(await listRecentDocuments(settingsPath)).toEqual([])
   })
 })
+
+describe('forgetRecentDocument', () => {
+  it('drops only the matching project+file entry and keeps the rest', async () => {
+    const { mkdtempSync, writeFileSync, readFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { forgetRecentDocument, RECENT_DOCUMENTS_KEY } = await import(
+      '../src/main/translate/recent-documents'
+    )
+    const dir = mkdtempSync(join(tmpdir(), 'recent-forget-'))
+    const settings = join(dir, 'settings.json')
+    const entry = (file: string, at: number) => ({
+      dir: join(dir, 'p'),
+      file,
+      output: `${file}.out`,
+      openedAt: at,
+    })
+    writeFileSync(
+      settings,
+      JSON.stringify({ [RECENT_DOCUMENTS_KEY]: [entry('a.docx', 2), entry('b.docx', 1)] }),
+    )
+    forgetRecentDocument(settings, { dir: join(dir, 'p'), file: 'a.docx' })
+    const left = JSON.parse(readFileSync(settings, 'utf8'))[RECENT_DOCUMENTS_KEY]
+    expect(left.map((e: { file: string }) => e.file)).toEqual(['b.docx'])
+  })
+})

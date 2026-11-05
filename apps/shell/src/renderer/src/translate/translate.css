@@ -938,7 +938,7 @@
 }
 
 .tt-recent {
-  --tt-cols: minmax(0, 2.2fr) minmax(0, 1.4fr) minmax(0, 1.2fr) minmax(110px, 0.8fr);
+  --tt-cols: minmax(0, 2.2fr) minmax(0, 1.4fr) minmax(0, 1.2fr) minmax(110px, 0.8fr) 36px;
 }
 
 .tt-files {
@@ -1141,7 +1141,7 @@
   }
 
   .tt-recent {
-    --tt-cols: minmax(0, 2fr) minmax(0, 1.2fr) minmax(90px, 0.8fr);
+    --tt-cols: minmax(0, 2fr) minmax(0, 1.2fr) minmax(90px, 0.8fr) 36px;
   }
 
   .tt-broken {
