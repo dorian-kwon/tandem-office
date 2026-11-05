@@ -148,22 +148,14 @@ describe('ratioForDragOffset', () => {
     )
   })
 
-  it('means "close a" (0) once the first pane would drop under its minimum', () => {
-    expect(ratioForDragOffset(SPLIT_MIN_PANE_PX - 1, VIEWPORT, 'side')).toBe(0)
-    expect(ratioForDragOffset(-50, VIEWPORT, 'side')).toBe(0)
-    expect(ratioForDragOffset(TAB_STRIP_HEIGHT + SPLIT_MIN_PANE_PX - 1, VIEWPORT, 'stack')).toBe(0)
-  })
-
-  it('means "close b" (1) once the second pane would drop under its minimum', () => {
-    expect(ratioForDragOffset(SIDE_AVAILABLE - SPLIT_MIN_PANE_PX + 1, VIEWPORT, 'side')).toBe(1)
-    expect(ratioForDragOffset(10_000, VIEWPORT, 'side')).toBe(1)
+  it('never closes a pane: past either minimum the share stays at that minimum', () => {
+    const minSide = SPLIT_MIN_PANE_PX / SIDE_AVAILABLE
+    expect(ratioForDragOffset(-50, VIEWPORT, 'side')).toBeCloseTo(minSide, 10)
+    expect(ratioForDragOffset(SPLIT_MIN_PANE_PX - 1, VIEWPORT, 'side')).toBeCloseTo(minSide, 10)
+    expect(ratioForDragOffset(10_000, VIEWPORT, 'side')).toBeCloseTo(1 - minSide, 10)
     expect(
-      ratioForDragOffset(
-        TAB_STRIP_HEIGHT + STACK_AVAILABLE - SPLIT_MIN_PANE_PX + 1,
-        VIEWPORT,
-        'stack',
-      ),
-    ).toBe(1)
+      ratioForDragOffset(TAB_STRIP_HEIGHT + STACK_AVAILABLE + 500, VIEWPORT, 'stack'),
+    ).toBeCloseTo(1 - SPLIT_MIN_PANE_PX / STACK_AVAILABLE, 10)
   })
 
   it('lets the maximum itself stay a live share', () => {

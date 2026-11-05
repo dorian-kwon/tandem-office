@@ -29,7 +29,6 @@ export interface DividerRect {
 }
 
 /** Tolerance so landing exactly on a minimum/maximum boundary is still live. */
-const EPSILON = 1e-9
 
 /** The space both panes share: everything below the tab strip's own axis. */
 function alongAxis(viewport: ViewportSize, orientation: SplitOrientation): number {
@@ -101,9 +100,9 @@ export function ratioForDividerOffset(
 }
 
 /**
- * The ratio a drag asks for. Past a pane's minimum that side is meant to close,
- * so the result is exactly 0 (close a) or 1 (close b); otherwise it is the
- * pointer's share, clamped so neither pane drops under its minimum.
+ * The ratio a drag asks for: the pointer's share, clamped so neither pane drops
+ * under its minimum. A drag never closes a pane; the split is closed with its
+ * own control.
  */
 export function ratioForDragOffset(
   offset: number,
@@ -112,7 +111,5 @@ export function ratioForDragOffset(
 ): number {
   const share = ratioForDividerOffset(offset, viewport, orientation)
   const { min, max } = splitRatioLimits(viewport, orientation)
-  if (share < min - EPSILON) return 0
-  if (share > max + EPSILON) return 1
   return Math.min(max, Math.max(min, share))
 }

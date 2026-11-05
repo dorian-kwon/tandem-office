@@ -106,16 +106,19 @@ describe('split geometry', () => {
     }
   })
 
-  it('agrees with the renderer drag ratio: in-between = clamped, past a minimum = close', () => {
+  it('agrees with the renderer drag ratio: always clamped, a drag never closes', () => {
     const viewport = { width: W, height: H }
     const share = ratioForDividerOffset(300, viewport, 'side')
     expect(ratioForDragOffset(300, viewport, 'side')).toBeCloseTo(
       clampSplitRatio(share, content, 'side'),
     )
-    // the renderer asks for a close (0/1) at the ends; setSplitRatio treats
-    // those as unsplit, so no clamp applies to them
-    expect(ratioForDragOffset(10, viewport, 'side')).toBe(0)
-    expect(ratioForDragOffset(W - 10, viewport, 'side')).toBe(1)
+    // past either end the drag stays at the minimum instead of closing a pane
+    expect(ratioForDragOffset(10, viewport, 'side')).toBeCloseTo(
+      clampSplitRatio(0, content, 'side'),
+    )
+    expect(ratioForDragOffset(W - 10, viewport, 'side')).toBeCloseTo(
+      clampSplitRatio(1, content, 'side'),
+    )
   })
 
   it('gives an in-between share back un-clamped and asks for a close past a minimum', () => {
