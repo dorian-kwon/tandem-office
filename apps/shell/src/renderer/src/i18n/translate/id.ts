@@ -33,6 +33,8 @@ export const id = {
   adoptTitle: 'Dokumen asli tidak ada',
   adoptText: 'Salinan asli {file} hilang, tetapi terjemahannya masih ada. Gunakan terjemahan sebagai dokumen asli? Terjemahan disalin ke folder asli dan keduanya dibuka berdampingan.',
   adoptConfirm: 'Gunakan sebagai asli',
+  adoptRemove: 'Hapus dokumen',
+  adoptRemoveNote: 'Menghapus akan mengeluarkan dokumen dari proyek. File terjemahan tetap ada di folder output.',
   countSources: 'Dokumen: {n}',
   countReferences: 'Referensi: {n}',
   backToList: 'Semua proyek',

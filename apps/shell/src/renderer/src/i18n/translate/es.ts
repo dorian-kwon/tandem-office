@@ -32,6 +32,8 @@ export const es = {
   adoptTitle: 'Falta el original',
   adoptText: 'La copia original de {file} ya no está, pero la traducción sí. ¿Usar la traducción como original? Se copia a la carpeta del original y ambos se abren lado a lado.',
   adoptConfirm: 'Usar como original',
+  adoptRemove: 'Eliminar documento',
+  adoptRemoveNote: 'Eliminar quita el documento del proyecto. El archivo de traducción permanece en la carpeta output.',
   countSources: 'Documentos: {n}',
   countReferences: 'Referencias: {n}',
   backToList: 'Todos los proyectos',

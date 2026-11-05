@@ -33,6 +33,8 @@ export const ms = {
   adoptTitle: 'Dokumen asal tiada',
   adoptText: 'Salinan asal {file} telah hilang, tetapi terjemahannya masih ada. Guna terjemahan sebagai dokumen asal? Ia disalin ke folder asal dan kedua-duanya dibuka bersebelahan.',
   adoptConfirm: 'Guna sebagai asal',
+  adoptRemove: 'Padam dokumen',
+  adoptRemoveNote: 'Memadam akan mengeluarkan dokumen daripada projek. Fail terjemahan kekal dalam folder output.',
   countSources: 'Dokumen: {n}',
   countReferences: 'Rujukan: {n}',
   backToList: 'Semua projek',

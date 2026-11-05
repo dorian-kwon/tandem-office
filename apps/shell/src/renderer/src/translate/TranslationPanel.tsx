@@ -184,9 +184,30 @@ export function TranslationPanel(props: TranslationPanelProps = {}) {
           >
             <h3>{s('adoptTitle')}</h3>
             <p data-adopt={flow.file}>{s('adoptText', { file: flow.file })}</p>
+            <p className="projects-hint">{s('adoptRemoveNote')}</p>
             <div className="modal-buttons">
               <button type="button" className="btn btn-secondary" onClick={close}>
                 {s('cancel')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                data-action="adopt-remove"
+                onClick={() => {
+                  const { dir, file } = flow
+                  setFlow(null)
+                  void (async () => {
+                    try {
+                      await window.translateApi?.removeMaterial({ dir, kind: 'source', file })
+                      await window.translateApi?.forgetRecent({ dir, file })
+                      setListsVersion((n) => n + 1)
+                    } catch (err) {
+                      fail(dir, err)
+                    }
+                  })()
+                }}
+              >
+                {s('adoptRemove')}
               </button>
               <button
                 type="button"

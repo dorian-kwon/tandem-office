@@ -32,6 +32,8 @@ export const nl = {
   adoptTitle: 'Origineel ontbreekt',
   adoptText: 'De originele kopie van {file} ontbreekt, maar de vertaling is er nog. De vertaling als origineel gebruiken? Ze wordt naar de map van het origineel gekopieerd en beide openen naast elkaar.',
   adoptConfirm: 'Als origineel gebruiken',
+  adoptRemove: 'Document verwijderen',
+  adoptRemoveNote: 'Verwijderen haalt het document uit het project. Het vertaalbestand blijft in de map output.',
   countSources: 'Documenten: {n}',
   countReferences: 'Referenties: {n}',
   backToList: 'Alle projecten',

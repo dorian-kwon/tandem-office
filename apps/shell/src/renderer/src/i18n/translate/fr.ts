@@ -33,6 +33,8 @@ export const fr = {
   adoptTitle: 'Original introuvable',
   adoptText: 'La copie originale de {file} a disparu, mais la traduction existe encore. Utiliser la traduction comme original ? Elle est copiée dans le dossier des originaux et les deux s’ouvrent côte à côte.',
   adoptConfirm: 'Utiliser comme original',
+  adoptRemove: 'Supprimer le document',
+  adoptRemoveNote: 'La suppression retire le document du projet. Le fichier de traduction reste dans le dossier output.',
   countSources: 'Documents : {n}',
   countReferences: 'Références : {n}',
   backToList: 'Tous les projets',

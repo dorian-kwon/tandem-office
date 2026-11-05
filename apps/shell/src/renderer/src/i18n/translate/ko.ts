@@ -31,6 +31,8 @@ export const ko = {
   adoptTitle: '원본이 없습니다',
   adoptText: '{file}의 원본 사본은 없고 번역본만 남아 있습니다. 번역본을 원본으로 쓰시겠습니까? 원본 폴더로 복사한 뒤 원본과 번역본을 나란히 엽니다.',
   adoptConfirm: '원본으로 쓰기',
+  adoptRemove: '삭제하기',
+  adoptRemoveNote: '삭제하면 이 문서가 프로젝트에서 빠집니다. 번역본 파일은 output 폴더에 그대로 남습니다.',
   countSources: '문서 {n}',
   countReferences: '참고자료 {n}',
   backToList: '모든 프로젝트',

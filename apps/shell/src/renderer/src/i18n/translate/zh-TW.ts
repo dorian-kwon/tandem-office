@@ -31,6 +31,8 @@ export const zhTW = {
   adoptTitle: '找不到原文',
   adoptText: '{file} 的原文副本已不存在，只剩譯文。要把譯文用作原文嗎？它會被複製到原文資料夾，然後並排開啟兩者。',
   adoptConfirm: '用作原文',
+  adoptRemove: '刪除文件',
+  adoptRemoveNote: '刪除會把該文件從專案中移除。譯文檔案會保留在 output 資料夾中。',
   countSources: '文件 {n}',
   countReferences: '參考資料 {n}',
   backToList: '所有專案',

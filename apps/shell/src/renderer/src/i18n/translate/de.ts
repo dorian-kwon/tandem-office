@@ -33,6 +33,8 @@ export const de = {
   adoptTitle: 'Original fehlt',
   adoptText: 'Die Originalkopie von {file} fehlt, die Übersetzung ist noch da. Übersetzung als Original verwenden? Sie wird in den Originalordner kopiert und beide werden nebeneinander geöffnet.',
   adoptConfirm: 'Als Original verwenden',
+  adoptRemove: 'Dokument löschen',
+  adoptRemoveNote: 'Beim Löschen wird das Dokument aus dem Projekt entfernt. Die Übersetzungsdatei bleibt im Ordner output.',
   countSources: 'Dokumente: {n}',
   countReferences: 'Referenzen: {n}',
   backToList: 'Alle Projekte',

@@ -32,6 +32,8 @@ export const cs = {
   adoptTitle: 'Originál chybí',
   adoptText: 'Kopie originálu {file} chybí, překlad ale existuje. Použít překlad jako originál? Zkopíruje se do složky originálů a oba se otevřou vedle sebe.',
   adoptConfirm: 'Použít jako originál',
+  adoptRemove: 'Smazat dokument',
+  adoptRemoveNote: 'Smazáním se dokument odebere z projektu. Soubor překladu zůstane ve složce output.',
   countSources: 'Dokumenty: {n}',
   countReferences: 'Podklady: {n}',
   backToList: 'Všechny projekty',

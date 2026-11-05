@@ -32,6 +32,8 @@ export const pl = {
   adoptTitle: 'Brak oryginału',
   adoptText: 'Kopii oryginału {file} nie ma, ale tłumaczenie nadal istnieje. Użyć tłumaczenia jako oryginału? Zostanie skopiowane do folderu oryginałów, a oba otworzą się obok siebie.',
   adoptConfirm: 'Użyj jako oryginału',
+  adoptRemove: 'Usuń dokument',
+  adoptRemoveNote: 'Usunięcie wyłącza dokument z projektu. Plik tłumaczenia pozostaje w folderze output.',
   countSources: 'Dokumenty: {n}',
   countReferences: 'Materiały: {n}',
   backToList: 'Wszystkie projekty',

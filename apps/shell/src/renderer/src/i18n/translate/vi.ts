@@ -32,6 +32,8 @@ export const vi = {
   adoptTitle: 'Thiếu bản gốc',
   adoptText: 'Bản sao gốc của {file} không còn, nhưng bản dịch vẫn còn. Dùng bản dịch làm bản gốc? Nó được sao chép vào thư mục bản gốc và hai bản mở cạnh nhau.',
   adoptConfirm: 'Dùng làm bản gốc',
+  adoptRemove: 'Xóa tài liệu',
+  adoptRemoveNote: 'Xóa sẽ gỡ tài liệu khỏi dự án. Tệp bản dịch vẫn nằm trong thư mục output.',
   countSources: 'Tài liệu: {n}',
   countReferences: 'Tài liệu tham khảo: {n}',
   backToList: 'Tất cả dự án',

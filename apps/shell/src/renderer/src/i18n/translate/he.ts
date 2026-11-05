@@ -31,6 +31,8 @@ export const he = {
   adoptTitle: 'המקור חסר',
   adoptText: 'עותק המקור של {file} חסר, אך התרגום עדיין קיים. להשתמש בתרגום כמקור? הוא יועתק לתיקיית המקור ושניהם ייפתחו זה לצד זה.',
   adoptConfirm: 'השתמש כמקור',
+  adoptRemove: 'מחיקת המסמך',
+  adoptRemoveNote: 'המחיקה מסירה את המסמך מהפרויקט. קובץ התרגום נשאר בתיקיית output.',
   countSources: 'מסמכים: {n}',
   countReferences: 'חומרי עזר: {n}',
   backToList: 'כל הפרויקטים',

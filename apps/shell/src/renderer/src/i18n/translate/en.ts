@@ -32,6 +32,8 @@ export const en = {
   adoptTitle: 'The original is missing',
   adoptText: 'The original copy of {file} is gone, but its translation is still here. Use the translation as the original? It is copied into the original folder, and both open side by side.',
   adoptConfirm: 'Use as original',
+  adoptRemove: 'Delete document',
+  adoptRemoveNote: 'Delete removes the document from the project. The translation file stays in the output folder.',
   countSources: 'Documents: {n}',
   countReferences: 'References: {n}',
   backToList: 'All projects',

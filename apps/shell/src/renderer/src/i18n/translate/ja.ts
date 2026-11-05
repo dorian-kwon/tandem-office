@@ -31,6 +31,8 @@ export const ja = {
   adoptTitle: '原文がありません',
   adoptText: '{file} の原文のコピーはなく、翻訳だけが残っています。翻訳を原文として使いますか？ 原文フォルダーにコピーし、原文と翻訳を並べて開きます。',
   adoptConfirm: '原文として使う',
+  adoptRemove: '文書を削除',
+  adoptRemoveNote: '削除すると、この文書はプロジェクトから外れます。翻訳ファイルは output フォルダーに残ります。',
   countSources: '文書 {n}',
   countReferences: '参考資料 {n}',
   backToList: 'すべてのプロジェクト',
