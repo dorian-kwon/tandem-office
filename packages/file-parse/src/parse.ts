@@ -12,6 +12,7 @@ import { pptxToText } from './pptx'
 import { xlsxToText } from './xlsx'
 import { xmindToText } from './xmind'
 import { readZipTextParts } from './zip-text-parts'
+import { decodeCsvBuffer } from '@genoffice/xlsx-gateway/gateway/csv-import'
 import { redactHtmlSource } from './html-redaction'
 import { redactMarkdownSource } from './markdown-redaction'
 
@@ -214,7 +215,8 @@ export async function parseFileToText(
   if (imageMime) return { ok: true, kind: 'image', mime: imageMime }
   try {
     if (TEXT_EXTS.has(ext)) {
-      const text = decodeTextBytes(await readFile(filePath))
+      const bytes = await readFile(filePath)
+      const text = ext === 'csv' || ext === 'tsv' ? decodeCsvBuffer(bytes) : decodeTextBytes(bytes)
       if (text === null) {
         return {
           ok: false,
