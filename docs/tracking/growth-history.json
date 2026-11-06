@@ -6997,21 +6997,21 @@
   },
   {
     "date": "2026-11-06",
-    "totalDownloads": 49227,
+    "totalDownloads": 49319,
     "installs": {
-      "windows": 35618,
-      "macos": 11520,
-      "linux": 2089
+      "windows": 35665,
+      "macos": 11559,
+      "linux": 2095
     },
-    "updateChecks": 81293,
+    "updateChecks": 82260,
     "releaseCount": 12,
-    "stars": 778,
+    "stars": 780,
     "forks": 142,
     "releases": [
       {
         "tag": "v0.12.11",
         "publishedAt": "2026-11-05T08:55:32Z",
-        "downloads": 3774
+        "downloads": 3866
       },
       {
         "tag": "v0.12.10",
@@ -7073,12 +7073,12 @@
       {
         "release": "v0.12.11",
         "asset": "IeumOffice-0.12.11-arm64-mac.zip",
-        "downloads": 81
+        "downloads": 83
       },
       {
         "release": "v0.12.11",
         "asset": "IeumOffice-0.12.11-arm64.dmg",
-        "downloads": 1232
+        "downloads": 1266
       },
       {
         "release": "v0.12.11",
@@ -7088,12 +7088,12 @@
       {
         "release": "v0.12.11",
         "asset": "IeumOffice-0.12.11-x64.dmg",
-        "downloads": 128
+        "downloads": 131
       },
       {
         "release": "v0.12.11",
         "asset": "IeumOffice-0.12.11.AppImage",
-        "downloads": 68
+        "downloads": 71
       },
       {
         "release": "v0.12.11",
@@ -7103,27 +7103,27 @@
       {
         "release": "v0.12.11",
         "asset": "IeumOffice-Setup-0.12.11.exe",
-        "downloads": 2209
+        "downloads": 2256
       },
       {
         "release": "v0.12.11",
         "asset": "ieumoffice_0.12.11_amd64.deb",
-        "downloads": 26
+        "downloads": 29
       },
       {
         "release": "v0.12.11",
         "asset": "latest-linux.yml",
-        "downloads": 99
+        "downloads": 104
       },
       {
         "release": "v0.12.11",
         "asset": "latest-mac.yml",
-        "downloads": 3453
+        "downloads": 4092
       },
       {
         "release": "v0.12.11",
         "asset": "latest.yml",
-        "downloads": 3421
+        "downloads": 3744
       },
       {
         "release": "v0.12.10",
