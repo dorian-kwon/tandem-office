@@ -395,6 +395,90 @@ function compare({ before, after }: RoundTrip) {
 }
 
 describe('translate_blocks round trip through the production open/save path', () => {
+  it('saves newly added italic spans as Word run properties and keeps adjacent text plain', async () => {
+    const source = await buildDocx({
+      bodyXml: para(null, run('원문', '<w:rPr><w:b/></w:rPr>')),
+    })
+    const { editor, ctx, path } = await openCopy(source)
+    const [entry] = readRunGroups(editor, 0, 0)
+    const result = await executeTool(
+      editor,
+      {
+        id: 'italic-save',
+        name: 'translate_blocks',
+        input: { blocks: [{ index: 0, fp: entry.fp, segments: ['Read <i>Nature</i> today.'] }] },
+      },
+      { bullet: null, ordered: null },
+    )
+    expect(result.isError, result.output).toBeFalsy()
+    expect(await save(ctx, false, true)).toBe(true)
+    const xml = await documentXml(await readFile(path))
+    const dom = new DOMParser().parseFromString(xml, 'application/xml')
+    const runs = Array.from(dom.getElementsByTagNameNS(W, 'r')).map((r) => ({
+      text: r.getElementsByTagNameNS(W, 't')[0]?.textContent,
+      italic: r.getElementsByTagNameNS(W, 'i').length > 0,
+      bold: r.getElementsByTagNameNS(W, 'b').length > 0,
+    }))
+    expect(runs).toEqual([
+      { text: 'Read ', italic: false, bold: true },
+      { text: 'Nature', italic: true, bold: true },
+      { text: ' today.', italic: false, bold: true },
+    ])
+    expect(xml).not.toContain('&lt;i&gt;')
+    const reopened = await parseDocx(await readFile(path))
+    const reopenedEditor = new Editor({
+      element: document.createElement('div'),
+      extensions: editorExtensions,
+      content: blocksToPmDoc(reopened.blocks, readSections(reopened), pmDocOptions(reopened)),
+    })
+    editors.push(reopenedEditor)
+    const italic: string[] = []
+    reopenedEditor.state.doc.descendants((node) => {
+      if (node.isText && node.marks.some((m) => m.type.name === 'italic')) italic.push(node.text!)
+    })
+    expect(italic).toEqual(['Nature'])
+  })
+
+  it('keeps table translation undo and redo through repeated autosaves', async () => {
+    const { editor, ctx, path } = await openCopy(await fixtureDocx())
+    const entry = readRunGroups(editor, 0, editor.state.doc.childCount - 1).find(
+      (e) => e.paragraph !== undefined && e.segments?.length,
+    )!
+    expect(entry).toBeDefined()
+    const before = editor.state.doc.textContent
+    const result = await executeTool(
+      editor,
+      {
+        id: 'table-save-undo',
+        name: 'translate_blocks',
+        input: {
+          blocks: [{ ...entry, segments: entry.segments!.map((_, i) => `Cell ${i}`) }],
+        },
+      },
+      { bullet: null, ordered: null },
+    )
+    expect(result.isError, result.output).toBeFalsy()
+    const after = editor.state.doc.textContent
+    expect(after).not.toBe(before)
+    expect(await save(ctx, false, true)).toBe(true)
+    expect(editor.commands.undo()).toBe(true)
+    expect(editor.state.doc.textContent).toBe(before)
+    const savedText = async () => {
+      const parsed = await parseDocx(await readFile(path))
+      return editor.schema.nodeFromJSON(
+        blocksToPmDoc(parsed.blocks, readSections(parsed), pmDocOptions(parsed)),
+      ).textContent
+    }
+    ctx.dirtyRef.current = true
+    expect(await save(ctx, false, true)).toBe(true)
+    expect(await savedText()).toBe(before)
+    expect(editor.commands.redo()).toBe(true)
+    expect(editor.state.doc.textContent).toBe(after)
+    ctx.dirtyRef.current = true
+    expect(await save(ctx, false, true)).toBe(true)
+    expect(await savedText()).toBe(after)
+  })
+
   it('keeps paragraph styles, run property sets, footnote references and empty paragraphs', async () => {
     const result = await roundTrip(await fixtureDocx())
     const d = compare(result)
