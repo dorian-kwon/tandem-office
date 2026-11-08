@@ -207,8 +207,10 @@ app's own features:
 The **AI compare** window in the Word editor asks Copilot and Grok through
 their web pages. You choose the engines and either a selection or the whole
 document, then press **Compare**. Accepting the first-use notice alone sends
-nothing. Paragraphs are processed in order, one engine at a time, in batches of
-20; you choose whether to continue with the next batch.
+nothing. Enabled engines process the same paragraph concurrently. Their results
+are collected before moving to the next paragraph, in batches of 20; you choose
+whether to continue with the next batch. Each engine handles only one paragraph
+at a time.
 
 - **What is sent.** One selected paragraph or paragraph portion at a time, up to
   4,000 characters, and its Korean original when a matching full paragraph is

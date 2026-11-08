@@ -1,24 +1,18 @@
 /**
- * The scheduler of one comparison: the engines (Copilot, Grok, ...) are asked about the units
- * (one paragraph, or the selection) strictly one at a time, in unit order and within a unit in
- * engine order, with a pause between calls so the sites are not hammered. It knows nothing about
- * ego lite, IPC, React or the editor: the driver, the prompt builder and the integration step are
- * passed in, so tests use fakes and a fake clock.
+ * One comparison advances in paragraph order. Enabled web engines start together for a unit;
+ * all of their answers settle before optional app AI integration and the next unit. A single
+ * engine never handles two units concurrently. Browser, IPC and editor details stay in deps.
  *
- * Rules:
- * - an engine that reports a block (login wall, a hand-over to the person, a CAPTCHA
- *   page) is BLOCKED for the rest of the run: shown as blocked, never asked again, never worked
- *   around. The other engines go on; when every enabled engine is blocked the run stops;
- * - a run asks at most `batchSize` units; "continue" asks the next batch;
- * - pause takes effect between calls (the call in flight finishes), resume goes on, stop aborts the
- *   call in flight (the driver kills its process tree) and ends the run.
+ * Blocked engines remain excluded without retries; their peers finish normally. Pause collects
+ * the current unit's in-flight answers and holds before starting more work. Stop aborts every
+ * active request and ignores late replies. Each batch handles at most `batchSize` units.
  */
 import { isBlockReason, type CompareAnswer, type CompareDriverClient } from '../../shared/compare'
 import { cleanCandidate, splitAnswer, type CandidateKind } from './prompts'
 
 /** units asked per run (and per "continue") */
 export const COMPARE_BATCH_SIZE = 20
-/** the pause between two calls to the web engines */
+/** the pause between consecutive units (for each engine) */
 export const COMPARE_PACE_MS = 4000
 
 export type EngineStatus = 'waiting' | 'running' | 'done' | 'failed' | 'stopped' | 'blocked'
@@ -53,7 +47,7 @@ export type Phase = 'idle' | 'running' | 'paused' | 'stopped' | 'batchDone' | 'd
 export interface RunState {
   phase: Phase
   units: UnitResult[]
-  /** engines asked in this run, in order */
+  /** enabled engine ids in stable display/candidate order */
   engines: string[]
   /** engine id to the block code that blocked it */
   blocked: Record<string, string>
@@ -93,7 +87,7 @@ export interface RunnerDeps {
   ): Promise<CompareAnswer>
   paceMs?: number
   batchSize?: number
-  /** waits `ms`; stop ends the wait early (a fake in tests) */
+  /** waits `ms`; generation guards prevent further work after stop (a fake in tests) */
   sleep?(ms: number): Promise<void>
 }
 
@@ -126,7 +120,7 @@ export function createRunner(deps: RunnerDeps): Runner {
   let units: RunnerUnit[] = []
   let auto = true
   let generation = 0
-  let abort: AbortController | null = null
+  const active = new Set<AbortController>()
   let resumeGate: (() => void) | null = null
   let calledOnce = false
 
@@ -175,16 +169,17 @@ export function createRunner(deps: RunnerDeps): Runner {
   }
 
   async function askEngine(unit: RunnerUnit, engine: string, gen: number): Promise<void> {
+    if (gen !== generation) return
     setEngine(unit.id, engine, { status: 'running' })
     const controller = new AbortController()
-    abort = controller
+    active.add(controller)
     let answer: CompareAnswer
     try {
       answer = await deps.driver.ask(engine, deps.promptFor(unit), controller.signal)
     } catch (error) {
       answer = { ok: false, reason: String(error).slice(0, 200) }
     }
-    if (abort === controller) abort = null
+    active.delete(controller)
     if (gen !== generation) return
     if (controller.signal.aborted) {
       setEngine(unit.id, engine, { status: 'stopped' })
@@ -220,14 +215,14 @@ export function createRunner(deps: RunnerDeps): Runner {
     if (answers.length === 0) return
     patchUnit(unit.id, (u) => ({ ...u, integrate: { status: 'running' } }))
     const controller = new AbortController()
-    abort = controller
+    active.add(controller)
     let reply: CompareAnswer
     try {
       reply = await deps.integrate(unit, answers, controller.signal)
     } catch (error) {
       reply = { ok: false, reason: String(error).slice(0, 200) }
     }
-    if (abort === controller) abort = null
+    active.delete(controller)
     if (gen !== generation) return
     if (reply.ok) {
       const text = cleanCandidate(reply.text)
@@ -244,24 +239,23 @@ export function createRunner(deps: RunnerDeps): Runner {
 
   async function runBatch(gen: number): Promise<void> {
     while (state.next < state.batchEnd) {
-      const unit = units[state.next]!
-      for (const engine of state.engines) {
-        if (state.blocked[engine]) {
-          setEngine(unit.id, engine, { status: 'blocked', reason: state.blocked[engine]! })
-          continue
-        }
+      if (!(await gate(gen))) return
+      if (calledOnce) {
+        await sleep(pace)
         if (!(await gate(gen))) return
-        if (calledOnce) {
-          await sleep(pace)
-          if (!(await gate(gen))) return
-        }
-        calledOnce = true
-        await askEngine(unit, engine, gen)
-        if (gen !== generation || state.phase !== 'running') {
-          if (gen === generation && state.phase === 'paused') continue
-          return
-        }
       }
+      const unit = units[state.next]!
+      calledOnce = true
+      await Promise.all(
+        state.engines.map((engine) => {
+          if (state.blocked[engine]) {
+            setEngine(unit.id, engine, { status: 'blocked', reason: state.blocked[engine]! })
+            return Promise.resolve()
+          }
+          return askEngine(unit, engine, gen)
+        }),
+      )
+      if (gen !== generation) return
       if (state.engines.every((e) => state.blocked[e])) {
         patchUnit(unit.id, (u) => ({ ...u, visited: true }))
         emit({ ...state, phase: 'allBlocked' })
@@ -276,6 +270,11 @@ export function createRunner(deps: RunnerDeps): Runner {
     emit({ ...state, phase: state.batchEnd >= state.total ? 'done' : 'batchDone' })
   }
 
+  function abortActive(): void {
+    for (const controller of [...active]) controller.abort()
+    active.clear()
+  }
+
   function launch(): void {
     const gen = ++generation
     calledOnce = false
@@ -288,8 +287,9 @@ export function createRunner(deps: RunnerDeps): Runner {
       listeners.add(listener)
       return () => listeners.delete(listener)
     },
-    start(nextUnits, engines, autoIntegrate) {
-      abort?.abort()
+    start(nextUnits, requestedEngines, autoIntegrate) {
+      const engines = [...new Set(requestedEngines)]
+      abortActive()
       resumeGate?.()
       resumeGate = null
       generation++
@@ -325,7 +325,7 @@ export function createRunner(deps: RunnerDeps): Runner {
     stop() {
       if (state.phase !== 'running' && state.phase !== 'paused') return
       generation++
-      abort?.abort()
+      abortActive()
       resumeGate?.()
       resumeGate = null
       emit({

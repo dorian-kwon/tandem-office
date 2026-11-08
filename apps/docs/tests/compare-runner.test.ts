@@ -37,7 +37,7 @@ function setup(patch: Partial<RunnerDeps> = {}) {
 afterEach(() => vi.useRealTimers())
 
 describe('comparison scheduler', () => {
-  it('asks units in document order and only one engine at a time, retaining per-unit answers', async () => {
+  it('asks both engines together while keeping units in document order and retaining their answers', async () => {
     const first = deferred<CompareAnswer>()
     const asks: string[] = []
     const { runner } = setup({
@@ -51,7 +51,7 @@ describe('comparison scheduler', () => {
     })
     runner.start(units.slice(0, 2), ['copilot', 'grok'], false)
     await settle()
-    expect(asks).toEqual(['copilot:Paragraph 0'])
+    expect(asks).toEqual(['copilot:Paragraph 0', 'grok:Paragraph 0'])
     first.resolve({ ok: true, text: 'First answer' })
     await settle()
     expect(asks).toEqual([
@@ -63,6 +63,166 @@ describe('comparison scheduler', () => {
     expect(runner.getState().phase).toBe('done')
     expect(runner.getState().units[0]?.engines.copilot?.text).toBe('First answer')
     expect(runner.getState().units[1]?.engines.grok?.text).toBe('grokParagraph 1')
+  })
+
+  it.each(['copilot', 'grok'])(
+    'waits for both answers when %s finishes first and integrates each unit once',
+    async (first) => {
+      const replies = new Map<string, ReturnType<typeof deferred<CompareAnswer>>>()
+      const active = new Map<string, number>()
+      const calls: string[] = []
+      const integrations: Array<{ unit: string; engines: string[] }> = []
+      const { runner } = setup({
+        driver: {
+          detect: async () => ({ installed: true }),
+          ask: async (engine, prompt) => {
+            active.set(engine, (active.get(engine) ?? 0) + 1)
+            expect(active.get(engine)).toBe(1)
+            const id = `${engine}:${prompt}`
+            calls.push(id)
+            const reply = deferred<CompareAnswer>()
+            replies.set(id, reply)
+            try {
+              return await reply.promise
+            } finally {
+              active.set(engine, active.get(engine)! - 1)
+            }
+          },
+        },
+        integrate: async (unit, answers) => {
+          integrations.push({ unit: unit.id, engines: answers.map((a) => a.id) })
+          return { ok: true, text: `Integrated ${unit.id}` }
+        },
+      })
+      runner.start(units.slice(0, 2), ['copilot', 'grok'], true)
+      await settle()
+      expect(calls).toEqual(['copilot:Paragraph 0', 'grok:Paragraph 0'])
+      replies.get(`${first}:Paragraph 0`)!.resolve({ ok: true, text: `${first} first` })
+      await settle()
+      expect(calls).toHaveLength(2)
+      expect(integrations).toEqual([])
+      const second = first === 'copilot' ? 'grok' : 'copilot'
+      replies.get(`${second}:Paragraph 0`)!.resolve({ ok: true, text: `${second} second` })
+      await settle()
+      expect(calls).toEqual([
+        'copilot:Paragraph 0',
+        'grok:Paragraph 0',
+        'copilot:Paragraph 1',
+        'grok:Paragraph 1',
+      ])
+      expect(integrations).toEqual([{ unit: 'u0', engines: ['copilot', 'grok'] }])
+      replies.get(`${second}:Paragraph 1`)!.resolve({ ok: true, text: 'Second unit answer' })
+      replies.get(`${first}:Paragraph 1`)!.resolve({ ok: true, text: 'Second unit answer' })
+      await settle()
+      expect(integrations).toEqual([
+        { unit: 'u0', engines: ['copilot', 'grok'] },
+        { unit: 'u1', engines: ['copilot', 'grok'] },
+      ])
+      expect(runner.getState().phase).toBe('done')
+    },
+  )
+
+  it('keeps the other engine running after one is blocked and never retries the blocked engine', async () => {
+    const copilot = deferred<CompareAnswer>()
+    const grok = deferred<CompareAnswer>()
+    const calls: string[] = []
+    let grokSignal: AbortSignal | undefined
+    const { runner } = setup({
+      driver: {
+        detect: async () => ({ installed: true }),
+        ask: (engine, _prompt, signal) => {
+          calls.push(engine)
+          if (engine === 'grok') grokSignal = signal
+          return engine === 'copilot' ? copilot.promise : grok.promise
+        },
+      },
+    })
+    runner.start(units.slice(0, 1), ['copilot', 'grok'], false)
+    await settle()
+    copilot.resolve({ ok: false, reason: 'blocked' })
+    await settle()
+    expect(runner.getState().units[0]?.engines.grok?.status).toBe('running')
+    expect(grokSignal?.aborted).toBe(false)
+    grok.resolve({ ok: true, text: 'Grok result' })
+    await settle()
+    runner.retry('u0', 'copilot')
+    await settle()
+    expect(calls).toEqual(['copilot', 'grok'])
+    expect(runner.getState().units[0]?.engines.grok?.text).toBe('Grok result')
+    expect(runner.getState().phase).toBe('done')
+  })
+
+  it('collects both in-flight answers while paused and waits before the next unit', async () => {
+    const copilot = deferred<CompareAnswer>()
+    const grok = deferred<CompareAnswer>()
+    const calls: string[] = []
+    const { runner } = setup({
+      driver: {
+        detect: async () => ({ installed: true }),
+        ask: (engine) => {
+          calls.push(engine)
+          return calls.length <= 2
+            ? engine === 'copilot'
+              ? copilot.promise
+              : grok.promise
+            : Promise.resolve({ ok: true, text: 'Next answer' })
+        },
+      },
+    })
+    runner.start(units.slice(0, 2), ['copilot', 'grok'], false)
+    await settle()
+    runner.pause()
+    copilot.resolve({ ok: true, text: 'Copilot result' })
+    grok.resolve({ ok: true, text: 'Grok result' })
+    await settle()
+    expect(runner.getState().phase).toBe('paused')
+    expect(runner.getState().units[0]?.engines.copilot?.text).toBe('Copilot result')
+    expect(runner.getState().units[0]?.engines.grok?.text).toBe('Grok result')
+    expect(calls).toEqual(['copilot', 'grok'])
+    runner.resume()
+    await settle()
+    expect(calls).toEqual(['copilot', 'grok', 'copilot', 'grok'])
+    expect(runner.getState().phase).toBe('done')
+  })
+
+  it('stop cancels every active engine and late replies cannot alter a new run', async () => {
+    const oldReplies = [deferred<CompareAnswer>(), deferred<CompareAnswer>()]
+    const signals: AbortSignal[] = []
+    let calls = 0
+    const { runner } = setup({
+      driver: {
+        detect: async () => ({ installed: true }),
+        ask: (_engine, _prompt, signal) => {
+          signals.push(signal)
+          return calls++ < 2
+            ? oldReplies[calls - 1]!.promise
+            : Promise.resolve({ ok: true, text: 'New answer' })
+        },
+      },
+    })
+    runner.start(units.slice(0, 1), ['copilot', 'grok'], false)
+    await settle()
+    runner.stop()
+    expect(signals).toHaveLength(2)
+    expect(signals.every((s) => s.aborted)).toBe(true)
+    runner.start([{ id: 'new', text: 'New paragraph', korean: '' }], ['copilot', 'grok'], false)
+    await settle()
+    oldReplies[1]!.resolve({ ok: false, reason: 'blocked' })
+    oldReplies[0]!.resolve({ ok: true, text: 'Old answer' })
+    await settle()
+    expect(runner.getState().units.map((u) => u.id)).toEqual(['new'])
+    expect(runner.getState().units[0]?.engines.copilot?.text).toBe('New answer')
+    expect(runner.getState().units[0]?.engines.grok?.text).toBe('New answer')
+    expect(runner.getState().blocked).toEqual({})
+    expect(runner.getState().phase).toBe('done')
+  })
+
+  it('deduplicates enabled engine ids so one engine cannot be started twice for a unit', async () => {
+    const { runner, calls } = setup()
+    runner.start(units.slice(0, 1), ['copilot', 'copilot', 'grok'], false)
+    await settle()
+    expect(calls).toEqual(['copilot:Paragraph 0', 'grok:Paragraph 0'])
+    expect(runner.getState().engines).toEqual(['copilot', 'grok'])
   })
 
   it('marks blocked engines once and skips them in later units and manual retries', async () => {

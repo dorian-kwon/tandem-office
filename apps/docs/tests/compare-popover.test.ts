@@ -452,6 +452,35 @@ describe('AI compare popup', () => {
     expect(prompts[1]).toBe(prompts[0])
   })
 
+  it('starts both enabled engines together and closing cancels both outstanding IPC requests', async () => {
+    const ids: string[] = []
+    const cancelled: string[] = []
+    const resolveReplies: Array<(answer: { ok: false; reason: string }) => void> = []
+    const { container } = setup(
+      ready({
+        compareGetPrefs: async () => ({ autoIntegrate: false }),
+        compareAsk: (request: { id: string }) => {
+          ids.push(request.id)
+          return new Promise((resolve) => {
+            resolveReplies.push(resolve)
+          })
+        },
+        compareCancel: async (id: string) => {
+          cancelled.push(id)
+        },
+      }),
+    )
+    await flush()
+    await start(container)
+    expect(ids).toHaveLength(2)
+    expect(new Set(ids).size).toBe(2)
+    expect(container.querySelectorAll('.cmp-chip-running').length).toBeGreaterThanOrEqual(2)
+    cleanups.pop()!()
+    expect(cancelled.sort()).toEqual([...ids].sort())
+    for (const resolve of resolveReplies) resolve({ ok: false, reason: 'stopped' })
+    await flush()
+  })
+
   it('selection scope sends and replaces only the selected portions of its boundary paragraphs', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const prompts: string[] = []

@@ -1,7 +1,7 @@
 /**
  * The "AI compare" popup: asks the web AIs of the site table (Copilot, Grok; their web pages,
  * driven through ego lite in the main process) about the selected text or about the whole
- * document, one unit (paragraph) at a time and one AI at a time, and lists every answer as a card
+ * document, one unit (paragraph) at a time with its enabled AIs in parallel, and lists every answer as a card
  * the person can apply to the document.
  *
  * It is an in-page floating panel, movable by its title bar and clamped to the editor area. It
