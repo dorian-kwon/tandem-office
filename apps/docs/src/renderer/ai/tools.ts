@@ -85,7 +85,12 @@ import {
   type NumIds,
   type SelectionScope,
 } from './protocol'
-import { applyBilingual, type BilingualItem, type BilingualLayout } from './bilingual-runs'
+import {
+  applyBilingual,
+  type BilingualItem,
+  type BilingualLayout,
+  type BilingualTarget,
+} from './bilingual-runs'
 import {
   applyRunTranslations,
   hasTwins,
@@ -201,7 +206,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
   {
     name: 'read_runs',
     description:
-      'Read a block range for TRANSLATION: one JSON line per paragraph with its text as numbered segments, one segment per run of equal formatting (footnote references, tabs, breaks and other inline objects sit between segments and are not shown). Table blocks list each cell paragraph with its "paragraph" number. Empty paragraphs are listed as "empty":true; leave them alone. ' +
+      'Read a block range for TRANSLATION: one JSON line per paragraph with its text as numbered segments, one segment per run of equal formatting (footnote references, tabs, breaks and other inline objects sit between segments and are not shown). Table blocks list each cell paragraph with its "paragraph" number and its grid cell "cell":"r<row>c<column>" (0-based; "span":"<cols>x<rows>" for a merged cell); a wholly empty cell is listed once with "empty":true and its "cell" (a free destination for add_bilingual). Empty paragraphs are listed as "empty":true; leave them alone. ' +
       'Long ranges are paged: a truncated result says which startBlockIndex to continue from. ' +
       'With notes:true it lists every footnote and endnote the same way ({"note","id","fp","segments"}; no block range needed). ' +
       'With checkRemaining:true (and sourceLanguage) it lists the body paragraphs and notes that still look untranslated; translation is finished only when it reports none. ' +
@@ -321,6 +326,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       'Bilingual output: KEEP the original text and ADD its translation next to it (use this, never translate_blocks or replace_blocks, whenever the original must stay). Same input as translate_blocks: read_runs first, then for each paragraph its "fp" unchanged and the translations of its segments, in the same order and number; the original paragraph is never touched. ' +
       'layout "after" (body paragraphs, headings, list items): a new paragraph right after the original with the same paragraph style and run formatting; footnote references, pictures and empty paragraphs are not copied. ' +
       'Table cells: layout "right" puts the translation in a NEW column directly right of each text column (original left, translation right), layout "below" in a NEW row directly below each text row (original top, translation bottom); ask the person which, every time. Pass the WHOLE table (every cell paragraph read_runs lists, with its "paragraph" number) in one call. A table with merged cells cannot take a column: it falls back to "below" and the result says so, tell the person. ' +
+      'ANYWHERE ELSE: an item may carry "target" (instead of the call layout) to put its translation exactly where the person wants. {kind:"cell", index:<table block>, row, column}: an EXISTING table cell, 0-based visual grid, the "cell":"r<row>c<column>" read_runs lists (a merged cell by its top-left anchor; read_runs marks wholly empty cells "empty":true); it must be empty, or add overwrite:true plus target.fp (that cell\'s own fp, one text paragraph, not while changes are tracked) to replace its text; several items for one cell become its paragraphs in order. {kind:"after"|"before", index} a new paragraph after/before ANY block, {kind:"end"} at the end of the document. Items with a target need no layout and no whole-table pass; the destination keeps its own paragraph formatting, else the original\'s. ' +
       'Added paragraphs shift later block indexes: read_runs again before the next call (the added translations are listed as skipped and are never flagged as untranslated). A paragraph that already has its translation is skipped. Footnotes and endnotes are not duplicated. Segments are plain text: no line breaks, no HTML.',
     inputSchema: {
       type: 'object',
@@ -329,7 +335,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
           type: 'string',
           enum: ['after', 'right', 'below'],
           description:
-            '"after" for body paragraphs; "right" or "below" for table cells (the person chose)',
+            '"after" for body paragraphs; "right" or "below" for new table columns/rows (the person chose). Needed unless every entry has a target',
         },
         blocks: {
           type: 'array',
@@ -351,12 +357,37 @@ export const AGENT_TOOLS: AgentToolDef[] = [
                 items: { type: 'string' },
                 description: 'the translated text of each segment, in read_runs order',
               },
+              target: {
+                type: 'object',
+                description:
+                  'an explicit destination for this translation (see the tool description)',
+                properties: {
+                  kind: { type: 'string', enum: ['cell', 'after', 'before', 'end'] },
+                  index: {
+                    type: 'integer',
+                    description:
+                      'cell: the table block index; after/before: the anchor block index',
+                  },
+                  row: { type: 'integer', description: 'cell: 0-based grid row' },
+                  column: { type: 'integer', description: 'cell: 0-based grid column' },
+                  overwrite: {
+                    type: 'boolean',
+                    description: 'cell: replace the existing text (needs fp)',
+                  },
+                  fp: {
+                    type: 'string',
+                    description:
+                      "cell with overwrite: the destination cell's own fp from read_runs",
+                  },
+                },
+                required: ['kind'],
+              },
             },
             required: ['index', 'fp', 'segments'],
           },
         },
       },
-      required: ['layout', 'blocks'],
+      required: ['blocks'],
     },
   },
   {
@@ -1504,6 +1535,36 @@ function noteStatusLine(editor: Editor, notes: AiNotesAccess | undefined): strin
   )
 }
 
+/** a bilingual target from tool input, or the reason it is unusable */
+function parseBilingualTarget(raw: unknown): BilingualTarget | string {
+  const t = (raw ?? {}) as Record<string, unknown>
+  const int = (v: unknown): v is number => Number.isInteger(v)
+  switch (t.kind) {
+    case 'end':
+      return { kind: 'end' }
+    case 'after':
+    case 'before':
+      return int(t.index)
+        ? { kind: t.kind, index: t.index }
+        : `target ${t.kind} needs an integer index (the anchor block from read_runs)`
+    case 'cell': {
+      if (!int(t.index) || !int(t.row) || !int(t.column))
+        return 'target cell needs integer index (the table block), row and column (0-based, the "cell" read_runs lists)'
+      if (t.fp !== undefined && typeof t.fp !== 'string') return 'target.fp must be a string'
+      return {
+        kind: 'cell',
+        index: t.index,
+        row: t.row,
+        column: t.column,
+        ...(t.overwrite === true ? { overwrite: true } : {}),
+        ...(typeof t.fp === 'string' ? { fp: t.fp } : {}),
+      }
+    }
+    default:
+      return 'target.kind must be "cell", "after", "before" or "end"'
+  }
+}
+
 const BILINGUAL_NOTES_NOTE =
   'Bilingual output (add_bilingual) does not duplicate footnotes or endnotes: leave them in the original language and tell the person.'
 
@@ -1942,7 +2003,8 @@ function executeSyncTool(
     case 'add_bilingual': {
       const summary = t('aiSumAddBilingual')
       const layout = call.input.layout
-      if (layout !== 'after' && layout !== 'right' && layout !== 'below')
+      const hasLayout = layout === 'after' || layout === 'right' || layout === 'below'
+      if (layout !== undefined && layout !== null && !hasLayout)
         return fail(
           summary,
           'layout must be "after" (body paragraphs), "right" or "below" (tables)',
@@ -1957,6 +2019,7 @@ function executeSyncTool(
           paragraph?: unknown
           fp?: unknown
           segments?: unknown
+          target?: unknown
         }
         const name = `block ${String(e.index)}`
         if (!Number.isInteger(e.index))
@@ -1972,16 +2035,33 @@ function executeSyncTool(
         const joined = Array.isArray(segments) ? segments.join('\n') : ''
         const echo = toolEchoError(joined) ?? contextMarkerError(joined)
         if (echo) return fail(summary, `${name}: ${echo.replace(/^html/, 'a segment')}`)
+        let target: BilingualTarget | undefined
+        if (e.target !== undefined && e.target !== null) {
+          const parsed = parseBilingualTarget(e.target)
+          if (typeof parsed === 'string') return fail(summary, `${name}: ${parsed}`)
+          target = parsed
+        } else if (!hasLayout) {
+          return fail(
+            summary,
+            `${name}: give a "target" for this entry, or a layout ("after", "right" or "below") for the call`,
+          )
+        }
         items.push({
           index: Number(e.index),
           fp: e.fp,
           segments,
+          ...(target ? { target } : {}),
           ...(e.paragraph === undefined || e.paragraph === null
             ? {}
             : { paragraph: Number(e.paragraph) }),
         })
       }
-      const outcome = applyBilingual(editor, layout as BilingualLayout, items, track)
+      const outcome = applyBilingual(
+        editor,
+        hasLayout ? (layout as BilingualLayout) : undefined,
+        items,
+        track,
+      )
       if (!outcome.ok) {
         return fail(
           summary,
@@ -2009,6 +2089,27 @@ function executeSyncTool(
             `Extra segments were appended to the last segment of: ${table.extra.join(', ')}.`,
           )
       }
+      if (outcome.placed.length > 0) {
+        lines.push(
+          `Placed ${outcome.placed.length} translation(s) where asked: ${outcome.placed
+            .slice(0, 40)
+            .map(
+              (p) =>
+                `block ${p.index}${p.paragraph === undefined ? '' : ` paragraph ${p.paragraph}`} -> ${p.at}`,
+            )
+            .join(
+              '; ',
+            )}${outcome.placed.length > 40 ? ' …' : ''}; the originals were not touched.` +
+            (outcome.lastShift > 0
+              ? ' New paragraphs moved later block indexes: call read_runs again before the next call.'
+              : ''),
+        )
+        const extras = outcome.placed.filter((p) => p.extra)
+        if (extras.length > 0)
+          lines.push(
+            `Extra segments were appended to the last segment of: ${extras.map((p) => `block ${p.index} (+${p.extra})`).join(', ')}.`,
+          )
+      }
       if (outcome.alreadyDone.length > 0)
         lines.push(
           `Skipped (already has its bilingual translation, nothing added twice): ${outcome.alreadyDone.join(', ')}.`,
@@ -2018,7 +2119,10 @@ function executeSyncTool(
         lines.push(
           `Extra segments were appended to the last segment of: ${extra.map((r) => `block ${r.index} (+${r.extra})`).join(', ')}.`,
         )
-      const count = outcome.added.length + outcome.tables.reduce((n, x) => n + x.paragraphs, 0)
+      const count =
+        outcome.added.length +
+        outcome.placed.length +
+        outcome.tables.reduce((n, x) => n + x.paragraphs, 0)
       lines.push(remainingLine(editor, notes))
       return {
         output: lines.join('\n'),

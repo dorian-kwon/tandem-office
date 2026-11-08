@@ -316,6 +316,8 @@ describe('composeContext reference chunks', () => {
         expect(text).toContain('use add_bilingual, never translate_blocks or replace_blocks')
         expect(text).toContain('right cell (left original, right translation)')
         expect(text).toContain('below cell (top original, bottom translation)')
+        expect(text).toContain('an existing empty cell next to the original')
+        expect(text).toContain('target {kind:"cell",index,row,column}')
         const line = text.split('\n').find((l) => l.includes('EVERY time')) ?? ''
         expect(line).not.toContain('remember key "')
       }
@@ -342,7 +344,7 @@ describe('composeContext reference chunks', () => {
     it('is a small block (the context has a length cap)', () => {
       const { text } = composeContext({ ...base, project: project() })
       const block = text.slice(text.indexOf('Translation choices'))
-      expect(block.length).toBeLessThan(1200)
+      expect(block.length).toBeLessThan(1400)
     })
   })
 })

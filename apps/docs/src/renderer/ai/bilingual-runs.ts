@@ -3,7 +3,7 @@ import { Fragment, type Mark, type Node as PmNode, type Schema } from '@tiptap/p
 import type { Transaction } from '@tiptap/pm/state'
 import { TableMap } from '@tiptap/pm/tables'
 import { TRACK_IGNORE } from '../editor/revisions'
-import { PARA_FORMAT_ATTRS } from '../editor/caret-marks'
+import { PARA_FORMAT_ATTRS, paraFormatIsDefault } from '../editor/caret-marks'
 import { isTrackedDeleted } from './doc-utils'
 import type { AiTrack } from './protocol'
 import {
@@ -20,7 +20,9 @@ import {
   edgesOf,
   fitSegments,
   gapsOf,
+  blocksShifted,
   groupsOf,
+  noteBlocksShifted,
   plainTwinRole,
   recordTwins,
   revisionDate,
@@ -62,9 +64,35 @@ import {
 
 export type BilingualLayout = 'after' | 'right' | 'below'
 
+/**
+ * An explicit destination for one item's translation.
+ *  - cell: an existing table cell of block `index`, at `row` and `column` of the table's visual
+ *    grid (both 0-based, as read_runs "cell":"r<row>c<column>" lists them; a merged cell is
+ *    addressed by its top-left anchor). It must be empty, or `overwrite` with the destination's
+ *    own `fp` (its single text paragraph, from read_runs) replaces its text.
+ *  - after / before: a new paragraph right after / before ANY top-level block `index`.
+ *  - end: a new paragraph at the end of the document.
+ */
+export type BilingualTarget =
+  | { kind: 'cell'; index: number; row: number; column: number; overwrite?: boolean; fp?: string }
+  | { kind: 'after'; index: number }
+  | { kind: 'before'; index: number }
+  | { kind: 'end' }
+
 export interface BilingualItem extends RunTranslationItem {
   /** the fp is required here: a paragraph is never located by position alone */
   fp: string
+  /** where the translation goes, instead of the call's layout */
+  target?: BilingualTarget
+}
+
+/** one translation written at an explicit target */
+export interface BilingualPlacedReport {
+  index: number
+  paragraph?: number
+  /** where it went, in words */
+  at: string
+  extra?: number
 }
 
 export interface BilingualPlainReport {
@@ -93,6 +121,8 @@ export type BilingualOutcome =
       /** body paragraphs added after their original */
       added: BilingualPlainReport[]
       tables: BilingualTableReport[]
+      /** translations written at an explicit target */
+      placed: BilingualPlacedReport[]
       /** items left alone because the original already has its twin */
       alreadyDone: string[]
       /** fingerprints of the originals and of their twins (completion tracking) */
@@ -530,13 +560,179 @@ function applyBlocksBelow(
   }
 }
 
+interface PlaceOp {
+  kind: 'place'
+  at: number
+  node: PmNode
+  seq: number
+}
+
+interface CellOp {
+  kind: 'cell'
+  /** absolute position of the destination cell */
+  at: number
+  cell: PmNode
+  content: PmNode[]
+}
+
+interface CellEntry {
+  item: BilingualItem
+  where: string
+  prepared: Prepared
+  /** absolute position of the original paragraph */
+  originalPos: number
+}
+
+interface CellDestination {
+  target: Extract<BilingualTarget, { kind: 'cell' }>
+  entries: CellEntry[]
+}
+
+const preview = (text: string): string => {
+  const flat = text.replace(/\s+/g, ' ').trim()
+  return flat.length > 40 ? `${flat.slice(0, 40)}…` : flat
+}
+
+/** the destination paragraph's own formatting laid over the twin's (the original's) when it has any */
+function withDestinationFormat(node: PmNode, destination: PmNode | undefined): PmNode {
+  if (!destination || paraFormatIsDefault(destination)) return node
+  const attrs = { ...node.attrs }
+  for (const key of PARA_FORMAT_ATTRS) {
+    const spec = destination.type.spec.attrs?.[key]
+    if (key in destination.attrs && spec && destination.attrs[key] !== spec.default)
+      attrs[key] = destination.attrs[key]
+  }
+  return node.type.create(attrs, node.content, node.marks)
+}
+
+type CellPlan =
+  { ok: true; op: CellOp; reports: BilingualPlacedReport[] } | { ok: false; error: string }
+
+/** check one destination cell and build its new content */
+function planCell(
+  editor: Editor,
+  doc: PmNode,
+  dest: CellDestination,
+  originals: ReadonlySet<number>,
+  track?: AiTrack,
+): CellPlan {
+  const { target } = dest
+  const at = `cell row ${target.row} column ${target.column} of block ${target.index}`
+  const top = topLevel(doc, target.index)
+  if (!top)
+    return { ok: false, error: `${at}: no such block (the document has ${doc.childCount} blocks)` }
+  if (top.node.type.name !== 'docTable')
+    return {
+      ok: false,
+      error: `${at}: block ${target.index} is not a table; read_runs lists the table's block index (use target kind "after", "before" or "end" for a new paragraph)`,
+    }
+  if (isTrackedDeleted(top.node))
+    return { ok: false, error: `${at}: the table is a pending tracked deletion; leave it alone` }
+  const map = TableMap.get(top.node)
+  const { row, column } = target
+  if (!Number.isInteger(row) || !Number.isInteger(column) || row < 0 || column < 0)
+    return { ok: false, error: `${at}: row and column are 0-based integers` }
+  if (row >= map.height || column >= map.width)
+    return {
+      ok: false,
+      error: `${at}: out of range (the table has ${map.height} rows and ${map.width} columns, 0-based); use the "cell" coordinates read_runs lists`,
+    }
+  const rel = map.map[row * map.width + column]
+  const rect = map.findCell(rel)
+  if (rect.top !== row || rect.left !== column)
+    return {
+      ok: false,
+      error: `${at}: covered by a merged cell whose top-left anchor is row ${rect.top} column ${rect.left}; address it there (or pick another cell)`,
+    }
+  const cell = top.node.nodeAt(rel)!
+  if (cell.attrs.gridGap)
+    return { ok: false, error: `${at}: a grid gap cell cannot take text; pick another cell` }
+  const cellPos = top.pos + 1 + rel
+  for (const entry of dest.entries) {
+    if (entry.originalPos >= cellPos && entry.originalPos < cellPos + cell.nodeSize)
+      return {
+        ok: false,
+        error: `${entry.where}: the destination ${at} is the original itself; pick another cell`,
+      }
+  }
+  const paragraphs: Array<{ node: PmNode; pos: number }> = []
+  let onlyText = true
+  cell.forEach((child, offset) => {
+    if (child.isTextblock) paragraphs.push({ node: child, pos: cellPos + 1 + offset })
+    else onlyText = false
+  })
+  for (const p of paragraphs)
+    if (originals.has(p.pos))
+      return { ok: false, error: `${at}: it holds the original of another item of this call` }
+  const empty = onlyText && paragraphs.every((p) => p.node.childCount === 0)
+  if (!empty) {
+    const shown = preview(cell.textContent)
+    if (!target.overwrite)
+      return {
+        ok: false,
+        error: `${at}: not empty${shown ? ` (it holds "${shown}")` : ' (it holds a picture or another object)'}; pick an empty cell (read_runs marks them "empty":true), or pass overwrite:true with this cell's own "fp" from read_runs to replace its text`,
+      }
+    if (track)
+      return {
+        ok: false,
+        error: `${at}: replacing existing text is not possible while changes are tracked (the old text could not be marked as deleted); pick an empty cell`,
+      }
+    const texty = paragraphs.filter((p) => groupsOf(p.node, p.pos).length > 0)
+    if (!onlyText || texty.length !== 1)
+      return {
+        ok: false,
+        error: `${at}: overwrite replaces a cell with exactly one text paragraph and nothing else; this one has ${onlyText ? `${texty.length} text paragraphs` : 'a nested table'}. Pick another cell`,
+      }
+    if (dest.entries.length > 1)
+      return {
+        ok: false,
+        error: `${at}: overwrite takes one translation; ${dest.entries.length} were given for it`,
+      }
+    const destFp = runFingerprint(groupsOf(texty[0].node, texty[0].pos).map((g) => g.text))
+    if (target.fp !== destFp)
+      return {
+        ok: false,
+        error: `${at}: overwrite needs the destination's own "fp" as target.fp (read_runs lists it for the cell's paragraph)${target.fp ? '; the given one no longer matches, read it again' : ''}`,
+      }
+    const blocks = textblocksOf(top.node, top.pos) ?? []
+    const roles = tableTwinRoles(
+      editor,
+      blocks.map((b) => {
+        const g = groupsOf(b.node, b.pos)
+        return g.length > 0 ? runFingerprint(g.map((x) => x.text)) : null
+      }),
+    )
+    if (roles[blocks.findIndex((b) => b.pos === texty[0].pos)] === 'source')
+      return {
+        ok: false,
+        error: `${at}: it holds an original that already has a translation; pick another cell`,
+      }
+  }
+  const content = dest.entries.map((entry, k) =>
+    withDestinationFormat(
+      entry.prepared.node,
+      paragraphs[Math.min(k, paragraphs.length - 1)]?.node,
+    ),
+  )
+  return {
+    ok: true,
+    op: { kind: 'cell', at: cellPos, cell, content },
+    reports: dest.entries.map((entry) => ({
+      index: entry.item.index,
+      ...(entry.item.paragraph === undefined ? {} : { paragraph: entry.item.paragraph }),
+      at: `${empty ? '' : 'over the text of '}${at}`,
+      ...(entry.prepared.extra ? { extra: entry.prepared.extra } : {}),
+    })),
+  }
+}
+
 /**
  * add_bilingual: every item checked first, one bad item refuses the whole call
  * with nothing changed. All edits land in one transaction (one undo step).
  */
 export function applyBilingual(
   editor: Editor,
-  layout: BilingualLayout,
+  layout: BilingualLayout | undefined,
   items: BilingualItem[],
   track?: AiTrack,
 ): BilingualOutcome {
@@ -551,6 +747,12 @@ export function applyBilingual(
   const tableItems = new Map<number, Array<{ item: BilingualItem; index: number }>>()
   const pairs: Array<[string, string]> = []
   const tableReports: BilingualTableReport[] = []
+  const placeOps: PlaceOp[] = []
+  const placedReports: BilingualPlacedReport[] = []
+  const cellDests = new Map<string, CellDestination>()
+  const originals = new Set<number>()
+  const placedPairsList: Array<[string, string]> = []
+  let seq = 0
 
   for (const item of items) {
     const index = locate(editor, doc, item)
@@ -573,6 +775,108 @@ export function applyBilingual(
     const blocks = textblocksOf(top.node, top.pos)
     if (!blocks) {
       errors.push(`${where}: a ${top.node.type.name} block has no text to translate`)
+      continue
+    }
+    if (item.target) {
+      // explicit destination: the original is a body paragraph or one cell paragraph
+      const target = item.target
+      const isTable = top.node.type.name === 'docTable'
+      if (isTable && !Number.isInteger(item.paragraph)) {
+        errors.push(
+          `${where}: a table block needs "paragraph" (the cell paragraph number read_runs lists)`,
+        )
+        continue
+      }
+      if (!isTable && item.paragraph !== undefined && item.paragraph !== 0) {
+        errors.push(`${where}: no such paragraph (a body block has one)`)
+        continue
+      }
+      const block = blocks[isTable ? (item.paragraph as number) : 0]
+      if (!block) {
+        errors.push(
+          `${where}: no such paragraph (the block has ${blocks.length}); use the paragraph numbers read_runs lists`,
+        )
+        continue
+      }
+      const groups = groupsOf(block.node, block.pos)
+      if (groups.length === 0) {
+        errors.push(`${where}: the paragraph has no text to translate`)
+        continue
+      }
+      const ownFp = runFingerprint(groups.map((g) => g.text))
+      const role = isTable
+        ? tableTwinRoles(
+            editor,
+            blocks.map((b) => {
+              const g = groupsOf(b.node, b.pos)
+              return g.length > 0 ? runFingerprint(g.map((x) => x.text)) : null
+            }),
+          )[item.paragraph as number]
+        : plainTwinRole(editor, doc, index, ownFp)
+      if (role === 'twin') {
+        errors.push(`${where}: this is a translation add_bilingual already added; leave it alone`)
+        continue
+      }
+      if (
+        role === 'source' &&
+        item.fp === ownFp &&
+        /\p{L}/u.test(groups.map((g) => g.text).join(' '))
+      ) {
+        alreadyDone.push(where)
+        continue
+      }
+      if (target.kind !== 'end' && blocksShifted(editor)) {
+        errors.push(
+          `${where}: block indexes moved since your last read_runs (translations were added); call read_runs again before choosing a destination`,
+        )
+        continue
+      }
+      const made = prepare(schema, block, item, where, track, date)
+      if (!made.ok) {
+        errors.push(made.error)
+        continue
+      }
+      const { prepared } = made
+      originals.add(block.pos)
+      if (target.kind === 'cell') {
+        const dkey = `${target.index}:${target.row}:${target.column}`
+        const dest = cellDests.get(dkey) ?? { target, entries: [] }
+        dest.entries.push({ item, where, prepared, originalPos: block.pos })
+        cellDests.set(dkey, dest)
+      } else if (target.kind === 'end') {
+        placeOps.push({ kind: 'place', at: doc.content.size, node: prepared.node, seq: seq++ })
+        placedReports.push({
+          index,
+          ...(item.paragraph === undefined ? {} : { paragraph: item.paragraph }),
+          at: 'the end of the document',
+          ...(prepared.extra ? { extra: prepared.extra } : {}),
+        })
+      } else {
+        const anchor = topLevel(doc, target.index)
+        if (!anchor) {
+          errors.push(
+            `${where}: target ${target.kind} block ${target.index}: no such block (the document has ${doc.childCount} blocks)`,
+          )
+          continue
+        }
+        placeOps.push({
+          kind: 'place',
+          at: target.kind === 'after' ? anchor.pos + anchor.node.nodeSize : anchor.pos,
+          node: prepared.node,
+          seq: seq++,
+        })
+        placedReports.push({
+          index,
+          ...(item.paragraph === undefined ? {} : { paragraph: item.paragraph }),
+          at: `a new paragraph ${target.kind} block ${target.index}`,
+          ...(prepared.extra ? { extra: prepared.extra } : {}),
+        })
+      }
+      placedPairsList.push([prepared.fp, prepared.twinFp])
+      continue
+    }
+    if (!layout) {
+      errors.push(`${where}: give a "target" for this item or a layout for the call`)
       continue
     }
     if (top.node.type.name === 'docTable') {
@@ -705,18 +1009,41 @@ export function applyBilingual(
     })
   }
 
+  const cellOps: CellOp[] = []
+  for (const dest of cellDests.values()) {
+    const plan = planCell(editor, doc, dest, originals, track)
+    if (!plan.ok) {
+      errors.push(plan.error)
+      continue
+    }
+    const tablePos = topLevel(doc, dest.target.index)!.pos
+    if (tableOps.some((o) => o.pos === tablePos)) {
+      errors.push(
+        `block ${dest.target.index}: a table cannot take a layout translation and an explicit cell destination in the same call; split them`,
+      )
+      continue
+    }
+    cellOps.push(plan.op)
+    placedReports.push(...plan.reports)
+  }
+
   if (errors.length > 0) return { ok: false, errors }
 
   const tr = editor.state.tr
   // last position first, so an edit never shifts the ones still ahead; a table starts where the
   // paragraph before it ends, and its own edits must run before that paragraph's insertion
-  const ops = [...bodyOps, ...tableOps].sort(
+  const opPos = (o: BodyOp | TableOp | PlaceOp | CellOp): number =>
+    o.kind === 'table' ? o.pos : o.at
+  const ops = [...bodyOps, ...tableOps, ...placeOps, ...cellOps].sort(
     (a, b) =>
-      (b.kind === 'body' ? b.at : b.pos) - (a.kind === 'body' ? a.at : a.pos) ||
-      (a.kind === 'table' ? -1 : 1) - (b.kind === 'table' ? -1 : 1),
+      opPos(b) - opPos(a) ||
+      (a.kind === 'table' || a.kind === 'cell' ? -1 : 1) -
+        (b.kind === 'table' || b.kind === 'cell' ? -1 : 1) ||
+      (b.kind === 'place' ? b.seq : 0) - (a.kind === 'place' ? a.seq : 0),
   )
   for (const op of ops) {
-    if (op.kind === 'body') tr.insert(op.at, op.node)
+    if (op.kind === 'body' || op.kind === 'place') tr.insert(op.at, op.node)
+    else if (op.kind === 'cell') tr.replaceWith(op.at + 1, op.at + op.cell.nodeSize - 1, op.content)
     else if (op.fellBack && op.layout === 'below') {
       // merged cells or an irregular grid: row blocks keep the grid valid
       applyBlocksBelow(tr, op, schema, track, date)
@@ -726,13 +1053,17 @@ export function applyBilingual(
   if (track) tr.setMeta(TRACK_IGNORE, true)
   if (ops.length > 0) editor.view.dispatch(tr)
   if (pairs.length > 0) recordTwins(editor, pairs)
-  addedBodyTwins.set(editor, (addedBodyTwins.get(editor) ?? 0) + bodyOps.length)
+  if (placedPairsList.length > 0) recordTwins(editor, placedPairsList, { placed: true })
+  const inserted = bodyOps.length + placeOps.length
+  addedBodyTwins.set(editor, (addedBodyTwins.get(editor) ?? 0) + inserted)
+  if (inserted > 0) noteBlocksShifted(editor)
   return {
     ok: true,
     added: bodyOps.map((o) => o.report),
     tables: tableReports,
+    placed: placedReports,
     alreadyDone,
-    handled: pairs.flat(),
-    lastShift: bodyOps.length,
+    handled: [...pairs, ...placedPairsList].flat(),
+    lastShift: inserted,
   }
 }

@@ -354,3 +354,15 @@ Needs a rebuild of the shell and docs apps (`npm run build -w @genoffice/shell`)
 8. Footnotes and endnotes carry no tracked changes: the AI only mentions doubts about them in the summary. Finish: the summary gives counts by kind of fix and the open doubts.
 9. An ODT document: the review tool is not offered (tracked changes are off there).
 
+
+## Bilingual output anywhere: add_bilingual with an explicit target
+
+Needs a rebuild of the shell and docs apps. Uses real AI turns (your subscription limit). Use Word documents with tables; keep the originals to compare.
+
+1. Worksheet with pre-made columns (image / OCR / translation): ask for the translation while keeping the original, answer the table question with "an existing empty cell next to the original" and say which column ("column C"). The translation lands in the empty cells of that column, nothing is added, the original cells are unchanged, and the cell keeps its own alignment and borders.
+2. A table with an empty row under each original row: choose "an existing empty cell next to the original (below)". Each translation fills the empty cell below its original; no new row appears.
+3. Choose "somewhere else" and type a place (a cell of another table, "after the last paragraph", "before the title"). The AI follows it literally; the original stays.
+4. A table with merged cells: a destination that is the top-left cell of a merge is written; a coordinate inside a merge gets an error naming the anchor and the AI retries there. Out-of-range coordinates are refused with the table size.
+5. A destination cell that already has text is refused unless you tell the AI to replace it; replacing with track changes ON is refused (the text could not be marked deleted), with it OFF the text is replaced.
+6. Track changes ON: the written text shows as an insertion by the AI author, in the existing cell and in new paragraphs. One undo restores the whole call.
+7. Afterwards "is anything left untranslated" lists neither the originals nor the cells you filled, and a repeated request does not write the same translation twice. Save, reopen in Word: cell content and formatting are as shown.

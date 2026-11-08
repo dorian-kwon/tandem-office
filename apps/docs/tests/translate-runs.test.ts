@@ -143,8 +143,14 @@ describe('readRunGroups', () => {
       },
     ])
     expect(readRunGroups(editor, 0, 0)).toEqual([
-      { index: 0, paragraph: 0, fp: runFingerprint(['칸 하나']), segments: ['칸 하나'] },
-      { index: 0, paragraph: 1, fp: runFingerprint(['칸 둘']), segments: ['칸 둘'] },
+      {
+        index: 0,
+        paragraph: 0,
+        cell: 'r0c0',
+        fp: runFingerprint(['칸 하나']),
+        segments: ['칸 하나'],
+      },
+      { index: 0, paragraph: 1, cell: 'r0c1', fp: runFingerprint(['칸 둘']), segments: ['칸 둘'] },
     ])
   })
 })
@@ -346,7 +352,9 @@ describe('translate_blocks refuses unsafe input (review fixes)', () => {
     )
     const exec = await executeTool(
       editor,
-      call([{ index: 0, paragraph: 1, fp: runFingerprint(['칸 둘']), segments: ['two'] }]),
+      call([
+        { index: 0, paragraph: 1, cell: 'r0c1', fp: runFingerprint(['칸 둘']), segments: ['two'] },
+      ]),
       NUM_IDS,
     )
     expect(exec.isError).toBeFalsy()

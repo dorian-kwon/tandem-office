@@ -259,6 +259,7 @@ describe('translationContextForFolder', () => {
     // bilingual output has its own tool: the original stays, indexes shift
     expect(prompts).toMatch(/original must stay[^\n]*add_bilingual instead of translate_blocks/)
     expect(prompts).toMatch(/"right" or "below" for a whole table in one call/)
+    expect(prompts).toMatch(/per-entry target \{kind:"cell",index,row,column\}/)
   })
 
   it('keeps the whole text within the limit with the editing rules added', async () => {

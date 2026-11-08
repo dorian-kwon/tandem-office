@@ -1,6 +1,7 @@
 import type { Editor } from '@tiptap/core'
 import type { Mark, Node as ProseMirrorNode } from '@tiptap/pm/model'
 import type { Transaction } from '@tiptap/pm/state'
+import { TableMap } from '@tiptap/pm/tables'
 import { TRACK_IGNORE } from '../editor/revisions'
 import { REDACT_MARK } from './redact'
 import { isTrackedDeleted } from './doc-utils'
@@ -52,7 +53,11 @@ export interface RunParagraph {
   segments?: string[]
   /** fingerprint of the paragraph's segment texts; translate_blocks checks it */
   fp?: string
-  /** no translatable text: left as it is */
+  /** a table paragraph: its cell in the visual grid, 0-based "r<row>c<column>" (the anchor of a merged cell) */
+  cell?: string
+  /** a merged cell: "<columns>x<rows>" it covers */
+  span?: string
+  /** no translatable text: left as it is. A table cell that is entirely empty is listed once with its "cell" (a free destination for add_bilingual) */
   empty?: true
   /** not translatable by these tools (an image, a protected block, a pending deletion) */
   skip?: string
@@ -181,16 +186,69 @@ export function topLevel(
 
 const twinPairs = new WeakMap<object, Map<string, Set<string>>>()
 
+/**
+ * Twins placed at an explicit destination (add_bilingual target): the pair is not
+ * recognised by position, so a paragraph counts as an original while its twin text
+ * is anywhere in the document, and as a twin while its original is.
+ */
+const placedPairs = new WeakMap<object, Map<string, Set<string>>>()
+
 /** remember that the paragraph with fingerprint `original` now has a twin with fingerprint `twin` */
-export function recordTwins(editor: Editor, pairs: ReadonlyArray<readonly [string, string]>): void {
+export function recordTwins(
+  editor: Editor,
+  pairs: ReadonlyArray<readonly [string, string]>,
+  options: { placed?: boolean } = {},
+): void {
   let map = twinPairs.get(editor)
   if (!map) twinPairs.set(editor, (map = new Map()))
+  let placed = placedPairs.get(editor)
+  if (options.placed && !placed) placedPairs.set(editor, (placed = new Map()))
   for (const [original, twin] of pairs) {
     let set = map.get(original)
     if (!set) map.set(original, (set = new Set()))
     set.add(twin)
+    if (options.placed && original !== twin && placed) {
+      let anywhere = placed.get(original)
+      if (!anywhere) placed.set(original, (anywhere = new Set()))
+      anywhere.add(twin)
+    }
   }
 }
+
+/** the fingerprints of every text paragraph of the document (tables included), per document state */
+const docFingerprints = new WeakMap<ProseMirrorNode, Set<string>>()
+
+function fingerprintsOfDoc(doc: ProseMirrorNode): Set<string> {
+  const cached = docFingerprints.get(doc)
+  if (cached) return cached
+  const set = new Set<string>()
+  let pos = 0
+  doc.forEach((top) => {
+    for (const block of textblocksOf(top, pos) ?? []) {
+      const groups = groupsOf(block.node, block.pos)
+      if (groups.length > 0) set.add(runFingerprint(groups.map((g) => g.text)))
+    }
+    pos += top.nodeSize
+  })
+  docFingerprints.set(doc, set)
+  return set
+}
+
+/** the role of a paragraph by explicit placement (its twin or original is anywhere in the document) */
+function placedRole(editor: Editor, fp: string): TwinRole | null {
+  const placed = placedPairs.get(editor)
+  if (!placed || placed.size === 0) return null
+  const present = fingerprintsOfDoc(editor.state.doc)
+  const mine = placed.get(fp)
+  if (mine && [...mine].some((t) => present.has(t))) return 'source'
+  for (const [original, twins] of placed) if (present.has(original) && twins.has(fp)) return 'twin'
+  return null
+}
+
+/** block indexes may have moved since the model last read them (blocks were inserted by add_bilingual) */
+const shiftedSinceRead = new WeakSet<object>()
+export const noteBlocksShifted = (editor: Editor): void => void shiftedSinceRead.add(editor)
+export const blocksShifted = (editor: Editor): boolean => shiftedSinceRead.has(editor)
 
 /** true once add_bilingual has added a twin in this editor */
 export function hasTwins(editor: Editor): boolean {
@@ -219,7 +277,7 @@ export function plainTwinRole(
   if (prev && pairs.get(prev)?.has(fp)) return 'twin'
   const next = blockFp(doc, index + 1)
   if (next && pairs.get(fp)?.has(next)) return 'source'
-  return null
+  return placedRole(editor, fp)
 }
 
 /** the twin roles of a table's paragraphs (null for text without a twin relation), by fingerprint inside the table */
@@ -235,13 +293,60 @@ export function tableTwinRoles(
     const mine = pairs.get(fp)
     if (mine && [...mine].some((t) => present.has(t))) return 'source'
     for (const [original, twins] of pairs) if (present.has(original) && twins.has(fp)) return 'twin'
-    return null
+    return placedRole(editor, fp)
   })
 }
 
 const TWIN_SKIP: Record<TwinRole, string> = {
   source: 'already has its bilingual translation (added by add_bilingual); leave it',
   twin: 'the bilingual translation added by add_bilingual; leave it',
+}
+
+interface CellInfo {
+  cell: string
+  span?: string
+  /** every paragraph of the cell is empty (no text, no inline object) */
+  empty: boolean
+  /** absolute position of the cell's first textblock */
+  firstPos: number
+}
+
+/** the grid cell of each directly nested textblock of a table, by absolute position (nested tables are left out) */
+function cellInfoOf(table: ProseMirrorNode, tablePos: number): Map<number, CellInfo> {
+  const out = new Map<number, CellInfo>()
+  let map: TableMap
+  try {
+    map = TableMap.get(table)
+  } catch {
+    return out
+  }
+  const seen = new Set<number>()
+  for (const rel of map.map) {
+    if (seen.has(rel)) continue
+    seen.add(rel)
+    const cell = table.nodeAt(rel)
+    if (!cell) continue
+    const rect = map.findCell(rel)
+    const cols = rect.right - rect.left
+    const rows = rect.bottom - rect.top
+    let empty = true
+    cell.forEach((child) => {
+      if (!child.isTextblock || child.childCount > 0) empty = false
+    })
+    let firstPos = -1
+    cell.forEach((child, offset) => {
+      if (!child.isTextblock) return
+      const abs = tablePos + 1 + rel + 1 + offset
+      if (firstPos < 0) firstPos = abs
+      out.set(abs, {
+        cell: `r${rect.top}c${rect.left}`,
+        ...(cols > 1 || rows > 1 ? { span: `${cols}x${rows}` } : {}),
+        empty,
+        firstPos,
+      })
+    })
+  }
+  return out
 }
 
 /** read_runs: the run groups of blocks start..end (inclusive), text only */
@@ -253,6 +358,7 @@ export function readRunGroups(
 ): RunParagraph[] {
   const doc = editor.state.doc
   const out: RunParagraph[] = []
+  shiftedSinceRead.delete(editor)
   for (let index = start; index <= end; index++) {
     const top = topLevel(doc, index)
     if (!top) break
@@ -270,18 +376,24 @@ export function readRunGroups(
     const listed = blocks.map((block) => groupsOf(block.node, block.pos).map((g) => g.text))
     const fps = listed.map((segments) => (segments.length > 0 ? runFingerprint(segments) : null))
     const roles = inTable ? tableTwinRoles(editor, fps) : []
-    blocks.forEach((_block, paragraph) => {
+    const cells = inTable ? cellInfoOf(node, pos) : null
+    blocks.forEach((block, paragraph) => {
       const segments = listed[paragraph]
-      // an empty cell paragraph is noise; an empty body paragraph is listed so it is seen and left alone
+      const ci = cells?.get(block.pos)
+      const cellFields = ci ? { cell: ci.cell, ...(ci.span ? { span: ci.span } : {}) } : {}
+      // an empty cell paragraph is noise, except a wholly empty cell (listed once: a free destination);
+      // an empty body paragraph is listed so it is seen and left alone
       if (segments.length === 0) {
         if (!inTable) out.push({ index, empty: true })
+        else if (ci?.empty && ci.firstPos === block.pos)
+          out.push({ index, ...cellFields, empty: true })
         return
       }
       const fp = fps[paragraph]!
       const role = inTable ? roles[paragraph] : plainTwinRole(editor, doc, index, fp)
       if (role && options.review) {
         // a review lists both sides: the twin is what gets revised, the original is read-only (no fp)
-        const where = inTable ? { index, paragraph } : { index }
+        const where = inTable ? { index, paragraph, ...cellFields } : { index }
         out.push(
           role === 'twin'
             ? { ...where, role: 'translation', fp, segments }
@@ -291,11 +403,15 @@ export function readRunGroups(
       }
       if (role) {
         out.push(
-          inTable ? { index, paragraph, skip: TWIN_SKIP[role] } : { index, skip: TWIN_SKIP[role] },
+          inTable
+            ? { index, paragraph, ...cellFields, skip: TWIN_SKIP[role] }
+            : { index, skip: TWIN_SKIP[role] },
         )
         return
       }
-      out.push(inTable ? { index, paragraph, fp, segments } : { index, fp, segments })
+      out.push(
+        inTable ? { index, paragraph, ...cellFields, fp, segments } : { index, fp, segments },
+      )
     })
   }
   return out

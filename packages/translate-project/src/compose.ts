@@ -167,7 +167,7 @@ export function translationChoicesRule(choices: TranslationChoices | undefined):
     )
   // tables are asked every time, never remembered: the person picks the direction per document
   ask.push(
-    '- Keeping the original (bilingual): in a Word document use add_bilingual, never translate_blocks or replace_blocks. For a table, ask with ask_choice EVERY time, without a remember key: right cell (left original, right translation) or below cell (top original, bottom translation); pass the answer as layout "right" or "below".',
+    '- Keeping the original (bilingual): in a Word document use add_bilingual, never translate_blocks or replace_blocks. For a table, ask with ask_choice EVERY time, without a remember key: right cell (left original, right translation) or below cell (top original, bottom translation), as a new column/row (layout "right"/"below") or an existing empty cell next to the original, or somewhere else the person types (target {kind:"cell",index,row,column} per entry; read_runs shows cells and the empty ones). When the person says where, follow it literally.',
   )
   const head =
     decided.length > 0
