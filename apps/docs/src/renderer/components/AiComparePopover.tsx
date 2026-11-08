@@ -1,13 +1,13 @@
 /**
- * The "AI compare" popup: asks Gemini, Claude and Copilot (their web pages, driven
- * through ego lite in the main process) to check and polish the selected English
- * text against its Korean original, lists every candidate as a card, and replaces
- * the selection with the one the person picks.
+ * The "AI compare" popup: asks the web AIs of the site table (Copilot, Grok; their web pages,
+ * driven through ego lite in the main process) about the selected text or about the whole
+ * document, one unit (paragraph) at a time and one AI at a time, and lists every answer as a card
+ * the person can apply to the document.
  *
- * It is an in-page floating panel, movable by its title bar and clamped to the
- * editor area. It never takes the document selection: the selected range and a
- * fingerprint of its text are stored when it opens, and "use this" replaces
- * exactly that range (refused when the text under it changed).
+ * It is an in-page floating panel, movable by its title bar and clamped to the editor area. It
+ * never takes the document selection. Every unit keeps the range and text fingerprint it was
+ * asked about (carried through edits), and applying a card replaces exactly that paragraph text,
+ * refused when the text under the range changed.
  */
 import React, {
   useCallback,
@@ -19,12 +19,18 @@ import React, {
   useSyncExternalStore,
 } from 'react'
 import type { Editor } from '@tiptap/core'
+import type { Node as PmNodeType } from '@tiptap/pm/model'
 import { aiSendGate } from '@genoffice/ui'
 import type { AiSettings } from '@genoffice/ai-provider/browser'
 import { useI18n, type StringKey } from '../i18n/locale'
 import { setInactiveSelectionShown } from '../editor/inactive-selection'
 import { COMPARE_SITES, EGO_INSTALL_URL } from '../../shared/compare-sites'
-import type { CompareAnswer, CompareDriverClient, EgoDetection } from '../../shared/compare'
+import type {
+  CompareAnswer,
+  CompareDriverClient,
+  ComparePrefs,
+  EgoDetection,
+} from '../../shared/compare'
 import { authorName } from '../author-name'
 import { useSubscriptionConnection } from '../ai/subscription-client'
 import {
@@ -35,25 +41,36 @@ import {
   languageName,
 } from '../compare/prompts'
 import { clampToBounds, dragPosition, type Box } from '../compare/drag-clamp'
-import { createCompareRun, type EngineStatus } from '../compare/run-state'
 import {
-  replaceSnapshot,
-  type ReplaceResult,
-  type SelectionSnapshot,
-} from '../compare/replace-selection'
-import { readKoreanSource } from '../compare/source-locate'
+  COMPARE_BATCH_SIZE,
+  createRunner,
+  type EngineStatus,
+  type RunnerUnit,
+  type UnitResult,
+} from '../compare/runner'
+import { replaceSnapshot, type SelectionSnapshot } from '../compare/replace-selection'
+import { loadSourceDoc, sourceTextFor } from '../compare/source-locate'
+import {
+  enumerateUnits,
+  mapRange,
+  selectionUnit,
+  type LiveRange,
+  type TextUnit,
+} from '../compare/units'
 
 interface Props {
   editor: Editor
-  /** the range and text fingerprint of the selection the popup was opened on */
-  snapshot: SelectionSnapshot
+  /** the selection the popup was opened on, or null (then the whole document is the scope) */
+  snapshot: SelectionSnapshot | null
   settings: AiSettings
   /** the tracked-changes toggle: a replacement is then recorded as a revision */
   trackChanges: boolean
   onClose: () => void
 }
 
-const WIDTH = 540
+type Scope = 'selection' | 'document'
+
+const WIDTH = 600
 const MARGIN = 8
 
 const siteNames = COMPARE_SITES.map((site) => site.name).join(', ')
@@ -64,8 +81,7 @@ const STATUS_KEYS: Record<EngineStatus, StringKey> = {
   done: 'cmpStDone',
   failed: 'cmpStFailed',
   stopped: 'cmpStStopped',
-  skipped: 'cmpStSkipped',
-  needsUser: 'cmpStNeedsUser',
+  blocked: 'cmpStBlocked',
 }
 
 /** the editor area, in viewport coordinates: the popup may not leave it */
@@ -98,6 +114,18 @@ function ipcDriver(): CompareDriverClient {
   }
 }
 
+/** what the popup remembers about one unit while a run goes on */
+interface UnitInfo extends LiveRange {
+  /** the text asked about, as the document held it (the stale-text fingerprint) */
+  fingerprint: string
+  /** the text as shown on the original card */
+  shown: string
+  hasObjects: boolean
+  /** the text sent was cut: using a result would drop the rest */
+  cut: boolean
+  korean: string
+}
+
 type MissingStep = 'ask' | 'steps' | 'later'
 
 export function AiComparePopover({
@@ -110,63 +138,69 @@ export function AiComparePopover({
   const { t, lang } = useI18n()
   const subscription = useSubscriptionConnection()
   const rootRef = useRef<HTMLDivElement>(null)
-  const english = useMemo(
-    () => editor.state.doc.textBetween(snapshot.from, snapshot.to, '\n', '\n').trim(),
-    [editor, snapshot],
-  )
   const [consent, setConsent] = useState<boolean | null>(null)
   const [detection, setDetection] = useState<EgoDetection | 'checking'>('checking')
   const [missing, setMissing] = useState<MissingStep>('ask')
-  // the Korean original is optional: found in a translation project, or added by the person
-  const [korean, setKorean] = useState('')
-  const [autoFilled, setAutoFilled] = useState(false)
+  const [scope, setScope] = useState<Scope>(snapshot ? 'selection' : 'document')
+  const [prefs, setPrefs] = useState<ComparePrefs>({})
+  const [typedOriginal, setTypedOriginal] = useState('')
   const [showOriginal, setShowOriginal] = useState(false)
-  // the language of the project's target (or the screen language outside a project); null until known
   const [targetCode, setTargetCode] = useState<string | null>(null)
-  const [lookupDone, setLookupDone] = useState(false)
-  const autoStarted = useRef(false)
-  const [auto, setAuto] = useState(true)
-  // the sites also translate the Korean themselves (remembered in the small settings file)
-  const [retranslate, setRetranslate] = useState(true)
+  const sourceDoc = useRef<PmNodeType | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
   const [notice, setNotice] = useState<StringKey | null>(null)
+  const [noticeCount, setNoticeCount] = useState<number | null>(null)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
 
-  // latest values for the long-lived run (its integration step reads them when it runs)
-  const englishSent = useMemo(() => capText(english), [english])
-  const koreanSent = useMemo(() => capText(korean), [korean])
-  const hasOriginal = koreanSent.text !== ''
+  const engineOn = (id: string): boolean => prefs.engines?.[id] !== false
+  const retranslate = prefs.retranslate !== false
+  const autoIntegrate = prefs.autoIntegrate !== false
+  const enabledEngines = COMPARE_SITES.filter((s) => engineOn(s.id)).map((s) => s.id)
+  const savePrefs = (patch: ComparePrefs): void => {
+    setPrefs((p) => ({ ...p, ...patch, engines: { ...p.engines, ...patch.engines } }))
+    void window.desktop?.compareSetPrefs?.(patch)
+  }
+
   const targetName = languageName(targetCode ?? lang)
+  // latest values for the long-lived runner (its prompt and integration steps read them when they run)
   const live = useRef({
     settings,
     statuses: subscription.statuses,
-    korean: koreanSent.text,
-    english: englishSent.text,
     target: targetName,
+    retranslate,
+    korean: new Map<string, string>(),
   })
   live.current = {
     settings,
     statuses: subscription.statuses,
-    korean: koreanSent.text,
-    english: englishSent.text,
     target: targetName,
+    retranslate,
+    korean: live.current.korean,
   }
+  /** the ranges and fingerprints of the units of the current run, carried through edits */
+  const infos = useRef(new Map<string, UnitInfo>())
 
   const driver = useMemo(ipcDriver, [])
-  const run = useMemo(
+  const runner = useMemo(
     () =>
-      createCompareRun({
+      createRunner({
         driver,
-        engineIds: COMPARE_SITES.map((s) => s.id),
-        integrate: async (answers): Promise<CompareAnswer> => {
-          const { settings: s, statuses, korean: ko, english: en, target } = live.current
+        promptFor: (unit) =>
+          buildComparePrompt(unit.korean, unit.text, {
+            retranslate: live.current.retranslate && unit.korean !== '',
+            targetLanguage: live.current.target,
+          }),
+        retranslateFor: (unit) => live.current.retranslate && unit.korean !== '',
+        integrate: async (unit, answers): Promise<CompareAnswer> => {
+          const { settings: s, statuses, target } = live.current
           // the app's own AI only, and only when its send gate lets a run through
           if (aiSendGate(s, statuses).kind !== 'run' || !window.desktop?.aiChat)
             return { ok: false, reason: t('cmpBlocked') }
           const request = buildIntegrationRequest({
-            korean: ko,
-            original: en,
-            ...(ko === '' ? { targetLanguage: target } : {}),
+            korean: unit.korean,
+            original: unit.text,
+            ...(unit.korean === '' ? { targetLanguage: target } : {}),
             answers: answers.map((a) => ({
               label: `${COMPARE_SITES.find((site) => site.id === a.id)?.name ?? a.id} (${a.kind === 'polished' ? 'polished' : 're-translated'})`,
               text: a.text,
@@ -178,13 +212,35 @@ export function AiComparePopover({
             : { ok: false, reason: reply.error ?? 'no answer' }
         },
       }),
-    // `t` is deliberately not a dependency: the run is created once per popup
+    // `t` is deliberately not a dependency: the runner is created once per popup
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [driver],
   )
-  const state = useSyncExternalStore(run.subscribe, run.getState)
-  useEffect(() => () => run.stop(), [run])
-  useEffect(() => run.setAutoIntegrate(auto), [run, auto])
+  const state = useSyncExternalStore(runner.subscribe, runner.getState)
+  useEffect(
+    () => () => {
+      runner.stop()
+    },
+    [runner],
+  )
+  useEffect(() => runner.setAutoIntegrate(autoIntegrate), [runner, autoIntegrate])
+
+  // every edit moves the ranges of the units
+  useEffect(() => {
+    const onTransaction = ({
+      transaction,
+    }: {
+      transaction: { docChanged: boolean; mapping: Parameters<typeof mapRange>[1] }
+    }): void => {
+      if (!transaction.docChanged) return
+      for (const [id, info] of infos.current)
+        infos.current.set(id, { ...info, ...mapRange(info, transaction.mapping) })
+    }
+    editor.on('transaction', onTransaction)
+    return () => {
+      editor.off('transaction', onTransaction)
+    }
+  }, [editor])
 
   const checkEgo = useCallback(() => {
     setDetection('checking')
@@ -196,32 +252,25 @@ export function AiComparePopover({
 
   useEffect(() => {
     let alive = true
-    void Promise.resolve(window.desktop?.compareGetRetranslate?.())
-      .then((v) => alive && typeof v === 'boolean' && setRetranslate(v))
+    void Promise.resolve(window.desktop?.compareGetPrefs?.())
+      .then((p) => alive && p && setPrefs(p))
       .catch(() => {})
     void Promise.resolve(window.desktop?.compareGetConsent?.())
       .then((v) => alive && setConsent(v === true))
       .catch(() => alive && setConsent(false))
     checkEgo()
-    // best effort and silent: the target language of the translation project and the Korean
-    // original of its document (found by block position) fill in by themselves
-    const languages = Promise.resolve(window.desktop?.getTranslationLanguages?.())
+    // best effort and silent: the target language of the translation project and its source copy
+    // (the Korean original of a paragraph is found by block position)
+    void Promise.resolve(window.desktop?.getTranslationLanguages?.())
       .then((pair) => alive && pair?.targetLang && setTargetCode(pair.targetLang))
       .catch(() => {})
-    const original = readKoreanSource(editor, snapshot, window.desktop?.compareReadSource).then(
-      (text) => {
-        if (!alive || !text) return
-        setKorean((current) => (current ? current : text))
-        setAutoFilled(true)
-        setShowOriginal(true)
-      },
-      () => {},
-    )
-    void Promise.all([languages, original]).then(() => alive && setLookupDone(true))
+    void loadSourceDoc(editor, window.desktop?.compareReadSource).then((doc) => {
+      if (alive) sourceDoc.current = doc
+    })
     return () => {
       alive = false
     }
-  }, [editor, snapshot, checkEgo])
+  }, [editor, checkEgo])
 
   // keep the selected range visible while the popup is open; it never takes the selection
   useEffect(() => {
@@ -259,7 +308,7 @@ export function AiComparePopover({
         inner,
       ),
     )
-  }, [state, detection, consent, missing])
+  }, [state, detection, consent, missing, expanded])
   useEffect(() => {
     const onResize = (): void => {
       const b = editorBounds()
@@ -292,25 +341,54 @@ export function AiComparePopover({
       e.currentTarget.releasePointerCapture(e.pointerId)
   }
 
-  // the re-translation only applies when there is an original to translate from
-  const asksRetranslation = retranslate && hasOriginal
-  const prompt = useMemo(
-    () =>
-      buildComparePrompt(koreanSent.text, englishSent.text, {
-        retranslate: asksRetranslation,
-        targetLanguage: targetName,
-      }),
-    [koreanSent.text, englishSent.text, asksRetranslation, targetName],
-  )
-  const canStart = consent === true && englishSent.text !== ''
   const installed = detection !== 'checking' && detection.installed
-  // no input is needed: once the person agreed, ego lite is there and the lookup finished, it starts
-  useEffect(() => {
-    if (autoStarted.current || !canStart || !installed || !lookupDone) return
-    autoStarted.current = true
-    run.start(prompt, auto, asksRetranslation)
-  }, [canStart, installed, lookupDone, run, prompt, auto, asksRetranslation])
-  const cut = englishSent.cut || koreanSent.cut
+  const running = state.phase === 'running'
+  const active = running || state.phase === 'paused'
+
+  /** the units of the chosen scope, with the Korean original of each when the project has one */
+  const buildUnits = (): { runner: RunnerUnit[]; infos: Map<string, UnitInfo> } => {
+    const raw: TextUnit[] =
+      scope === 'selection' && snapshot
+        ? [selectionUnit(editor, snapshot)]
+        : enumerateUnits(editor.state.doc)
+    const out: RunnerUnit[] = []
+    const map = new Map<string, UnitInfo>()
+    for (const unit of raw) {
+      const sent = capText(unit.text)
+      if (sent.text === '') continue
+      let korean = ''
+      if (scope === 'selection' && typedOriginal.trim() !== '') korean = typedOriginal
+      else if (sourceDoc.current)
+        korean =
+          sourceTextFor(editor.state.doc, sourceDoc.current, unit.from, unit.to) ?? ''
+      const koreanSent = capText(korean)
+      out.push({ id: unit.id, text: sent.text, korean: koreanSent.text })
+      map.set(unit.id, {
+        from: unit.from,
+        to: unit.to,
+        gone: false,
+        fingerprint: scope === 'selection' && snapshot ? snapshot.fingerprint : unit.text,
+        shown: unit.text,
+        hasObjects: unit.hasObjects,
+        cut: sent.cut || koreanSent.cut,
+        korean: koreanSent.text,
+      })
+    }
+    return { runner: out, infos: map }
+  }
+
+  const start = (): void => {
+    setNotice(null)
+    setNoticeCount(null)
+    const built = buildUnits()
+    if (built.runner.length === 0) {
+      setNotice('cmpNoUnits')
+      return
+    }
+    infos.current = built.infos
+    setExpanded(new Set(scope === 'selection' ? [built.runner[0]!.id] : []))
+    runner.start(built.runner, enabledEngines, autoIntegrate)
+  }
 
   const copy = (key: string, text: string): void => {
     void navigator.clipboard?.writeText(text).then(
@@ -321,68 +399,238 @@ export function AiComparePopover({
       () => {},
     )
   }
-  const manual = (siteUrl: string): void => {
-    copy('prompt', prompt)
+  const manual = (siteUrl: string, unitId?: string): void => {
+    const info = unitId ? infos.current.get(unitId) : undefined
+    const text = info ? capText(info.shown).text : ''
+    copy(
+      'prompt',
+      buildComparePrompt(info?.korean ?? '', text, {
+        retranslate: retranslate && !!info?.korean,
+        targetLanguage: targetName,
+      }),
+    )
     window.open(siteUrl)
   }
 
-  const use = (text: string): void => {
-    const result: ReplaceResult = replaceSnapshot(
+  /** replace one unit's text; false when it was refused (the notice says why) */
+  const applyUnit = (unitId: string, text: string): boolean => {
+    const info = infos.current.get(unitId)
+    if (!info || info.gone || info.hasObjects || info.cut) {
+      setNotice('cmpCannotReplace')
+      return false
+    }
+    const result = replaceSnapshot(
       editor,
-      snapshot,
+      { from: info.from, to: info.to, fingerprint: info.fingerprint },
       text,
       trackChanges ? { author: authorName() } : undefined,
     )
-    if (result.ok) {
-      onClose()
-      return
+    if (!result.ok) {
+      setNotice(result.reason === 'stale' ? 'cmpStale' : 'cmpCannotReplace')
+      return false
     }
-    setNotice(result.reason === 'stale' ? 'cmpStale' : 'cmpCannotReplace')
+    runner.markApplied(unitId)
+    return true
   }
+  const applyAll = (): void => {
+    let count = 0
+    for (const unit of state.units) {
+      if (unit.applied || unit.integrate.status !== 'done' || !unit.integrate.text) continue
+      if (applyUnit(unit.id, unit.integrate.text)) count++
+    }
+    setNotice(null)
+    setNoticeCount(count)
+  }
+  const appliable = state.units.filter(
+    (u) => !u.applied && u.integrate.status === 'done' && u.integrate.text,
+  ).length
+
+  const toggle = (id: string): void =>
+    setExpanded((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
 
   const card = (
+    unitId: string,
     key: string,
     title: string,
     body: React.ReactNode,
     text: string | null,
+    applied: boolean,
     extra?: React.ReactNode,
-  ): React.JSX.Element => (
-    <div className="cmp-card" key={key}>
-      <div className="cmp-card-head">
-        <span className="cmp-card-title">{title}</span>
-        {extra}
-      </div>
-      <div className="cmp-card-body">{body}</div>
-      {text && (
-        <div className="cmp-card-foot">
-          <button type="button" className="ai-ask-confirm" disabled={cut} onClick={() => use(text)}>
-            {t('cmpUse')}
-          </button>
-          <button type="button" className="ai-ask-cancel" onClick={() => copy(key, text)}>
-            {copied === key ? t('cmpCopied') : t('cmpCopy')}
-          </button>
+  ): React.JSX.Element => {
+    const info = infos.current.get(unitId)
+    return (
+      <div className="cmp-card" key={key}>
+        <div className="cmp-card-head">
+          <span className="cmp-card-title">{title}</span>
+          {extra}
         </div>
-      )}
-    </div>
+        <div className="cmp-card-body">{body}</div>
+        {text && (
+          <div className="cmp-card-foot">
+            <button
+              type="button"
+              className="ai-ask-confirm"
+              disabled={applied || !!info?.cut || !!info?.hasObjects}
+              onClick={() => applyUnit(unitId, text)}
+            >
+              {t('cmpUse')}
+            </button>
+            <button
+              type="button"
+              className="ai-ask-cancel"
+              onClick={() => copy(`${unitId}-${key}`, text)}
+            >
+              {copied === `${unitId}-${key}` ? t('cmpCopied') : t('cmpCopy')}
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const chip = (status: EngineStatus, label?: string): React.JSX.Element => (
+    <span className={`cmp-chip cmp-chip-${status}`}>
+      {label ? `${label}: ` : ''}
+      {t(STATUS_KEYS[status])}
+    </span>
   )
 
-  const statusChip = (status: EngineStatus): React.JSX.Element => (
-    <span className={`cmp-chip cmp-chip-${status}`}>{t(STATUS_KEYS[status])}</span>
-  )
-  const integrateStatus: EngineStatus =
-    state.integrate.status === 'running'
-      ? 'running'
-      : state.integrate.status === 'done'
-        ? 'done'
-        : state.integrate.status === 'failed'
-          ? 'failed'
-          : 'waiting'
-  const anyDone = state.engines.some((e) => e.status === 'done')
-  const noneAnswered =
-    state.started &&
-    state.engines.every((e) => e.status !== 'waiting' && e.status !== 'running') &&
-    !anyDone
-  const busy = state.engines.some((e) => e.status === 'running' || e.status === 'waiting')
+  const unitRow = (result: UnitResult, index: number): React.JSX.Element => {
+    const info = infos.current.get(result.id)
+    const open = expanded.has(result.id)
+    const idle = !active && state.phase !== 'running'
+    return (
+      <div className="cmp-unit" key={result.id}>
+        <div
+          className="cmp-unit-row"
+          role="button"
+          tabIndex={0}
+          aria-expanded={open}
+          onClick={() => toggle(result.id)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              toggle(result.id)
+            }
+          }}
+        >
+          <span className="cmp-unit-arrow">{open ? '▾' : '▸'}</span>
+          <span className="cmp-unit-n">{index + 1}</span>
+          <span className="cmp-unit-text">{(info?.shown ?? '').slice(0, 60)}</span>
+          <span className="cmp-unit-chips">
+            {state.engines.map((id) => {
+              const e = result.engines[id]
+              const name = COMPARE_SITES.find((s) => s.id === id)?.name ?? id
+              return e ? <React.Fragment key={id}>{chip(e.status, name)}</React.Fragment> : null
+            })}
+            {result.applied && <span className="cmp-chip cmp-chip-done">{t('cmpApplied')}</span>}
+          </span>
+        </div>
+        {open && (
+          <div className="cmp-cards">
+            {card(result.id, 'original', t('cmpCardOriginal'), info?.shown ?? '', info?.shown ?? null, true)}
+            {state.engines.map((id) => {
+              const site = COMPARE_SITES.find((s) => s.id === id)
+              const e = result.engines[id]
+              if (!site || !e) return null
+              const retry = idle && (e.status === 'failed' || e.status === 'stopped')
+              const head = (
+                <span className="cmp-head-actions">
+                  {chip(e.status)}
+                  {retry && (
+                    <button
+                      type="button"
+                      className="cmp-link"
+                      onClick={() => runner.retry(result.id, id)}
+                    >
+                      {t('cmpRetry')}
+                    </button>
+                  )}
+                  {/* always offered: copy the prompt and open the site to do it by hand */}
+                  <button
+                    type="button"
+                    className="cmp-link"
+                    onClick={() => manual(site.url, result.id)}
+                  >
+                    {t('cmpManual', { name: site.name })}
+                  </button>
+                </span>
+              )
+              const first = e.text ?? e.retranslation ?? null
+              const firstKind = e.text ? 'cmpKindPolished' : 'cmpKindRetranslated'
+              const both = e.text && e.retranslation
+              return (
+                <React.Fragment key={id}>
+                  {card(
+                    result.id,
+                    id,
+                    e.retranslation ? `${site.name} · ${t(firstKind)}` : site.name,
+                    e.status === 'done' ? (
+                      first
+                    ) : e.status === 'blocked' && e.reason === 'needs-user' ? (
+                      <span className="cmp-reason">{t('cmpNeedsUserHint')}</span>
+                    ) : e.reason ? (
+                      <span className="cmp-reason">{e.reason}</span>
+                    ) : null,
+                    e.status === 'done' ? first : null,
+                    result.applied,
+                    head,
+                  )}
+                  {both &&
+                    card(
+                      result.id,
+                      `${id}-re`,
+                      `${site.name} · ${t('cmpKindRetranslated')}`,
+                      e.retranslation,
+                      e.retranslation ?? null,
+                      result.applied,
+                    )}
+                </React.Fragment>
+              )
+            })}
+            {(result.integrate.status !== 'idle' || result.engines) &&
+              card(
+                result.id,
+                'integrated',
+                t('cmpCardIntegrated'),
+                result.integrate.status === 'done' ? (
+                  result.integrate.text
+                ) : result.integrate.reason ? (
+                  <span className="cmp-reason">{result.integrate.reason}</span>
+                ) : null,
+                result.integrate.status === 'done' ? (result.integrate.text ?? null) : null,
+                result.applied,
+                <span className="cmp-head-actions">
+                  {result.integrate.status === 'running'
+                    ? chip('running')
+                    : result.integrate.status === 'done'
+                      ? chip('done')
+                      : result.integrate.status === 'failed'
+                        ? chip('failed')
+                        : null}
+                  {idle &&
+                    result.integrate.status !== 'running' &&
+                    Object.values(result.engines).some((e) => e.status === 'done') && (
+                      <button
+                        type="button"
+                        className="cmp-link"
+                        onClick={() => runner.integrateNow(result.id)}
+                      >
+                        {t('cmpIntegrateNow')}
+                      </button>
+                    )}
+                </span>,
+              )}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   const manualButtons = (
     <div className="cmp-manual">
@@ -391,13 +639,19 @@ export function AiComparePopover({
           key={site.id}
           type="button"
           className="ai-ask-cancel"
-          onClick={() => manual(site.url)}
+          onClick={() => manual(site.url, state.units[0]?.id)}
         >
           {t('cmpManual', { name: site.name })}
         </button>
       ))}
     </div>
   )
+
+  const done = Math.max(0, Math.min(state.next, state.batchEnd) - state.batchStart)
+  const batchTotal = state.batchEnd - state.batchStart
+  const blockedList = Object.entries(state.blocked)
+  const started = state.phase !== 'idle'
+  const canStart = consent === true && installed && enabledEngines.length > 0 && !active
 
   return (
     <div
@@ -412,8 +666,8 @@ export function AiComparePopover({
         maxHeight: editorBounds().height - 2 * MARGIN,
       }}
       // clicking the popup must not move the document selection; text fields and the result texts
-      // are excepted so their text can be selected and copied (the range to replace was stored
-      // when the popup opened, so a moved selection does not matter)
+      // are excepted so their text can be selected and copied (the ranges to replace were stored
+      // when the run started, so a moved selection does not matter)
       onMouseDown={(e) => {
         if (!(e.target as HTMLElement).closest('textarea, input, .cmp-card-body, .cmp-text'))
           e.preventDefault()
@@ -462,29 +716,6 @@ export function AiComparePopover({
         )}
         {consent && (
           <>
-            {!showOriginal ? (
-              <div>
-                <button type="button" className="cmp-link" onClick={() => setShowOriginal(true)}>
-                  {t('cmpAddOriginal')}
-                </button>
-              </div>
-            ) : (
-              <>
-                <label className="cmp-label" htmlFor="cmp-korean">
-                  {t('cmpSourceLabel')}
-                </label>
-                {autoFilled && <div className="cmp-hint">{t('cmpSourceAuto')}</div>}
-                <textarea
-                  id="cmp-korean"
-                  className="ai-ask-pop-input cmp-text"
-                  value={korean}
-                  rows={3}
-                  placeholder={t('cmpSourcePlaceholder')}
-                  onChange={(e) => setKorean(e.target.value)}
-                />
-              </>
-            )}
-            {cut && <div className="cmp-warn">{t('cmpCut', { max: COMPARE_TEXT_MAX_CHARS })}</div>}
             {detection === 'checking' && <div className="cmp-hint">{t('cmpChecking')}</div>}
             {detection !== 'checking' && !detection.installed && (
               <div className="cmp-missing">
@@ -525,135 +756,158 @@ export function AiComparePopover({
                 {manualButtons}
               </div>
             )}
-            {installed && (
+            <div className="cmp-controls">
+              <div className="cmp-switches" role="group">
+                {COMPARE_SITES.map((site) => (
+                  <label key={site.id} className="cmp-auto">
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      checked={engineOn(site.id)}
+                      disabled={active}
+                      onChange={(e) => savePrefs({ engines: { [site.id]: e.target.checked } })}
+                    />
+                    {site.name}
+                  </label>
+                ))}
+              </div>
+              <div className="cmp-scope" role="radiogroup">
+                <label className="cmp-auto">
+                  <input
+                    type="radio"
+                    name="cmp-scope"
+                    checked={scope === 'selection'}
+                    disabled={!snapshot || active}
+                    onChange={() => setScope('selection')}
+                  />
+                  {t('cmpScopeSelection')}
+                </label>
+                <label className="cmp-auto">
+                  <input
+                    type="radio"
+                    name="cmp-scope"
+                    checked={scope === 'document'}
+                    disabled={active}
+                    onChange={() => setScope('document')}
+                  />
+                  {t('cmpScopeDocument')}
+                </label>
+              </div>
               <div className="cmp-actions">
                 <label className="cmp-auto">
                   <input
                     type="checkbox"
-                    checked={auto}
-                    onChange={(e) => setAuto(e.target.checked)}
+                    checked={autoIntegrate}
+                    onChange={(e) => savePrefs({ autoIntegrate: e.target.checked })}
                   />
                   {t('cmpAutoIntegrate')}
                 </label>
-                {hasOriginal && (
-                  <label className="cmp-auto cmp-retranslate">
-                    <input
-                      type="checkbox"
-                      checked={retranslate}
-                      onChange={(e) => {
-                        setRetranslate(e.target.checked)
-                        void window.desktop?.compareSetRetranslate?.(e.target.checked)
-                      }}
-                    />
-                    {t('cmpRetranslate')}
-                  </label>
-                )}
-                {busy && state.started ? (
-                  <button type="button" className="ai-ask-cancel" onClick={() => run.stop()}>
-                    {t('cmpStop')}
-                  </button>
-                ) : (
-                  anyDone && (
+                <label className="cmp-auto cmp-retranslate">
+                  <input
+                    type="checkbox"
+                    checked={retranslate}
+                    onChange={(e) => savePrefs({ retranslate: e.target.checked })}
+                  />
+                  {t('cmpRetranslate')}
+                </label>
+                {active ? (
+                  <>
                     <button
                       type="button"
                       className="ai-ask-cancel"
-                      onClick={() => run.integrateNow()}
+                      onClick={() => (running ? runner.pause() : runner.resume())}
                     >
-                      {t('cmpIntegrateNow')}
+                      {t(running ? 'cmpPause' : 'cmpResume')}
                     </button>
-                  )
+                    <button type="button" className="ai-ask-cancel" onClick={() => runner.stop()}>
+                      {t('cmpStop')}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="ai-ask-confirm"
+                    disabled={!canStart}
+                    onClick={start}
+                  >
+                    {t('cmpStart')}
+                  </button>
                 )}
-                <button
-                  type="button"
-                  className="ai-ask-confirm"
-                  disabled={!canStart || (busy && state.started)}
-                  onClick={() => {
-                    setNotice(null)
-                    run.start(prompt, auto, asksRetranslation)
-                  }}
-                >
-                  {t('cmpStart')}
-                </button>
+              </div>
+              {enabledEngines.length === 0 && <div className="cmp-hint">{t('cmpNoEngine')}</div>}
+              {scope === 'selection' && snapshot && (
+                <div>
+                  {!showOriginal ? (
+                    <button
+                      type="button"
+                      className="cmp-link"
+                      onClick={() => setShowOriginal(true)}
+                    >
+                      {t('cmpAddOriginal')}
+                    </button>
+                  ) : (
+                    <>
+                      <label className="cmp-label" htmlFor="cmp-korean">
+                        {t('cmpSourceLabel')}
+                      </label>
+                      <textarea
+                        id="cmp-korean"
+                        className="ai-ask-pop-input cmp-text"
+                        value={typedOriginal}
+                        rows={3}
+                        disabled={active}
+                        placeholder={t('cmpSourcePlaceholder')}
+                        onChange={(e) => setTypedOriginal(e.target.value)}
+                      />
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+            {started && (
+              <div className="cmp-progress" role="status">
+                <span>{t('cmpProgress', { done, total: batchTotal })}</span>
+                {state.total > state.batchEnd && (
+                  <span className="cmp-hint">
+                    {t('cmpRemaining', { n: state.total - state.batchEnd })}
+                  </span>
+                )}
+                {state.phase === 'batchDone' && (
+                  <button type="button" className="ai-ask-confirm" onClick={() => runner.continueNext()}>
+                    {t('cmpContinue', {
+                      n: Math.min(COMPARE_BATCH_SIZE, state.total - state.batchEnd),
+                    })}
+                  </button>
+                )}
               </div>
             )}
-            {notice && <div className="cmp-warn">{t(notice)}</div>}
-            {noneAnswered && (
+            {blockedList.map(([id, reason]) => (
+              <div className="cmp-warn" key={id}>
+                {t('cmpBlockedLine', {
+                  name: COMPARE_SITES.find((s) => s.id === id)?.name ?? id,
+                  reason: reason === 'needs-user' ? t('cmpNeedsUserHint') : reason,
+                })}
+              </div>
+            ))}
+            {state.phase === 'allBlocked' && (
               <div className="cmp-missing">
-                <div>{t('cmpNoAnswer')}</div>
+                <div>{t('cmpAllBlocked')}</div>
                 {manualButtons}
               </div>
             )}
-            <div className="cmp-cards">
-              {card('original', t('cmpCardOriginal'), english, english)}
-              {installed &&
-                state.started &&
-                state.engines.map((engine) => {
-                  const site = COMPARE_SITES.find((s) => s.id === engine.id)
-                  if (!site) return null
-                  const retryable = ['failed', 'stopped', 'skipped', 'needsUser'].includes(
-                    engine.status,
-                  )
-                  const both = engine.text && engine.retranslation
-                  const head = (
-                    <span className="cmp-head-actions">
-                      {statusChip(engine.status)}
-                      {retryable && (
-                        <button
-                          type="button"
-                          className="cmp-link"
-                          onClick={() => run.retry(engine.id)}
-                        >
-                          {t('cmpRetry')}
-                        </button>
-                      )}
-                      {/* always offered: copy the prompt and open the site to do it by hand */}
-                      <button type="button" className="cmp-link" onClick={() => manual(site.url)}>
-                        {t('cmpManual', { name: site.name })}
-                      </button>
-                    </span>
-                  )
-                  // the first card carries the status; a second one holds the re-translation
-                  const first = engine.text ?? engine.retranslation ?? null
-                  const firstKind = engine.text ? 'cmpKindPolished' : 'cmpKindRetranslated'
-                  return (
-                    <React.Fragment key={engine.id}>
-                      {card(
-                        engine.id,
-                        engine.retranslation ? `${site.name} · ${t(firstKind)}` : site.name,
-                        engine.status === 'done' ? (
-                          first
-                        ) : engine.status === 'needsUser' ? (
-                          <span className="cmp-reason">{t('cmpNeedsUserHint')}</span>
-                        ) : engine.reason ? (
-                          <span className="cmp-reason">{engine.reason}</span>
-                        ) : null,
-                        engine.status === 'done' ? first : null,
-                        head,
-                      )}
-                      {both &&
-                        card(
-                          `${engine.id}-re`,
-                          `${site.name} · ${t('cmpKindRetranslated')}`,
-                          engine.retranslation,
-                          engine.retranslation ?? null,
-                        )}
-                    </React.Fragment>
-                  )
-                })}
-              {installed &&
-                state.started &&
-                card(
-                  'integrated',
-                  t('cmpCardIntegrated'),
-                  state.integrate.status === 'done' ? (
-                    state.integrate.text
-                  ) : state.integrate.reason ? (
-                    <span className="cmp-reason">{state.integrate.reason}</span>
-                  ) : null,
-                  state.integrate.status === 'done' ? (state.integrate.text ?? null) : null,
-                  statusChip(integrateStatus),
-                )}
-            </div>
+            {started && <div className="cmp-hint">{t('cmpFlatNote')}</div>}
+            {notice && <div className="cmp-warn">{t(notice)}</div>}
+            {noticeCount !== null && (
+              <div className="cmp-warn">{t('cmpApplyAllDone', { n: noticeCount })}</div>
+            )}
+            {appliable > 0 && (
+              <div className="ai-ask-pop-foot">
+                <button type="button" className="ai-ask-confirm" onClick={applyAll}>
+                  {t('cmpApplyAll')}
+                </button>
+              </div>
+            )}
+            <div className="cmp-units">{state.units.map((u, i) => unitRow(u, i))}</div>
           </>
         )}
       </div>
