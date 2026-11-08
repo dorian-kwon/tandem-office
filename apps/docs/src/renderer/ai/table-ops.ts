@@ -289,7 +289,7 @@ export function insertColumnAt(tr: Transaction, tablePos: number, col: number): 
   }
 }
 
-const COPIED_CELL_ATTRS = [
+export const COPIED_CELL_ATTRS = [
   'fill',
   'borders',
   'vAlign',

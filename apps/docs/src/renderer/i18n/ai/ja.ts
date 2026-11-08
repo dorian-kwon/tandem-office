@@ -154,6 +154,8 @@ export const ja = {
   aiSumReadRuns: 'ブロック {start}-{end} のテキスト区間を読む',
   aiSumTranslateBlocks: 'ブロックを翻訳',
   aiSumTranslatedBlocks: '{count} 段落を翻訳',
+  aiSumAddBilingual: '原文と訳文を併記',
+  aiSumAddedBilingual: '訳文の段落を {count} 件追加',
   aiSumInsertChart: 'グラフを挿入',
   aiSumDefineStyle: 'スタイルを定義',
   aiSumSetWatermark: '透かしを設定',

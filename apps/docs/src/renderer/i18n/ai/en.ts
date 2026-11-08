@@ -153,6 +153,8 @@ export const en = {
   aiSumReadRuns: 'Read text runs {start}-{end}',
   aiSumTranslateBlocks: 'Translate blocks',
   aiSumTranslatedBlocks: 'Translated {count} paragraph(s)',
+  aiSumAddBilingual: 'Add bilingual translation',
+  aiSumAddedBilingual: 'Added {count} bilingual paragraph(s)',
   aiSumInsertChart: 'Insert chart',
   aiSumDefineStyle: 'Define style',
   aiSumSetWatermark: 'Set watermark',

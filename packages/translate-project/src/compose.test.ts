@@ -300,7 +300,20 @@ describe('composeContext reference chunks', () => {
       expect(text).toContain('- Output mode: Overwrite')
       expect(text).toContain('- Bilingual layout: Two columns')
       expect(text).toContain('- OCR placement: Column B')
-      expect(text).not.toContain('ask with ask_choice')
+      // nothing is remembered any more; only the per-document table direction is still asked
+      expect(text).not.toContain('remember key "')
+      expect(text).toContain('ask with ask_choice EVERY time, without a remember key')
+    })
+
+    it('tells the bilingual tool and asks the table direction every time, never remembered', () => {
+      for (const choices of [{}, { outputMode: 'Keep', bilingual: 'After the paragraph' }]) {
+        const { text } = composeContext({ ...base, project: withChoices(choices) })
+        expect(text).toContain('use add_bilingual, never translate_blocks or replace_blocks')
+        expect(text).toContain('right cell (left original, right translation)')
+        expect(text).toContain('below cell (top original, bottom translation)')
+        const line = text.split('\n').find((l) => l.includes('EVERY time')) ?? ''
+        expect(line).not.toContain('remember key "')
+      }
     })
 
     it('keeps each answer on one line', () => {

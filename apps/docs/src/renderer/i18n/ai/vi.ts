@@ -154,6 +154,8 @@ export const vi = {
   aiSumReadRuns: 'Đọc các đoạn văn bản của khối {start}-{end}',
   aiSumTranslateBlocks: 'Dịch các khối',
   aiSumTranslatedBlocks: 'Đã dịch {count} đoạn',
+  aiSumAddBilingual: 'Thêm bản dịch song ngữ',
+  aiSumAddedBilingual: 'Đã thêm {count} đoạn song ngữ',
   aiSumInsertChart: 'Chèn biểu đồ',
   aiSumDefineStyle: 'Xác định kiểu',
   aiSumSetWatermark: 'Đặt hình mờ',

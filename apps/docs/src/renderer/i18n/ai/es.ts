@@ -157,6 +157,8 @@ export const es = {
   aiSumReadRuns: 'Leer fragmentos de los bloques {start}-{end}',
   aiSumTranslateBlocks: 'Traducir bloques',
   aiSumTranslatedBlocks: '{count} párrafo(s) traducido(s)',
+  aiSumAddBilingual: 'Añadir traducción bilingüe',
+  aiSumAddedBilingual: '{count} párrafo(s) bilingüe(s) añadido(s)',
   aiSumInsertChart: 'Insertar gráfico',
   aiSumDefineStyle: 'Definir estilo',
   aiSumSetWatermark: 'Establecer marca de agua',

@@ -146,6 +146,8 @@ export const zhTW = {
   aiSumReadRuns: '讀取區塊 {start}-{end} 的文字段',
   aiSumTranslateBlocks: '翻譯區塊',
   aiSumTranslatedBlocks: '已翻譯 {count} 個段落',
+  aiSumAddBilingual: '新增雙語對照譯文',
+  aiSumAddedBilingual: '已新增 {count} 個雙語段落',
   aiSumInsertChart: '插入圖表',
   aiSumDefineStyle: '定義樣式',
   aiSumSetWatermark: '設定水印',

@@ -31,7 +31,7 @@ import type { AiNotesAccess, NoteKind } from './note-ops'
  */
 
 /** top-level text blocks the tools translate directly */
-const TEXT_BLOCK_TYPES = new Set(['docParagraph', 'docHeading', 'docListItem'])
+export const TEXT_BLOCK_TYPES = new Set(['docParagraph', 'docHeading', 'docListItem'])
 
 /** marks whose text is not prose to translate (field results, glyphs, withheld or deleted text) */
 const FIXED_MARK_TYPES = new Set([
@@ -58,7 +58,7 @@ export interface RunParagraph {
   skip?: string
 }
 
-interface Group {
+export interface Group {
   /** absolute document positions of the group's text */
   from: number
   to: number
@@ -73,11 +73,11 @@ interface Group {
 }
 
 /** the gap flags settleTexts takes, one per group */
-const gapsOf = (groups: readonly { gapAfter?: boolean }[]): boolean[] =>
+export const gapsOf = (groups: readonly { gapAfter?: boolean }[]): boolean[] =>
   groups.map((g) => g.gapAfter === true)
 
 /** the edge flags settleTexts takes: a blank run already separates the group from an inline object */
-const edgesOf = (groups: readonly Group[]): SettleEdges => ({
+export const edgesOf = (groups: readonly Group[]): SettleEdges => ({
   before: groups.map((g) => g.blankBefore === true),
   after: groups.map((g) => g.blankAfter === true),
 })
@@ -86,7 +86,7 @@ const isFixed = (node: ProseMirrorNode): boolean =>
   node.marks.some((m) => FIXED_MARK_TYPES.has(m.type.name))
 
 /** the translatable groups of the textblock starting at `pos` */
-function groupsOf(block: ProseMirrorNode, pos: number): Group[] {
+export function groupsOf(block: ProseMirrorNode, pos: number): Group[] {
   const groups: Group[] = []
   block.forEach((child, offset) => {
     if (!child.isText || isFixed(child)) return
@@ -139,7 +139,7 @@ export function runFingerprint(segments: readonly string[]): string {
 }
 
 /** the textblocks of a top-level block with their positions (a table: every cell paragraph) */
-function textblocksOf(
+export function textblocksOf(
   node: ProseMirrorNode,
   pos: number,
 ): Array<{ node: ProseMirrorNode; pos: number }> | null {
@@ -156,7 +156,7 @@ function textblocksOf(
   return out
 }
 
-function topLevel(
+export function topLevel(
   doc: ProseMirrorNode,
   index: number,
 ): { node: ProseMirrorNode; pos: number } | null {
@@ -164,6 +164,82 @@ function topLevel(
   let pos = 0
   for (let i = 0; i < index; i++) pos += doc.child(i).nodeSize
   return { node: doc.child(index), pos }
+}
+
+// ---------------------------------------------------------------------------
+// Bilingual twins (add_bilingual)
+//
+// add_bilingual keeps the original paragraph and adds its translation next to
+// it. The twin is ordinary document content, so the tools remember the pairs
+// by fingerprint (original fp -> twin fps, per editor) and recognise them by
+// position: a plain paragraph's twin is the next block; a table's twins sit in
+// the same table. read_runs lists both sides as skipped, so the model never
+// translates a twin again and the completion check never flags either side.
+// ---------------------------------------------------------------------------
+
+const twinPairs = new WeakMap<object, Map<string, Set<string>>>()
+
+/** remember that the paragraph with fingerprint `original` now has a twin with fingerprint `twin` */
+export function recordTwins(editor: Editor, pairs: ReadonlyArray<readonly [string, string]>): void {
+  let map = twinPairs.get(editor)
+  if (!map) twinPairs.set(editor, (map = new Map()))
+  for (const [original, twin] of pairs) {
+    let set = map.get(original)
+    if (!set) map.set(original, (set = new Set()))
+    set.add(twin)
+  }
+}
+
+/** true once add_bilingual has added a twin in this editor */
+export function hasTwins(editor: Editor): boolean {
+  return (twinPairs.get(editor)?.size ?? 0) > 0
+}
+
+export type TwinRole = 'source' | 'twin'
+
+const blockFp = (doc: ProseMirrorNode, index: number): string | null => {
+  const top = topLevel(doc, index)
+  if (!top || !TEXT_BLOCK_TYPES.has(top.node.type.name)) return null
+  const groups = groupsOf(top.node, top.pos)
+  return groups.length > 0 ? runFingerprint(groups.map((g) => g.text)) : null
+}
+
+/** the twin role of the plain paragraph at `index` (its neighbours decide), or null */
+export function plainTwinRole(
+  editor: Editor,
+  doc: ProseMirrorNode,
+  index: number,
+  fp: string,
+): TwinRole | null {
+  const pairs = twinPairs.get(editor)
+  if (!pairs || pairs.size === 0) return null
+  const prev = blockFp(doc, index - 1)
+  if (prev && pairs.get(prev)?.has(fp)) return 'twin'
+  const next = blockFp(doc, index + 1)
+  if (next && pairs.get(fp)?.has(next)) return 'source'
+  return null
+}
+
+/** the twin roles of a table's paragraphs (null for text without a twin relation), by fingerprint inside the table */
+export function tableTwinRoles(
+  editor: Editor,
+  fps: ReadonlyArray<string | null>,
+): Array<TwinRole | null> {
+  const pairs = twinPairs.get(editor)
+  if (!pairs || pairs.size === 0) return fps.map(() => null)
+  const present = new Set(fps.filter((f): f is string => f !== null))
+  return fps.map((fp) => {
+    if (fp === null) return null
+    const mine = pairs.get(fp)
+    if (mine && [...mine].some((t) => present.has(t))) return 'source'
+    for (const [original, twins] of pairs) if (present.has(original) && twins.has(fp)) return 'twin'
+    return null
+  })
+}
+
+const TWIN_SKIP: Record<TwinRole, string> = {
+  source: 'already has its bilingual translation (added by add_bilingual); leave it',
+  twin: 'the bilingual translation added by add_bilingual; leave it',
 }
 
 /** read_runs: the run groups of blocks start..end (inclusive), text only */
@@ -184,14 +260,24 @@ export function readRunGroups(editor: Editor, start: number, end: number): RunPa
       continue
     }
     const inTable = node.type.name === 'docTable'
-    blocks.forEach((block, paragraph) => {
-      const segments = groupsOf(block.node, block.pos).map((g) => g.text)
+    const listed = blocks.map((block) => groupsOf(block.node, block.pos).map((g) => g.text))
+    const fps = listed.map((segments) => (segments.length > 0 ? runFingerprint(segments) : null))
+    const roles = inTable ? tableTwinRoles(editor, fps) : []
+    blocks.forEach((_block, paragraph) => {
+      const segments = listed[paragraph]
       // an empty cell paragraph is noise; an empty body paragraph is listed so it is seen and left alone
       if (segments.length === 0) {
         if (!inTable) out.push({ index, empty: true })
         return
       }
-      const fp = runFingerprint(segments)
+      const fp = fps[paragraph]!
+      const role = inTable ? roles[paragraph] : plainTwinRole(editor, doc, index, fp)
+      if (role) {
+        out.push(
+          inTable ? { index, paragraph, skip: TWIN_SKIP[role] } : { index, skip: TWIN_SKIP[role] },
+        )
+        return
+      }
       out.push(inTable ? { index, paragraph, fp, segments } : { index, fp, segments })
     })
   }
@@ -253,7 +339,7 @@ const LEAD = /^\s*/
 const TRAIL = /\s*$/
 
 /** text that closes a phrase: a space in front of it is never wanted */
-const STARTS_WITH_CLOSING =
+export const STARTS_WITH_CLOSING =
   /^[,.;:!?)\]}%\u00BB\u201D\u2019\u3001\u3002\uFF0C\uFF0E\uFF1B\uFF1A\uFF01\uFF1F\uFF09\u3011\u300D\u300F]/
 
 /** per group: a blank run already separates it from an inline object before / after it */
@@ -469,7 +555,7 @@ function joinExtra(parts: string[]): string {
 }
 
 /** why a segments array cannot be applied (null: fine) */
-function segmentsError(where: string, segments: unknown): string | null {
+export function segmentsError(where: string, segments: unknown): string | null {
   if (!Array.isArray(segments) || segments.some((s) => typeof s !== 'string'))
     return `${where}: segments must be an array of strings`
   if (segments.some((s: string) => /[\r\n]/.test(s)))
@@ -480,7 +566,7 @@ function segmentsError(where: string, segments: unknown): string | null {
 }
 
 /** the segments fitted to the group count: extras appended to the last group, a shortfall reported */
-function fitSegments(
+export function fitSegments(
   groups: number,
   given: string[],
   report: { extra?: number; incomplete?: { groups: number; given: number } },
@@ -572,7 +658,7 @@ function planParagraph(doc: ProseMirrorNode, item: RunTranslationItem): PlanResu
   return { ok: true, edits, report }
 }
 
-function revisionDate(): string {
+export function revisionDate(): string {
   return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')
 }
 

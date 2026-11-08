@@ -158,6 +158,8 @@ export const de = {
   aiSumReadRuns: 'Textabschnitte der Blöcke {start}-{end} lesen',
   aiSumTranslateBlocks: 'Blöcke übersetzen',
   aiSumTranslatedBlocks: '{count} Absatz/Absätze übersetzt',
+  aiSumAddBilingual: 'Zweisprachige Übersetzung ergänzen',
+  aiSumAddedBilingual: '{count} zweisprachige(r) Absatz/Absätze ergänzt',
   aiSumInsertChart: 'Diagramm einfügen',
   aiSumDefineStyle: 'Formatvorlage definieren',
   aiSumSetWatermark: 'Wasserzeichen setzen',

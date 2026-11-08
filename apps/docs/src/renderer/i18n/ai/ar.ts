@@ -151,6 +151,8 @@ export const ar = {
   aiSumReadRuns: 'قراءة نصوص الكتل {start}-{end}',
   aiSumTranslateBlocks: 'ترجمة الكتل',
   aiSumTranslatedBlocks: 'تمت ترجمة {count} فقرة',
+  aiSumAddBilingual: 'إضافة ترجمة ثنائية اللغة',
+  aiSumAddedBilingual: 'تمت إضافة {count} فقرة ثنائية اللغة',
   aiSumInsertChart: 'إدراج مخطط',
   aiSumDefineStyle: 'تعريف نمط',
   aiSumSetWatermark: 'تعيين علامة مائية',

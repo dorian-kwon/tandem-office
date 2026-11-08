@@ -158,6 +158,8 @@ export const it = {
   aiSumReadRuns: 'Leggi i segmenti dei blocchi {start}-{end}',
   aiSumTranslateBlocks: 'Traduci blocchi',
   aiSumTranslatedBlocks: '{count} paragrafo/i tradotto/i',
+  aiSumAddBilingual: 'Aggiungi traduzione bilingue',
+  aiSumAddedBilingual: '{count} paragrafo/i bilingue/i aggiunto/i',
   aiSumInsertChart: 'Inserisci grafico',
   aiSumDefineStyle: 'Definisci stile',
   aiSumSetWatermark: 'Imposta filigrana',

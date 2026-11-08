@@ -155,6 +155,8 @@ export const pl = {
   aiSumReadRuns: 'Odczyt fragmentów tekstu bloków {start}-{end}',
   aiSumTranslateBlocks: 'Przetłumacz bloki',
   aiSumTranslatedBlocks: 'Przetłumaczono akapity: {count}',
+  aiSumAddBilingual: 'Dodaj tłumaczenie dwujęzyczne',
+  aiSumAddedBilingual: 'Dodano akapity dwujęzyczne: {count}',
   aiSumInsertChart: 'Wstaw wykres',
   aiSumDefineStyle: 'Zdefiniuj styl',
   aiSumSetWatermark: 'Ustaw znak wodny',

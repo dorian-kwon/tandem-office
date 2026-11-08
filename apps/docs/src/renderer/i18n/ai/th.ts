@@ -151,6 +151,8 @@ export const th = {
   aiSumReadRuns: 'อ่านส่วนข้อความของบล็อก {start}-{end}',
   aiSumTranslateBlocks: 'แปลบล็อก',
   aiSumTranslatedBlocks: 'แปลแล้ว {count} ย่อหน้า',
+  aiSumAddBilingual: 'เพิ่มคำแปลสองภาษา',
+  aiSumAddedBilingual: 'เพิ่มย่อหน้าสองภาษาแล้ว {count} ย่อหน้า',
   aiSumInsertChart: 'แทรกแผนภูมิ',
   aiSumDefineStyle: 'กำหนดสไตล์',
   aiSumSetWatermark: 'ตั้งค่าลายน้ำ',

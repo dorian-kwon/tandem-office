@@ -326,3 +326,15 @@ Needs a rebuild of the shell and sheets apps. Uses ONE real AI picture-read at a
 3. Choose picture 1 (speech bubbles), Next, Start. The bubble text ("리루, 네 침대 밑에 이런 게 있던데....") should come back in the chat message. Before this change a picture of art came back with 0 characters and no error.
 4. Choose a blank picture (for example picture 29): the popup must say "Picture 29 (...): no text found in this picture." with "Retry these pictures" and "Continue with what was read"; no silent success.
 5. Disconnect or sign out of the AI program and start again: the failure shows per picture with its reason, and "Retry these pictures" runs only those after the usual confirmation.
+
+
+## Translation project: bilingual output (add_bilingual)
+
+Needs a rebuild of the shell app (`npm run build -w @genoffice/shell`). Uses real AI turns (your subscription limit). Use a copy of a Word document that has body paragraphs, a heading, a list, a footnote, a plain table, and a second copy with a merged-cell table.
+
+1. New translation project, pick "keep the original and add the translation beside it". In a paragraph-only part: the translation should appear as a new paragraph right after each original with the same style and run formatting; the original paragraphs, empty paragraphs and footnote marks are unchanged, and no footnote mark is duplicated in the new paragraphs. The tool card reads "Added N bilingual paragraph(s)".
+2. Ask for the same range again: nothing is added twice (the result says the paragraphs already have their translation). Ask "is anything left untranslated": the AI should not list the originals or the added paragraphs. Footnotes are left in the original language and the AI says so.
+3. Plain table: the AI must ask the direction EVERY time (right cell: left original, right translation; below cell: top original, bottom translation), with no "use this for the rest of the project" box. Choose right: a new column appears right of each text column, with the same fill and borders, the table keeps its total width, originals untouched. Ask again for another document with a table: it asks again. Choose below: a new row under each text row, same fill and borders.
+4. Table with merged cells: choose right. The AI tells you it fell back to rows below because of the merged cells; each row group tied by merges is repeated as one block right after the group with the same merges, and the grid is not broken (open the saved file in Word to check).
+5. Track changes on: the added paragraphs, rows and cells show as insertions by the AI author; reject all returns the original document.
+6. Undo once after one add_bilingual call restores the document before it. A numbered heading (numbering from the heading style) gets its twin numbered too: note it if it looks wrong.

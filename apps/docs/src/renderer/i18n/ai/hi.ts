@@ -153,6 +153,8 @@ export const hi = {
   aiSumReadRuns: 'ब्लॉक {start}-{end} के पाठ खंड पढ़ें',
   aiSumTranslateBlocks: 'ब्लॉक का अनुवाद करें',
   aiSumTranslatedBlocks: '{count} अनुच्छेद अनूदित',
+  aiSumAddBilingual: 'द्विभाषी अनुवाद जोड़ें',
+  aiSumAddedBilingual: '{count} द्विभाषी अनुच्छेद जोड़े गए',
   aiSumInsertChart: 'चार्ट सम्मिलित करें',
   aiSumDefineStyle: 'शैली परिभाषित करें',
   aiSumSetWatermark: 'वॉटरमार्क सेट करें',

@@ -153,6 +153,8 @@ export const id = {
   aiSumReadRuns: 'Baca potongan teks blok {start}-{end}',
   aiSumTranslateBlocks: 'Terjemahkan blok',
   aiSumTranslatedBlocks: '{count} paragraf diterjemahkan',
+  aiSumAddBilingual: 'Tambahkan terjemahan dwibahasa',
+  aiSumAddedBilingual: '{count} paragraf dwibahasa ditambahkan',
   aiSumInsertChart: 'Sisipkan bagan',
   aiSumDefineStyle: 'Tentukan gaya',
   aiSumSetWatermark: 'Atur tanda air',

@@ -260,6 +260,7 @@ export interface TranslationFolderContext {
 export const TRANSLATION_EDITING_RULES = [
   'How to translate in the editors of this app:',
   '- In a Word document, translate with read_runs then translate_blocks only: one translated string per segment, in order. Never use replace_blocks, write_document, edit_note or apply_ops to translate; they lose run formatting. translate_blocks tidies spacing itself; do not fix spacing by hand or ask permission.',
+  '- When the original must stay (bilingual output), use add_bilingual instead of translate_blocks: same read_runs fp and segments, layout "after" for body paragraphs, "right" or "below" for a whole table in one call. It adds the translation and shifts later block indexes, so read_runs again before the next call.',
   '- Never delete, fill or restyle empty paragraphs, or move, delete or retype a footnote reference mark.',
   '- Footnotes and endnotes are translated too: read_runs notes:true, then translate_blocks entries with "note" and "id". Tool results state the note counts and what is left; trust them. Translation is not finished until read_runs with checkRemaining:true and sourceLanguage reports nothing left.',
   '- Pass each paragraph\'s "fp" from read_runs to translate_blocks unchanged; a refused fp means call read_runs again.',

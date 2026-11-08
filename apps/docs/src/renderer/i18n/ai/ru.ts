@@ -155,6 +155,8 @@ export const ru = {
   aiSumReadRuns: 'Чтение фрагментов текста блоков {start}-{end}',
   aiSumTranslateBlocks: 'Перевести блоки',
   aiSumTranslatedBlocks: 'Переведено абзацев: {count}',
+  aiSumAddBilingual: 'Добавить двуязычный перевод',
+  aiSumAddedBilingual: 'Добавлено двуязычных абзацев: {count}',
   aiSumInsertChart: 'Вставка диаграммы',
   aiSumDefineStyle: 'Определить стиль',
   aiSumSetWatermark: 'Задать подложку',

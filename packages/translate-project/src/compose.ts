@@ -155,12 +155,16 @@ export function translationChoicesRule(choices: TranslationChoices | undefined):
     )
   if (!c.bilingual)
     ask.push(
-      '- Bilingual layout is not decided: if the output mode keeps the original, ask with ask_choice before writing (remember key "bilingual"): original in parentheses after the translated term, translation after the original paragraph, or two columns / adjacent cell; adapt the options to this editor.',
+      '- Bilingual layout is not decided: if the output mode keeps the original, ask with ask_choice before writing (remember key "bilingual"): translation in a new paragraph after the original, or original in parentheses after the translated term; adapt the options to this editor. Table cells are asked separately (see below).',
     )
   if (!c.ocrPlacement)
     ask.push(
       '- OCR placement is not decided: after reading text from pictures, ask with ask_choice where it goes (remember key "ocrPlacement"); never place it without an answer.',
     )
+  // tables are asked every time, never remembered: the person picks the direction per document
+  ask.push(
+    '- Keeping the original (bilingual): in a Word document use add_bilingual, never translate_blocks or replace_blocks. For a table, ask with ask_choice EVERY time, without a remember key: right cell (left original, right translation) or below cell (top original, bottom translation); pass the answer as layout "right" or "below".',
+  )
   const head =
     decided.length > 0
       ? 'Translation choices (decided by the person; follow them, never invent your own):'

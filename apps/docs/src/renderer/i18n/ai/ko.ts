@@ -151,6 +151,8 @@ export const ko = {
   aiSumReadRuns: '블록 {start}-{end} 글자 묶음 읽기',
   aiSumTranslateBlocks: '블록 번역',
   aiSumTranslatedBlocks: '문단 {count}개 번역함',
+  aiSumAddBilingual: '원문과 번역 나란히',
+  aiSumAddedBilingual: '번역 문단 {count}개 추가함',
   aiSumInsertChart: '차트 삽입',
   aiSumDefineStyle: '스타일 정의',
   aiSumSetWatermark: '워터마크 설정',

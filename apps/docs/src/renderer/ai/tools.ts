@@ -84,8 +84,10 @@ import {
   type NumIds,
   type SelectionScope,
 } from './protocol'
+import { applyBilingual, type BilingualItem, type BilingualLayout } from './bilingual-runs'
 import {
   applyRunTranslations,
+  hasTwins,
   planNoteTranslations,
   readNoteRuns,
   readRunGroups,
@@ -260,6 +262,50 @@ export const AGENT_TOOLS: AgentToolDef[] = [
         },
       },
       required: ['blocks'],
+    },
+  },
+  {
+    name: 'add_bilingual',
+    description:
+      'Bilingual output: KEEP the original text and ADD its translation next to it (use this, never translate_blocks or replace_blocks, whenever the original must stay). Same input as translate_blocks: read_runs first, then for each paragraph its "fp" unchanged and the translations of its segments, in the same order and number; the original paragraph is never touched. ' +
+      'layout "after" (body paragraphs, headings, list items): a new paragraph right after the original with the same paragraph style and run formatting; footnote references, pictures and empty paragraphs are not copied. ' +
+      'Table cells: layout "right" puts the translation in a NEW column directly right of each text column (original left, translation right), layout "below" in a NEW row directly below each text row (original top, translation bottom); ask the person which, every time. Pass the WHOLE table (every cell paragraph read_runs lists, with its "paragraph" number) in one call. A table with merged cells cannot take a column: it falls back to "below" and the result says so, tell the person. ' +
+      'Added paragraphs shift later block indexes: read_runs again before the next call (the added translations are listed as skipped and are never flagged as untranslated). A paragraph that already has its translation is skipped. Footnotes and endnotes are not duplicated. Segments are plain text: no line breaks, no HTML.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        layout: {
+          type: 'string',
+          enum: ['after', 'right', 'below'],
+          description:
+            '"after" for body paragraphs; "right" or "below" for table cells (the person chose)',
+        },
+        blocks: {
+          type: 'array',
+          description: 'one entry per paragraph to add the translation of',
+          items: {
+            type: 'object',
+            properties: {
+              index: { type: 'integer', description: 'block index from read_runs' },
+              paragraph: {
+                type: 'integer',
+                description: 'for a table block: the "paragraph" number from read_runs',
+              },
+              fp: {
+                type: 'string',
+                description: 'the "fp" read_runs gave for this paragraph, unchanged',
+              },
+              segments: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'the translated text of each segment, in read_runs order',
+              },
+            },
+            required: ['index', 'fp', 'segments'],
+          },
+        },
+      },
+      required: ['layout', 'blocks'],
     },
   },
   {
@@ -937,6 +983,7 @@ const INDEX_WRITE_SUMMARIES: Record<string, () => string> = {
   write_document: () => t('aiSumWriteDocument'),
   replace_blocks: () => t('aiSumReplaceContent'),
   translate_blocks: () => t('aiSumTranslateBlocks'),
+  add_bilingual: () => t('aiSumAddBilingual'),
   replace_selection: () => t('aiSumReplaceSelection'),
   apply_ops: () => t('aiSumApplyCommands'),
   insert_chart: () => t('aiSumInsertChart'),
@@ -1405,6 +1452,9 @@ function noteStatusLine(editor: Editor, notes: AiNotesAccess | undefined): strin
   )
 }
 
+const BILINGUAL_NOTES_NOTE =
+  'Bilingual output (add_bilingual) does not duplicate footnotes or endnotes: leave them in the original language and tell the person.'
+
 /** what translate_blocks still leaves open, by its own tracking (short) */
 function remainingLine(editor: Editor, notes: AiNotesAccess | undefined): string {
   const report = remainingUntranslated(editor, notes)
@@ -1416,7 +1466,8 @@ function remainingLine(editor: Editor, notes: AiNotesAccess | undefined): string
   ].filter(Boolean)
   return (
     `Still untranslated: ${report.body.length} body block(s) and ${report.notes.length} note paragraph(s) (not finished; ${next.join(' and ')}). ` +
-    'Spacing around punctuation is tidied by the tool; do not fix it by hand.'
+    'Spacing around punctuation is tidied by the tool; do not fix it by hand.' +
+    (hasTwins(editor) && report.notes.length > 0 ? ` ${BILINGUAL_NOTES_NOTE}` : '')
   )
 }
 
@@ -1757,7 +1808,8 @@ function executeSyncTool(
               ? 'Nothing left to translate: every body paragraph and note has been handled.'
               : `${total} item(s) still look untranslated (names, quotations and terms you deliberately kept may be listed; translate the rest).` +
                 list('Body blocks', report.body) +
-                list('Notes', report.notes),
+                list('Notes', report.notes) +
+                (hasTwins(editor) && report.notes.length > 0 ? `\n${BILINGUAL_NOTES_NOTE}` : ''),
           mutated: false,
           summary: t('aiSumReadRuns', {
             start: 0,
@@ -1830,6 +1882,94 @@ function executeSyncTool(
           start: range.start,
           end: next === null ? range.end : next - 1,
         }),
+      }
+    }
+
+    case 'add_bilingual': {
+      const summary = t('aiSumAddBilingual')
+      const layout = call.input.layout
+      if (layout !== 'after' && layout !== 'right' && layout !== 'below')
+        return fail(
+          summary,
+          'layout must be "after" (body paragraphs), "right" or "below" (tables)',
+        )
+      const raw = call.input.blocks
+      if (!Array.isArray(raw) || raw.length === 0)
+        return fail(summary, 'blocks must be a non-empty array of { index, fp, segments }')
+      const items: BilingualItem[] = []
+      for (const entry of raw as unknown[]) {
+        const e = (entry ?? {}) as {
+          index?: unknown
+          paragraph?: unknown
+          fp?: unknown
+          segments?: unknown
+        }
+        const name = `block ${String(e.index)}`
+        if (!Number.isInteger(e.index))
+          return fail(summary, 'every entry needs an integer index from read_runs')
+        if (e.paragraph !== undefined && e.paragraph !== null && !Number.isInteger(e.paragraph))
+          return fail(summary, `${name}: paragraph must be an integer`)
+        if (typeof e.fp !== 'string' || e.fp === '')
+          return fail(
+            summary,
+            `${name}: fp is missing; pass the "fp" read_runs gave for this paragraph (call read_runs if you have none)`,
+          )
+        const segments = e.segments as string[]
+        const joined = Array.isArray(segments) ? segments.join('\n') : ''
+        const echo = toolEchoError(joined) ?? contextMarkerError(joined)
+        if (echo) return fail(summary, `${name}: ${echo.replace(/^html/, 'a segment')}`)
+        items.push({
+          index: Number(e.index),
+          fp: e.fp,
+          segments,
+          ...(e.paragraph === undefined || e.paragraph === null
+            ? {}
+            : { paragraph: Number(e.paragraph) }),
+        })
+      }
+      const outcome = applyBilingual(editor, layout as BilingualLayout, items, track)
+      if (!outcome.ok) {
+        return fail(
+          summary,
+          `Nothing was changed: ${outcome.errors.join('; ')}. Call read_runs for the current blocks, then retry.`,
+        )
+      }
+      recordHandled(editor, outcome.handled)
+      const lines: string[] = []
+      if (outcome.added.length > 0)
+        lines.push(
+          `Added the translation as a new paragraph after each of ${outcome.added.length} original paragraph(s); the originals were not touched. Block indexes after them moved down: call read_runs again before the next call (the added translations are listed as skipped).`,
+        )
+      for (const table of outcome.tables) {
+        lines.push(
+          `Table block ${table.index}: added the translation of ${table.paragraphs} cell paragraph(s) in a new ${table.layout === 'right' ? 'column to the right of each text column' : 'row below each text row'}; the original cells were not touched.` +
+            (table.fellBack
+              ? ` FELL BACK from "right" to "below" because ${table.fellBack}: tell the person the table got its translation in rows below instead of columns.`
+              : '') +
+            (table.blockwise
+              ? ` (${table.blockwise}: each group of rows tied together by merged cells was repeated as one block right after the group, with the same merges.)`
+              : ''),
+        )
+        if (table.extra.length > 0)
+          lines.push(
+            `Extra segments were appended to the last segment of: ${table.extra.join(', ')}.`,
+          )
+      }
+      if (outcome.alreadyDone.length > 0)
+        lines.push(
+          `Skipped (already has its bilingual translation, nothing added twice): ${outcome.alreadyDone.join(', ')}.`,
+        )
+      const extra = outcome.added.filter((r) => r.extra)
+      if (extra.length > 0)
+        lines.push(
+          `Extra segments were appended to the last segment of: ${extra.map((r) => `block ${r.index} (+${r.extra})`).join(', ')}.`,
+        )
+      const count = outcome.added.length + outcome.tables.reduce((n, x) => n + x.paragraphs, 0)
+      lines.push(remainingLine(editor, notes))
+      return {
+        output: lines.join('\n'),
+        mutated: count > 0,
+        summary: t('aiSumAddedBilingual', { count }),
       }
     }
 

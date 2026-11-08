@@ -156,6 +156,8 @@ export const nl = {
   aiSumReadRuns: 'Tekstsegmenten van blokken {start}-{end} lezen',
   aiSumTranslateBlocks: 'Blokken vertalen',
   aiSumTranslatedBlocks: '{count} alinea(’s) vertaald',
+  aiSumAddBilingual: 'Tweetalige vertaling toevoegen',
+  aiSumAddedBilingual: '{count} tweetalige alinea(’s) toegevoegd',
   aiSumInsertChart: 'Grafiek invoegen',
   aiSumDefineStyle: 'Stijl definiëren',
   aiSumSetWatermark: 'Watermerk instellen',

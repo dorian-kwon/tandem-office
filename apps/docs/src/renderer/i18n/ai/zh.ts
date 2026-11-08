@@ -144,6 +144,8 @@ export const zh = {
   aiSumReadRuns: '读取块 {start}-{end} 的文本段',
   aiSumTranslateBlocks: '翻译块',
   aiSumTranslatedBlocks: '已翻译 {count} 个段落',
+  aiSumAddBilingual: '添加双语对照译文',
+  aiSumAddedBilingual: '已添加 {count} 个双语段落',
   aiSumInsertChart: '插入图表',
   aiSumDefineStyle: '定义样式',
   aiSumSetWatermark: '设置水印',

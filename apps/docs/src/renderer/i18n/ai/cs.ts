@@ -155,6 +155,8 @@ export const cs = {
   aiSumReadRuns: 'Čtení textů bloků {start}–{end}',
   aiSumTranslateBlocks: 'Přeložit bloky',
   aiSumTranslatedBlocks: 'Přeloženo odstavců: {count}',
+  aiSumAddBilingual: 'Přidat dvojjazyčný překlad',
+  aiSumAddedBilingual: 'Přidáno dvojjazyčných odstavců: {count}',
   aiSumInsertChart: 'Vložit graf',
   aiSumDefineStyle: 'Definovat styl',
   aiSumSetWatermark: 'Nastavit vodoznak',

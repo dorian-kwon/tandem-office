@@ -148,6 +148,8 @@ export const he = {
   aiSumReadRuns: 'קריאת קטעי טקסט בבלוקים {start}-{end}',
   aiSumTranslateBlocks: 'תרגום בלוקים',
   aiSumTranslatedBlocks: 'תורגמו {count} פסקאות',
+  aiSumAddBilingual: 'הוספת תרגום דו-לשוני',
+  aiSumAddedBilingual: 'נוספו {count} פסקאות דו-לשוניות',
   aiSumInsertChart: 'הוספת תרשים',
   aiSumDefineStyle: 'הגדרת סגנון',
   aiSumSetWatermark: 'הגדרת סימן מים',

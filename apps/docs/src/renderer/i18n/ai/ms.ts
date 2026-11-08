@@ -154,6 +154,8 @@ export const ms = {
   aiSumReadRuns: 'Baca segmen teks blok {start}-{end}',
   aiSumTranslateBlocks: 'Terjemah blok',
   aiSumTranslatedBlocks: '{count} perenggan diterjemah',
+  aiSumAddBilingual: 'Tambah terjemahan dwibahasa',
+  aiSumAddedBilingual: '{count} perenggan dwibahasa ditambah',
   aiSumInsertChart: 'Sisipkan carta',
   aiSumDefineStyle: 'Takrifkan gaya',
   aiSumSetWatermark: 'Tetapkan tera air',
