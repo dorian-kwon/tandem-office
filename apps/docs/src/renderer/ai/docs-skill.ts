@@ -3,8 +3,9 @@ import { redactLabelsOf } from './redact-view'
 import type { Editor } from '@tiptap/core'
 import { attachedImageNote, type AgentSkill } from '@genoffice/agent-core'
 import {
-  AGENT_SYSTEM_PROMPT,
+  buildAgentSystemPrompt,
   buildDocContext,
+  type AiProfile,
   getSelectionScope,
   type AiTrack,
   type NumIds,
@@ -25,6 +26,7 @@ import type { AiNotesAccess } from './note-ops'
 import type { AgentToolDef } from '../../shared/ipc'
 import { isOdtSession } from '../odt-gate'
 import { ODT_SYSTEM_NOTE, odtToolFilter } from './odt-tools'
+import { profileToolRefusal, toolsForProfile } from './translation-profile'
 
 const IMAGE_GEN_OFF_NOTE =
   '\n\nNote: generate_image is currently unavailable (no image provider: no Codex subscription connected and no image API key in Settings). Do not call or promise it; use image_search for imagery.'
@@ -55,11 +57,14 @@ export function createDocsSkill(
   mediaAnalysisAvailable?: () => boolean,
   /** the files attached to this chat, so insert_image can take one the user made elsewhere */
   getAttachments?: () => AiAttachmentAccess | undefined,
+  /** the tool and prompt set of this run; absent: the whole assistant */
+  getProfile?: () => AiProfile,
 ): AgentSkill {
   // Selection frozen per run: tools act on the range the prompt described,
   // not on wherever the user's live selection has wandered mid-run. The doc
   // snapshot bounds the freeze's validity (see FrozenSelection).
   let frozen: FrozenSelection | null = null
+  const profile = (): AiProfile => getProfile?.() ?? 'normal'
   /** tools that need a media provider: a connected subscription, or a media key in Settings */
   const mediaToolsOff = (): Set<string> => {
     const hidden = new Set<string>()
@@ -69,6 +74,8 @@ export function createDocsSkill(
   }
   const mediaOffNote = (): string =>
     [...mediaToolsOff()]
+      // generate_image is not offered in the translation profile: no note about it there
+      .filter((name) => !(name === 'generate_image' && profile() === 'translation'))
       .map((name) => (name === 'generate_image' ? IMAGE_GEN_OFF_NOTE : MEDIA_ANALYSIS_OFF_NOTE))
       .join('')
   return {
@@ -84,15 +91,21 @@ export function createDocsSkill(
         : []
       const redact = labels.length > 0 ? `\n\n${placeholderInstruction(labels)}` : ''
       const odt = isOdtSession() ? ODT_SYSTEM_NOTE : ''
-      const attached = attachedImageNote(
-        getAttachments?.()?.names() ?? [],
-        'call insert_image with attachment set to the name',
-      )
-      return AGENT_SYSTEM_PROMPT + mediaOffNote() + attached + redact + odt
+      // insert_image is not offered in the translation profile, so its note is left out too
+      const attached =
+        profile() === 'translation'
+          ? ''
+          : attachedImageNote(
+              getAttachments?.()?.names() ?? [],
+              'call insert_image with attachment set to the name',
+            )
+      const base = buildAgentSystemPrompt(profile())
+      return base + mediaOffNote() + attached + redact + odt
     },
     get tools() {
       const hidden = mediaToolsOff()
-      const tools = hidden.size === 0 ? AGENT_TOOLS : AGENT_TOOLS.filter((t) => !hidden.has(t.name))
+      const offered = toolsForProfile(AGENT_TOOLS, profile())
+      const tools = hidden.size === 0 ? offered : offered.filter((t) => !hidden.has(t.name))
       // an ODT document: tools for switched-off features are not offered
       return odtToolFilter(tools) as AgentToolDef[]
     },
@@ -108,8 +121,11 @@ export function createDocsSkill(
         getPageSetup?.()?.list(),
       )
     },
-    executeTool: (call, signal) =>
-      executeTool(
+    executeTool: (call, signal) => {
+      // a tool the profile withheld is refused even when the model calls it anyway
+      const refusal = profileToolRefusal(profile(), call.name)
+      if (refusal) return { output: refusal, isError: true, mutated: false, summary: call.name }
+      return executeTool(
         getEditor(),
         call,
         getNumIds(),
@@ -123,6 +139,7 @@ export function createDocsSkill(
         getExtras?.(),
         getNotes?.(),
         getAttachments?.(),
-      ),
+      )
+    },
   }
 }

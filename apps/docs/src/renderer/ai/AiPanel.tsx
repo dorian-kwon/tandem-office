@@ -80,7 +80,7 @@ import { redactTextBetween, type RedactableNode } from './redact-view'
 import { ATTACHMENT_IMAGE_EXTS } from '../../shared/ipc'
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { captureRollbackSnapshot, restoreRollbackSnapshot } from './rollback-snapshot'
-import { countWords, findNumId, type NumIds } from './protocol'
+import { countWords, findNumId, type AiProfile, type NumIds } from './protocol'
 import { DOC_NAV_SCHEME, navigateToBlock, parseDocNavHref } from './doc-nav'
 import {
   markDocSeen,
@@ -1214,6 +1214,8 @@ export function AiPanel({
     decidePartial(false)
   }
 
+  /** the tool and prompt set of the current run, decided when it starts */
+  const aiProfileRef = useRef<AiProfile>('normal')
   const loopRef = useRef<AgentLoop<ProseMirrorNode> | null>(null)
   if (!loopRef.current) {
     const numIds = (): NumIds => ({
@@ -1264,6 +1266,7 @@ export function AiPanel({
                 .filter((attachment) => ATTACHMENT_IMAGE_EXTS.has(attachment.ext))
                 .map((attachment) => attachment.name),
           }),
+          () => aiProfileRef.current,
         ),
         createFilesSkill(availableAttachments),
         // the person's skills: use_skill, read_skill_file, propose_skill (app-run tools)
@@ -1641,6 +1644,14 @@ export function AiPanel({
           await projectRef.current?.prepareSend()
           if (pendingSendRef.current !== pending) return
         }
+        // the pane type is asked again at every run start (same question as the
+        // translation lock): the output pane gets the slimmer tool and prompt
+        // set; no bridge, a failed or a false answer keeps the whole assistant
+        const outputPane: boolean = await Promise.resolve(window.desktop?.isTranslationOutput?.())
+          .then((answer) => answer === true)
+          .catch(() => false)
+        if (pendingSendRef.current !== pending) return
+        aiProfileRef.current = outputPane ? 'translation' : 'normal'
         pendingSendRef.current = null
         // the wait ended because another document replaced this one, or the
         // user stopped / reset the chat meanwhile: nothing to run
