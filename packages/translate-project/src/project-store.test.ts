@@ -40,6 +40,16 @@ const isDir = async (p: string): Promise<boolean> =>
   (await stat(p).catch(() => null))?.isDirectory() === true
 
 describe('createProject', () => {
+  it('starts with Claude for OCR, or with the provider it is given', async () => {
+    expect((await createProject(root, 'A', 'ko', 'en')).project.ocr).toEqual({
+      kind: 'ai',
+      provider: 'claude',
+    })
+    const b = await createProject(root, 'B', 'ko', 'en', { kind: 'ai', provider: 'chatgpt' })
+    expect(b.project.ocr).toEqual({ kind: 'ai', provider: 'chatgpt' })
+    expect((await loadProject(b.dir)).ocr).toEqual({ kind: 'ai', provider: 'chatgpt' })
+  })
+
   it('creates the full folder layout', async () => {
     const { dir, project } = await createProject(root, 'My Book', 'ko', 'en')
     expect(dir).toBe(join(root, 'My Book'))

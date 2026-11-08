@@ -114,6 +114,11 @@ export interface TranslateIpcDeps {
   showOpenDialog: (
     options: OpenDialogOptions,
   ) => Promise<{ canceled: boolean; filePaths: string[] }>
+  /**
+   * The OCR provider a new project starts with: the subscription the person is
+   * actually connected to. Absent: Claude (the project file's own default).
+   */
+  defaultOcrProvider?: () => 'claude' | 'chatgpt'
   /** override for the allowlist token generator (tests) */
   newToken?: () => string
   /** the shell's tabs for the translation view; absent where there is no tab strip */
@@ -463,7 +468,13 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       const name = requireString(args.name, 'name')
       const sourceLang = requireString(args.sourceLang, 'sourceLang')
       const targetLang = requireString(args.targetLang, 'targetLang')
-      const { dir } = await createProject(parentDir, name, sourceLang, targetLang)
+      const { dir } = await createProject(
+        parentDir,
+        name,
+        sourceLang,
+        targetLang,
+        deps.defaultOcrProvider ? { kind: 'ai', provider: deps.defaultOcrProvider() } : undefined,
+      )
       const path = deps.settingsPath()
       try {
         const rest = readTranslationProjects(path).filter((e) => fold(e.dir) !== fold(dir))

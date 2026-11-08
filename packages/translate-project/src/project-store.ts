@@ -5,6 +5,7 @@ import {
   defaultProjectFile,
   parseProjectFile,
   serializeProjectFile,
+  type OcrMode,
   type ProjectFile,
 } from './project-file'
 
@@ -54,6 +55,7 @@ export async function createProject(
   name: string,
   sourceLang: string,
   targetLang: string,
+  ocr?: OcrMode,
 ): Promise<{ dir: string; project: ProjectFile }> {
   const dir = join(parentDir, safeFolderName(name))
   try {
@@ -65,7 +67,7 @@ export async function createProject(
   try {
     for (const sub of SUBFOLDERS) await mkdir(join(dir, sub))
     await mkdir(join(dir, STATE_DIR))
-    const project = defaultProjectFile(name, sourceLang, targetLang)
+    const project = defaultProjectFile(name, sourceLang, targetLang, ocr)
     await saveProject(dir, project)
     return { dir, project }
   } catch (e) {

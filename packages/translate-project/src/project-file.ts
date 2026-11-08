@@ -64,6 +64,7 @@ export function defaultProjectFile(
   name: string,
   sourceLang: string,
   targetLang: string,
+  ocr: OcrMode = { kind: 'ai', provider: 'claude' },
 ): ProjectFile {
   return {
     version: 1,
@@ -71,7 +72,7 @@ export function defaultProjectFile(
     sourceLang,
     targetLang,
     projectPrompt: '',
-    ocr: { kind: 'ai', provider: 'claude' },
+    ocr,
     writingStyle: defaultWritingStyle(),
     sources: [],
     references: [],

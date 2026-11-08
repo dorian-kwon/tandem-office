@@ -9180,6 +9180,14 @@ registerTranslateIpc(
       const owner = BrowserWindow.getFocusedWindow()
       return owner ? dialog.showOpenDialog(owner, options) : dialog.showOpenDialog(options)
     },
+    // a new project reads pictures with the subscription that is connected: Claude when it
+    // is ready (the same preference as the automatic AI choice), else ChatGPT / Codex
+    defaultOcrProvider: () => {
+      const st = sharedSubscriptionStatuses()
+      if (st['claude-code']?.state === 'ready') return 'claude'
+      if (st.chatgpt?.state === 'ready' || st.codex?.state === 'ready') return 'chatgpt'
+      return 'claude'
+    },
     view: translationViewDeps(),
     projects: {
       ensureListed: (dir) => translationProjects().ensureListed(dir),
