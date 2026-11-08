@@ -69,6 +69,9 @@ export const id = {
   cmpStDone: 'Selesai',
   cmpStFailed: 'Gagal',
   cmpStStopped: 'Dihentikan',
+  cmpRetryFailed: 'Ulangi semua yang gagal',
+  cmpRetryStale: 'Teks yang berubah dilewati. Mulai perbandingan baru untuk teks itu.',
+  cmpTargetLanguage: 'Bahasa tujuan',
   cmpRetry: 'Coba lagi',
   cmpUse: 'Pakai ini',
   cmpCopy: 'Salin',
@@ -89,9 +92,6 @@ export const id = {
   cmpAddOriginal: 'Tambah teks asli',
   cmpCut:
     'Hanya {max} karakter pertama yang dikirim, jadi Pakai ini dinonaktifkan. Pilih bagian yang lebih pendek untuk menggantinya.',
-  cmpKindPolished: 'Dipoles',
-  cmpKindRetranslated: 'Diterjemahkan ulang',
-  cmpRetranslate: 'Sertakan terjemahan ulang',
   cmpNoAnswer:
     'Tidak ada mesin yang menjawab. Anda dapat menyalin prompt dan bertanya sendiri di situs-situs itu.',
   aiAskTitle: 'Minta perubahan pada teks terpilih',

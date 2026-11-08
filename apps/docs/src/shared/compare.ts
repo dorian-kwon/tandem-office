@@ -65,8 +65,6 @@ export type CompareSourceBytes = { ok: true; bytes: Uint8Array } | { ok: false }
 export interface ComparePrefs {
   /** engine id to on/off; an engine without an entry is on */
   engines?: Record<string, boolean>
-  /** the sites also translate the Korean original themselves (with an original) */
-  retranslate?: boolean
   /** our own AI integrates the answers of each unit */
   autoIntegrate?: boolean
 }

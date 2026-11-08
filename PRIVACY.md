@@ -213,8 +213,8 @@ Accepting the first-use notice alone sends nothing.
 - **What is sent.** Enabled engines receive one paragraph or selected paragraph
   portion at a time, up to 4,000 characters, and a matching Korean original when
   available. Partial paragraphs do not borrow an entire source paragraph.
-  Truncated units cannot be applied. Both engines receive the same polishing or
-  retranslation instruction for that unit. The app AI is asked for read-only
+  Truncated units cannot be applied. Both engines receive the same single translation or improvement request
+  for that unit and return one answer each. The app AI is asked for read-only
   text without document tools. Nothing changes until you choose and apply an
   answer. Parts cannot be hidden from this step.
 - **Where it goes.** Copilot uses the installed ego lite browser and its existing
@@ -228,6 +228,11 @@ Accepting the first-use notice alone sends nothing.
   one unit at a time. Runs pause after 20 units for Continue. Stop or closing the
   window cancels every active comparison request. A failing engine does not
   cancel the other engine’s answer.
+- **Failed requests.** Individual retry and Retry all failed resend failed
+  unit-engine pairs only. Successful and applied results stay in place. Blocked
+  engines, stopped pairs and text changed since the request are excluded from
+  bulk retry. Retries use the original unit and target language. A new comparison
+  is needed for changed text or a changed target. Stop cancels active retries.
 - **Integration.** Automatic integration is off by default and is suppressed
   when Connected AI already supplies a candidate. You can explicitly request
   Integrate now after seeing the candidates; that is a separate app AI request.

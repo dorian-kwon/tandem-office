@@ -46,9 +46,6 @@ describe('AI compare strings', () => {
     expect(ko.cmpBtn).toBe('AI 비교')
     expect(ko.cmpStSkipped).toBe('건너뜀 (로그인 안 됨)')
     expect(ko.cmpAddOriginal).toBe('원문 추가')
-    expect(ko.cmpRetranslate).toBe('재번역 포함')
-    expect(ko.cmpKindPolished).toBe('다듬기')
-    expect(ko.cmpKindRetranslated).toBe('재번역')
   })
 
   it('the other languages are real translations, not copies of the English text', async () => {

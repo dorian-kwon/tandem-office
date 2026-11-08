@@ -65,7 +65,8 @@ Word 문서(.docx)와 ODT(.odt) 에디터다. 그리고 배포되는 앱 전체�
 
 - `components/AiComparePopover.tsx`는 Copilot 웹 답변과 "연결된 AI"를 비교한다. 공용 ID는 `src/shared/compare-engines.ts`의 `copilot`·`connected-ai`이며 웹 항목은 `compare-sites.ts`의 Copilot 하나다. 연결된 AI는 웹 driver로 보내지 않고 `renderer/compare/connected-ai.ts`에서 현재 `getAiSettings`·`aiSendGate`·`createElectronTransport`를 쓴다. 제공자·모델을 바꾸거나 별도 웹 로그인을 요구하지 않는다.
 - `runner.ts`가 같은 문단의 두 엔진을 병렬로 실행하고 모두 끝난 뒤 다음 문단으로 간다. 한 엔진은 한 단위씩만 처리한다. 일시정지는 진행 중인 답을 수집하고 중단·닫기는 모든 요청을 취소한다. 20개 단위 뒤에는 계속을 기다린다. `units.ts`는 선택의 첫·끝을 선택 부분만 포함하며 원문 매칭은 `source-locate.ts`가 한다.
-- 같은 `prompts.ts` 다듬기·재번역 지시문을 두 엔진에 보낸다. 연결된 AI 호출은 도구 없는 읽기 전용 글이다. 사용자가 답을 적용할 때만 `replace-selection.ts`가 단위 범위·지문을 검사하고 별도 undo 지점으로 바꾼다. 자동 통합은 기본 꺼짐이며 연결된 AI 후보가 켜진 실행은 억제한다. 명시적 "지금 통합"은 기존 별도 요청이다.
+- 같은 `prompts.ts` 작업 하나를 두 엔진에 보낸다. 한글 원문은 목표 언어로 번역, 기존 번역문은 원문 맥락을 붙인 개선 한 번이며 답도 엔진별 하나다. 목표 언어는 프로젝트 값 또는 영어 기본값이며 화면에서 바꿀 수 있다. UI 언어를 목표로 삼지 않는다. 연결된 AI 호출은 도구 없는 읽기 전용 글이다. 사용자가 답을 적용할 때만 `replace-selection.ts`가 단위 범위·지문을 검사하고 별도 undo 지점으로 바꾼다. 자동 통합은 기본 꺼짐이며 연결된 AI 후보가 켜진 실행은 억제한다. 명시적 "지금 통합"은 기존 별도 요청이다.
+- `retryFailed`는 failed 쌍만 단위 순서·엔진 병렬로 다시 요청한다. 성공·적용 답과 배치 위치는 보존하며 blocked/stopped/applied/바뀐 글은 전체 재실행에서 제외한다. 개별 stopped 재실행은 명시적 사용자 요청일 때 기존대로 허용한다. 같은 실행 중 중복 재실행·통합을 시작하지 않는다.
 - 동의 판 4에서 전송 경로를 다시 확인하며 옛 Grok·웹 ChatGPT ID는 새 엔진으로 승계하지 않는다. 인증 파일과 브라우저 쿠키를 읽거나 복사하지 않는다. 시험은 가짜 IPC·transport·격리 VM을 쓴다. 실제 AI 메시지를 보내는 확인, 앱 실행·재시작은 사용자 허락 범위에 따르며 이번 구현의 응답 품질은 실호출로 확인하지 않았다.
 
 ## 로컬 AI (결정 0067)

@@ -35,6 +35,7 @@ function setup(
   bodyText: string | string[] = 'Revenue grew eight percent.',
   range?: [number, number],
   appSettings: AiSettings = settings,
+  initial: 'en' | 'ko' = 'en',
 ) {
   const editor = new Editor({
     element: document.createElement('div'),
@@ -62,7 +63,7 @@ function setup(
     root.render(
       createElement(
         LocaleProvider,
-        { initial: 'en', children: null },
+        { initial, children: null },
         createElement(AiComparePopover, {
           editor,
           snapshot,
@@ -450,30 +451,133 @@ describe('AI compare popup', () => {
     expect(container.textContent).not.toContain('partial')
   })
 
-  it('shows both polishing and retranslation candidates when an original is entered', async () => {
+  it('asks one improvement with original context and shows exactly one answer card', async () => {
     const prompts: string[] = []
     const { container } = setup(
       ready({
-        compareAsk: async (req: { prompt: string }) => {
-          prompts.push(req.prompt)
-          return { ok: true, text: '[POLISHED]\nPolished\n[RETRANSLATION]\nFresh' }
+        compareAsk: async (request: { prompt: string }) => {
+          prompts.push(request.prompt)
+          return { ok: true, text: 'One finished answer' }
         },
       }),
     )
     await flush()
+    expect(container.querySelector('.cmp-retranslate')).toBeNull()
     act(() => button(container, 'Add original')!.click())
     const area = container.querySelector('textarea')!
     act(() => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
         area,
-        '매출 증가',
+        '한국어 원문',
       )
       area.dispatchEvent(new Event('input', { bubbles: true }))
     })
     await start(container)
-    expect(prompts[0]).toContain('Original Korean:\n매출 증가')
-    expect(container.textContent).toContain('Copilot · Polished')
-    expect(container.textContent).toContain('Copilot · Re-translated')
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0]).toContain('Improve the following English translation')
+    expect(prompts[0]).not.toMatch(/POLISHED|RETRANSLATION|two sections/)
+    expect(
+      [...container.querySelectorAll('.cmp-card-title')].filter((c) => c.textContent === 'Copilot'),
+    ).toHaveLength(1)
+    expect(container.textContent).toContain('One finished answer')
+  })
+
+  it('defaults Korean UI/source to English and preserves an explicitly chosen target', async () => {
+    const prompts: string[] = []
+    const text = '한국어 원문입니다'
+    const { container } = setup(
+      ready({
+        compareAsk: async (request: { prompt: string }) => {
+          prompts.push(request.prompt)
+          return { ok: true, text: 'Answer' }
+        },
+      }),
+      text,
+      [1, text.length + 1],
+      settings,
+      'ko',
+    )
+    await flush()
+    const select = container.querySelector('select')!
+    expect(select.value).toBe('en')
+    act(() =>
+      (container.querySelector('.cmp-actions .ai-ask-confirm') as HTMLButtonElement).click(),
+    )
+    await flush()
+    expect(prompts[0]).toContain('Translate the following text into English.')
+    act(() => {
+      select.value = 'fr'
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    act(() =>
+      (container.querySelector('.cmp-actions .ai-ask-confirm') as HTMLButtonElement).click(),
+    )
+    await flush()
+    expect(prompts[1]).toContain('Translate the following text into French.')
+    expect(select.value).toBe('fr')
+  })
+
+  it('retry all resends only a failed unit and preserves an already applied successful answer', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const requests: string[] = []
+    const { container, editor } = setup(
+      ready({
+        compareAsk: async (request: { prompt: string }) => {
+          requests.push(request.prompt)
+          return requests.length === 1
+            ? { ok: false, reason: 'temporary failure' }
+            : {
+                ok: true,
+                text: request.prompt.includes('Second') ? 'Second answer' : 'First answer',
+              }
+        },
+      }),
+      ['First', 'Second'],
+    )
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    act(() => (container.querySelectorAll('input[type=radio]')[1] as HTMLInputElement).click())
+    act(() => button(container, 'Compare')!.click())
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4000)
+    })
+    const rows = [...container.querySelectorAll('.cmp-unit')]
+    act(() => (rows[1]!.querySelector('.cmp-unit-row') as HTMLElement).click())
+    const copilot = [...rows[1]!.querySelectorAll('.cmp-card')].find(
+      (c) => c.querySelector('.cmp-card-title')?.textContent === 'Copilot',
+    )!
+    act(() => button(copilot as HTMLElement, 'Use this')!.click())
+    act(() => button(container, 'Retry all failed')!.click())
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(requests).toHaveLength(3)
+    expect(requests[2]).toContain('First')
+    expect(editor.state.doc.child(0).textContent).toBe('First')
+    expect(editor.state.doc.child(1).textContent).toBe('Second answer')
+    expect(rows[1]?.textContent).toContain('Applied')
+  })
+
+  it('does not resend changed text through either individual or global retry', async () => {
+    let calls = 0
+    const { container, editor } = setup(
+      ready({
+        compareAsk: async () => {
+          calls++
+          return { ok: false, reason: 'temporary failure' }
+        },
+      }),
+    )
+    await flush()
+    await start(container)
+    act(() => editor.commands.insertContentAt(15, 'X'))
+    act(() => button(container, 'Retry all failed')!.click())
+    await flush()
+    act(() => button(container, 'Retry')!.click())
+    await flush()
+    expect(calls).toBe(1)
+    expect(container.textContent).toContain('Changed text was skipped')
   })
 
   it('keeps prompt options fixed when project language loading finishes during a run', async () => {

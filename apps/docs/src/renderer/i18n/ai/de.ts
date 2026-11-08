@@ -72,6 +72,9 @@ export const de = {
   cmpStDone: 'Fertig',
   cmpStFailed: 'Fehlgeschlagen',
   cmpStStopped: 'Gestoppt',
+  cmpRetryFailed: 'Alle fehlgeschlagenen wiederholen',
+  cmpRetryStale: 'Geänderter Text wurde übersprungen. Starten Sie einen neuen Vergleich.',
+  cmpTargetLanguage: 'Zielsprache',
   cmpRetry: 'Erneut versuchen',
   cmpUse: 'Diese verwenden',
   cmpCopy: 'Kopieren',
@@ -93,9 +96,6 @@ export const de = {
   cmpAddOriginal: 'Original hinzufügen',
   cmpCut:
     'Nur die ersten {max} Zeichen wurden gesendet, daher ist Diese verwenden ausgeschaltet. Wählen Sie einen kürzeren Abschnitt zum Ersetzen.',
-  cmpKindPolished: 'Überarbeitet',
-  cmpKindRetranslated: 'Neu übersetzt',
-  cmpRetranslate: 'Neuübersetzung einbeziehen',
   cmpNoAnswer:
     'Keine Engine hat geantwortet. Sie können den Prompt kopieren und selbst auf den Seiten nachfragen.',
   aiAskTitle: 'Änderung an der Auswahl anfragen',

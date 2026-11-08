@@ -70,6 +70,9 @@ export const pl = {
   cmpStDone: 'Gotowe',
   cmpStFailed: 'Niepowodzenie',
   cmpStStopped: 'Zatrzymano',
+  cmpRetryFailed: 'Ponów wszystkie nieudane',
+  cmpRetryStale: 'Zmieniony tekst został pominięty. Rozpocznij nowe porównanie.',
+  cmpTargetLanguage: 'Język docelowy',
   cmpRetry: 'Ponów',
   cmpUse: 'Użyj tego',
   cmpCopy: 'Kopiuj',
@@ -89,9 +92,6 @@ export const pl = {
   cmpAddOriginal: 'Dodaj oryginał',
   cmpCut:
     'Wysłano tylko pierwsze {max} znaków, więc Użyj tego jest wyłączone. Zaznacz krótszy fragment, aby go zastąpić.',
-  cmpKindPolished: 'Dopracowany',
-  cmpKindRetranslated: 'Przetłumaczony ponownie',
-  cmpRetranslate: 'Dołącz ponowne tłumaczenie',
   cmpNoAnswer:
     'Żaden silnik nie odpowiedział. Możesz skopiować prompt i zapytać samodzielnie na tych stronach.',
   aiAskTitle: 'Poproś o zmianę zaznaczenia',

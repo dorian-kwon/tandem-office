@@ -19,6 +19,7 @@ import React, {
 } from 'react'
 import type { Editor } from '@tiptap/core'
 import type { Node as PmNodeType } from '@tiptap/pm/model'
+import { LANGS } from '@genoffice/i18n'
 import { aiSendGate, AiInputTruncatedNotice } from '@genoffice/ui'
 import { createElectronTransport } from '../ai/transport'
 import { integrateComparison } from '../compare/integration'
@@ -148,7 +149,8 @@ export function AiComparePopover({
   const [prefs, setPrefs] = useState<ComparePrefs>({})
   const [typedOriginal, setTypedOriginal] = useState('')
   const [showOriginal, setShowOriginal] = useState(false)
-  const [targetCode, setTargetCode] = useState<string | null>(null)
+  const [targetCode, setTargetCode] = useState('en')
+  const targetChosen = useRef(false)
   const sourceDoc = useRef<PmNodeType | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
   const [notice, setNotice] = useState<StringKey | null>(null)
@@ -157,7 +159,6 @@ export function AiComparePopover({
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
 
   const engineOn = (id: string): boolean => prefs.engines?.[id] !== false
-  const retranslate = prefs.retranslate !== false
   const engineOptions = [
     ...COMPARE_SITES.map((s) => ({ id: s.id, name: s.name })),
     { id: CONNECTED_AI_ENGINE_ID, name: t('cmpConnectedAi') },
@@ -172,20 +173,18 @@ export function AiComparePopover({
     void window.desktop?.compareSetPrefs?.(patch)?.catch(() => {})
   }
 
-  const targetName = languageName(targetCode ?? lang)
-  const runOptions = useRef({ retranslate, target: targetName })
+  const targetName = languageName(targetCode)
+  const runOptions = useRef({ target: targetName })
   // latest values for the long-lived runner (its prompt and integration steps read them when they run)
   const live = useRef({
     settings,
     statuses: subscription.statuses,
     target: targetName,
-    retranslate,
   })
   live.current = {
     settings,
     statuses: subscription.statuses,
     target: targetName,
-    retranslate,
   }
   /** the ranges and fingerprints of the units of the current run, carried through edits */
   const infos = useRef(new Map<string, UnitInfo>())
@@ -223,10 +222,9 @@ export function AiComparePopover({
         driver,
         promptFor: (unit) =>
           buildComparePrompt(unit.korean, unit.text, {
-            retranslate: runOptions.current.retranslate && unit.korean !== '',
             targetLanguage: runOptions.current.target,
           }),
-        retranslateFor: (unit) => runOptions.current.retranslate && unit.korean !== '',
+        canRetry: (unit) => retryTextIsCurrent(unit.id),
         integrate: async (unit, answers, signal): Promise<CompareAnswer> => {
           const { settings: s, statuses } = live.current
           const { target } = runOptions.current
@@ -240,9 +238,9 @@ export function AiComparePopover({
           const request = buildIntegrationRequest({
             korean: unit.korean,
             original: unit.text,
-            ...(unit.korean === '' ? { targetLanguage: target } : {}),
+            targetLanguage: target,
             answers: answers.map((a) => ({
-              label: `${a.id === CONNECTED_AI_ENGINE_ID ? t('cmpConnectedAi') : (COMPARE_SITES.find((site) => site.id === a.id)?.name ?? a.id)} (${a.kind === 'polished' ? 'polished' : 're-translated'})`,
+              label: `${a.id === CONNECTED_AI_ENGINE_ID ? t('cmpConnectedAi') : (COMPARE_SITES.find((site) => site.id === a.id)?.name ?? a.id)}`,
               text: a.text,
             })),
           })
@@ -307,7 +305,10 @@ export function AiComparePopover({
     // best effort and silent: the target language of the translation project and its source copy
     // (the Korean original of a paragraph is found by block position)
     void Promise.resolve(window.desktop?.getTranslationLanguages?.())
-      .then((pair) => alive && pair?.targetLang && setTargetCode(pair.targetLang))
+      .then(
+        (pair) =>
+          alive && !targetChosen.current && pair?.targetLang && setTargetCode(pair.targetLang),
+      )
       .catch(() => {})
     void loadSourceDoc(editor, window.desktop?.compareReadSource).then((doc) => {
       if (alive) sourceDoc.current = doc
@@ -427,6 +428,35 @@ export function AiComparePopover({
     return { runner: out, infos: map }
   }
 
+  function retryTextIsCurrent(id: string): boolean {
+    const info = infos.current.get(id)
+    return (
+      !!info &&
+      !editor.isDestroyed &&
+      !info.gone &&
+      info.from >= 0 &&
+      info.to <= editor.state.doc.content.size &&
+      rangeText(editor, info.from, info.to) === info.fingerprint
+    )
+  }
+  const retryOne = (unitId: string, engineId: string): void => {
+    if (!retryTextIsCurrent(unitId)) {
+      setNotice('cmpRetryStale')
+      return
+    }
+    setNotice(null)
+    runner.retry(unitId, engineId)
+  }
+  const retryAll = (): void => {
+    const stale = state.units.some(
+      (u) =>
+        !u.applied &&
+        Object.values(u.engines).some((e) => e.status === 'failed') &&
+        !retryTextIsCurrent(u.id),
+    )
+    setNotice(stale ? 'cmpRetryStale' : null)
+    runner.retryFailed()
+  }
   const start = (): void => {
     setNotice(null)
     setInputTruncated(false)
@@ -444,7 +474,8 @@ export function AiComparePopover({
       setNotice('cmpNoUnits')
       return
     }
-    runOptions.current = { retranslate, target: targetName }
+    targetChosen.current = true
+    runOptions.current = { target: targetName }
     infos.current = built.infos
     setExpanded(new Set(scope === 'selection' ? [built.runner[0]!.id] : []))
     runner.start(built.runner, enabledEngines, autoIntegrate)
@@ -465,7 +496,6 @@ export function AiComparePopover({
     copy(
       'prompt',
       buildComparePrompt(info?.korean ?? '', text, {
-        retranslate: retranslate && !!info?.korean,
         targetLanguage: targetName,
       }),
     )
@@ -598,7 +628,8 @@ export function AiComparePopover({
               const engine = engineOptions.find((s) => s.id === id)
               const e = result.engines[id]
               if (!engine || !e) return null
-              const retry = idle && (e.status === 'failed' || e.status === 'stopped')
+              const retry =
+                idle && !result.applied && (e.status === 'failed' || e.status === 'stopped')
               const head = (
                 <span className="cmp-head-actions">
                   {chip(e.status)}
@@ -606,7 +637,7 @@ export function AiComparePopover({
                     <button
                       type="button"
                       className="cmp-link"
-                      onClick={() => runner.retry(result.id, id)}
+                      onClick={() => retryOne(result.id, id)}
                     >
                       {t('cmpRetry')}
                     </button>
@@ -622,36 +653,20 @@ export function AiComparePopover({
                   )}
                 </span>
               )
-              const first = e.text ?? e.retranslation ?? null
-              const firstKind = e.text ? 'cmpKindPolished' : 'cmpKindRetranslated'
-              const both = e.text && e.retranslation
-              return (
-                <React.Fragment key={id}>
-                  {card(
-                    result.id,
-                    id,
-                    e.retranslation ? `${engine.name} · ${t(firstKind)}` : engine.name,
-                    e.status === 'done' ? (
-                      first
-                    ) : e.status === 'blocked' ? (
-                      <span className="cmp-reason">{blockText(e.reason ?? '')}</span>
-                    ) : e.reason ? (
-                      <span className="cmp-reason">{interactionText(e.reason)}</span>
-                    ) : null,
-                    e.status === 'done' ? first : null,
-                    result.applied,
-                    head,
-                  )}
-                  {both &&
-                    card(
-                      result.id,
-                      `${id}-re`,
-                      `${engine.name} · ${t('cmpKindRetranslated')}`,
-                      e.retranslation,
-                      e.retranslation ?? null,
-                      result.applied,
-                    )}
-                </React.Fragment>
+              return card(
+                result.id,
+                id,
+                engine.name,
+                e.status === 'done' ? (
+                  e.text
+                ) : e.status === 'blocked' ? (
+                  <span className="cmp-reason">{blockText(e.reason ?? '')}</span>
+                ) : e.reason ? (
+                  <span className="cmp-reason">{interactionText(e.reason)}</span>
+                ) : null,
+                e.status === 'done' ? (e.text ?? null) : null,
+                result.applied,
+                head,
               )
             })}
             {(result.integrate.status !== 'idle' || result.engines) &&
@@ -745,7 +760,9 @@ export function AiComparePopover({
       // are excepted so their text can be selected and copied (the ranges to replace were stored
       // when the run started, so a moved selection does not matter)
       onMouseDown={(e) => {
-        if (!(e.target as HTMLElement).closest('textarea, input, .cmp-card-body, .cmp-text'))
+        if (
+          !(e.target as HTMLElement).closest('textarea, input, select, .cmp-card-body, .cmp-text')
+        )
           e.preventDefault()
       }}
     >
@@ -881,14 +898,26 @@ export function AiComparePopover({
                   />
                   {t('cmpAutoIntegrate')}
                 </label>
-                <label className="cmp-auto cmp-retranslate">
-                  <input
-                    type="checkbox"
-                    checked={retranslate}
+                <label className="cmp-auto">
+                  {t('cmpTargetLanguage')}
+                  <select
+                    aria-label={t('cmpTargetLanguage')}
+                    value={targetCode}
                     disabled={active || state.phase === 'batchDone'}
-                    onChange={(e) => savePrefs({ retranslate: e.target.checked })}
-                  />
-                  {t('cmpRetranslate')}
+                    onChange={(e) => {
+                      targetChosen.current = true
+                      setTargetCode(e.target.value)
+                    }}
+                  >
+                    {!LANGS.includes(targetCode as (typeof LANGS)[number]) && (
+                      <option value={targetCode}>{languageName(targetCode)}</option>
+                    )}
+                    {LANGS.map((code) => (
+                      <option key={code} value={code}>
+                        {new Intl.DisplayNames([lang], { type: 'language' }).of(code) ?? code}
+                      </option>
+                    ))}
+                  </select>
                 </label>
                 {active ? (
                   <>
@@ -951,9 +980,23 @@ export function AiComparePopover({
                 )}
             </div>
             {connectedSelected && <div className="cmp-hint">{t('cmpIntegrationSeparate')}</div>}
+            {state.units.some(
+              (u) =>
+                !u.applied &&
+                Object.entries(u.engines).some(
+                  ([id, e]) => e.status === 'failed' && !state.blocked[id],
+                ),
+            ) && (
+              <button type="button" className="ai-ask-cancel" disabled={active} onClick={retryAll}>
+                {t('cmpRetryFailed')}
+              </button>
+            )}
             {started && (
               <div className="cmp-progress" role="status">
                 <span>{t('cmpProgress', { done, total: batchTotal })}</span>
+                <span>
+                  {t('cmpTargetLanguage')}: {runOptions.current.target}
+                </span>
                 {state.total > state.batchEnd && (
                   <span className="cmp-hint">
                     {t('cmpRemaining', { n: state.total - state.batchEnd })}

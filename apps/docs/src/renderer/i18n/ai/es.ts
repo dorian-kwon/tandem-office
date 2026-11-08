@@ -71,6 +71,9 @@ export const es = {
   cmpStDone: 'Hecho',
   cmpStFailed: 'Falló',
   cmpStStopped: 'Detenido',
+  cmpRetryFailed: 'Reintentar todos los fallidos',
+  cmpRetryStale: 'Se omitió el texto modificado. Inicie una nueva comparación.',
+  cmpTargetLanguage: 'Idioma de destino',
   cmpRetry: 'Reintentar',
   cmpUse: 'Usar este',
   cmpCopy: 'Copiar',
@@ -91,9 +94,6 @@ export const es = {
   cmpAddOriginal: 'Añadir original',
   cmpCut:
     'Solo se enviaron los primeros {max} caracteres, así que Usar este está desactivado. Seleccione un pasaje más corto para reemplazar.',
-  cmpKindPolished: 'Pulido',
-  cmpKindRetranslated: 'Retraducido',
-  cmpRetranslate: 'Incluir retraducción',
   cmpNoAnswer:
     'Ningún motor respondió. Puede copiar el prompt y preguntar usted mismo en los sitios.',
   aiAskTitle: 'Pedir un cambio sobre la selección',

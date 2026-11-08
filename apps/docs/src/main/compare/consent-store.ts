@@ -1,7 +1,7 @@
 /**
  * The person's small settings of the AI compare feature, kept in one file in the
  * data folder (`web-compare.json`): the one-time acknowledgement of what is sent
- * where, and the popup's choices (engine switches, re-translation, auto integrate). The AI settings file is owned by
+ * where, and the popup's choices (engine switches, auto integrate). The AI settings file is owned by
  * the provider code and these values are not provider choices, hence their own
  * file. Reads never throw; anything unreadable counts as "not yet" / the default.
  */
@@ -18,7 +18,6 @@ export const COMPARE_CONSENT_VERSION = 4
 
 interface Stored {
   consentVersion?: unknown
-  retranslate?: unknown
   autoIntegrate?: unknown
   engines?: unknown
 }
@@ -78,7 +77,6 @@ function sanitizePrefs(value: unknown): ComparePrefs {
   const out: ComparePrefs = {}
   if (!value || typeof value !== 'object') return out
   const raw = value as Record<string, unknown>
-  if (typeof raw.retranslate === 'boolean') out.retranslate = raw.retranslate
   if (typeof raw.autoIntegrate === 'boolean') out.autoIntegrate = raw.autoIntegrate
   if (raw.engines && typeof raw.engines === 'object' && !Array.isArray(raw.engines)) {
     const engines: Record<string, boolean> = {}

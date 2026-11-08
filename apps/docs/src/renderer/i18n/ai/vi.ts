@@ -67,6 +67,9 @@ export const vi = {
   cmpStDone: 'Xong',
   cmpStFailed: 'Thất bại',
   cmpStStopped: 'Đã dừng',
+  cmpRetryFailed: 'Thử lại tất cả mục thất bại',
+  cmpRetryStale: 'Đã bỏ qua văn bản thay đổi. Hãy bắt đầu so sánh mới.',
+  cmpTargetLanguage: 'Ngôn ngữ đích',
   cmpRetry: 'Thử lại',
   cmpUse: 'Dùng bản này',
   cmpCopy: 'Sao chép',
@@ -87,9 +90,6 @@ export const vi = {
   cmpAddOriginal: 'Thêm bản gốc',
   cmpCut:
     'Chỉ {max} ký tự đầu được gửi, nên Dùng bản này bị tắt. Hãy chọn đoạn ngắn hơn để thay thế.',
-  cmpKindPolished: 'Đã trau chuốt',
-  cmpKindRetranslated: 'Dịch lại',
-  cmpRetranslate: 'Bao gồm bản dịch lại',
   cmpNoAnswer:
     'Không có công cụ nào trả lời. Bạn có thể sao chép lời nhắc và tự hỏi trên các trang đó.',
   aiAskTitle: 'Hỏi AI về phần đã chọn',

@@ -69,6 +69,9 @@ export const cs = {
   cmpStDone: 'Hotovo',
   cmpStFailed: 'Selhalo',
   cmpStStopped: 'Zastaveno',
+  cmpRetryFailed: 'Zopakovat všechny neúspěšné',
+  cmpRetryStale: 'Změněný text byl přeskočen. Spusťte nové porovnání.',
+  cmpTargetLanguage: 'Cílový jazyk',
   cmpRetry: 'Zkusit znovu',
   cmpUse: 'Použít toto',
   cmpCopy: 'Kopírovat',
@@ -88,9 +91,6 @@ export const cs = {
   cmpAddOriginal: 'Přidat originál',
   cmpCut:
     'Odeslalo se jen prvních {max} znaků, proto je Použít toto vypnuto. Pro nahrazení vyberte kratší úsek.',
-  cmpKindPolished: 'Vyladěný',
-  cmpKindRetranslated: 'Přeložený znovu',
-  cmpRetranslate: 'Zahrnout nový překlad',
   cmpNoAnswer:
     'Žádný engine neodpověděl. Můžete zkopírovat prompt a zeptat se sami na těchto stránkách.',
   aiAskTitle: 'Zeptat se AI na výběr',

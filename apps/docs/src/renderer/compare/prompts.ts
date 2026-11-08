@@ -4,36 +4,7 @@
  * integrates the candidates. Pure string work.
  */
 
-/** the instruction every website receives, word for word */
-export const COMPARE_INSTRUCTION =
-  'compare the English text against the original Korean text for accuracy and polish the text to make it sound more natural and refined'
-
-/**
- * One closing line after the labelled texts. It only asks the site to answer with
- * the text itself, which keeps the candidates free of chatter without any brittle
- * parsing; the instruction above is untouched.
- */
-export const COMPARE_ANSWER_ONLY =
-  'Reply with the polished English text only, without any explanation.'
-
-/** the instruction the app's own AI gets for the integration step, word for word */
-export const INTEGRATE_INSTRUCTION =
-  'combine the translations and produce the best version (by integrating the better elements of each, for example)'
-
-/** the section markers a re-translating site is asked to answer with */
-export const MARKER_POLISHED = '[POLISHED]'
-export const MARKER_RETRANSLATION = '[RETRANSLATION]'
-
-/**
- * The extra instruction when the sites also re-translate the Korean original. It asks for an
- * independent translation (the given English must not be looked at) and for exactly two
- * marked sections, so the reply can be split by the markers without guessing.
- */
-export const COMPARE_RETRANSLATE_INSTRUCTION = [
-  'Also translate the original Korean text into English yourself, independently: do not look at the given English text while doing this.',
-  '',
-  `Answer in exactly two sections. Start the first with the line ${MARKER_POLISHED} followed by the polished English text only, then start the second with the line ${MARKER_RETRANSLATION} followed by your own fresh English translation only. No commentary, no quotes, no markdown.`,
-].join('\n')
+export const INTEGRATE_INSTRUCTION = 'Combine the candidates into one best translation.'
 
 /** the most characters of the selection (and of an added original) that are sent to the sites */
 export const COMPARE_TEXT_MAX_CHARS = 4000
@@ -66,49 +37,35 @@ export function languageName(code: string): string {
 }
 
 export interface PromptOptions {
-  /** with an original: the sites also translate it themselves and answer in two marked sections */
-  retranslate?: boolean
-  /** without an original: the language the selection is translated into (English name) */
   targetLanguage?: string
 }
 
-/**
- * The prompt sent to each website, one builder for two modes.
- * With an original (`korean` not empty): the polishing instruction, the labelled original and
- * English, and either the answer-only line or (`retranslate`) the re-translation instruction.
- * Without: only the selection, to be translated into the target language, or re-translated when
- * it already is in it; the site detects the source language itself.
- */
+/** Each engine gets one translation or improvement task and returns one answer. */
 export function buildComparePrompt(
   korean: string,
-  english: string,
+  text: string,
   options: PromptOptions = {},
 ): string {
-  if (korean.trim() === '') {
-    const target = options.targetLanguage?.trim() || 'English'
+  const target = options.targetLanguage?.trim() || 'English'
+  const selection = text.trim()
+  const koreanSource = /\p{Script=Hangul}/u.test(selection)
+  if (koreanSource || !korean.trim())
     return [
-      `Translate the following text into ${target}. If it is already in ${target}, re-translate it so that it is accurate, natural and refined. Answer with the resulting text only.`,
+      `Translate the following text into ${target}. Return only one finished translation, without explanation.`,
       '',
-      english.trim(),
+      selection,
     ].join('\n')
-  }
-  return [
-    COMPARE_INSTRUCTION,
+  const parts = [
+    `Improve the following ${target} translation for accuracy and natural wording. Return only one finished translation, without explanation.`,
     '',
-    'Original Korean:',
-    korean.trim(),
-    '',
-    'English text:',
-    english.trim(),
-    '',
-    options.retranslate ? COMPARE_RETRANSLATE_INSTRUCTION : COMPARE_ANSWER_ONLY,
-  ].join('\n')
+  ]
+  if (korean.trim()) parts.push('Original Korean:', korean.trim(), '')
+  parts.push('Current translation:', selection)
+  return parts.join('\n')
 }
 
-export type CandidateKind = 'polished' | 'retranslation'
-
 export interface Candidate {
-  /** label shown to the model, e.g. "Gemini (polished)" */
+  /** engine label shown to the model */
   label: string
   text: string
 }
@@ -123,8 +80,8 @@ export function buildIntegrationRequest(input: {
   /** without an original: the language all candidates are in (English name) */
   targetLanguage?: string
 }): { system: string; user: string } {
-  const system =
-    'You are a careful English editor. Reply with the final English text only: no explanation, no labels, no quotation marks around it. Candidates may contain leftover chat remarks; ignore those.'
+  const target = input.targetLanguage?.trim() || 'English'
+  const system = `You are a careful translation editor. Reply with one final ${target} text only, without explanation or labels.`
   const parts = [INTEGRATE_INSTRUCTION, '']
   if (input.korean.trim() !== '') parts.push('Original Korean:', input.korean.trim(), '')
   if (input.targetLanguage) parts.push(`Target language: ${input.targetLanguage}`, '')
@@ -137,52 +94,8 @@ export function buildIntegrationRequest(input: {
     seen.add(key)
     parts.push(`Candidate (${answer.label}):`, answer.text.trim(), '')
   }
-  parts.push('Reply with the final English text only.')
+  parts.push(`Reply with one final ${target} text only.`)
   return { system, user: parts.join('\n') }
-}
-
-export interface SplitAnswer {
-  /** the polished English, cleaned; '' when the reply has none */
-  polished: string
-  /** the site's own fresh translation, cleaned; '' when the reply has none */
-  retranslation: string
-}
-
-const MARKER_LINE = /^[\s>*_#`-]*\[(POLISHED|RETRANSLATION)\][\s*_:`-]*(.*)$/i
-
-/**
- * A site's reply split into its two sections by the markers. Never fails: without any marker
- * (or when re-translation is off) the whole reply is the polished text; with one marker, what
- * follows it is that section (an earlier unmarked part is chatter and is dropped); the order
- * of the sections does not matter; a repeated marker keeps the first filled section.
- * Each section goes through the same cleaning as any single answer.
- */
-export function splitAnswer(raw: string, retranslate: boolean): SplitAnswer {
-  if (!retranslate) return { polished: cleanCandidate(raw), retranslation: '' }
-  const lines = raw.replace(/\r\n/g, '\n').split('\n')
-  const sections: Record<'polished' | 'retranslation', string[]> = {
-    polished: [],
-    retranslation: [],
-  }
-  let current: 'polished' | 'retranslation' | null = null
-  let sawMarker = false
-  for (const line of lines) {
-    const marker = MARKER_LINE.exec(line)
-    if (marker) {
-      sawMarker = true
-      const name = marker[1]!.toUpperCase() === 'POLISHED' ? 'polished' : 'retranslation'
-      // a second marker of an already filled section is ignored together with its text
-      current = sections[name].some((l) => l.trim() !== '') ? null : name
-      if (current && marker[2]!.trim() !== '') sections[current].push(marker[2]!)
-      continue
-    }
-    if (current) sections[current].push(line)
-  }
-  if (!sawMarker) return { polished: cleanCandidate(raw), retranslation: '' }
-  return {
-    polished: cleanCandidate(sections.polished.join('\n')),
-    retranslation: cleanCandidate(sections.retranslation.join('\n')),
-  }
 }
 
 const LEAD_IN = /^(sure|certainly|of course|here(?:'s| is| are)|okay|ok)\b[^\n]*:\s*$/i

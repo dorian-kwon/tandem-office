@@ -70,6 +70,9 @@ export const nl = {
   cmpStDone: 'Klaar',
   cmpStFailed: 'Mislukt',
   cmpStStopped: 'Gestopt',
+  cmpRetryFailed: 'Alle mislukte opnieuw proberen',
+  cmpRetryStale: 'Gewijzigde tekst is overgeslagen. Start daarvoor een nieuwe vergelijking.',
+  cmpTargetLanguage: 'Doeltaal',
   cmpRetry: 'Opnieuw proberen',
   cmpUse: 'Deze gebruiken',
   cmpCopy: 'Kopiëren',
@@ -90,9 +93,6 @@ export const nl = {
   cmpAddOriginal: 'Origineel toevoegen',
   cmpCut:
     'Alleen de eerste {max} tekens zijn verzonden, dus Deze gebruiken staat uit. Selecteer een korter stuk om te vervangen.',
-  cmpKindPolished: 'Bijgewerkt',
-  cmpKindRetranslated: 'Opnieuw vertaald',
-  cmpRetranslate: 'Hervertaling opnemen',
   cmpNoAnswer:
     'Geen enkele engine heeft geantwoord. U kunt de prompt kopiëren en het zelf op de sites vragen.',
   aiAskTitle: 'Vraag een wijziging van de selectie',

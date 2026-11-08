@@ -497,20 +497,19 @@ describe('consent and source copy', () => {
     },
   )
 
-  it('the re-translation switch is on by default, remembered, and independent of the consent', async () => {
-    let stored: string | null = null
-    const fs = { read: async () => stored, write: async (t: string) => void (stored = t) }
-    expect((await readComparePrefs(fs)).retranslate ?? true).toBe(true)
+  it('ignores the retired two-answer preference and preserves current choices', async () => {
+    let stored = '{"retranslate":true,"autoIntegrate":false}'
+    const fs = {
+      read: async () => stored,
+      write: async (text: string) => {
+        stored = text
+      },
+    }
+    expect(await readComparePrefs(fs)).toEqual({ autoIntegrate: false })
     await writeCompareConsent(fs)
-    await writeComparePrefs(fs, { retranslate: false })
-    expect((await readComparePrefs(fs)).retranslate).toBe(false)
-    // writing one value keeps the other
     expect(await readCompareConsent(fs)).toBe(true)
-    await writeComparePrefs(fs, { retranslate: true })
-    expect(await readCompareConsent(fs)).toBe(true)
-    expect((await readComparePrefs(fs)).retranslate ?? true).toBe(true)
-    stored = 'garbage'
-    expect((await readComparePrefs(fs)).retranslate ?? true).toBe(true)
+    await writeComparePrefs(fs, { retranslate: false, autoIntegrate: true })
+    expect(await readComparePrefs(fs)).toEqual({ autoIntegrate: true })
   })
 
   it('preserves simultaneous preference changes and consent writes', async () => {

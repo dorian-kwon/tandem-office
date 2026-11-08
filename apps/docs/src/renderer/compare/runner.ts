@@ -9,7 +9,7 @@
  */
 import { isBlockReason, type CompareAnswer, type CompareDriverClient } from '../../shared/compare'
 import { CONNECTED_AI_ENGINE_ID } from '../../shared/compare-engines'
-import { cleanCandidate, splitAnswer, type CandidateKind } from './prompts'
+import { cleanCandidate } from './prompts'
 
 /** units asked per run (and per "continue") */
 export const COMPARE_BATCH_SIZE = 20
@@ -20,10 +20,8 @@ export type EngineStatus = 'waiting' | 'running' | 'done' | 'failed' | 'stopped'
 
 export interface EngineResult {
   status: EngineStatus
-  /** the cleaned answer (the polished text when two sections were asked for) */
+  /** the single cleaned answer */
   text?: string
-  /** the site's own fresh translation, when asked for and given */
-  retranslation?: string
   /** why it failed or was blocked (a block code or a short diagnostic) */
   reason?: string
 }
@@ -70,7 +68,6 @@ export interface RunnerUnit {
 
 export interface IntegrationCandidate {
   id: string
-  kind: CandidateKind
   text: string
 }
 
@@ -78,8 +75,8 @@ export interface RunnerDeps {
   driver: CompareDriverClient
   /** the prompt of one unit (pure; mode depends on the unit's original) */
   promptFor(unit: RunnerUnit): string
-  /** whether the prompt of this unit asks for a re-translation (replies are then split by markers) */
-  retranslateFor(unit: RunnerUnit): boolean
+  /** Retry only while the original text range is still valid. */
+  canRetry?(unit: RunnerUnit): boolean
   /** the app's own AI over the answers of one unit */
   integrate(
     unit: RunnerUnit,
@@ -104,6 +101,7 @@ export interface Runner {
   continueNext(): void
   /** ask one engine again about one unit (not while running, never a blocked engine) */
   retry(unitId: string, engineId: string): void
+  retryFailed(): void
   /** integrate one unit now */
   integrateNow(unitId: string): void
   setAutoIntegrate(on: boolean): void
@@ -155,8 +153,7 @@ export function createRunner(deps: RunnerDeps): Runner {
     for (const engine of state.engines) {
       const e = result.engines[engine]
       if (e?.status !== 'done') continue
-      if (e.text) out.push({ id: engine, kind: 'polished', text: e.text })
-      if (e.retranslation) out.push({ id: engine, kind: 'retranslation', text: e.retranslation })
+      if (e.text) out.push({ id: engine, text: e.text })
     }
     return out
   }
@@ -185,14 +182,12 @@ export function createRunner(deps: RunnerDeps): Runner {
     if (controller.signal.aborted) {
       setEngine(unit.id, engine, { status: 'stopped' })
     } else if (answer.ok) {
-      const { polished, retranslation } = splitAnswer(answer.text, deps.retranslateFor(unit))
-      if (polished || retranslation) {
-        setEngine(unit.id, engine, {
-          status: 'done',
-          ...(polished ? { text: polished } : {}),
-          ...(retranslation ? { retranslation } : {}),
-        })
-      } else setEngine(unit.id, engine, { status: 'failed', reason: 'the answer was empty' })
+      const text = cleanCandidate(answer.text)
+      setEngine(
+        unit.id,
+        engine,
+        text ? { status: 'done', text } : { status: 'failed', reason: 'the answer was empty' },
+      )
     } else if (isBlockReason(answer.reason)) {
       const reason = answer.reason
       emit({
@@ -276,6 +271,51 @@ export function createRunner(deps: RunnerDeps): Runner {
     active.clear()
   }
 
+  function retryPairs(
+    pairs: Array<{ unitId: string; engineId: string }>,
+    allowStopped = false,
+  ): void {
+    if (!['stopped', 'batchDone', 'done', 'allBlocked'].includes(state.phase)) return
+    const eligible = (unit: RunnerUnit, id: string): boolean => {
+      const result = resultOf(unit.id)
+      const status = result?.engines[id]?.status
+      return (
+        !result?.applied &&
+        !state.blocked[id] &&
+        (status === 'failed' || (allowStopped && status === 'stopped')) &&
+        (deps.canRetry?.(unit) ?? true)
+      )
+    }
+    const queued = units
+      .map((unit) => ({
+        unit,
+        engines: [
+          ...new Set(pairs.filter((p) => p.unitId === unit.id).map((p) => p.engineId)),
+        ].filter((id) => eligible(unit, id)),
+      }))
+      .filter((item) => item.engines.length)
+    if (!queued.length) return
+    const phase = state.phase
+    const gen = ++generation
+    emit({ ...state, phase: 'running' })
+    void (async () => {
+      let attempted = false
+      for (const { unit, engines } of queued) {
+        if (!(await gate(gen))) return
+        if (attempted) {
+          await sleep(pace)
+          if (!(await gate(gen))) return
+        }
+        const current = engines.filter((id) => eligible(unit, id))
+        if (!current.length) continue
+        attempted = true
+        await Promise.all(current.map((id) => askEngine(unit, id, gen)))
+        if (gen !== generation) return
+      }
+      if (await gate(gen)) emit({ ...state, phase })
+    })()
+  }
+
   function launch(): void {
     const gen = ++generation
     calledOnce = false
@@ -355,17 +395,16 @@ export function createRunner(deps: RunnerDeps): Runner {
       launch()
     },
     retry(unitId, engineId) {
-      const unit = unitOf(unitId)
-      const e = resultOf(unitId)?.engines[engineId]
-      const idle = ['stopped', 'batchDone', 'done', 'allBlocked'].includes(state.phase)
-      if (!unit || !e || !idle || state.blocked[engineId]) return
-      if (e.status !== 'failed' && e.status !== 'stopped') return
-      const gen = generation
-      const before = state
-      emit({ ...state, phase: 'running' })
-      void askEngine(unit, engineId, gen).then(async () => {
-        if (await gate(gen)) emit({ ...state, phase: before.phase })
-      })
+      retryPairs([{ unitId, engineId }], true)
+    },
+    retryFailed() {
+      retryPairs(
+        state.units.flatMap((unit) =>
+          Object.entries(unit.engines)
+            .filter(([, result]) => result.status === 'failed')
+            .map(([engineId]) => ({ unitId: unit.id, engineId })),
+        ),
+      )
     },
     integrateNow(unitId) {
       const unit = unitOf(unitId)

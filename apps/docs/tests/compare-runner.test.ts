@@ -26,7 +26,6 @@ function setup(patch: Partial<RunnerDeps> = {}) {
       },
     },
     promptFor: (u) => u.text,
-    retranslateFor: () => false,
     integrate: async () => ({ ok: true, text: 'Integrated' }),
     paceMs: 0,
     sleep: async () => {},
@@ -389,4 +388,94 @@ describe('comparison scheduler', () => {
     await settle()
     expect(runner.getState().units[0]?.integrate.status).not.toBe('done')
   })
+})
+
+it('retry all targets failed pairs only and preserves successful, applied and blocked results', async () => {
+  const calls: string[] = []
+  const count = new Map<string, number>()
+  const { runner } = setup({
+    driver: {
+      detect: async () => ({ installed: true }),
+      ask: async (engine, prompt) => {
+        const key = `${engine}:${prompt}`
+        calls.push(key)
+        count.set(key, (count.get(key) ?? 0) + 1)
+        const failed =
+          key === 'copilot:Paragraph 0' ||
+          key === 'copilot:Paragraph 1' ||
+          key === 'connected-ai:Paragraph 2'
+        return failed && count.get(key) === 1
+          ? { ok: false, reason: 'temporary failure' }
+          : { ok: true, text: `answer ${key}` }
+      },
+    },
+  })
+  runner.start(units, ['copilot', 'connected-ai'], false)
+  await settle()
+  await settle()
+  await settle()
+  runner.markApplied('u0')
+  const success = runner.getState().units[1]!.engines['connected-ai']
+  runner.retryFailed()
+  runner.retryFailed()
+  await settle()
+  await settle()
+  expect(calls.slice(6)).toEqual(['copilot:Paragraph 1', 'connected-ai:Paragraph 2'])
+  expect(runner.getState().units[0]!.applied).toBe(true)
+  expect(runner.getState().units[0]!.engines.copilot?.status).toBe('failed')
+  expect(runner.getState().units[1]!.engines['connected-ai']).toBe(success)
+  expect(runner.getState().units[2]!.engines['connected-ai']?.status).toBe('done')
+})
+
+it('retry all skips stale units, stopped pairs and blocked engines', async () => {
+  let retriesAllowed = true
+  const calls: string[] = []
+  const { runner } = setup({
+    canRetry: () => retriesAllowed,
+    driver: {
+      detect: async () => ({ installed: true }),
+      ask: async (engine) => {
+        calls.push(engine)
+        return { ok: false, reason: engine === 'copilot' ? 'blocked' : 'temporary failure' }
+      },
+    },
+  })
+  runner.start(units.slice(0, 1), ['copilot', 'connected-ai'], false)
+  await settle()
+  retriesAllowed = false
+  runner.retryFailed()
+  await settle()
+  expect(calls).toEqual(['copilot', 'connected-ai'])
+  retriesAllowed = true
+  runner.retryFailed()
+  await settle()
+  expect(calls).toEqual(['copilot', 'connected-ai', 'connected-ai'])
+})
+
+it('stop cancels an active failed-only retry and ignores its late reply', async () => {
+  const pending = deferred<CompareAnswer>()
+  let count = 0
+  let signal: AbortSignal | undefined
+  const { runner } = setup({
+    driver: {
+      detect: async () => ({ installed: true }),
+      ask: async (_engine, _prompt, s) => {
+        signal = s
+        return ++count === 1 ? { ok: false, reason: 'temporary failure' } : pending.promise
+      },
+    },
+  })
+  runner.start(units.slice(0, 1), ['copilot'], false)
+  await settle()
+  runner.retryFailed()
+  await settle()
+  runner.stop()
+  expect(signal?.aborted).toBe(true)
+  pending.resolve({ ok: true, text: 'late' })
+  await settle()
+  expect(runner.getState().phase).toBe('stopped')
+  expect(runner.getState().units[0]!.engines.copilot?.text).toBeUndefined()
+  runner.retryFailed()
+  await settle()
+  expect(count).toBe(2)
 })

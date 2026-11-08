@@ -69,6 +69,9 @@ export const ms = {
   cmpStDone: 'Selesai',
   cmpStFailed: 'Gagal',
   cmpStStopped: 'Dihentikan',
+  cmpRetryFailed: 'Cuba semula semua yang gagal',
+  cmpRetryStale: 'Teks yang berubah dilangkau. Mulakan perbandingan baharu untuknya.',
+  cmpTargetLanguage: 'Bahasa sasaran',
   cmpRetry: 'Cuba lagi',
   cmpUse: 'Guna ini',
   cmpCopy: 'Salin',
@@ -89,9 +92,6 @@ export const ms = {
   cmpAddOriginal: 'Tambah teks asal',
   cmpCut:
     'Hanya {max} aksara pertama dihantar, jadi Guna ini dimatikan. Pilih bahagian yang lebih pendek untuk menggantikan.',
-  cmpKindPolished: 'Digilap',
-  cmpKindRetranslated: 'Diterjemah semula',
-  cmpRetranslate: 'Sertakan terjemahan semula',
   cmpNoAnswer:
     'Tiada enjin yang menjawab. Anda boleh menyalin prompt dan bertanya sendiri di tapak tersebut.',
   aiAskTitle: 'Minta perubahan pada pilihan',

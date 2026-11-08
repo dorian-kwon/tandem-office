@@ -70,6 +70,9 @@ export const pt = {
   cmpStDone: 'Concluído',
   cmpStFailed: 'Falhou',
   cmpStStopped: 'Interrompido',
+  cmpRetryFailed: 'Repetir todos os que falharam',
+  cmpRetryStale: 'O texto alterado foi ignorado. Inicie uma nova comparação.',
+  cmpTargetLanguage: 'Idioma de destino',
   cmpRetry: 'Tentar de novo',
   cmpUse: 'Usar este',
   cmpCopy: 'Copiar',
@@ -90,9 +93,6 @@ export const pt = {
   cmpAddOriginal: 'Adicionar original',
   cmpCut:
     'Apenas os primeiros {max} caracteres foram enviados, então Usar este está desativado. Selecione um trecho menor para substituir.',
-  cmpKindPolished: 'Refinado',
-  cmpKindRetranslated: 'Retraduzido',
-  cmpRetranslate: 'Incluir retradução',
   cmpNoAnswer:
     'Nenhum mecanismo respondeu. Você pode copiar o prompt e perguntar nos sites por conta própria.',
   aiAskTitle: 'Pedir uma alteração na seleção',
