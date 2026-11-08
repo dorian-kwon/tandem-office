@@ -67,6 +67,9 @@ export interface AgentLoopOptions<TSnapshot = unknown> {
   maxHistory?: number
   /** Context compaction; false disables it (enabled by default with default thresholds) */
   compaction?: CompactionOptions | false
+  /** Outgoing-only character limits by tool name for results from completed runs.
+   * Current-run results, errors, tool calls and the stored transcript stay intact. */
+  pastToolOutputLimits?: Readonly<Record<string, number>>
   /** capture rollback state; invoked right before tools run (see snapshotBefore) */
   captureSnapshot?(): TSnapshot
   /** wrap instruction + skill context into the user message text */
@@ -994,6 +997,33 @@ export class AgentLoop<TSnapshot = unknown> {
     this.history = next
   }
 
+  private requestMessages(): AgentMessage[] {
+    const limits = this.options.pastToolOutputLimits
+    const boundary = this.runUserMsg ? this.history.indexOf(this.runUserMsg) : -1
+    if (!limits || boundary < 0) return [...this.history]
+    return this.history.map((message, i) => {
+      if (i >= boundary || message.role !== 'tool') return message
+      return {
+        ...message,
+        results: message.results.map((result) => {
+          const limit = limits[result.name]
+          if (
+            typeof limit !== 'number' ||
+            !Number.isFinite(limit) ||
+            limit < 1 ||
+            result.isError ||
+            result.output.length <= limit
+          )
+            return result
+          return {
+            ...result,
+            output: `${result.output.slice(0, Math.floor(limit))}\n…(earlier tool output shortened; read the source again if needed)`,
+          }
+        }),
+      }
+    })
+  }
+
   private startTurn(retriesUsed = 0): void {
     const generation = this.generation
     // a tool turn is ending here: fold its usage into the run total before the new turn resets it
@@ -1020,7 +1050,7 @@ export class AgentLoop<TSnapshot = unknown> {
             this.options.skill.systemPrompt +
             (toolsAllowed ? '' : TOOLS_UNAVAILABLE_NOTE) +
             (this.options.systemSuffix?.() ?? ''),
-          messages: [...this.history],
+          messages: this.requestMessages(),
           tools: this.finalizing || !toolsAllowed ? [] : this.options.skill.tools,
           // one id for every turn of this run, so the context gate asks once
           ...(this.runId ? { runId: this.runId } : {}),

@@ -12,6 +12,14 @@
  */
 import type { AiProfile } from './protocol'
 
+/** Completed document reads describe an older snapshot; retain a preview in follow-ups.
+ * Skill instructions, edit arguments and current-run reads are never shortened here. */
+export const TRANSLATION_PAST_TOOL_OUTPUT_LIMITS: Readonly<Record<string, number>> = {
+  read_runs: 4000,
+  read_blocks: 4000,
+  get_document_context: 4000,
+}
+
 /** Tools withheld from the translation profile, with what each one is for. */
 export const TRANSLATION_DROPPED_TOOLS: ReadonlySet<string> = new Set([
   'generate_mindmap',

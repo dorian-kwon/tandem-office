@@ -81,6 +81,7 @@ import { ATTACHMENT_IMAGE_EXTS } from '../../shared/ipc'
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { captureRollbackSnapshot, restoreRollbackSnapshot } from './rollback-snapshot'
 import { countWords, findNumId, type AiProfile, type NumIds } from './protocol'
+import { TRANSLATION_PAST_TOOL_OUTPUT_LIMITS } from './translation-profile'
 import { DOC_NAV_SCHEME, navigateToBlock, parseDocNavHref } from './doc-nav'
 import {
   markDocSeen,
@@ -1225,6 +1226,11 @@ export function AiPanel({
     loopRef.current = new AgentLoop<ProseMirrorNode>({
       transport: transportRef.current,
       systemSuffix: aiLangDirective,
+      get pastToolOutputLimits() {
+        return aiProfileRef.current === 'translation'
+          ? TRANSLATION_PAST_TOOL_OUTPUT_LIMITS
+          : undefined
+      },
       // a local model that reported no tool support answers in text only
       toolsAllowed: () => localModelCapabilities(settingsRef.current).tools !== false,
       skill: composeWithDrive('docs+files', '', () => loopRef.current?.messages ?? [], [
