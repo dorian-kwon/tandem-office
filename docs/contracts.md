@@ -588,8 +588,8 @@ metadata:
 
 ## 웹 AI 비교 (`web-compare.json`, ego lite 구동)
 
-- 데이터 폴더의 `web-compare.json`은 `{ "consentVersion": 1 }` 하나다. Word 편집기 "AI 비교" 창의 첫 사용 확인을 기억한다. 값이 없거나 다른 판이면 다시 묻는다. 앱만 읽고 쓴다. 터미널 명령어와 MCP는 읽지 않는다.
-- IPC 채널(`apps/docs/src/shared/compare.ts`): `compare:detect`(`{ installed, path? }`), `compare:ask`(`{ id, siteId, prompt }` → `{ ok: true, text } | { ok: false, reason }`), `compare:cancel`(id), `compare:read-source`(번역 프로젝트의 `source/` 사본 바이트, 같은 이름의 `.docx`만, 40 MiB까지), `compare:get-consent`, `compare:set-consent`.
+- 데이터 폴더의 `web-compare.json`은 `{ "consentVersion": 1, "retranslate": true }`다(`retranslate`는 없으면 켬). Word 편집기 "AI 비교" 창의 첫 사용 확인과 "재번역 포함" 선택을 기억한다. 두 값은 따로 쓰고 서로 지우지 않는다. 값이 없거나 다른 판이면 다시 묻는다. 앱만 읽고 쓴다. 터미널 명령어와 MCP는 읽지 않는다.
+- IPC 채널(`apps/docs/src/shared/compare.ts`): `compare:detect`(`{ installed, path? }`), `compare:ask`(`{ id, siteId, prompt }` → `{ ok: true, text } | { ok: false, reason }`), `compare:cancel`(id), `compare:read-source`(번역 프로젝트의 `source/` 사본 바이트, 같은 이름의 `.docx`만, 40 MiB까지), `compare:get-consent`, `compare:set-consent`, `compare:get-retranslate`, `compare:set-retranslate`.
 - `reason`의 코드: `login-wall`(로그인·가입 쪽으로 넘어가거나 벽이 입력칸을 덮음), `no-prompt-box`(제한 시간 안에 입력칸이 없음)은 그 엔진을 조용히 건너뛴다(오류 아님). `needs-user`는 ego lite가 사람에게 창을 넘긴 것(브라우저 권한 창)이고 앱은 돌아가서 다시 시도하지 않는다. 입력칸이 있고 보낼 수 있는 손님(로그아웃) 상태는 그대로 쓴다. 그 밖의 `reason`은 사람이 읽는 짧은 진단 글이다.
 - 사이트 표(`apps/docs/src/shared/compare-sites.ts`)가 엔진 목록이다. 한 줄을 더하거나 빼면 상태 줄, 카드, 프롬프트, 다시 시도가 따라 바뀐다.
 

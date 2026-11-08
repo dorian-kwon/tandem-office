@@ -23,7 +23,7 @@ export const ja = {
   cmpBtn: 'AI 比較',
   cmpTitle: '他の AI と比較',
   cmpLeaves:
-    '選択した文章と韓国語の原文はこのアプリの外に送られます。ego ブラウザーのログインを通じて {sites} の Web ページに送信され、各サイトの利用規約が適用されます。エディターはこの段階で文章の一部を隠せません。「比較」を押すまで何も送信されません。',
+    '選択した文章(韓国語の原文がある場合は原文も)はこのアプリの外に送られます。下で同意すると、AI 比較を押した時点ですぐに、ego ブラウザーのログインを通じて {sites} の Web ページに送信され、各サイトの利用規約が適用されます。エディターはこの段階で文章の一部を隠せません。同意するまで何も送信されません。',
   cmpConsentAgree: '理解しました。続ける',
   cmpSourceLabel: '韓国語の原文',
   cmpSourceAuto:
@@ -61,6 +61,12 @@ export const ja = {
   cmpStNeedsUser: '操作が必要',
   cmpNeedsUserHint:
     'ego lite があなたの操作を待っています。ego lite のウィンドウで確認を済ませるか、サイトの Cookie 通知を一度閉じてから「再試行」を押してください。',
+  cmpAddOriginal: '原文を追加',
+  cmpCut:
+    '最初の {max} 文字だけを送信したため、「これを使う」は無効です。置き換えるには短い範囲を選んでください。',
+  cmpKindPolished: '推敲',
+  cmpKindRetranslated: '再翻訳',
+  cmpRetranslate: '再翻訳を含める',
   cmpNoAnswer: '回答したエンジンがありません。プロンプトをコピーして、各サイトで直接質問できます。',
   aiAskTitle: '選択範囲への修正を依頼',
   aiAskEditTitle: 'この修正指示を編集',

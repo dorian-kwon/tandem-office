@@ -202,6 +202,51 @@ describe('compare run state machine', () => {
     expect(run.getState().integrate.status).toBe('idle')
   })
 
+  it('with re-translation each engine gives up to two candidates; a missing marker never fails an engine', async () => {
+    const { driver } = fakeDriver({
+      gemini: [{ ok: true, text: '[POLISHED]\nGP\n[RETRANSLATION]\nGR' }],
+      claude: [{ ok: true, text: 'No markers here' }],
+      copilot: [{ ok: true, text: 'chatter\n[RETRANSLATION]\nCR only' }],
+    })
+    const seen: Array<Array<[string, string, string]>> = []
+    const run = createCompareRun({
+      driver,
+      engineIds: IDS,
+      integrate: async (a) => (
+        seen.push(a.map((x) => [x.id, x.kind, x.text])),
+        { ok: true, text: 'M' }
+      ),
+    })
+    run.start('p', true, true)
+    await flush()
+    const e = run.getState().engines
+    expect(e[0]).toMatchObject({ status: 'done', text: 'GP', retranslation: 'GR' })
+    expect(e[1]).toMatchObject({ status: 'done', text: 'No markers here' })
+    expect(e[1]!.retranslation).toBeUndefined()
+    expect(e[2]).toMatchObject({ status: 'done', retranslation: 'CR only' })
+    expect(e[2]!.text).toBeUndefined()
+    expect(seen[0]).toEqual([
+      ['gemini', 'polished', 'GP'],
+      ['gemini', 'retranslation', 'GR'],
+      ['claude', 'polished', 'No markers here'],
+      ['copilot', 'retranslation', 'CR only'],
+    ])
+  })
+
+  it('without re-translation a reply is never split', async () => {
+    const { driver } = fakeDriver({
+      gemini: [{ ok: true, text: '[POLISHED]\nX\n[RETRANSLATION]\nY' }],
+    })
+    const run = createCompareRun({
+      driver,
+      engineIds: ['gemini'],
+      integrate: async () => ({ ok: true, text: 'M' }),
+    })
+    run.start('p', false, false)
+    await flush()
+    expect(run.getState().engines[0]!.retranslation).toBeUndefined()
+  })
+
   it('an empty cleaned answer counts as a failure', async () => {
     const { driver } = fakeDriver({ gemini: [{ ok: true, text: '```\n```' }] })
     const run = createCompareRun({

@@ -23,7 +23,7 @@ export const vi = {
   cmpBtn: 'So sánh AI',
   cmpTitle: 'So sánh với AI khác',
   cmpLeaves:
-    'Văn bản đã chọn và bản gốc tiếng Hàn sẽ rời khỏi ứng dụng này: chúng được gửi tới các trang web {sites} qua các đăng nhập trong trình duyệt ego của bạn, và điều khoản của các trang đó được áp dụng. Trình soạn thảo không thể ẩn một phần văn bản ở bước này. Không có gì được gửi cho đến khi bạn nhấn So sánh.',
+    'Văn bản đã chọn (và bản gốc tiếng Hàn, nếu có) rời khỏi ứng dụng này: sau khi bạn đồng ý bên dưới, nhấn So sánh AI sẽ gửi ngay tới các trang web {sites} qua các đăng nhập trong trình duyệt ego của bạn, và điều khoản của các trang đó được áp dụng. Trình soạn thảo không thể ẩn một phần văn bản ở bước này. Không có gì được gửi trước khi bạn đồng ý.',
   cmpConsentAgree: 'Tôi hiểu, tiếp tục',
   cmpSourceLabel: 'Văn bản gốc tiếng Hàn',
   cmpSourceAuto: 'Đã điền từ dự án dịch (cùng vị trí đoạn). Hãy kiểm tra và sửa nếu cần.',
@@ -60,6 +60,12 @@ export const vi = {
   cmpStNeedsUser: 'Cần bạn xử lý',
   cmpNeedsUserHint:
     'ego lite đang chờ bạn. Trong cửa sổ ego lite, hãy xử lý yêu cầu hoặc đóng thông báo cookie của trang một lần, rồi nhấn Thử lại.',
+  cmpAddOriginal: 'Thêm bản gốc',
+  cmpCut:
+    'Chỉ {max} ký tự đầu được gửi, nên Dùng bản này bị tắt. Hãy chọn đoạn ngắn hơn để thay thế.',
+  cmpKindPolished: 'Đã trau chuốt',
+  cmpKindRetranslated: 'Dịch lại',
+  cmpRetranslate: 'Bao gồm bản dịch lại',
   cmpNoAnswer:
     'Không có công cụ nào trả lời. Bạn có thể sao chép lời nhắc và tự hỏi trên các trang đó.',
   aiAskTitle: 'Hỏi AI về phần đã chọn',

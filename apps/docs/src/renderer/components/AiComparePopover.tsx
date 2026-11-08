@@ -27,7 +27,13 @@ import { COMPARE_SITES, EGO_INSTALL_URL } from '../../shared/compare-sites'
 import type { CompareAnswer, CompareDriverClient, EgoDetection } from '../../shared/compare'
 import { authorName } from '../author-name'
 import { useSubscriptionConnection } from '../ai/subscription-client'
-import { buildComparePrompt, buildIntegrationRequest } from '../compare/prompts'
+import {
+  COMPARE_TEXT_MAX_CHARS,
+  buildComparePrompt,
+  buildIntegrationRequest,
+  capText,
+  languageName,
+} from '../compare/prompts'
 import { clampToBounds, dragPosition, type Box } from '../compare/drag-clamp'
 import { createCompareRun, type EngineStatus } from '../compare/run-state'
 import {
@@ -101,7 +107,7 @@ export function AiComparePopover({
   trackChanges,
   onClose,
 }: Props): React.JSX.Element {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const subscription = useSubscriptionConnection()
   const rootRef = useRef<HTMLDivElement>(null)
   const english = useMemo(
@@ -111,16 +117,40 @@ export function AiComparePopover({
   const [consent, setConsent] = useState<boolean | null>(null)
   const [detection, setDetection] = useState<EgoDetection | 'checking'>('checking')
   const [missing, setMissing] = useState<MissingStep>('ask')
+  // the Korean original is optional: found in a translation project, or added by the person
   const [korean, setKorean] = useState('')
   const [autoFilled, setAutoFilled] = useState(false)
+  const [showOriginal, setShowOriginal] = useState(false)
+  // the language of the project's target (or the screen language outside a project); null until known
+  const [targetCode, setTargetCode] = useState<string | null>(null)
+  const [lookupDone, setLookupDone] = useState(false)
+  const autoStarted = useRef(false)
   const [auto, setAuto] = useState(true)
+  // the sites also translate the Korean themselves (remembered in the small settings file)
+  const [retranslate, setRetranslate] = useState(true)
   const [copied, setCopied] = useState<string | null>(null)
   const [notice, setNotice] = useState<StringKey | null>(null)
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
 
   // latest values for the long-lived run (its integration step reads them when it runs)
-  const live = useRef({ settings, statuses: subscription.statuses, korean, english })
-  live.current = { settings, statuses: subscription.statuses, korean, english }
+  const englishSent = useMemo(() => capText(english), [english])
+  const koreanSent = useMemo(() => capText(korean), [korean])
+  const hasOriginal = koreanSent.text !== ''
+  const targetName = languageName(targetCode ?? lang)
+  const live = useRef({
+    settings,
+    statuses: subscription.statuses,
+    korean: koreanSent.text,
+    english: englishSent.text,
+    target: targetName,
+  })
+  live.current = {
+    settings,
+    statuses: subscription.statuses,
+    korean: koreanSent.text,
+    english: englishSent.text,
+    target: targetName,
+  }
 
   const driver = useMemo(ipcDriver, [])
   const run = useMemo(
@@ -129,15 +159,16 @@ export function AiComparePopover({
         driver,
         engineIds: COMPARE_SITES.map((s) => s.id),
         integrate: async (answers): Promise<CompareAnswer> => {
-          const { settings: s, statuses, korean: ko, english: en } = live.current
+          const { settings: s, statuses, korean: ko, english: en, target } = live.current
           // the app's own AI only, and only when its send gate lets a run through
           if (aiSendGate(s, statuses).kind !== 'run' || !window.desktop?.aiChat)
             return { ok: false, reason: t('cmpBlocked') }
           const request = buildIntegrationRequest({
             korean: ko,
             original: en,
+            ...(ko === '' ? { targetLanguage: target } : {}),
             answers: answers.map((a) => ({
-              label: COMPARE_SITES.find((site) => site.id === a.id)?.name ?? a.id,
+              label: `${COMPARE_SITES.find((site) => site.id === a.id)?.name ?? a.id} (${a.kind === 'polished' ? 'polished' : 're-translated'})`,
               text: a.text,
             })),
           })
@@ -165,16 +196,28 @@ export function AiComparePopover({
 
   useEffect(() => {
     let alive = true
+    void Promise.resolve(window.desktop?.compareGetRetranslate?.())
+      .then((v) => alive && typeof v === 'boolean' && setRetranslate(v))
+      .catch(() => {})
     void Promise.resolve(window.desktop?.compareGetConsent?.())
       .then((v) => alive && setConsent(v === true))
       .catch(() => alive && setConsent(false))
     checkEgo()
-    // the Korean original of a translation project's document, found by block position
-    void readKoreanSource(editor, snapshot, window.desktop?.compareReadSource).then((text) => {
-      if (!alive || !text) return
-      setKorean((current) => (current ? current : text))
-      setAutoFilled(true)
-    })
+    // best effort and silent: the target language of the translation project and the Korean
+    // original of its document (found by block position) fill in by themselves
+    const languages = Promise.resolve(window.desktop?.getTranslationLanguages?.())
+      .then((pair) => alive && pair?.targetLang && setTargetCode(pair.targetLang))
+      .catch(() => {})
+    const original = readKoreanSource(editor, snapshot, window.desktop?.compareReadSource).then(
+      (text) => {
+        if (!alive || !text) return
+        setKorean((current) => (current ? current : text))
+        setAutoFilled(true)
+        setShowOriginal(true)
+      },
+      () => {},
+    )
+    void Promise.all([languages, original]).then(() => alive && setLookupDone(true))
     return () => {
       alive = false
     }
@@ -249,9 +292,25 @@ export function AiComparePopover({
       e.currentTarget.releasePointerCapture(e.pointerId)
   }
 
-  const prompt = useMemo(() => buildComparePrompt(korean, english), [korean, english])
-  const canStart = consent === true && korean.trim() !== '' && english !== ''
+  // the re-translation only applies when there is an original to translate from
+  const asksRetranslation = retranslate && hasOriginal
+  const prompt = useMemo(
+    () =>
+      buildComparePrompt(koreanSent.text, englishSent.text, {
+        retranslate: asksRetranslation,
+        targetLanguage: targetName,
+      }),
+    [koreanSent.text, englishSent.text, asksRetranslation, targetName],
+  )
+  const canStart = consent === true && englishSent.text !== ''
   const installed = detection !== 'checking' && detection.installed
+  // no input is needed: once the person agreed, ego lite is there and the lookup finished, it starts
+  useEffect(() => {
+    if (autoStarted.current || !canStart || !installed || !lookupDone) return
+    autoStarted.current = true
+    run.start(prompt, auto, asksRetranslation)
+  }, [canStart, installed, lookupDone, run, prompt, auto, asksRetranslation])
+  const cut = englishSent.cut || koreanSent.cut
 
   const copy = (key: string, text: string): void => {
     void navigator.clipboard?.writeText(text).then(
@@ -296,7 +355,7 @@ export function AiComparePopover({
       <div className="cmp-card-body">{body}</div>
       {text && (
         <div className="cmp-card-foot">
-          <button type="button" className="ai-ask-confirm" onClick={() => use(text)}>
+          <button type="button" className="ai-ask-confirm" disabled={cut} onClick={() => use(text)}>
             {t('cmpUse')}
           </button>
           <button type="button" className="ai-ask-cancel" onClick={() => copy(key, text)}>
@@ -332,7 +391,6 @@ export function AiComparePopover({
           key={site.id}
           type="button"
           className="ai-ask-cancel"
-          disabled={korean.trim() === ''}
           onClick={() => manual(site.url)}
         >
           {t('cmpManual', { name: site.name })}
@@ -401,18 +459,29 @@ export function AiComparePopover({
         )}
         {consent && (
           <>
-            <label className="cmp-label" htmlFor="cmp-korean">
-              {t('cmpSourceLabel')}
-            </label>
-            {autoFilled && <div className="cmp-hint">{t('cmpSourceAuto')}</div>}
-            <textarea
-              id="cmp-korean"
-              className="ai-ask-pop-input cmp-text"
-              value={korean}
-              rows={3}
-              placeholder={t('cmpSourcePlaceholder')}
-              onChange={(e) => setKorean(e.target.value)}
-            />
+            {!showOriginal ? (
+              <div>
+                <button type="button" className="cmp-link" onClick={() => setShowOriginal(true)}>
+                  {t('cmpAddOriginal')}
+                </button>
+              </div>
+            ) : (
+              <>
+                <label className="cmp-label" htmlFor="cmp-korean">
+                  {t('cmpSourceLabel')}
+                </label>
+                {autoFilled && <div className="cmp-hint">{t('cmpSourceAuto')}</div>}
+                <textarea
+                  id="cmp-korean"
+                  className="ai-ask-pop-input cmp-text"
+                  value={korean}
+                  rows={3}
+                  placeholder={t('cmpSourcePlaceholder')}
+                  onChange={(e) => setKorean(e.target.value)}
+                />
+              </>
+            )}
+            {cut && <div className="cmp-warn">{t('cmpCut', { max: COMPARE_TEXT_MAX_CHARS })}</div>}
             {detection === 'checking' && <div className="cmp-hint">{t('cmpChecking')}</div>}
             {detection !== 'checking' && !detection.installed && (
               <div className="cmp-missing">
@@ -463,6 +532,19 @@ export function AiComparePopover({
                   />
                   {t('cmpAutoIntegrate')}
                 </label>
+                {hasOriginal && (
+                  <label className="cmp-auto cmp-retranslate">
+                    <input
+                      type="checkbox"
+                      checked={retranslate}
+                      onChange={(e) => {
+                        setRetranslate(e.target.checked)
+                        void window.desktop?.compareSetRetranslate?.(e.target.checked)
+                      }}
+                    />
+                    {t('cmpRetranslate')}
+                  </label>
+                )}
                 {busy && state.started ? (
                   <button type="button" className="ai-ask-cancel" onClick={() => run.stop()}>
                     {t('cmpStop')}
@@ -484,7 +566,7 @@ export function AiComparePopover({
                   disabled={!canStart || (busy && state.started)}
                   onClick={() => {
                     setNotice(null)
-                    run.start(buildComparePrompt(korean, english), auto)
+                    run.start(prompt, auto, asksRetranslation)
                   }}
                 >
                   {t('cmpStart')}
@@ -508,17 +590,8 @@ export function AiComparePopover({
                   const retryable = ['failed', 'stopped', 'skipped', 'needsUser'].includes(
                     engine.status,
                   )
-                  return card(
-                    engine.id,
-                    site.name,
-                    engine.status === 'done' ? (
-                      engine.text
-                    ) : engine.status === 'needsUser' ? (
-                      <span className="cmp-reason">{t('cmpNeedsUserHint')}</span>
-                    ) : engine.reason ? (
-                      <span className="cmp-reason">{engine.reason}</span>
-                    ) : null,
-                    engine.status === 'done' ? (engine.text ?? null) : null,
+                  const both = engine.text && engine.retranslation
+                  const head = (
                     <span className="cmp-head-actions">
                       {statusChip(engine.status)}
                       {retryable && (
@@ -535,7 +608,34 @@ export function AiComparePopover({
                           {t('cmpManual', { name: site.name })}
                         </button>
                       )}
-                    </span>,
+                    </span>
+                  )
+                  // the first card carries the status; a second one holds the re-translation
+                  const first = engine.text ?? engine.retranslation ?? null
+                  const firstKind = engine.text ? 'cmpKindPolished' : 'cmpKindRetranslated'
+                  return (
+                    <React.Fragment key={engine.id}>
+                      {card(
+                        engine.id,
+                        engine.retranslation ? `${site.name} · ${t(firstKind)}` : site.name,
+                        engine.status === 'done' ? (
+                          first
+                        ) : engine.status === 'needsUser' ? (
+                          <span className="cmp-reason">{t('cmpNeedsUserHint')}</span>
+                        ) : engine.reason ? (
+                          <span className="cmp-reason">{engine.reason}</span>
+                        ) : null,
+                        engine.status === 'done' ? first : null,
+                        head,
+                      )}
+                      {both &&
+                        card(
+                          `${engine.id}-re`,
+                          `${site.name} · ${t('cmpKindRetranslated')}`,
+                          engine.retranslation,
+                          engine.retranslation ?? null,
+                        )}
+                    </React.Fragment>
                   )
                 })}
               {installed &&

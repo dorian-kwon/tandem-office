@@ -23,7 +23,7 @@ export const zhTW = {
   cmpBtn: 'AI 比較',
   cmpTitle: '與其他 AI 比較',
   cmpLeaves:
-    '所選文字與韓文原文會離開本應用程式:透過你的 ego 瀏覽器登入傳送到 {sites} 網頁,並適用這些網站的條款。編輯器無法在這一步隱藏部分文字。按下「比較」之前不會傳送任何內容。',
+    '所選文字(如有韓文原文,也包括原文)會離開本應用程式:在下方同意後,按下 AI 比較會立即透過你的 ego 瀏覽器登入傳送到 {sites} 網頁,並適用這些網站的條款。編輯器無法在這一步隱藏部分文字。同意之前不會傳送任何內容。',
   cmpConsentAgree: '我了解,繼續',
   cmpSourceLabel: '韓文原文',
   cmpSourceAuto: '已依翻譯專案(相同段落位置)填入。請檢查,必要時修改。',
@@ -58,6 +58,11 @@ export const zhTW = {
   cmpStNeedsUser: '需要你操作',
   cmpNeedsUserHint:
     'ego lite 正在等你。請在 ego lite 視窗中處理該提示,或關閉該網站的 Cookie 提示(只需一次),然後按「重試」。',
+  cmpAddOriginal: '加入原文',
+  cmpCut: '只傳送了前 {max} 個字元,因此「使用此版本」已關閉。請選取較短的段落再取代。',
+  cmpKindPolished: '潤飾',
+  cmpKindRetranslated: '重新翻譯',
+  cmpRetranslate: '包含重新翻譯',
   cmpNoAnswer: '沒有任何引擎回答。你可以複製提示,自行到這些網站提問。',
   aiAskTitle: '對選中內容提出修改',
   aiAskEditTitle: '編輯這條修改意見',

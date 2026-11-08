@@ -23,7 +23,7 @@ export const ko = {
   cmpBtn: 'AI 비교',
   cmpTitle: '다른 AI와 비교',
   cmpLeaves:
-    '선택한 글과 한국어 원문이 이 앱 밖으로 나갑니다. 내 ego 브라우저 로그인으로 {sites} 웹 페이지에 전송되며, 각 사이트의 약관이 적용됩니다. 편집기는 이 단계에서 글의 일부를 가릴 수 없습니다. 비교 단추를 누르기 전에는 아무것도 전송되지 않습니다.',
+    '선택한 글(원문이 있으면 원문도)이 이 앱 밖으로 나갑니다. 아래에서 동의하면 AI 비교를 누르는 즉시 내 ego 브라우저 로그인으로 {sites} 웹 페이지에 전송되며, 각 사이트의 약관이 적용됩니다. 편집기는 이 단계에서 글의 일부를 가릴 수 없습니다. 동의하기 전에는 아무것도 전송되지 않습니다.',
   cmpConsentAgree: '이해했습니다, 계속',
   cmpSourceLabel: '한국어 원문',
   cmpSourceAuto:
@@ -59,6 +59,12 @@ export const ko = {
   cmpStNeedsUser: '확인 필요',
   cmpNeedsUserHint:
     'ego lite가 사용자를 기다리고 있습니다. ego lite 창에서 요청을 처리하거나 사이트의 쿠키 안내를 한 번 닫은 뒤 다시 시도를 누르세요.',
+  cmpAddOriginal: '원문 추가',
+  cmpCut:
+    '앞의 {max}자만 보냈으므로 "이걸로 바꾸기"는 꺼져 있습니다. 바꾸려면 더 짧은 구간을 선택하세요.',
+  cmpKindPolished: '다듬기',
+  cmpKindRetranslated: '재번역',
+  cmpRetranslate: '재번역 포함',
   cmpNoAnswer: '답한 곳이 없습니다. 프롬프트를 복사해 직접 사이트에서 물어볼 수 있습니다.',
   aiAskTitle: '선택 영역에 대한 수정 요청',
   aiAskEditTitle: '이 수정 지시 편집',

@@ -10,7 +10,7 @@ import {
   type CompareAnswer,
   type CompareDriverClient,
 } from '../../shared/compare'
-import { cleanCandidate } from './prompts'
+import { cleanCandidate, splitAnswer, type CandidateKind } from './prompts'
 
 /**
  * `skipped`: chatting is impossible there (login wall, redirect to a login page, no prompt box);
@@ -24,8 +24,10 @@ export type EngineStatus =
 export interface EngineState {
   id: string
   status: EngineStatus
-  /** the cleaned answer, when done */
+  /** the cleaned polished English, when done (absent when the reply held only a re-translation) */
   text?: string
+  /** the site's own fresh translation of the Korean, when asked for and given */
+  retranslation?: string
   /** why it failed, when failed */
   reason?: string
 }
@@ -42,12 +44,19 @@ export interface CompareState {
   integrate: IntegrateState
 }
 
+/** one finished text handed to the integration step */
+export interface IntegrationCandidate {
+  id: string
+  kind: CandidateKind
+  text: string
+}
+
 export interface CompareRunDeps {
   driver: CompareDriverClient
   /** engine ids in display order (from the site table) */
   engineIds: readonly string[]
   /** the integration step: the app's own AI over the finished answers */
-  integrate(answers: Array<{ id: string; text: string }>): Promise<CompareAnswer>
+  integrate(answers: IntegrationCandidate[]): Promise<CompareAnswer>
   /** engines asked at the same time */
   concurrency?: number
 }
@@ -55,7 +64,8 @@ export interface CompareRunDeps {
 export interface CompareRun {
   getState(): CompareState
   subscribe(listener: () => void): () => void
-  start(prompt: string, autoIntegrate: boolean): void
+  /** `retranslate`: the prompt also asks for a fresh translation, and the replies are split by markers */
+  start(prompt: string, autoIntegrate: boolean, retranslate?: boolean): void
   retry(id: string): void
   stop(): void
   setAutoIntegrate(on: boolean): void
@@ -69,6 +79,7 @@ export function createCompareRun(deps: CompareRunDeps): CompareRun {
   const concurrency = Math.max(1, deps.concurrency ?? COMPARE_CONCURRENCY)
   let state: CompareState = initial()
   let prompt = ''
+  let retranslate = false
   let auto = true
   let generation = 0
   let integrateToken = 0
@@ -100,15 +111,23 @@ export function createCompareRun(deps: CompareRunDeps): CompareRun {
   const pick = (patch: Partial<EngineState>): Partial<EngineState> => {
     const out: Partial<EngineState> = {}
     if (patch.text !== undefined) out.text = patch.text
+    if (patch.retranslation !== undefined) out.retranslation = patch.retranslation
     if (patch.reason !== undefined) out.reason = patch.reason
     return out
   }
   const engine = (id: string): EngineState | undefined => state.engines.find((e) => e.id === id)
   const settled = (): boolean =>
     state.engines.every((e) => e.status !== 'waiting' && e.status !== 'running')
-  const doneAnswers = (): Array<{ id: string; text: string }> =>
-    state.engines.flatMap((e) =>
-      e.status === 'done' && e.text ? [{ id: e.id, text: e.text }] : [],
+  const doneAnswers = (): IntegrationCandidate[] =>
+    state.engines.flatMap((e): IntegrationCandidate[] =>
+      e.status === 'done'
+        ? [
+            ...(e.text ? [{ id: e.id, kind: 'polished' as const, text: e.text }] : []),
+            ...(e.retranslation
+              ? [{ id: e.id, kind: 'retranslation' as const, text: e.retranslation }]
+              : []),
+          ]
+        : [],
     )
 
   async function runEngine(id: string, gen: number): Promise<void> {
@@ -126,9 +145,14 @@ export function createCompareRun(deps: CompareRunDeps): CompareRun {
     if (controller.signal.aborted) {
       setEngine(id, { status: 'stopped' })
     } else if (answer.ok) {
-      const text = cleanCandidate(answer.text)
-      if (text) setEngine(id, { status: 'done', text })
-      else setEngine(id, { status: 'failed', reason: 'the answer was empty' })
+      const { polished, retranslation } = splitAnswer(answer.text, retranslate)
+      if (polished || retranslation) {
+        setEngine(id, {
+          status: 'done',
+          ...(polished ? { text: polished } : {}),
+          ...(retranslation ? { retranslation } : {}),
+        })
+      } else setEngine(id, { status: 'failed', reason: 'the answer was empty' })
     } else if (isSkipReason(answer.reason)) {
       setEngine(id, { status: 'skipped' })
     } else if (answer.reason === COMPARE_NEEDS_USER) {
@@ -189,7 +213,7 @@ export function createCompareRun(deps: CompareRunDeps): CompareRun {
       listeners.add(listener)
       return () => listeners.delete(listener)
     },
-    start(nextPrompt, autoIntegrate) {
+    start(nextPrompt, autoIntegrate, withRetranslation = false) {
       generation++
       integrateToken++
       for (const controller of aborts.values()) controller.abort()
@@ -199,6 +223,7 @@ export function createCompareRun(deps: CompareRunDeps): CompareRun {
       integratedFor = ''
       prompt = nextPrompt
       auto = autoIntegrate
+      retranslate = withRetranslation
       emit({ ...initial(), started: true })
       queue.push(...deps.engineIds)
       pump(generation)

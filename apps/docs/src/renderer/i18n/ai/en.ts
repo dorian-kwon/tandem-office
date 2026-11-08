@@ -24,7 +24,7 @@ export const en = {
   cmpBtn: 'AI compare',
   cmpTitle: 'Compare with other AIs',
   cmpLeaves:
-    'The selected text and the Korean original leave this app: they are sent to the {sites} web pages through your ego browser logins, and those sites’ terms apply. The editor cannot hide parts of the text from this step. Nothing is sent until you press Compare.',
+    'The selected text (and the Korean original, if there is one) leaves this app: once you have agreed below, pressing AI compare sends it at once to the {sites} web pages through your ego browser logins, and those sites’ terms apply. The editor cannot hide parts of the text from this step. Nothing is sent before you agree.',
   cmpConsentAgree: 'I understand, continue',
   cmpSourceLabel: 'Original Korean text',
   cmpSourceAuto:
@@ -61,6 +61,12 @@ export const en = {
   cmpStNeedsUser: 'Needs you',
   cmpNeedsUserHint:
     'ego lite is waiting for you. In the ego lite window, handle the prompt or close the site’s cookie notice once, then press Retry.',
+  cmpAddOriginal: 'Add original',
+  cmpCut:
+    'Only the first {max} characters were sent, so Use this is turned off. Select a shorter passage to replace it.',
+  cmpKindPolished: 'Polished',
+  cmpKindRetranslated: 'Re-translated',
+  cmpRetranslate: 'Include re-translation',
   cmpNoAnswer: 'No engine answered. You can copy the prompt and ask on the sites yourself.',
   aiAskTitle: 'Ask AI about the selection',
   aiAskEditTitle: 'Edit this queued instruction',

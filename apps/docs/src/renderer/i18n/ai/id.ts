@@ -24,7 +24,7 @@ export const id = {
   cmpBtn: 'Bandingkan AI',
   cmpTitle: 'Bandingkan dengan AI lain',
   cmpLeaves:
-    'Teks yang dipilih dan teks asli Korea keluar dari aplikasi ini: keduanya dikirim ke halaman web {sites} melalui login ego browser Anda, dan ketentuan situs tersebut berlaku. Editor tidak dapat menyembunyikan bagian teks pada langkah ini. Tidak ada yang dikirim sebelum Anda menekan Bandingkan.',
+    'Teks yang dipilih (dan teks asli Korea, jika ada) keluar dari aplikasi ini: setelah Anda setuju di bawah, menekan Bandingkan AI langsung mengirimnya ke halaman web {sites} melalui login ego browser Anda, dan ketentuan situs tersebut berlaku. Editor tidak dapat menyembunyikan bagian teks pada langkah ini. Tidak ada yang dikirim sebelum Anda setuju.',
   cmpConsentAgree: 'Saya mengerti, lanjutkan',
   cmpSourceLabel: 'Teks asli Korea',
   cmpSourceAuto:
@@ -62,6 +62,12 @@ export const id = {
   cmpStNeedsUser: 'Perlu tindakan Anda',
   cmpNeedsUserHint:
     'ego lite menunggu Anda. Di jendela ego lite, tangani permintaan atau tutup sekali pemberitahuan cookie situs, lalu tekan Coba lagi.',
+  cmpAddOriginal: 'Tambah teks asli',
+  cmpCut:
+    'Hanya {max} karakter pertama yang dikirim, jadi Pakai ini dinonaktifkan. Pilih bagian yang lebih pendek untuk menggantinya.',
+  cmpKindPolished: 'Dipoles',
+  cmpKindRetranslated: 'Diterjemahkan ulang',
+  cmpRetranslate: 'Sertakan terjemahan ulang',
   cmpNoAnswer:
     'Tidak ada mesin yang menjawab. Anda dapat menyalin prompt dan bertanya sendiri di situs-situs itu.',
   aiAskTitle: 'Minta perubahan pada teks terpilih',

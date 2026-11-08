@@ -24,7 +24,7 @@ export const pl = {
   cmpBtn: 'Porównanie AI',
   cmpTitle: 'Porównaj z innymi AI',
   cmpLeaves:
-    'Zaznaczony tekst i koreański oryginał opuszczają tę aplikację: są wysyłane do stron {sites} przez Twoje logowania w przeglądarce ego, a obowiązują regulaminy tych serwisów. Edytor nie może w tym kroku ukryć części tekstu. Nic nie jest wysyłane, dopóki nie naciśniesz Porównaj.',
+    'Zaznaczony tekst (i koreański oryginał, jeśli jest) opuszcza tę aplikację: po wyrażeniu zgody poniżej naciśnięcie Porównanie AI od razu wysyła go do stron {sites} przez Twoje logowania w przeglądarce ego, a obowiązują regulaminy tych serwisów. Edytor nie może w tym kroku ukryć części tekstu. Przed Twoją zgodą nic nie jest wysyłane.',
   cmpConsentAgree: 'Rozumiem, dalej',
   cmpSourceLabel: 'Koreański tekst oryginalny',
   cmpSourceAuto:
@@ -62,6 +62,12 @@ export const pl = {
   cmpStNeedsUser: 'Potrzebna Twoja reakcja',
   cmpNeedsUserHint:
     'ego lite czeka na Ciebie. W oknie ego lite obsłuż komunikat albo raz zamknij informację o plikach cookie witryny, a potem naciśnij Ponów.',
+  cmpAddOriginal: 'Dodaj oryginał',
+  cmpCut:
+    'Wysłano tylko pierwsze {max} znaków, więc Użyj tego jest wyłączone. Zaznacz krótszy fragment, aby go zastąpić.',
+  cmpKindPolished: 'Dopracowany',
+  cmpKindRetranslated: 'Przetłumaczony ponownie',
+  cmpRetranslate: 'Dołącz ponowne tłumaczenie',
   cmpNoAnswer:
     'Żaden silnik nie odpowiedział. Możesz skopiować prompt i zapytać samodzielnie na tych stronach.',
   aiAskTitle: 'Poproś o zmianę zaznaczenia',

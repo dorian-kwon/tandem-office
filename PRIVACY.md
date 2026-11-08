@@ -206,13 +206,17 @@ app's own features:
 
 The **AI compare** button next to a text selection in the Word editor asks
 Gemini, Claude, Copilot and Grok, through their own web pages, to check and polish the
-selected English text against its Korean original. It exists only so that you can
-compare their answers with the original, and it does nothing until you press
-**Compare** in its window.
+selected text against its Korean original, or, when there is no original,
+to translate or re-translate the selection. It exists only so that you can
+compare their answers, and it sends nothing until you have agreed in its window
+and pressed the button; after that it starts at once.
 
-- **What is sent.** The selected text and the Korean original (filled in from the
-  translation project, or typed or pasted by you), together with one fixed
-  instruction. Nothing else from the document. The editor cannot hide parts of
+- **What is sent.** The selected text (at most 4,000 characters; the window says
+  when it was cut) and, only if there is one, the Korean original (filled in from
+  the translation project, or typed or pasted by you; also at most 4,000
+  characters), together with one fixed instruction. With an original the sites are
+  also asked to translate it again themselves (a switch in the window, on by
+  default). Nothing else from the document. The editor cannot hide parts of
   the text from this step, so the window says that the text leaves the app. The
   first time, the window asks you to acknowledge this; the acknowledgement is
   kept in `web-compare.json` in the app's data folder.

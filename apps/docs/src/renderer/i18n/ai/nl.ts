@@ -25,7 +25,7 @@ export const nl = {
   cmpBtn: 'AI-vergelijking',
   cmpTitle: 'Vergelijken met andere AI’s',
   cmpLeaves:
-    'De geselecteerde tekst en het Koreaanse origineel verlaten deze app: ze worden via uw ego-browseraanmeldingen naar de webpagina’s van {sites} gestuurd, en de voorwaarden van die sites gelden. De editor kan in deze stap geen delen van de tekst verbergen. Er wordt niets verzonden voordat u op Vergelijken drukt.',
+    'De geselecteerde tekst (en het Koreaanse origineel, als dat er is) verlaat deze app: nadat u hieronder akkoord bent gegaan, stuurt een druk op AI-vergelijking hem meteen via uw ego-browseraanmeldingen naar de webpagina’s van {sites}, en de voorwaarden van die sites gelden. De editor kan in deze stap geen delen van de tekst verbergen. Vóór uw akkoord wordt niets verzonden.',
   cmpConsentAgree: 'Begrepen, doorgaan',
   cmpSourceLabel: 'Koreaanse brontekst',
   cmpSourceAuto:
@@ -63,6 +63,12 @@ export const nl = {
   cmpStNeedsUser: 'Uw actie is nodig',
   cmpNeedsUserHint:
     'ego lite wacht op u. Handel in het ego lite-venster de melding af of sluit eenmalig de cookiemelding van de site en druk op Opnieuw proberen.',
+  cmpAddOriginal: 'Origineel toevoegen',
+  cmpCut:
+    'Alleen de eerste {max} tekens zijn verzonden, dus Deze gebruiken staat uit. Selecteer een korter stuk om te vervangen.',
+  cmpKindPolished: 'Bijgewerkt',
+  cmpKindRetranslated: 'Opnieuw vertaald',
+  cmpRetranslate: 'Hervertaling opnemen',
   cmpNoAnswer:
     'Geen enkele engine heeft geantwoord. U kunt de prompt kopiëren en het zelf op de sites vragen.',
   aiAskTitle: 'Vraag een wijziging van de selectie',

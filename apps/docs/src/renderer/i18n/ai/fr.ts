@@ -25,7 +25,7 @@ export const fr = {
   cmpBtn: 'Comparaison IA',
   cmpTitle: 'Comparer avec d’autres IA',
   cmpLeaves:
-    'Le texte sélectionné et l’original coréen quittent cette application : ils sont envoyés aux pages web de {sites} via vos connexions dans le navigateur ego, et les conditions de ces sites s’appliquent. L’éditeur ne peut pas masquer une partie du texte à cette étape. Rien n’est envoyé tant que vous n’appuyez pas sur Comparer.',
+    'Le texte sélectionné (et l’original coréen, s’il y en a un) quitte cette application : une fois que vous avez accepté ci-dessous, appuyer sur Comparaison IA l’envoie aussitôt aux pages web de {sites} via vos connexions dans le navigateur ego, et les conditions de ces sites s’appliquent. L’éditeur ne peut pas masquer une partie du texte à cette étape. Rien n’est envoyé avant votre accord.',
   cmpConsentAgree: 'J’ai compris, continuer',
   cmpSourceLabel: 'Texte original en coréen',
   cmpSourceAuto:
@@ -63,6 +63,12 @@ export const fr = {
   cmpStNeedsUser: 'Votre action est requise',
   cmpNeedsUserHint:
     'ego lite vous attend. Dans la fenêtre d’ego lite, traitez la demande ou fermez une fois l’avis de cookies du site, puis appuyez sur Réessayer.',
+  cmpAddOriginal: 'Ajouter l’original',
+  cmpCut:
+    'Seuls les {max} premiers caractères ont été envoyés, donc Utiliser celui-ci est désactivé. Sélectionnez un passage plus court pour remplacer.',
+  cmpKindPolished: 'Peaufiné',
+  cmpKindRetranslated: 'Retraduit',
+  cmpRetranslate: 'Inclure la retraduction',
   cmpNoAnswer:
     'Aucun moteur n’a répondu. Vous pouvez copier le prompt et poser la question vous-même sur les sites.',
   aiAskTitle: 'Demander une modification de la sélection',

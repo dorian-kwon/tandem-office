@@ -8,6 +8,8 @@ export const COMPARE_CHANNELS = {
   readSource: 'compare:read-source',
   getConsent: 'compare:get-consent',
   setConsent: 'compare:set-consent',
+  getRetranslate: 'compare:get-retranslate',
+  setRetranslate: 'compare:set-retranslate',
 } as const
 
 /**

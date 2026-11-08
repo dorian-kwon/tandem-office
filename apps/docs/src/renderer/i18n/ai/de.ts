@@ -25,7 +25,7 @@ export const de = {
   cmpBtn: 'KI-Vergleich',
   cmpTitle: 'Mit anderen KIs vergleichen',
   cmpLeaves:
-    'Der markierte Text und das koreanische Original verlassen diese App: Sie werden über Ihre ego-Browser-Anmeldungen an die Webseiten von {sites} gesendet, und die Bedingungen dieser Seiten gelten. Der Editor kann in diesem Schritt keine Textteile ausblenden. Es wird nichts gesendet, bis Sie auf Vergleichen klicken.',
+    'Der markierte Text (und das koreanische Original, falls vorhanden) verlässt diese App: Nachdem Sie unten zugestimmt haben, sendet ein Klick auf KI-Vergleich ihn sofort über Ihre ego-Browser-Anmeldungen an die Webseiten von {sites}, und deren Bedingungen gelten. Der Editor kann in diesem Schritt keine Textteile ausblenden. Vor Ihrer Zustimmung wird nichts gesendet.',
   cmpConsentAgree: 'Verstanden, weiter',
   cmpSourceLabel: 'Koreanischer Originaltext',
   cmpSourceAuto:
@@ -64,6 +64,12 @@ export const de = {
   cmpStNeedsUser: 'Ihre Eingabe nötig',
   cmpNeedsUserHint:
     'ego lite wartet auf Sie. Bearbeiten Sie im ego-lite-Fenster die Abfrage oder schließen Sie einmalig den Cookie-Hinweis der Seite und klicken Sie dann auf Erneut versuchen.',
+  cmpAddOriginal: 'Original hinzufügen',
+  cmpCut:
+    'Nur die ersten {max} Zeichen wurden gesendet, daher ist Diese verwenden ausgeschaltet. Wählen Sie einen kürzeren Abschnitt zum Ersetzen.',
+  cmpKindPolished: 'Überarbeitet',
+  cmpKindRetranslated: 'Neu übersetzt',
+  cmpRetranslate: 'Neuübersetzung einbeziehen',
   cmpNoAnswer:
     'Keine Engine hat geantwortet. Sie können den Prompt kopieren und selbst auf den Seiten nachfragen.',
   aiAskTitle: 'Änderung an der Auswahl anfragen',

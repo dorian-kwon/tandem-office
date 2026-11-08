@@ -458,6 +458,9 @@ export interface DesktopApi {
   compareReadSource?(): Promise<CompareSourceBytes>
   compareGetConsent?(): Promise<boolean>
   compareSetConsent?(): Promise<boolean>
+  /** whether the sites also re-translate the Korean original (default on) */
+  compareGetRetranslate?(): Promise<boolean>
+  compareSetRetranslate?(on: boolean): Promise<boolean>
   onAutoSaveDefaultChanged(handler: (value: AutoSaveDefault) => void): () => void
   /** author of comments and tracked changes (Settings → General, falling back to the OS account) */
   getAuthorName(): Promise<string>

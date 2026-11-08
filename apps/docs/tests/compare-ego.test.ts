@@ -10,7 +10,12 @@ import {
   egoChildEnv,
   type EgoChild,
 } from '../src/main/compare/ego-driver'
-import { readCompareConsent, writeCompareConsent } from '../src/main/compare/consent-store'
+import {
+  readCompareConsent,
+  readCompareRetranslate,
+  writeCompareConsent,
+  writeCompareRetranslate,
+} from '../src/main/compare/consent-store'
 import { translationSourceCopy } from '../src/main/compare/source-path'
 
 const site = COMPARE_SITES[0]!
@@ -413,6 +418,22 @@ describe('consent and source copy', () => {
     expect(await readCompareConsent(fs)).toBe(false)
     stored = 'garbage'
     expect(await readCompareConsent(fs)).toBe(false)
+  })
+
+  it('the re-translation switch is on by default, remembered, and independent of the consent', async () => {
+    let stored: string | null = null
+    const fs = { read: async () => stored, write: async (t: string) => void (stored = t) }
+    expect(await readCompareRetranslate(fs)).toBe(true)
+    await writeCompareConsent(fs)
+    await writeCompareRetranslate(fs, false)
+    expect(await readCompareRetranslate(fs)).toBe(false)
+    // writing one value keeps the other
+    expect(await readCompareConsent(fs)).toBe(true)
+    await writeCompareRetranslate(fs, true)
+    expect(await readCompareConsent(fs)).toBe(true)
+    expect(await readCompareRetranslate(fs)).toBe(true)
+    stored = 'garbage'
+    expect(await readCompareRetranslate(fs)).toBe(true)
   })
 
   it('finds the source copy only inside a translation project', async () => {

@@ -18,7 +18,12 @@ import { COMPARE_CHANNELS, type CompareAnswer, type CompareDriver } from '../../
 import { compareSiteById } from '../../shared/compare-sites'
 import { detectEgo } from './ego-detect'
 import { createEgoDriver, egoChildEnv, type EgoChild } from './ego-driver'
-import { readCompareConsent, writeCompareConsent } from './consent-store'
+import {
+  readCompareConsent,
+  readCompareRetranslate,
+  writeCompareConsent,
+  writeCompareRetranslate,
+} from './consent-store'
 import { COMPARE_SOURCE_MAX_BYTES, translationSourceCopy } from './source-path'
 
 const PROMPT_MAX_CHARS = 60_000
@@ -163,6 +168,11 @@ export function registerCompareIpc(deps: CompareIpcDeps): void {
   ipcMain.handle(COMPARE_CHANNELS.getConsent, () => readCompareConsent(consentFs))
   ipcMain.handle(COMPARE_CHANNELS.setConsent, async () => {
     await writeCompareConsent(consentFs)
+    return true
+  })
+  ipcMain.handle(COMPARE_CHANNELS.getRetranslate, () => readCompareRetranslate(consentFs))
+  ipcMain.handle(COMPARE_CHANNELS.setRetranslate, async (_event, on: unknown) => {
+    await writeCompareRetranslate(consentFs, on !== false)
     return true
   })
 }

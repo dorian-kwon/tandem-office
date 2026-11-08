@@ -24,7 +24,7 @@ export const cs = {
   cmpBtn: 'Porovnání AI',
   cmpTitle: 'Porovnat s jinými AI',
   cmpLeaves:
-    'Vybraný text a korejský originál opouštějí tuto aplikaci: odesílají se na webové stránky {sites} přes vaše přihlášení v prohlížeči ego a platí podmínky těchto služeb. Editor v tomto kroku nemůže skrýt části textu. Dokud nestisknete Porovnat, nic se neodešle.',
+    'Vybraný text (a korejský originál, pokud existuje) opouští tuto aplikaci: po vašem souhlasu níže jej stisknutí Porovnání AI ihned odešle na webové stránky {sites} přes vaše přihlášení v prohlížeči ego a platí podmínky těchto služeb. Editor v tomto kroku nemůže skrýt části textu. Před vaším souhlasem se nic neodešle.',
   cmpConsentAgree: 'Rozumím, pokračovat',
   cmpSourceLabel: 'Korejský původní text',
   cmpSourceAuto:
@@ -61,6 +61,12 @@ export const cs = {
   cmpStNeedsUser: 'Je potřeba váš zásah',
   cmpNeedsUserHint:
     'ego lite na vás čeká. V okně ego lite vyřiďte výzvu nebo jednou zavřete upozornění webu na cookies a poté stiskněte Zkusit znovu.',
+  cmpAddOriginal: 'Přidat originál',
+  cmpCut:
+    'Odeslalo se jen prvních {max} znaků, proto je Použít toto vypnuto. Pro nahrazení vyberte kratší úsek.',
+  cmpKindPolished: 'Vyladěný',
+  cmpKindRetranslated: 'Přeložený znovu',
+  cmpRetranslate: 'Zahrnout nový překlad',
   cmpNoAnswer:
     'Žádný engine neodpověděl. Můžete zkopírovat prompt a zeptat se sami na těchto stránkách.',
   aiAskTitle: 'Zeptat se AI na výběr',

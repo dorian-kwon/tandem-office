@@ -24,7 +24,7 @@ export const ms = {
   cmpBtn: 'Bandingkan AI',
   cmpTitle: 'Bandingkan dengan AI lain',
   cmpLeaves:
-    'Teks yang dipilih dan teks asal Korea keluar daripada aplikasi ini: kedua-duanya dihantar ke halaman web {sites} melalui log masuk pelayar ego anda, dan terma tapak tersebut terpakai. Penyunting tidak dapat menyembunyikan sebahagian teks pada langkah ini. Tiada apa-apa dihantar sehingga anda menekan Bandingkan.',
+    'Teks yang dipilih (dan teks asal Korea, jika ada) keluar daripada aplikasi ini: selepas anda bersetuju di bawah, menekan Bandingkan AI terus menghantarnya ke halaman web {sites} melalui log masuk pelayar ego anda, dan terma tapak tersebut terpakai. Penyunting tidak dapat menyembunyikan sebahagian teks pada langkah ini. Tiada apa-apa dihantar sebelum anda bersetuju.',
   cmpConsentAgree: 'Saya faham, teruskan',
   cmpSourceLabel: 'Teks asal Korea',
   cmpSourceAuto:
@@ -62,6 +62,12 @@ export const ms = {
   cmpStNeedsUser: 'Tindakan anda diperlukan',
   cmpNeedsUserHint:
     'ego lite menunggu anda. Dalam tetingkap ego lite, uruskan permintaan atau tutup sekali notis kuki tapak, kemudian tekan Cuba lagi.',
+  cmpAddOriginal: 'Tambah teks asal',
+  cmpCut:
+    'Hanya {max} aksara pertama dihantar, jadi Guna ini dimatikan. Pilih bahagian yang lebih pendek untuk menggantikan.',
+  cmpKindPolished: 'Digilap',
+  cmpKindRetranslated: 'Diterjemah semula',
+  cmpRetranslate: 'Sertakan terjemahan semula',
   cmpNoAnswer:
     'Tiada enjin yang menjawab. Anda boleh menyalin prompt dan bertanya sendiri di tapak tersebut.',
   aiAskTitle: 'Minta perubahan pada pilihan',

@@ -26,7 +26,7 @@ export const it = {
   cmpBtn: 'Confronto IA',
   cmpTitle: 'Confronta con altre IA',
   cmpLeaves:
-    'Il testo selezionato e l’originale coreano escono da questa app: vengono inviati alle pagine web di {sites} tramite i tuoi accessi nel browser ego, e valgono i termini di quei siti. L’editor non può nascondere parti del testo in questo passaggio. Non viene inviato nulla finché non premi Confronta.',
+    'Il testo selezionato (e l’originale coreano, se c’è) esce da questa app: dopo che hai accettato qui sotto, premendo Confronto IA viene inviato subito alle pagine web di {sites} tramite i tuoi accessi nel browser ego, e valgono i termini di quei siti. L’editor non può nascondere parti del testo in questo passaggio. Non viene inviato nulla prima del tuo consenso.',
   cmpConsentAgree: 'Ho capito, continua',
   cmpSourceLabel: 'Testo originale in coreano',
   cmpSourceAuto:
@@ -65,6 +65,12 @@ export const it = {
   cmpStNeedsUser: 'Serve il tuo intervento',
   cmpNeedsUserHint:
     'ego lite ti sta aspettando. Nella finestra di ego lite gestisci la richiesta o chiudi una volta l’avviso cookie del sito, poi premi Riprova.',
+  cmpAddOriginal: 'Aggiungi originale',
+  cmpCut:
+    'Sono stati inviati solo i primi {max} caratteri, quindi Usa questo è disattivato. Seleziona un brano più breve per sostituire.',
+  cmpKindPolished: 'Rifinito',
+  cmpKindRetranslated: 'Ritradotto',
+  cmpRetranslate: 'Includi la ritraduzione',
   cmpNoAnswer: 'Nessun motore ha risposto. Puoi copiare il prompt e chiedere tu stesso sui siti.',
   aiAskTitle: 'Richiedi una modifica alla selezione',
   aiAskEditTitle: 'Modifica questa istruzione in coda',

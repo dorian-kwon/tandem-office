@@ -29,7 +29,11 @@ beforeAll(() => {
   Element.prototype.scrollTo ??= () => {}
 })
 
-function setup(desktop: Record<string, unknown>) {
+function setup(
+  desktop: Record<string, unknown>,
+  bodyText = 'Revenue grew eight percent.',
+  range?: [number, number],
+) {
   const editor = new Editor({
     element: document.createElement('div'),
     extensions: editorExtensions,
@@ -39,12 +43,12 @@ function setup(desktop: Record<string, unknown>) {
         {
           type: 'docParagraph',
           attrs: { docxIndex: null },
-          content: [{ type: 'text', text: 'Revenue grew eight percent.' }],
+          content: [{ type: 'text', text: bodyText }],
         },
       ],
     } as never,
   })
-  editor.commands.setTextSelection({ from: 14, to: 27 })
+  editor.commands.setTextSelection(range ? { from: range[0], to: range[1] } : { from: 14, to: 27 })
   const snapshot = snapshotSelection(editor)!
   ;(window as unknown as { desktop: unknown }).desktop = {
     onLanguageChanged: () => () => {},
@@ -111,57 +115,65 @@ describe('AI compare popup', () => {
     expect(button(container, 'Compare')).toBeDefined()
   })
 
-  it('shows consent first, remembers it, and sends nothing before then', async () => {
+  it('shows consent first, remembers it, sends nothing before then and starts at once after', async () => {
     const setConsent = vi.fn(async () => true)
-    const ask = vi.fn()
+    const ask = vi.fn(async () => ({ ok: true as const, text: 'x' }))
     const { container } = setup({
       compareDetect: async () => ({ installed: true, path: '/x' }),
       compareGetConsent: async () => false,
       compareSetConsent: setConsent,
       compareAsk: ask,
+      compareCancel: async () => {},
     })
     await flush()
     expect(container.textContent).toContain('Gemini, Claude, Copilot, Grok')
-    expect(container.querySelector('textarea')).toBeNull()
-    act(() => button(container, 'I understand, continue')!.click())
-    expect(setConsent).toHaveBeenCalledTimes(1)
-    expect(container.querySelector('textarea')).not.toBeNull()
+    expect(container.querySelector('.cmp-cards')).toBeNull()
     expect(ask).not.toHaveBeenCalled()
+    act(() => button(container, 'I understand, continue')!.click())
+    await flush()
+    expect(setConsent).toHaveBeenCalledTimes(1)
+    // no input needed: it started by itself, with only the selection
+    expect(ask).toHaveBeenCalledTimes(4)
   })
 
-  it('runs the three engines, shows per-engine results, and "use this" replaces the selection', async () => {
+  const noOriginalDesktop = (ask: unknown, extra: Record<string, unknown> = {}) => ({
+    compareDetect: async () => ({ installed: true, path: '/x' }),
+    compareGetConsent: async () => true,
+    compareSetConsent: async () => true,
+    compareAsk: ask,
+    compareCancel: async () => {},
+    ...extra,
+  })
+
+  it('starts by itself with only the selection, shows per-engine results, and "use this" replaces it', async () => {
     const ask = vi.fn(async (req: { siteId: string; prompt: string }) =>
       req.siteId === 'claude'
         ? { ok: false as const, reason: 'not signed in' }
         : req.siteId === 'grok'
           ? { ok: false as const, reason: 'login-wall' }
-          : { ok: true as const, text: `${req.siteId} polished` },
+          : { ok: true as const, text: `${req.siteId} translated` },
     )
     const chat = vi.fn()
-    const { container, editor, onClose } = setup({
-      compareDetect: async () => ({ installed: true, path: '/x' }),
-      compareGetConsent: async () => true,
-      compareSetConsent: async () => true,
-      compareAsk: ask,
-      compareCancel: async () => {},
-      aiChat: chat,
-    })
+    const { container, editor, onClose } = setup(
+      noOriginalDesktop(ask, {
+        aiChat: chat,
+        getTranslationLanguages: async () => ({ sourceLang: 'ko', targetLang: 'ja' }),
+      }),
+    )
     await flush()
-    const area = container.querySelector('textarea')!
-    await act(async () => {
-      const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!
-      set.call(area, '매출이 8퍼센트 늘었다.')
-      area.dispatchEvent(new Event('input', { bubbles: true }))
-    })
-    act(() => button(container, 'Compare')!.click())
-    await flush()
+    // nothing was typed or clicked: the run is already going, in selection-only mode
     expect(ask).toHaveBeenCalledTimes(4)
     const prompts = new Set(ask.mock.calls.map((c) => c[0].prompt))
     expect(prompts.size).toBe(1)
-    expect([...prompts][0]).toContain('Original Korean:\n매출이 8퍼센트 늘었다.')
-    expect([...prompts][0]).toContain('English text:\neight percent')
+    const prompt = [...prompts][0]!
+    expect(prompt).toContain('Translate the following text into Japanese.')
+    expect(prompt).toContain('\n\neight percent')
+    expect(prompt).not.toContain('Original Korean:')
+    // the original field is collapsed and the re-translation switch is hidden in this mode
+    expect(container.querySelector('textarea')).toBeNull()
+    expect(button(container, 'Add original')).toBeDefined()
+    expect(container.textContent).not.toContain('Include re-translation')
     expect(container.textContent).toContain('not signed in')
-    // a site that cannot be chatted with is a quiet skipped row, not a failure with a reason
     const grokCard = [...container.querySelectorAll('.cmp-card')].find((c) =>
       c.textContent?.includes('Grok'),
     )!
@@ -169,14 +181,71 @@ describe('AI compare popup', () => {
     expect(grokCard.textContent).not.toContain('login-wall')
     expect(grokCard.querySelector('.cmp-chip-failed')).toBeNull()
     expect(button(container, 'Retry')).toBeDefined()
-    // integration is blocked (no connected AI in this fake): reported, nothing sent
+    // integration is blocked (no connected AI in this fake): nothing sent
     expect(chat).not.toHaveBeenCalled()
-    const useButtons = [...container.querySelectorAll('.cmp-card')]
-      .find((card) => card.textContent?.includes('Copilot'))!
-      .querySelectorAll('button')
-    act(() => [...useButtons].find((b) => b.textContent === 'Use this')!.click())
-    expect(editor.state.doc.textContent).toBe('Revenue grew copilot polished.')
+    const copilot = [...container.querySelectorAll('.cmp-card')].find((card) =>
+      card.textContent?.includes('Copilot'),
+    )!
+    act(() =>
+      [...copilot.querySelectorAll('button')].find((b) => b.textContent === 'Use this')!.click(),
+    )
+    expect(editor.state.doc.textContent).toBe('Revenue grew copilot translated.')
     expect(onClose).toHaveBeenCalled()
+  })
+
+  it('with an added original it asks for the polish plus a re-translation and shows two cards per engine', async () => {
+    const reply = '[POLISHED]\nPolished by site\n[RETRANSLATION]\nFresh by site'
+    const ask = vi.fn(async () => ({ ok: true as const, text: reply }))
+    const setRe = vi.fn(async () => true)
+    const { container } = setup(noOriginalDesktop(ask, { compareSetRetranslate: setRe }))
+    await flush()
+    expect(ask).toHaveBeenCalledTimes(4)
+    act(() => button(container, 'Add original')!.click())
+    const area = container.querySelector('textarea')!
+    await act(async () => {
+      const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!
+      set.call(area, '매출이 8퍼센트 늘었다.')
+      area.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(container.textContent).toContain('Include re-translation')
+    ask.mockClear()
+    act(() => button(container, 'Compare')!.click())
+    await flush()
+    expect(ask).toHaveBeenCalledTimes(4)
+    const prompt = (ask.mock.calls[0] as unknown as [{ prompt: string }])[0].prompt
+    expect(prompt).toContain('Original Korean:\n매출이 8퍼센트 늘었다.')
+    expect(prompt).toContain('[RETRANSLATION]')
+    const titles = [...container.querySelectorAll('.cmp-card-title')].map((e) => e.textContent)
+    expect(titles).toContain('Gemini · Polished')
+    expect(titles).toContain('Gemini · Re-translated')
+    expect(titles.filter((x) => x?.startsWith('Claude'))).toHaveLength(2)
+    // the switch is remembered and, when off, the prompt is the polishing-only one
+    const box = [
+      ...container.querySelectorAll('label.cmp-retranslate input'),
+    ][0] as HTMLInputElement
+    act(() => box.click())
+    expect(setRe).toHaveBeenCalledWith(false)
+    ask.mockClear()
+    act(() => button(container, 'Compare')!.click())
+    await flush()
+    const plain = (ask.mock.calls[0] as unknown as [{ prompt: string }])[0].prompt
+    expect(plain).toContain('Reply with the polished English text only')
+    expect(plain).not.toContain('[RETRANSLATION]')
+  })
+
+  it('cuts a very long selection, says so and turns "use this" off', async () => {
+    const ask = vi.fn(async () => ({ ok: true as const, text: 'short' }))
+    const long = 'word '.repeat(1200)
+    const { container } = setup(noOriginalDesktop(ask), long, [1, long.length])
+    await flush()
+    const prompt = (ask.mock.calls[0] as unknown as [{ prompt: string }])[0].prompt
+    expect(prompt.length).toBeLessThan(4400)
+    expect(container.textContent).toContain('Only the first 4000 characters were sent')
+    const use = [...container.querySelectorAll('button')].filter(
+      (b) => b.textContent === 'Use this',
+    )
+    expect(use.length).toBeGreaterThan(0)
+    for (const b of use) expect((b as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('says so and offers the manual fallback when no engine answered', async () => {
@@ -185,20 +254,7 @@ describe('AI compare popup', () => {
         ? { ok: false as const, reason: 'needs-user' }
         : { ok: false as const, reason: 'no-prompt-box' },
     )
-    const { container } = setup({
-      compareDetect: async () => ({ installed: true, path: '/x' }),
-      compareGetConsent: async () => true,
-      compareAsk: ask,
-      compareCancel: async () => {},
-    })
-    await flush()
-    const area = container.querySelector('textarea')!
-    await act(async () => {
-      const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!
-      set.call(area, '원문')
-      area.dispatchEvent(new Event('input', { bubbles: true }))
-    })
-    act(() => button(container, 'Compare')!.click())
+    const { container } = setup(noOriginalDesktop(ask))
     await flush()
     expect(container.textContent).toContain('No engine answered.')
     expect(container.textContent).toContain(
