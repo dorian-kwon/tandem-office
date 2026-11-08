@@ -287,6 +287,56 @@ describe('AI compare popup', () => {
     expect(container.textContent).toContain('Nothing was replaced.')
   })
 
+  it('keeps app AI integration off by default and calls it only after the person turns it on', async () => {
+    let listener: ((chunk: { requestId: string; type: string; text?: string }) => void) | undefined
+    const requests: Array<{ requestId: string }> = []
+    const preferences: unknown[] = []
+    const appSettings: AiSettings = {
+      ...settings,
+      providers: {
+        ...settings.providers,
+        anthropic: { ...settings.providers.anthropic, apiKey: 'fake-key' },
+      },
+    }
+    const { container } = setup(
+      ready({
+        compareGetPrefs: async () => ({ engines: { grok: false } }),
+        compareSetPrefs: async (patch: unknown) => {
+          preferences.push(patch)
+          return true
+        },
+        compareAsk: async () => ({ ok: true, text: 'Web candidate' }),
+        onAiStream: (fn: typeof listener) => {
+          listener = fn
+          return () => {
+            listener = undefined
+          }
+        },
+        aiStream: async (request: { requestId: string }) => {
+          requests.push(request)
+          listener?.({ requestId: request.requestId, type: 'delta', text: 'Combined answer' })
+          listener?.({ requestId: request.requestId, type: 'done' })
+        },
+      }),
+      undefined,
+      undefined,
+      appSettings,
+    )
+    await flush()
+    const automatic = [...container.querySelectorAll('label')]
+      .find((label) => label.textContent?.trim() === 'Auto integrate')!
+      .querySelector('input')!
+    expect(automatic.checked).toBe(false)
+    await start(container)
+    expect(requests).toEqual([])
+    expect(container.textContent).toContain('Web candidate')
+    act(() => automatic.click())
+    expect(preferences).toEqual([{ autoIntegrate: true }])
+    await start(container)
+    expect(requests).toHaveLength(1)
+    expect(container.textContent).toContain('Combined answer')
+  })
+
   it('uses the app stream for optional integration and cancels that request on Stop', async () => {
     let listener: ((chunk: { requestId: string; type: string; text?: string }) => void) | undefined
     const requests: Array<{ requestId: string; tools: unknown[] }> = []

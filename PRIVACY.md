@@ -233,7 +233,8 @@ nothing. Paragraphs are processed in order, one engine at a time, in batches of
   them. It never downloads or runs the ego lite installer: when ego lite is
   missing it asks whether to open the install page (https://github.com/citrolabs/ego-lite)
   in your browser and you install it yourself.
-- **The integrated version.** When you leave **Auto integrate** on, the app
+- **The integrated version.** Automatic integration is off by default. When
+  you turn **Auto integrate** on, the app
   sends the selected text and the web answers to the AI you already selected in
   the app, as for any other AI request, to combine them. It never switches to a
   paid route for this. Stop or closing the window cancels the current request.

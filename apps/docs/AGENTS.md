@@ -63,7 +63,7 @@ Word 문서(.docx)와 ODT(.odt) 에디터다. 그리고 배포되는 앱 전체�
 
 ## AI 비교 (웹 AI 비교 창)
 
-- 선택 단추(`AiAskPopover`)나 상태 표시줄의 "AI 비교"가 `components/AiComparePopover.tsx`를 연다. `renderer/compare/runner.ts`가 문단별·엔진별 순차 요청과 일시정지·중단·20개 단위 뒤 계속을 맡는다. `units.ts`는 전체 문서나 선택 범위를 문단별로 나누고 선택의 첫·끝은 선택한 부분만 포함한다. 프롬프트는 `prompts.ts`, 범위 매핑과 교체는 `units.ts`·`replace-selection.ts`, 원문 매핑은 `source-locate.ts`, 앱 AI 통합은 `integration.ts`다. 뒷단은 `src/main/compare/`이고 `registerAiIpc`가 등록한다.
+- 선택 단추(`AiAskPopover`)나 상태 표시줄의 "AI 비교"가 `components/AiComparePopover.tsx`를 연다. `renderer/compare/runner.ts`가 문단별·엔진별 순차 요청과 일시정지·중단·20개 단위 뒤 계속을 맡는다. `units.ts`는 전체 문서나 선택 범위를 문단별로 나누고 선택의 첫·끝은 선택한 부분만 포함한다. 프롬프트는 `prompts.ts`, 범위 매핑과 교체는 `units.ts`·`replace-selection.ts`, 원문 매핑은 `source-locate.ts`, 앱 AI 통합은 `integration.ts`다. 자동 통합은 기본 꺼짐이며 사용자가 켜거나 단위별 통합을 요청할 때만 앱 AI를 부른다. 뒷단은 `src/main/compare/`이고 `registerAiIpc`가 등록한다.
 - 웹 쪽은 `CompareDriver` 인터페이스 뒤에만 있다. 사이트 목록은 `src/shared/compare-sites.ts`의 Copilot·Grok 두 개다. `verified`와 주석은 이전 실제 사이트 확인 기록이며 현재 호환성을 보증하지 않는다. 회귀 검사는 가짜 구동기·IPC·직렬화된 콜백의 격리 VM으로 수행한다. 실제 Copilot/Grok 호환성, 화면 배치, 실제 AI 답변 품질과 패키징은 이번 변경에서 확인하지 않았다.
 - 바꾸기는 `replaceInlineRange`(replace_selection과 같은 길)를 쓰고 단위마다 되돌리기 지점을 나눈다. 요청한 범위는 편집에 따라 이동시키며 글 지문이 달라지면 거절한다. 잘린 글이나 인라인 개체가 있는 단위는 적용하지 않는다. 구조가 맞는 원문이 없거나 선택이 문단 일부면 원문을 추측하지 않고 해당 단위에 표시한다. 전송 확인은 동의 판 2이며 ego lite 설치 파일은 받거나 실행하지 않는다(`docs/security.md`의 "웹 AI 비교").
 

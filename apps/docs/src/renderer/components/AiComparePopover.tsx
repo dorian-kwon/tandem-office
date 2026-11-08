@@ -157,7 +157,7 @@ export function AiComparePopover({
 
   const engineOn = (id: string): boolean => prefs.engines?.[id] !== false
   const retranslate = prefs.retranslate !== false
-  const autoIntegrate = prefs.autoIntegrate !== false
+  const autoIntegrate = prefs.autoIntegrate === true
   const enabledEngines = COMPARE_SITES.filter((s) => engineOn(s.id)).map((s) => s.id)
   const savePrefs = (patch: ComparePrefs): void => {
     setPrefs((p) => ({ ...p, ...patch, engines: { ...p.engines, ...patch.engines } }))
