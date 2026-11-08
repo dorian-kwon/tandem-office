@@ -466,6 +466,7 @@ import {
   uniqueNameIn,
   type FolderErrors,
 } from './folder-tree'
+import { notifyFolderChanged } from './folder-notifications'
 import {
   FOLDER_ROOTS_KEY,
   describeExtraRoot,
@@ -4626,9 +4627,7 @@ function ensureFolderWatchers(): void {
     if (folderWatchers.has(root)) continue
     const watcher = new FolderWatcher(root, (dirs) => {
       fileIndexer?.refresh()
-      for (const wc of webContents.getAllWebContents()) {
-        if (!wc.isDestroyed()) wc.send(HOME_CHANNELS.folderChanged, dirs)
-      }
+      notifyFolderChanged(webContents.getAllWebContents(), dirs)
     })
     folderWatchers.set(root, watcher)
   }
