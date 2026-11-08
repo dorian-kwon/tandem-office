@@ -66,6 +66,7 @@ const api: DesktopApi = {
   },
   getAutoSaveDefault: () => ipcRenderer.invoke('app:get-auto-save-default'),
   isTranslationOutput: () => ipcRenderer.invoke('app:is-translation-output'),
+  getTranslationLanguages: () => ipcRenderer.invoke('app:get-translation-languages'),
   isTranslationSource: () => ipcRenderer.invoke('app:is-translation-source'),
   onAutoSaveDefaultChanged: (handler) => {
     const listener = (_event: IpcRendererEvent, value: AutoSaveDefault) => handler(value)

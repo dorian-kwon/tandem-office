@@ -18,6 +18,7 @@ export const zh = {
   aiScopeClearTitle: '取消选中范围',
   aiAskBtn: 'AI 修改',
   aiAskWebSearch: '网络搜索',
+  aiAskGoogleTranslate: '谷歌翻译',
   aiAskTitle: '对选中内容提出修改',
   aiAskEditTitle: '编辑这条修改意见',
   aiAskPlaceholder: '描述想要的修改…',

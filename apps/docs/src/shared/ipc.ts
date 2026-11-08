@@ -445,6 +445,8 @@ export interface DesktopApi {
   getAutoSaveDefault(): Promise<AutoSaveDefault>
   /** whether this window is the translation view's output pane (locks it while the AI runs) */
   isTranslationOutput(): Promise<boolean>
+  /** the language pair of the translation project this document belongs to, or null */
+  getTranslationLanguages?(): Promise<{ sourceLang: string; targetLang: string } | null>
   isTranslationSource(): Promise<boolean>
   onAutoSaveDefaultChanged(handler: (value: AutoSaveDefault) => void): () => void
   /** author of comments and tracked changes (Settings → General, falling back to the OS account) */

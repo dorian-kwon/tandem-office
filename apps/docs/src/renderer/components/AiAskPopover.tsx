@@ -91,6 +91,30 @@ function searchTheWeb(editor: Editor): void {
   if (query) window.open(`https://www.google.com/search?q=${encodeURIComponent(query)}`)
 }
 
+/**
+ * Google Translate's code for a project language code. The project stores plain codes
+ * ('ko', 'en', 'zh-CN'); Google wants 'zh-CN' / 'zh-TW' for Chinese and the bare code otherwise.
+ */
+function googleLanguage(code: string): string {
+  const c = code.trim().toLowerCase()
+  if (c === 'zh' || c === 'zh-cn' || c === 'zh-hans') return 'zh-CN'
+  if (c === 'zh-tw' || c === 'zh-hk' || c === 'zh-hant') return 'zh-TW'
+  return c.split(/[-_]/)[0] || 'en'
+}
+
+/** The selection in Google Translate: source language detected, target = the project's target */
+function translateOnTheWeb(editor: Editor, targetLang: string): void {
+  const query = searchQuery(editor)
+  if (!query) return
+  const params = new URLSearchParams({
+    sl: 'auto',
+    tl: googleLanguage(targetLang),
+    text: query,
+    op: 'translate',
+  })
+  window.open(`https://translate.google.com/?${params.toString()}`)
+}
+
 /** viewport rect of a PM position range */
 function rangeRect(editor: Editor, from: number, to: number): AnchorRect | null {
   try {
@@ -116,7 +140,20 @@ export function AiAskPopover({
   onQueueUpdate,
   onQueueRemove,
 }: Props): React.JSX.Element | null {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
+  // the project's target language when this document belongs to a translation project,
+  // otherwise the screen language
+  const [targetLang, setTargetLang] = useState<string | null>(null)
+  useEffect(() => {
+    let alive = true
+    void window.desktop
+      ?.getTranslationLanguages?.()
+      .then((pair) => alive && setTargetLang(pair?.targetLang ?? null))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
   const [trigger, setTrigger] = useState<{ left: number; top: number } | null>(null)
   const [open, setOpen] = useState<OpenState | null>(null)
   const [kind, setKind] = useState<SelectionKind>('text')
@@ -452,6 +489,24 @@ export function AiAskPopover({
                 />
               </svg>
               {t('aiAskWebSearch')}
+            </button>
+          )}
+          {searchQuery(editor) && (
+            <button
+              className="ai-ask-trigger ai-ask-search"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => translateOnTheWeb(editor, targetLang ?? lang)}
+            >
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" aria-hidden>
+                <path
+                  d="M4 5h9M8.5 3v2M6 5c0 3.5 2.5 6.5 6 8M11 5c0 3-2.5 6-6.5 8M12.5 20l4-9 4 9M14 17h5"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              {t('aiAskGoogleTranslate')}
             </button>
           )}
         </div>

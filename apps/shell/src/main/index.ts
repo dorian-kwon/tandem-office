@@ -161,6 +161,7 @@ import type {
 import { ResultStore } from '../../../../packages/pdf-structure/src/store'
 import type { TranslationViewDeps } from './translate/open-translation'
 import { translationContextForFolder } from './translate/context-injection'
+import { translationLanguagesOfFile } from './translate/language-of-file'
 import { FixedContextLedger } from './translate/fixed-context'
 import { translationProjectLink, type TranslationProjectLink } from './translate/project-link'
 import { restoreRememberedSplit } from './split-restore'
@@ -527,6 +528,7 @@ import {
   isTranslationOutputTab,
   isTranslationSourceTab,
   translationSaveAsInterceptor,
+  TRANSLATION_LANGUAGES_CHANNEL,
   TRANSLATION_OUTPUT_CHANNEL,
   TRANSLATION_SOURCE_CHANNEL,
 } from './translation-output'
@@ -6499,6 +6501,16 @@ function registerHomeIpc(): void {
       manager.splitState(),
       (id) => manager.isReadOnlyTab(id),
     )
+  })
+
+  // an editor asks which language pair its document's translation project has (web translation
+  // aims at the target language); null for a document outside any project
+  ipcMain.handle(TRANSLATION_LANGUAGES_CHANNEL, async (event) => {
+    const manager = tabManager
+    if (!manager) return null
+    const id = manager.tabIdForWebContents(event.sender.id)
+    const filePath = manager.list().find((tab) => tab.id === id)?.filePath
+    return translationLanguagesOfFile(APP_SETTINGS_PATH(), filePath)
   })
 
   // every editor's own Save As (menu, ribbon, shortcut) asks here first: the output pane

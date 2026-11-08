@@ -7,6 +7,8 @@
  * output while the AI translates (packages/ui use-translation-lock.ts).
  */
 export const TRANSLATION_OUTPUT_CHANNEL = 'app:is-translation-output'
+/** An editor asks for the language pair of the translation project its document belongs to. */
+export const TRANSLATION_LANGUAGES_CHANNEL = 'app:get-translation-languages'
 /** An editor asks whether it is the translation view's read-only source pane. */
 export const TRANSLATION_SOURCE_CHANNEL = 'app:is-translation-source'
 
