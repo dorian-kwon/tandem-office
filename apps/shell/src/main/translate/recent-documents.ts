@@ -1,5 +1,5 @@
 import { stat } from 'node:fs/promises'
-import { basename, isAbsolute, join, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { loadProject } from '@genoffice/translate-project'
 import { readAppSettings, readTranslationProjects, writeAppSetting } from '../app-settings'
 import type { TranslateRecentDocument } from '../../shared/translate-api'
@@ -84,7 +84,15 @@ export function forgetRecentDocument(
   if (next.length !== current.length) writeAppSetting(settingsPath, RECENT_DOCUMENTS_KEY, next)
 }
 
-/** The recent documents of projects still registered, newest first, at most 10. */
+/**
+ * The recent documents of projects still registered, newest first, at most 10.
+ *
+ * An entry that cannot be opened any more (the project folder or its file is gone, neither
+ * the original nor the translation is left, or the project no longer lists the file) is
+ * dropped from the stored list, so it does not linger as a dead row. It is kept, shown as
+ * unavailable, only when the folder's own parent cannot be reached either: an unplugged drive
+ * or an offline network share is not a deleted document.
+ */
 export async function listRecentDocuments(
   settingsPath: string,
 ): Promise<TranslateRecentDocument[]> {
@@ -92,6 +100,7 @@ export async function listRecentDocuments(
     readTranslationProjects(settingsPath).map((p) => [fold(p.dir), p.dir] as const),
   )
   const out: TranslateRecentDocument[] = []
+  const gone: StoredRecent[] = []
   for (const e of normalize(readAppSettings(settingsPath)[RECENT_DOCUMENTS_KEY])) {
     const dir = registered.get(fold(e.dir))
     if (dir === undefined) continue
@@ -113,6 +122,10 @@ export async function listRecentDocuments(
     } catch {
       // the folder or the project file is gone: shown, but not openable
     }
+    if (!available && (await stat(dirname(dir)).catch(() => null))?.isDirectory() === true) {
+      gone.push(e)
+      continue
+    }
     out.push({
       dir,
       projectName,
@@ -122,6 +135,12 @@ export async function listRecentDocuments(
       openedAt: e.openedAt,
       available,
     })
+  }
+  if (gone.length > 0) {
+    // re-read: a document may have been opened while the folders were being checked
+    const current = normalize(readAppSettings(settingsPath)[RECENT_DOCUMENTS_KEY])
+    const next = current.filter((e) => !gone.some((g) => sameDoc(g, e)))
+    if (next.length !== current.length) writeAppSetting(settingsPath, RECENT_DOCUMENTS_KEY, next)
   }
   return out
 }

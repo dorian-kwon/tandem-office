@@ -51,6 +51,8 @@ describe('recent translation documents', () => {
   })
 
   it('keeps one entry per project and file, moved to the top', async () => {
+    await withSource('a.md')
+    await withSource('b.md')
     writeFileSync(join(dir, 'output', 'b.md'), 'x')
     recordRecentDocument(settingsPath, { dir, file: 'a.md', output: 'a.md' }, 100)
     recordRecentDocument(settingsPath, { dir, file: 'b.md', output: 'b.md' }, 200)
@@ -63,6 +65,10 @@ describe('recent translation documents', () => {
   })
 
   it('keeps at most 10 entries', async () => {
+    for (let i = 0; i < 15; i++) {
+      await withSource(`f${i}.md`)
+      writeFileSync(join(dir, 'output', `f${i}.md`), 'x')
+    }
     for (let i = 0; i < 15; i++)
       recordRecentDocument(settingsPath, { dir, file: `f${i}.md`, output: `f${i}.md` }, i + 1)
     const list = await listRecentDocuments(settingsPath)
@@ -85,12 +91,29 @@ describe('recent translation documents', () => {
     expect((await listRecentDocuments(settingsPath))[0].available).toBe(true)
   })
 
-  it('is unavailable when both the source copy and the output are missing', async () => {
+  it('drops an entry from the list and the stored settings when neither file is left', async () => {
     await withSource('a.md')
     rmSync(join(dir, 'source', 'a.md'))
     rmSync(join(dir, 'output', 'a.md'))
     recordRecentDocument(settingsPath, { dir, file: 'a.md', output: 'a.md' }, 100)
-    expect((await listRecentDocuments(settingsPath))[0].available).toBe(false)
+    expect(await listRecentDocuments(settingsPath)).toEqual([])
+    expect((readAppSettings(settingsPath).translationRecentDocuments as unknown[]).length).toBe(0)
+  })
+
+  it('drops only the dead entries and keeps the openable ones', async () => {
+    await withSource('a.md')
+    await withSource('b.md')
+    writeFileSync(join(dir, 'output', 'b.md'), 'x')
+    recordRecentDocument(settingsPath, { dir, file: 'a.md', output: 'a.md' }, 100)
+    recordRecentDocument(settingsPath, { dir, file: 'b.md', output: 'b.md' }, 200)
+    rmSync(join(dir, 'source', 'a.md'))
+    rmSync(join(dir, 'output', 'a.md'))
+    expect((await listRecentDocuments(settingsPath)).map((r) => r.file)).toEqual(['b.md'])
+    expect(
+      (readAppSettings(settingsPath).translationRecentDocuments as { file: string }[]).map(
+        (e) => e.file,
+      ),
+    ).toEqual(['b.md'])
   })
 
   it('stays available when only the translation is left (the open offers to use it as original)', async () => {
@@ -102,24 +125,33 @@ describe('recent translation documents', () => {
     expect((await listRecentDocuments(settingsPath))[0].available).toBe(true)
   })
 
-  it('is unavailable when the source entry is no longer listed in the project', async () => {
+  it('drops an entry whose source is no longer listed in the project', async () => {
     writeFileSync(join(dir, 'source', 'a.md'), 'x')
     recordRecentDocument(settingsPath, { dir, file: 'a.md', output: 'a.md' }, 100)
-    expect((await listRecentDocuments(settingsPath))[0].available).toBe(false)
+    expect(await listRecentDocuments(settingsPath)).toEqual([])
   })
 
-  it('marks entries unavailable when the folder is gone', async () => {
+  it('drops entries whose project folder was deleted while its parent is still there', async () => {
     await withSource('a.md')
     recordRecentDocument(settingsPath, { dir, file: 'a.md', output: 'a.md' }, 100)
-    let list = await listRecentDocuments(settingsPath)
-    expect(list[0].available).toBe(true)
+    expect((await listRecentDocuments(settingsPath))[0].available).toBe(true)
     rmSync(dir, { recursive: true, force: true })
-    list = await listRecentDocuments(settingsPath)
-    expect(list.every((r) => !r.available)).toBe(true)
-    expect(list[0].projectName).toBe('Demo')
+    expect(await listRecentDocuments(settingsPath)).toEqual([])
+  })
+
+  it('keeps an entry, shown as unavailable, when even the parent folder cannot be reached', async () => {
+    // an unplugged drive or an offline share: not a deleted document, so nothing is dropped
+    const offline = join(root, 'offline-drive', 'Demo')
+    writeTranslationProjects(settingsPath, [{ dir: offline, lastOpened: 1 }])
+    recordRecentDocument(settingsPath, { dir: offline, file: 'a.md', output: 'a.md' }, 100)
+    const list = await listRecentDocuments(settingsPath)
+    expect(list).toHaveLength(1)
+    expect(list[0].available).toBe(false)
+    expect((readAppSettings(settingsPath).translationRecentDocuments as unknown[]).length).toBe(1)
   })
 
   it('keeps the newest of duplicates in an unsorted stored list', async () => {
+    await withSource('a.md')
     writeFileSync(
       settingsPath,
       JSON.stringify({
