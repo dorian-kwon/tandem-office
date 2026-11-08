@@ -3,13 +3,23 @@ import { Mark, type Node as PmNodeType } from '@tiptap/pm/model'
 import { TRACK_IGNORE } from './editor/revisions'
 
 /**
- * Attributes that only point into the saved file (patch anchors) or mark AI highlighting.
- * A re-parse of freshly saved bytes legitimately changes them without the document changing.
+ * Attributes that only point into the saved file (patch anchors) or record a baseline read from
+ * it: `docxIndex`, a table's `originalStructure` / `originalFormatting` signatures and its rows' and
+ * cells' raw property XML (the baselines the next save compares the live table against). A re-parse of freshly saved bytes
+ * legitimately changes them without the document changing, so they are refreshed in place.
+ * `aiChanged` marks AI highlighting and keeps its live value.
  */
-const ANCHOR_ATTRS = ['docxIndex'] as const
+const ANCHOR_ATTRS = [
+  'docxIndex',
+  'originalStructure',
+  'originalFormatting',
+  // raw property XML of a table row / cell as last read from the file; the writer may normalise it
+  'rawTrPr',
+  'rawTcPr',
+] as const
 const IGNORED_ATTRS = new Set<string>([...ANCHOR_ATTRS, 'aiChanged'])
 
-type AnchorUpdate = { pos: number; value: unknown }
+type AnchorUpdate = { pos: number; attr: string; value: unknown }
 
 function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true
@@ -39,8 +49,12 @@ function collectAnchorDiffs(
     if (IGNORED_ATTRS.has(k)) continue
     if (!deepEqual(live.attrs[k], next.attrs[k])) return false
   }
-  if (live.attrs.docxIndex !== next.attrs.docxIndex && pos >= 0) {
-    out.push({ pos, value: next.attrs.docxIndex ?? null })
+  if (pos >= 0) {
+    for (const attr of ANCHOR_ATTRS) {
+      if (live.attrs[attr] !== next.attrs[attr]) {
+        out.push({ pos, attr, value: next.attrs[attr] ?? null })
+      }
+    }
   }
   if (live.childCount !== next.childCount) return false
   let offset = 0
@@ -79,7 +93,7 @@ export function applyAnchorOnlyReload(
   if (!collectAnchorDiffs(live, next, -1, updates)) return null
   if (updates.length === 0) return 'same'
   const tr = editor.state.tr
-  for (const u of updates) tr.setNodeAttribute(u.pos, 'docxIndex', u.value)
+  for (const u of updates) tr.setNodeAttribute(u.pos, u.attr, u.value)
   tr.setMeta('addToHistory', false)
   tr.setMeta(TRACK_IGNORE, true)
   editor.view.dispatch(tr)
