@@ -1475,8 +1475,11 @@ export function App() {
     onSelectionUpdate: () => forceRender(),
     // typing in the main document takes ribbon routing back from any textbox
     onFocus: () => setActiveSubEditor(null),
-    onUpdate: () => {
-      dirtyRef.current = true
+    onUpdate: ({ transaction }) => {
+      // setEditable() also emits "update", with an empty transaction: that is a state
+      // refresh (the translation lock, Read Mode), not an edit, and must not mark the
+      // document as changed
+      if (transaction.docChanged) dirtyRef.current = true
       forceRender()
     },
   })
@@ -5347,6 +5350,8 @@ export function App() {
     document.fonts.addEventListener('loadingdone', onLoadingDone)
     scroller.addEventListener('scroll', locate, { passive: true })
     const onDocUpdate = ({ transaction }: { transaction: Transaction }) => {
+      // an "update" without a document change (setEditable) needs no new page pass
+      if (!transaction.docChanged) return
       resetWidthPassHistory(colWidthPass)
       passGovernor.reset()
       // a many-block change (translate_blocks) has no single edited block, so the
