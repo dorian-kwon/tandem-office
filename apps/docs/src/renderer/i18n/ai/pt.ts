@@ -41,8 +41,13 @@ export const pt = {
   cmpAllBlocked: 'Todos os motores estão bloqueados. Pare e trate dos sites pessoalmente.',
   cmpFlatNote:
     'Escolha uma resposta por unidade. As substituições usam texto simples e podem ser desfeitas separadamente.',
+  cmpConnectedAi: 'IA ligada',
+  cmpConnectedUnavailable:
+    'A IA escolhida não está disponível. Verifique a ligação e o aviso de primeira utilização no painel de IA.',
+  cmpIntegrationSeparate:
+    'A IA ligada já fornece uma resposta. A integração automática está desligada; Integrar agora faz um pedido separado.',
   cmpLeaves:
-    'O texto escolhido e o original coreano disponível são enviados a {sites} pelo navegador ego. Aplicam-se os termos desses sites. Não é possível ocultar partes. Escolha o âmbito e os motores e prima Comparar para enviar. O ChatGPT usa apenas uma sessão web com sessão já iniciada no navegador ego.',
+    'Os motores ativados recebem a unidade escolhida e o original coreano disponível. {sites} usa ego; a IA ligada usa a ligação e o modelo atuais desta aplicação, sem início de sessão no site ChatGPT. Aplicam-se os seus termos. Não é possível ocultar partes. Escolha o âmbito e os motores e prima Comparar para enviar.',
   cmpBtn: 'Comparar IA',
   cmpTitle: 'Comparar com outras IAs',
   cmpConsentAgree: 'Entendi, continuar',

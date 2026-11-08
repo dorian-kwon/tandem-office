@@ -40,8 +40,13 @@ export const ms = {
   cmpAllBlocked: 'Semua enjin disekat. Berhenti dan urus laman sendiri.',
   cmpFlatNote:
     'Pilih satu jawapan bagi setiap unit. Penggantian menggunakan teks biasa dan boleh dibuat asal secara berasingan.',
+  cmpConnectedAi: 'AI disambungkan',
+  cmpConnectedUnavailable:
+    'AI yang dipilih tidak tersedia. Semak sambungan dan notis penggunaan pertama dalam panel AI.',
+  cmpIntegrationSeparate:
+    'AI disambungkan sudah memberikan jawapan. Penggabungan automatik dimatikan; Gabungkan sekarang membuat permintaan berasingan.',
   cmpLeaves:
-    'Teks yang dipilih dan asal bahasa Korea jika ada dihantar ke {sites} melalui pelayar ego. Syarat laman berkenaan terpakai. Bahagian teks tidak boleh disembunyikan. Pilih skop dan enjin, kemudian tekan Bandingkan untuk menghantar. ChatGPT hanya menggunakan sesi web yang sudah dilog masuk dalam pelayar ego.',
+    'Enjin yang dihidupkan menerima unit pilihan dan asal Korea jika ada. {sites} menggunakan ego; AI disambungkan menggunakan sambungan dan model semasa aplikasi tanpa log masuk laman ChatGPT. Syarat perkhidmatan terpakai dan bahagian tidak boleh disembunyikan. Pilih skop dan enjin kemudian tekan Bandingkan.',
   cmpBtn: 'Bandingkan AI',
   cmpTitle: 'Bandingkan dengan AI lain',
   cmpConsentAgree: 'Saya faham, teruskan',

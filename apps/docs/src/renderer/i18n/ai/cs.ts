@@ -40,8 +40,13 @@ export const cs = {
   cmpAllBlocked: 'Všechny moduly jsou zablokované. Zastavte běh a stránky vyřešte sami.',
   cmpFlatNote:
     'Pro každou jednotku vyberte jednu odpověď. Náhrady používají prostý text a lze je vrátit jednotlivě.',
+  cmpConnectedAi: 'Připojená AI',
+  cmpConnectedUnavailable:
+    'Vybraná AI není dostupná. V panelu AI zkontrolujte připojení a upozornění prvního použití.',
+  cmpIntegrationSeparate:
+    'Připojená AI již poskytuje odpověď. Automatické sloučení je vypnuté; Sloučit nyní vytvoří samostatný požadavek.',
   cmpLeaves:
-    'Vybraný text a dostupný korejský originál se přes prohlížeč ego odešlou na {sites}. Platí podmínky těchto webů. Části nelze skrýt. Vyberte rozsah a moduly a odešlete tlačítkem Porovnat. ChatGPT používá pouze webovou relaci, ve které jste již přihlášeni v prohlížeči ego.',
+    'Zapnuté moduly obdrží vybranou jednotku a dostupný korejský originál. {sites} používá ego; připojená AI používá současné připojení a model této aplikace bez přihlášení na web ChatGPT. Platí jejich podmínky. Části nelze skrýt. Zvolte rozsah a moduly a stiskněte Porovnat.',
   cmpBtn: 'Porovnání AI',
   cmpTitle: 'Porovnat s jinými AI',
   cmpConsentAgree: 'Rozumím, pokračovat',

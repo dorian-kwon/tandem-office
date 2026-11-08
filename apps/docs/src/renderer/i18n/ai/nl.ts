@@ -41,8 +41,13 @@ export const nl = {
   cmpAllBlocked: 'Alle engines zijn geblokkeerd. Stop en handel de sites zelf af.',
   cmpFlatNote:
     'Kies één antwoord per eenheid. Vervangingen gebruiken platte tekst en kunnen afzonderlijk ongedaan worden gemaakt.',
+  cmpConnectedAi: 'Verbonden AI',
+  cmpConnectedUnavailable:
+    'De gekozen AI is niet beschikbaar. Controleer de verbinding en de melding voor eerste gebruik in het AI-paneel.',
+  cmpIntegrationSeparate:
+    'De verbonden AI levert al een antwoord. Automatische integratie staat uit; Nu integreren maakt een apart verzoek.',
   cmpLeaves:
-    'De gekozen tekst en een beschikbaar Koreaans origineel worden via uw ego-browser naar {sites} gestuurd. Hun voorwaarden gelden. Delen kunnen niet worden verborgen. Kies het bereik en de engines en druk op Vergelijken om te verzenden. ChatGPT gebruikt alleen een websessie die al is aangemeld in de ego-browser.',
+    'Ingeschakelde engines ontvangen de gekozen eenheid en een beschikbaar Koreaans origineel. {sites} gebruikt ego; de verbonden AI gebruikt de huidige verbinding en het model van deze app, zonder aanmelding op de ChatGPT-website. Hun voorwaarden gelden. Delen kunnen niet worden verborgen. Kies bereik en engines en druk op Vergelijken om te verzenden.',
   cmpBtn: 'AI-vergelijking',
   cmpTitle: 'Vergelijken met andere AI’s',
   cmpConsentAgree: 'Begrepen, doorgaan',

@@ -8,6 +8,7 @@
  * active request and ignores late replies. Each batch handles at most `batchSize` units.
  */
 import { isBlockReason, type CompareAnswer, type CompareDriverClient } from '../../shared/compare'
+import { CONNECTED_AI_ENGINE_ID } from '../../shared/compare-engines'
 import { cleanCandidate, splitAnswer, type CandidateKind } from './prompts'
 
 /** units asked per run (and per "continue") */
@@ -262,7 +263,7 @@ export function createRunner(deps: RunnerDeps): Runner {
         return
       }
       if (!(await gate(gen))) return
-      if (auto) await integrateUnit(unit, gen)
+      if (auto && !state.engines.includes(CONNECTED_AI_ENGINE_ID)) await integrateUnit(unit, gen)
       if (!(await gate(gen))) return
       patchUnit(unit.id, (u) => ({ ...u, visited: true }))
       emit({ ...state, next: state.next + 1 })

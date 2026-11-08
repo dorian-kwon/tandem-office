@@ -92,7 +92,7 @@ const button = (c: HTMLElement, label: string): HTMLButtonElement | undefined =>
 const ready = (extra: Record<string, unknown> = {}) => ({
   compareDetect: async () => ({ installed: true, path: '/fake/ego' }),
   compareGetConsent: async () => true,
-  compareGetPrefs: async () => ({ autoIntegrate: false, engines: { chatgpt: false } }),
+  compareGetPrefs: async () => ({ autoIntegrate: false, engines: { 'connected-ai': false } }),
   compareSetPrefs: async () => true,
   compareCancel: async () => {},
   ...extra,
@@ -135,7 +135,7 @@ describe('AI compare popup', () => {
       }),
     )
     await flush()
-    expect(container.textContent).toContain('Copilot, ChatGPT')
+    expect(container.textContent).toContain('Copilot')
     expect(asks).toEqual([])
     act(() => button(container, 'I understand, continue')!.click())
     await flush()
@@ -146,31 +146,63 @@ describe('AI compare popup', () => {
     expect(asks[0]?.prompt).toContain('eight percent')
   })
 
-  it('requires fresh consent for the current engines and never reuses a retired Grok preference', async () => {
-    const engines: string[] = []
+  it('requires fresh consent and never routes the connected AI through the retired website', async () => {
+    const web: string[] = []
+    const appRequests: Array<{ requestId: string; settings: AiSettings }> = []
+    let listener: ((chunk: { requestId: string; type: string; text?: string }) => void) | undefined
+    const current = {
+      ...settings,
+      providers: {
+        ...settings.providers,
+        anthropic: { ...settings.providers.anthropic, apiKey: 'fake-key', model: 'current-model' },
+      },
+    }
     const { container } = setup(
       ready({
         compareGetConsent: async () => false,
+        compareDetect: async () => ({ installed: false }),
         compareSetConsent: async () => true,
         compareGetPrefs: async () => ({
-          engines: { copilot: false, grok: false },
-          autoIntegrate: false,
+          engines: { copilot: false, grok: false, chatgpt: false },
+          autoIntegrate: true,
         }),
+        getAiSettings: async () => current,
         compareAsk: async (request: { siteId: string }) => {
-          engines.push(request.siteId)
+          web.push(request.siteId)
           return { ok: true, text: 'Web answer' }
+        },
+        onAiStream: (fn: typeof listener) => {
+          listener = fn
+          return () => {
+            listener = undefined
+          }
+        },
+        aiStream: async (request: { requestId: string; settings: AiSettings }) => {
+          appRequests.push(request)
+          listener?.({ requestId: request.requestId, type: 'delta', text: 'Connected answer' })
+          listener?.({ requestId: request.requestId, type: 'done' })
         },
       }),
     )
     await flush()
-    expect(engines).toEqual([])
-    expect(container.textContent).toContain('Copilot, ChatGPT')
-    expect(container.textContent).not.toContain('Grok')
+    expect(appRequests).toEqual([])
     act(() => button(container, 'I understand, continue')!.click())
     await flush()
-    expect(engines).toEqual([])
+    expect(appRequests).toEqual([])
+    expect(
+      [...container.querySelectorAll('label')].some((l) => l.textContent === 'Connected AI'),
+    ).toBe(true)
     await start(container)
-    expect(engines).toEqual(['chatgpt'])
+    expect(web).toEqual([])
+    expect(appRequests).toHaveLength(1)
+    expect(appRequests[0]?.settings).toBe(current)
+    expect(container.textContent).toContain('Connected answer')
+    expect(button(container, 'Copy prompt and open ChatGPT')).toBeUndefined()
+    expect(
+      [...container.querySelectorAll('.cmp-card-title')].some(
+        (c) => c.textContent === 'Connected AI',
+      ),
+    ).toBe(true)
   })
 
   it('lets the person select one answer and keeps the popup available for other units', async () => {
@@ -338,7 +370,7 @@ describe('AI compare popup', () => {
     }
     const { container } = setup(
       ready({
-        compareGetPrefs: async () => ({ engines: { chatgpt: false } }),
+        compareGetPrefs: async () => ({ engines: { 'connected-ai': false } }),
         compareSetPrefs: async (patch: unknown) => {
           preferences.push(patch)
           return true
@@ -388,7 +420,7 @@ describe('AI compare popup', () => {
     }
     const { container } = setup(
       ready({
-        compareGetPrefs: async () => ({ autoIntegrate: true, engines: { chatgpt: false } }),
+        compareGetPrefs: async () => ({ autoIntegrate: true, engines: { 'connected-ai': false } }),
         compareAsk: async () => ({ ok: true, text: 'Candidate' }),
         onAiStream: (fn: typeof listener) => {
           listener = fn
@@ -450,7 +482,7 @@ describe('AI compare popup', () => {
     const prompts: string[] = []
     const { container } = setup(
       ready({
-        compareGetPrefs: async () => ({ autoIntegrate: false }),
+        compareGetPrefs: async () => ({ autoIntegrate: false, engines: { 'connected-ai': false } }),
         getTranslationLanguages: () =>
           new Promise((resolve) => {
             loadLanguage = resolve
@@ -460,10 +492,12 @@ describe('AI compare popup', () => {
           return { ok: true, text: 'Answer' }
         },
       }),
+      ['Repeated paragraph', 'Repeated paragraph'],
     )
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0)
     })
+    act(() => (container.querySelectorAll('input[type=radio]')[1] as HTMLInputElement).click())
     act(() => button(container, 'Compare')!.click())
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0)
@@ -479,32 +513,50 @@ describe('AI compare popup', () => {
     expect(prompts[1]).toBe(prompts[0])
   })
 
-  it('starts both enabled engines together and closing cancels both outstanding IPC requests', async () => {
-    const ids: string[] = []
-    const cancelled: string[] = []
-    const resolveReplies: Array<(answer: { ok: false; reason: string }) => void> = []
+  it('starts web and connected AI together and closing cancels both requests', async () => {
+    const web: string[] = []
+    const app: string[] = []
+    const cancelledWeb: string[] = []
+    const cancelledApp: string[] = []
+    let finishWeb!: (answer: { ok: false; reason: string }) => void
+    const current = {
+      ...settings,
+      providers: {
+        ...settings.providers,
+        anthropic: { ...settings.providers.anthropic, apiKey: 'fake-key' },
+      },
+    }
     const { container } = setup(
       ready({
-        compareGetPrefs: async () => ({ autoIntegrate: false }),
+        compareGetPrefs: async () => ({ autoIntegrate: true }),
+        getAiSettings: async () => current,
         compareAsk: (request: { id: string }) => {
-          ids.push(request.id)
+          web.push(request.id)
           return new Promise((resolve) => {
-            resolveReplies.push(resolve)
+            finishWeb = resolve
           })
         },
         compareCancel: async (id: string) => {
-          cancelled.push(id)
+          cancelledWeb.push(id)
+        },
+        onAiStream: () => () => {},
+        aiStream: async (request: { requestId: string }) => {
+          app.push(request.requestId)
+        },
+        aiStreamCancel: async (id: string) => {
+          cancelledApp.push(id)
         },
       }),
     )
     await flush()
     await start(container)
-    expect(ids).toHaveLength(2)
-    expect(new Set(ids).size).toBe(2)
+    expect(web).toHaveLength(1)
+    expect(app).toHaveLength(1)
     expect(container.querySelectorAll('.cmp-chip-running').length).toBeGreaterThanOrEqual(2)
     cleanups.pop()!()
-    expect(cancelled.sort()).toEqual([...ids].sort())
-    for (const resolve of resolveReplies) resolve({ ok: false, reason: 'stopped' })
+    expect(cancelledWeb).toEqual(web)
+    expect(cancelledApp).toEqual(app)
+    finishWeb({ ok: false, reason: 'stopped' })
     await flush()
   })
 

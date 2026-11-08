@@ -61,11 +61,12 @@ Word 문서(.docx)와 ODT(.odt) 에디터다. 그리고 배포되는 앱 전체�
 - 문서 바이트는 IPC 응답이 아니라 미디어 프로토콜의 일회용 주소로 렌더러에 건넨다(`byte-handoff.ts`). IPC 직렬화가 버퍼를 통째로 복사해 1GB 파일에서 메인 프로세스가 죽었기 때문이다.
 - 디자인 템플릿 글꼴은 설치 파일에 한 번만 들어 있고(`resources/template-fonts`) 렌더러 빌드 자산으로 import하지 않는다. 같은 미디어 프로토콜의 `template-fonts` 호스트가 목록에 있는 파일만 내주고(`main/lazy-media.ts`가 `@genoffice/electron-utils/template-font-response`로 답한다. 면 목록과 주소는 `@genoffice/ui/template-fonts`에 있다), 렌더러가 시작할 때 실제 패밀리 이름으로 등록한다(`renderer/template-fonts.ts`). 인쇄와 PDF 내보내기(창 없는 내보내기 포함)는 같은 렌더러에서 돌므로 따로 등록하지 않는다.
 
-## AI 비교 (웹 AI 비교 창)
+## AI 비교
 
-- 선택 단추(`AiAskPopover`)나 상태 표시줄의 "AI 비교"가 `components/AiComparePopover.tsx`를 연다. `renderer/compare/runner.ts`가 문단 순서대로 같은 문단의 엔진들을 병렬 요청하고 답을 모은 뒤 다음 문단으로 가는 흐름과 일시정지·중단·20개 단위 뒤 계속을 맡는다. 같은 엔진에 두 문단을 동시에 요청하지 않으며 중단·닫기는 진행 중인 요청을 모두 취소한다. `units.ts`는 전체 문서나 선택 범위를 문단별로 나누고 선택의 첫·끝은 선택한 부분만 포함한다. 프롬프트는 `prompts.ts`, 범위 매핑과 교체는 `units.ts`·`replace-selection.ts`, 원문 매핑은 `source-locate.ts`, 앱 AI 통합은 `integration.ts`다. 자동 통합은 기본 꺼짐이며 사용자가 켜거나 단위별 통합을 요청할 때만 앱 AI를 부른다. 뒷단은 `src/main/compare/`이고 `registerAiIpc`가 등록한다.
-- 웹 쪽은 `CompareDriver` 인터페이스 뒤에만 있다. 사이트 목록은 `src/shared/compare-sites.ts`의 Copilot·ChatGPT 두 개다. `verified`와 주석은 이전 실제 사이트 확인 기록이며 현재 호환성을 보증하지 않는다. 회귀 검사는 가짜 구동기·IPC·직렬화된 콜백의 격리 VM으로 수행한다. ChatGPT는 로그인 전 DOM만 읽었고 로그인된 웹 세션의 입력·응답 수집은 미검증이다. 실제 Copilot/ChatGPT 호환성, 화면 배치, 실제 AI 답변 품질과 패키징은 이번 변경에서 확인하지 않았다. ChatGPT 엔진은 ego의 로그인된 웹 세션만 쓰며 Codex·Claude 로그인 파일과 브라우저 쿠키를 읽거나 복사하지 않는다.
-- 바꾸기는 `replaceInlineRange`(replace_selection과 같은 길)를 쓰고 단위마다 되돌리기 지점을 나눈다. 요청한 범위는 편집에 따라 이동시키며 글 지문이 달라지면 거절한다. 잘린 글이나 인라인 개체가 있는 단위는 적용하지 않는다. 구조가 맞는 원문이 없거나 선택이 문단 일부면 원문을 추측하지 않고 해당 단위에 표시한다. 전송 확인은 동의 판 3이며 ego lite 설치 파일은 받거나 실행하지 않는다(`docs/security.md`의 "웹 AI 비교").
+- `components/AiComparePopover.tsx`는 Copilot 웹 답변과 "연결된 AI"를 비교한다. 공용 ID는 `src/shared/compare-engines.ts`의 `copilot`·`connected-ai`이며 웹 항목은 `compare-sites.ts`의 Copilot 하나다. 연결된 AI는 웹 driver로 보내지 않고 `renderer/compare/connected-ai.ts`에서 현재 `getAiSettings`·`aiSendGate`·`createElectronTransport`를 쓴다. 제공자·모델을 바꾸거나 별도 웹 로그인을 요구하지 않는다.
+- `runner.ts`가 같은 문단의 두 엔진을 병렬로 실행하고 모두 끝난 뒤 다음 문단으로 간다. 한 엔진은 한 단위씩만 처리한다. 일시정지는 진행 중인 답을 수집하고 중단·닫기는 모든 요청을 취소한다. 20개 단위 뒤에는 계속을 기다린다. `units.ts`는 선택의 첫·끝을 선택 부분만 포함하며 원문 매칭은 `source-locate.ts`가 한다.
+- 같은 `prompts.ts` 다듬기·재번역 지시문을 두 엔진에 보낸다. 연결된 AI 호출은 도구 없는 읽기 전용 글이다. 사용자가 답을 적용할 때만 `replace-selection.ts`가 단위 범위·지문을 검사하고 별도 undo 지점으로 바꾼다. 자동 통합은 기본 꺼짐이며 연결된 AI 후보가 켜진 실행은 억제한다. 명시적 "지금 통합"은 기존 별도 요청이다.
+- 동의 판 4에서 전송 경로를 다시 확인하며 옛 Grok·웹 ChatGPT ID는 새 엔진으로 승계하지 않는다. 인증 파일과 브라우저 쿠키를 읽거나 복사하지 않는다. 시험은 가짜 IPC·transport·격리 VM을 쓴다. 실제 AI 메시지를 보내는 확인, 앱 실행·재시작은 사용자 허락 범위에 따르며 이번 구현의 응답 품질은 실호출로 확인하지 않았다.
 
 ## 로컬 AI (결정 0067)
 

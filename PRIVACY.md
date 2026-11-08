@@ -202,52 +202,46 @@ app's own features:
   in the editors. Searches are not asked about: a search query goes only to
   the search service.
 
-## Comparing with other AIs on the web (Word editor)
+## Comparing AI answers (Word editor)
 
-The **AI compare** window in the Word editor asks Copilot and ChatGPT through
-their web pages. You choose the engines and either a selection or the whole
-document, then press **Compare**. Accepting the first-use notice alone sends
-nothing. Enabled engines process the same paragraph concurrently. Their results
-are collected before moving to the next paragraph, in batches of 20; you choose
-whether to continue with the next batch. Each engine handles only one paragraph
-at a time.
+The **AI compare** window compares Copilot’s web answer with the AI currently
+connected in this app. **Connected AI** keeps the provider and model selected in
+this app; it does not require a ChatGPT website login or switch providers. You
+choose the engines and selection or whole-document scope, then press Compare.
+Accepting the first-use notice alone sends nothing.
 
-- **What is sent.** One selected paragraph or paragraph portion at a time, up to
-  4,000 characters, and its Korean original when a matching full paragraph is
-  available in the translation project. You may enter an original for a single
-  selected unit. Unmatched or partial paragraphs use only their own text; the
-  window marks units without a matched original. Text outside the selection is
-  excluded when selection scope is chosen. Originals are also capped at 4,000
-  characters. Truncated units cannot be applied. The fixed instruction can ask
-  for a fresh translation as well as polishing (the retranslation switch).
-  Parts cannot be hidden from this step. The first-use acknowledgement and
-  engine preferences are kept in `web-compare.json` in the app's data folder.
-
-- **Where it goes.** The app starts the **ego lite** browser's command-line
-  program on your PC, which opens each site's page and types the prompt there,
-  signed in with the logins you made inside ego lite. The text therefore goes
-  to **Microsoft** (Copilot) and **OpenAI** (ChatGPT),
-  under your own accounts, and the terms of those sites apply. ChatGPT uses
-  only a web session already signed in within ego lite. This engine does not
-  use Codex or Claude login files or copy browser cookies. Automating a
-  site may be restricted by its terms; that is your decision when you press the
-  button.
-- **What the app never does.** It never reads, copies or stores a cookie, token
-  or login of ego lite or of any of those sites, and it has no login form for
-  them. It never downloads or runs the ego lite installer: when ego lite is
-  missing it asks whether to open the install page (https://github.com/citrolabs/ego-lite)
-  in your browser and you install it yourself.
-- **The integrated version.** Automatic integration is off by default. When
-  you turn **Auto integrate** on, the app
-  sends the selected text and the web answers to the AI you already selected in
-  the app, as for any other AI request, to combine them. It never switches to a
-  paid route for this. Stop or closing the window cancels the current request.
-- **Blocked sites.** A CAPTCHA, login wall or handover to you
-  blocks that engine for the rest of the run. The app never retries it or tries
-  to get around the block. Other enabled engines may continue. Missing inputs,
-  text that was not accepted, and unavailable send buttons are interaction
-  failures; the app reports that nothing was sent and does not try another
-  submission route.
+- **What is sent.** Enabled engines receive one paragraph or selected paragraph
+  portion at a time, up to 4,000 characters, and a matching Korean original when
+  available. Partial paragraphs do not borrow an entire source paragraph.
+  Truncated units cannot be applied. Both engines receive the same polishing or
+  retranslation instruction for that unit. The app AI is asked for read-only
+  text without document tools. Nothing changes until you choose and apply an
+  answer. Parts cannot be hidden from this step.
+- **Where it goes.** Copilot uses the installed ego lite browser and its existing
+  web login. Its text goes to Microsoft under that site’s terms. Connected AI
+  uses this app’s normal AI selection and send gate with the current connection
+  and model, under the same terms as an ordinary AI-panel request. The app does
+  not open ChatGPT’s website, read or copy Codex/Claude authentication files, or
+  copy browser cookies for this engine. There is no fallback to another provider.
+- **Scheduling and cancellation.** Both enabled engines process the same unit
+  concurrently; their results settle before the next unit. Each engine handles
+  one unit at a time. Runs pause after 20 units for Continue. Stop or closing the
+  window cancels every active comparison request. A failing engine does not
+  cancel the other engine’s answer.
+- **Integration.** Automatic integration is off by default and is suppressed
+  when Connected AI already supplies a candidate. You can explicitly request
+  Integrate now after seeing the candidates; that is a separate app AI request.
+  With only Copilot enabled, optional automatic integration remains available.
+- **Consent and installation.** Version 4 of the first-use acknowledgement and
+  engine preferences are kept in `web-compare.json`. Old Grok or web ChatGPT
+  preferences do not enable a replacement engine implicitly. Only Copilot needs
+  ego lite. The app never downloads or runs its installer; you install it and
+  handle its login yourself.
+- **Blocked sites.** A CAPTCHA, login wall or handover blocks Copilot for the
+  rest of the run without retry or bypass. Missing inputs, rejected text and
+  unavailable send buttons are interaction failures; the app submits nothing
+  and does not try another submission route. App AI failures use the normal
+  connection/error path and never change the chosen provider.
 
 ## Google Drive
 

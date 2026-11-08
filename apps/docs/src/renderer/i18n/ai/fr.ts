@@ -41,8 +41,13 @@ export const fr = {
   cmpAllBlocked: 'Tous les moteurs sont bloqués. Arrêtez et intervenez vous-même sur les sites.',
   cmpFlatNote:
     'Choisissez une réponse par unité. Chaque remplacement en texte brut peut être annulé séparément.',
+  cmpConnectedAi: 'IA connectée',
+  cmpConnectedUnavailable:
+    'L’IA choisie est indisponible. Vérifiez sa connexion et l’avis de première utilisation dans le panneau IA.',
+  cmpIntegrationSeparate:
+    'L’IA connectée fournit déjà une réponse. L’intégration automatique est désactivée ; Intégrer maintenant lance une demande distincte.',
   cmpLeaves:
-    'Le texte choisi et l’original coréen disponible sont envoyés à {sites} via votre navigateur ego. Leurs conditions s’appliquent. Aucun passage ne peut être masqué. Choisissez la portée et les moteurs, puis appuyez sur Comparer pour envoyer. ChatGPT utilise uniquement une session web déjà connectée dans le navigateur ego.',
+    'Les moteurs activés reçoivent l’unité choisie et l’original coréen disponible. {sites} utilise ego ; l’IA connectée conserve la connexion et le modèle actuels de cette application, sans connexion au site ChatGPT. Leurs conditions s’appliquent. Aucun passage ne peut être masqué. Choisissez la portée et les moteurs, puis Comparer pour envoyer.',
   cmpBtn: 'Comparaison IA',
   cmpTitle: 'Comparer avec d’autres IA',
   cmpConsentAgree: 'J’ai compris, continuer',

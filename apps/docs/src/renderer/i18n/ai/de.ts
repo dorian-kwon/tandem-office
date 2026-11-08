@@ -43,8 +43,13 @@ export const de = {
     'Alle Engines sind blockiert. Beenden Sie den Vorgang und prüfen Sie die Seiten selbst.',
   cmpFlatNote:
     'Wählen Sie pro Einheit eine Antwort. Ersetzungen verwenden Klartext und lassen sich einzeln rückgängig machen.',
+  cmpConnectedAi: 'Verbundenes KI-Modell',
+  cmpConnectedUnavailable:
+    'Die gewählte KI ist nicht verfügbar. Prüfen Sie Verbindung und Erstnutzungshinweis im KI-Bereich.',
+  cmpIntegrationSeparate:
+    'Die verbundene KI liefert bereits eine Antwort. Automatische Integration ist aus; Jetzt integrieren startet eine separate Anfrage.',
   cmpLeaves:
-    'Der gewählte Text und ein vorhandenes koreanisches Original werden über Ihren ego-Browser an {sites} gesendet. Es gelten deren Bedingungen. Teile können nicht verborgen werden. Wählen Sie Umfang und Engines und drücken Sie zum Senden auf Vergleichen. ChatGPT nutzt nur eine im ego-Browser bereits angemeldete Websitzung.',
+    'Aktivierte Engines erhalten die gewählte Einheit und ein verfügbares koreanisches Original. {sites} nutzt ego; die verbundene KI nutzt die aktuelle Verbindung und das Modell dieser App ohne Anmeldung auf der ChatGPT-Website. Ihre Bedingungen gelten. Teile lassen sich nicht verbergen. Wählen Sie Umfang und Engines und senden Sie mit Vergleichen.',
   cmpBtn: 'KI-Vergleich',
   cmpTitle: 'Mit anderen KIs vergleichen',
   cmpConsentAgree: 'Verstanden, weiter',

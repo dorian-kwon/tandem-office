@@ -1,6 +1,5 @@
 /**
- * The "AI compare" popup: asks the web AIs of the site table (Copilot, ChatGPT; their web pages,
- * driven through ego lite in the main process) about the selected text or about the whole
+ * The "AI compare" popup: asks Copilot through ego lite and the app’s current connected AI about the selected text or about the whole
  * document, one unit (paragraph) at a time with its enabled AIs in parallel, and lists every answer as a card
  * the person can apply to the document.
  *
@@ -23,6 +22,8 @@ import type { Node as PmNodeType } from '@tiptap/pm/model'
 import { aiSendGate, AiInputTruncatedNotice } from '@genoffice/ui'
 import { createElectronTransport } from '../ai/transport'
 import { integrateComparison } from '../compare/integration'
+import { createConnectedCompareAsk } from '../compare/connected-ai'
+import { CONNECTED_AI_ENGINE_ID } from '../../shared/compare-engines'
 import type { AiSettings } from '@genoffice/ai-provider/browser'
 import { useI18n, type StringKey } from '../i18n/locale'
 import { setInactiveSelectionShown } from '../editor/inactive-selection'
@@ -157,8 +158,15 @@ export function AiComparePopover({
 
   const engineOn = (id: string): boolean => prefs.engines?.[id] !== false
   const retranslate = prefs.retranslate !== false
-  const autoIntegrate = prefs.autoIntegrate === true
-  const enabledEngines = COMPARE_SITES.filter((s) => engineOn(s.id)).map((s) => s.id)
+  const engineOptions = [
+    ...COMPARE_SITES.map((s) => ({ id: s.id, name: s.name })),
+    { id: CONNECTED_AI_ENGINE_ID, name: t('cmpConnectedAi') },
+  ]
+  const engineName = (id: string): string => engineOptions.find((s) => s.id === id)?.name ?? id
+  const enabledEngines = engineOptions.filter((s) => engineOn(s.id)).map((s) => s.id)
+  const connectedSelected = enabledEngines.includes(CONNECTED_AI_ENGINE_ID)
+  const autoIntegrate = prefs.autoIntegrate === true && !connectedSelected
+  const needsWeb = COMPARE_SITES.some((site) => enabledEngines.includes(site.id))
   const savePrefs = (patch: ComparePrefs): void => {
     setPrefs((p) => ({ ...p, ...patch, engines: { ...p.engines, ...patch.engines } }))
     void window.desktop?.compareSetPrefs?.(patch)?.catch(() => {})
@@ -183,7 +191,32 @@ export function AiComparePopover({
   const infos = useRef(new Map<string, UnitInfo>())
   const selectionRange = useRef(snapshot ? { ...snapshot, gone: false } : null)
 
-  const driver = useMemo(ipcDriver, [])
+  const webDriver = useMemo(ipcDriver, [])
+  const connectedAsk = useMemo(
+    () =>
+      createConnectedCompareAsk({
+        getSettings: async () => (await window.desktop?.getAiSettings?.()) ?? live.current.settings,
+        getStatuses: () => live.current.statuses,
+        transportFor: (current) =>
+          createElectronTransport(() => current, {
+            onInputTruncated: () => setInputTruncated(true),
+          }),
+        unavailableText: () => t('cmpConnectedUnavailable'),
+      }),
+    // The long-lived client reads current settings/statuses for each unit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  )
+  const driver = useMemo<CompareDriverClient>(
+    () => ({
+      detect: webDriver.detect,
+      ask: (id, prompt, signal) =>
+        id === CONNECTED_AI_ENGINE_ID
+          ? connectedAsk(prompt, signal)
+          : webDriver.ask(id, prompt, signal),
+    }),
+    [webDriver, connectedAsk],
+  )
   const runner = useMemo(
     () =>
       createRunner({
@@ -209,7 +242,7 @@ export function AiComparePopover({
             original: unit.text,
             ...(unit.korean === '' ? { targetLanguage: target } : {}),
             answers: answers.map((a) => ({
-              label: `${COMPARE_SITES.find((site) => site.id === a.id)?.name ?? a.id} (${a.kind === 'polished' ? 'polished' : 're-translated'})`,
+              label: `${a.id === CONNECTED_AI_ENGINE_ID ? t('cmpConnectedAi') : (COMPARE_SITES.find((site) => site.id === a.id)?.name ?? a.id)} (${a.kind === 'polished' ? 'polished' : 're-translated'})`,
               text: a.text,
             })),
           })
@@ -540,7 +573,7 @@ export function AiComparePopover({
           <span className="cmp-unit-chips">
             {state.engines.map((id) => {
               const e = result.engines[id]
-              const name = COMPARE_SITES.find((s) => s.id === id)?.name ?? id
+              const name = engineName(id)
               return e ? <React.Fragment key={id}>{chip(e.status, name)}</React.Fragment> : null
             })}
             {result.applied && <span className="cmp-chip cmp-chip-done">{t('cmpApplied')}</span>}
@@ -562,8 +595,9 @@ export function AiComparePopover({
             )}
             {state.engines.map((id) => {
               const site = COMPARE_SITES.find((s) => s.id === id)
+              const engine = engineOptions.find((s) => s.id === id)
               const e = result.engines[id]
-              if (!site || !e) return null
+              if (!engine || !e) return null
               const retry = idle && (e.status === 'failed' || e.status === 'stopped')
               const head = (
                 <span className="cmp-head-actions">
@@ -577,14 +611,15 @@ export function AiComparePopover({
                       {t('cmpRetry')}
                     </button>
                   )}
-                  {/* always offered: copy the prompt and open the site to do it by hand */}
-                  <button
-                    type="button"
-                    className="cmp-link"
-                    onClick={() => manual(site.url, result.id)}
-                  >
-                    {t('cmpManual', { name: site.name })}
-                  </button>
+                  {site && (
+                    <button
+                      type="button"
+                      className="cmp-link"
+                      onClick={() => manual(site.url, result.id)}
+                    >
+                      {t('cmpManual', { name: site.name })}
+                    </button>
+                  )}
                 </span>
               )
               const first = e.text ?? e.retranslation ?? null
@@ -595,7 +630,7 @@ export function AiComparePopover({
                   {card(
                     result.id,
                     id,
-                    e.retranslation ? `${site.name} · ${t(firstKind)}` : site.name,
+                    e.retranslation ? `${engine.name} · ${t(firstKind)}` : engine.name,
                     e.status === 'done' ? (
                       first
                     ) : e.status === 'blocked' ? (
@@ -611,7 +646,7 @@ export function AiComparePopover({
                     card(
                       result.id,
                       `${id}-re`,
-                      `${site.name} · ${t('cmpKindRetranslated')}`,
+                      `${engine.name} · ${t('cmpKindRetranslated')}`,
                       e.retranslation,
                       e.retranslation ?? null,
                       result.applied,
@@ -691,7 +726,8 @@ export function AiComparePopover({
     return reason
   }
   const started = state.phase !== 'idle'
-  const canStart = consent === true && installed && enabledEngines.length > 0 && !active
+  const canStart =
+    consent === true && (!needsWeb || installed) && enabledEngines.length > 0 && !active
 
   return (
     <div
@@ -756,8 +792,10 @@ export function AiComparePopover({
         )}
         {consent && (
           <>
-            {detection === 'checking' && <div className="cmp-hint">{t('cmpChecking')}</div>}
-            {detection !== 'checking' && !detection.installed && (
+            {needsWeb && detection === 'checking' && (
+              <div className="cmp-hint">{t('cmpChecking')}</div>
+            )}
+            {needsWeb && detection !== 'checking' && !detection.installed && (
               <div className="cmp-missing">
                 <div>{t('cmpEgoMissing')}</div>
                 {missing === 'steps' && (
@@ -798,7 +836,7 @@ export function AiComparePopover({
             )}
             <div className="cmp-controls">
               <div className="cmp-switches" role="group">
-                {COMPARE_SITES.map((site) => (
+                {engineOptions.map((site) => (
                   <label key={site.id} className="cmp-auto">
                     <input
                       type="checkbox"
@@ -838,6 +876,7 @@ export function AiComparePopover({
                   <input
                     type="checkbox"
                     checked={autoIntegrate}
+                    disabled={connectedSelected}
                     onChange={(e) => savePrefs({ autoIntegrate: e.target.checked })}
                   />
                   {t('cmpAutoIntegrate')}
@@ -911,6 +950,7 @@ export function AiComparePopover({
                   </div>
                 )}
             </div>
+            {connectedSelected && <div className="cmp-hint">{t('cmpIntegrationSeparate')}</div>}
             {started && (
               <div className="cmp-progress" role="status">
                 <span>{t('cmpProgress', { done, total: batchTotal })}</span>
