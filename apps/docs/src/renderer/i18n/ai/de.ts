@@ -22,10 +22,27 @@ export const de = {
   aiAskBtn: 'KI fragen',
   aiAskWebSearch: 'Websuche',
   aiAskGoogleTranslate: 'Übersetzen',
+  cmpStBlocked: 'Blockiert',
+  cmpNoSource: 'Kein passendes koreanisches Original. Nur der Text dieser Einheit wird gesendet.',
+  cmpNoUnits: 'Keine Textabsätze zum Vergleichen.',
+  cmpApplied: 'Angewendet',
+  cmpScopeSelection: 'Auswahl',
+  cmpScopeDocument: 'Gesamtes Dokument',
+  cmpPause: 'Pausieren',
+  cmpResume: 'Fortsetzen',
+  cmpNoEngine: 'Aktivieren Sie mindestens eine Engine.',
+  cmpProgress: '{done} / {total} Einheiten',
+  cmpRemaining: '{n} Einheiten übrig',
+  cmpContinue: 'Mit {n} Einheiten fortfahren',
+  cmpBlockedLine: '{name}: blockiert ({reason}). Kein erneuter Versuch in diesem Durchlauf.',
+  cmpAllBlocked:
+    'Alle Engines sind blockiert. Beenden Sie den Vorgang und prüfen Sie die Seiten selbst.',
+  cmpFlatNote:
+    'Wählen Sie pro Einheit eine Antwort. Ersetzungen verwenden Klartext und lassen sich einzeln rückgängig machen.',
+  cmpLeaves:
+    'Der gewählte Text und ein vorhandenes koreanisches Original werden über Ihren ego-Browser an {sites} gesendet. Es gelten deren Bedingungen. Teile können nicht verborgen werden. Wählen Sie Umfang und Engines und drücken Sie zum Senden auf Vergleichen.',
   cmpBtn: 'KI-Vergleich',
   cmpTitle: 'Mit anderen KIs vergleichen',
-  cmpLeaves:
-    'Der markierte Text (und das koreanische Original, falls vorhanden) verlässt diese App: Nachdem Sie unten zugestimmt haben, sendet ein Klick auf KI-Vergleich ihn sofort über Ihre ego-Browser-Anmeldungen an die Webseiten von {sites}, und deren Bedingungen gelten. Der Editor kann in diesem Schritt keine Textteile ausblenden. Vor Ihrer Zustimmung wird nichts gesendet.',
   cmpConsentAgree: 'Verstanden, weiter',
   cmpSourceLabel: 'Koreanischer Originaltext',
   cmpSourceAuto:
@@ -56,7 +73,7 @@ export const de = {
   cmpStale:
     'Die Auswahl hat sich geändert, seit dieses Fenster geöffnet wurde. Es wurde nichts ersetzt.',
   cmpCannotReplace:
-    'Diese Auswahl kann hier nicht ersetzt werden (sie umfasst mehrere Absätze oder liegt in einer Tabelle).',
+    'Dieser Text kann hier nicht ersetzt werden (eingebettete Objekte oder nicht unterstützter Bereich).',
   cmpBlocked:
     'Verbinden Sie zuerst im KI-Bereich eine KI (oder schließen Sie deren Erstnutzungshinweis ab), um zusammenzuführen.',
   cmpStop: 'Stopp',

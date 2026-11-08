@@ -23,10 +23,27 @@ export const it = {
   aiAskBtn: "Chiedi all'IA",
   aiAskWebSearch: 'Cerca',
   aiAskGoogleTranslate: 'Traduci',
+  cmpStBlocked: 'Bloccato',
+  cmpNoSource:
+    'Nessun originale coreano corrispondente. Viene inviato solo il testo di questa unità.',
+  cmpNoUnits: 'Nessun paragrafo di testo da confrontare.',
+  cmpApplied: 'Applicato',
+  cmpScopeSelection: 'Selezione',
+  cmpScopeDocument: 'Intero documento',
+  cmpPause: 'Pausa',
+  cmpResume: 'Riprendi',
+  cmpNoEngine: 'Attiva almeno un motore.',
+  cmpProgress: '{done} / {total} unità',
+  cmpRemaining: '{n} unità rimanenti',
+  cmpContinue: 'Continua con {n} unità',
+  cmpBlockedLine: '{name}: bloccato ({reason}). Nessun nuovo tentativo in questa esecuzione.',
+  cmpAllBlocked: 'Tutti i motori sono bloccati. Fermati e intervieni personalmente sui siti.',
+  cmpFlatNote:
+    'Scegli una risposta per unità. Le sostituzioni usano testo semplice e si possono annullare singolarmente.',
+  cmpLeaves:
+    'Il testo scelto e l’eventuale originale coreano vengono inviati a {sites} tramite il browser ego. Si applicano i loro termini. Non si possono nascondere parti. Scegli ambito e motori, poi premi Confronta per inviare.',
   cmpBtn: 'Confronto IA',
   cmpTitle: 'Confronta con altre IA',
-  cmpLeaves:
-    'Il testo selezionato (e l’originale coreano, se c’è) esce da questa app: dopo che hai accettato qui sotto, premendo Confronto IA viene inviato subito alle pagine web di {sites} tramite i tuoi accessi nel browser ego, e valgono i termini di quei siti. L’editor non può nascondere parti del testo in questo passaggio. Non viene inviato nulla prima del tuo consenso.',
   cmpConsentAgree: 'Ho capito, continua',
   cmpSourceLabel: 'Testo originale in coreano',
   cmpSourceAuto:
@@ -57,7 +74,7 @@ export const it = {
   cmpStale:
     'La selezione è cambiata dopo l’apertura di questa finestra. Non è stato sostituito nulla.',
   cmpCannotReplace:
-    'Questa selezione non può essere sostituita qui (copre più paragrafi o si trova in una tabella).',
+    'Questo testo non può essere sostituito qui (oggetti in linea o intervallo non supportato).',
   cmpBlocked:
     'Collega prima un’IA nel pannello IA (o completa il suo avviso di primo utilizzo) per integrare.',
   cmpStop: 'Ferma',

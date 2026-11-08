@@ -13,7 +13,7 @@ export interface ConsentFs {
 }
 
 /** bump when the wording of what is sent changes: an older acknowledgement then asks again */
-export const COMPARE_CONSENT_VERSION = 1
+export const COMPARE_CONSENT_VERSION = 2
 
 interface Stored {
   consentVersion?: unknown
@@ -33,10 +33,19 @@ async function readStored(fs: ConsentFs): Promise<Stored> {
   }
 }
 
-async function writeStored(fs: ConsentFs, patch: Stored): Promise<void> {
-  // keep whatever else the file holds (the two values are written independently)
-  const next = { ...(await readStored(fs)), ...patch }
-  await fs.write(JSON.stringify(next) + '\n')
+const pendingWrites = new WeakMap<ConsentFs, Promise<void>>()
+
+function writeStored(fs: ConsentFs, patch: Stored | ((stored: Stored) => Stored)): Promise<void> {
+  const previous = pendingWrites.get(fs) ?? Promise.resolve()
+  const next = previous
+    .catch(() => {})
+    .then(async () => {
+      const current = await readStored(fs)
+      const change = typeof patch === 'function' ? patch(current) : patch
+      await fs.write(JSON.stringify({ ...current, ...change }) + '\n')
+    })
+  pendingWrites.set(fs, next)
+  return next
 }
 
 export async function readCompareConsent(fs: ConsentFs): Promise<boolean> {
@@ -56,10 +65,12 @@ export async function readComparePrefs(fs: ConsentFs): Promise<ComparePrefs> {
 /** merge a change into the remembered choices (engine switches merge per engine); nothing else is touched */
 export async function writeComparePrefs(fs: ConsentFs, patch: unknown): Promise<void> {
   const clean = sanitizePrefs(patch)
-  const current = sanitizePrefs(await readStored(fs))
-  const next: ComparePrefs = { ...current, ...clean }
-  if (clean.engines) next.engines = { ...current.engines, ...clean.engines }
-  await writeStored(fs, next as Stored)
+  await writeStored(fs, (stored) => {
+    const current = sanitizePrefs(stored)
+    const next: ComparePrefs = { ...current, ...clean }
+    if (clean.engines) next.engines = { ...current.engines, ...clean.engines }
+    return next as Stored
+  })
 }
 
 function sanitizePrefs(value: unknown): ComparePrefs {

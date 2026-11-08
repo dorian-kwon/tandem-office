@@ -204,26 +204,27 @@ app's own features:
 
 ## Comparing with other AIs on the web (Word editor)
 
-The **AI compare** button next to a text selection in the Word editor asks
-Gemini, Claude, Copilot and Grok, through their own web pages, to check and polish the
-selected text against its Korean original, or, when there is no original,
-to translate or re-translate the selection. It exists only so that you can
-compare their answers, and it sends nothing until you have agreed in its window
-and pressed the button; after that it starts at once.
+The **AI compare** window in the Word editor asks Copilot and Grok through
+their web pages. You choose the engines and either a selection or the whole
+document, then press **Compare**. Accepting the first-use notice alone sends
+nothing. Paragraphs are processed in order, one engine at a time, in batches of
+20; you choose whether to continue with the next batch.
 
-- **What is sent.** The selected text (at most 4,000 characters; the window says
-  when it was cut) and, only if there is one, the Korean original (filled in from
-  the translation project, or typed or pasted by you; also at most 4,000
-  characters), together with one fixed instruction. With an original the sites are
-  also asked to translate it again themselves (a switch in the window, on by
-  default). Nothing else from the document. The editor cannot hide parts of
-  the text from this step, so the window says that the text leaves the app. The
-  first time, the window asks you to acknowledge this; the acknowledgement is
-  kept in `web-compare.json` in the app's data folder.
+- **What is sent.** One selected paragraph or paragraph portion at a time, up to
+  4,000 characters, and its Korean original when a matching full paragraph is
+  available in the translation project. You may enter an original for a single
+  selected unit. Unmatched or partial paragraphs use only their own text; the
+  window marks units without a matched original. Text outside the selection is
+  excluded when selection scope is chosen. Originals are also capped at 4,000
+  characters. Truncated units cannot be applied. The fixed instruction can ask
+  for a fresh translation as well as polishing (the retranslation switch).
+  Parts cannot be hidden from this step. The first-use acknowledgement and
+  engine preferences are kept in `web-compare.json` in the app's data folder.
+
 - **Where it goes.** The app starts the **ego lite** browser's command-line
   program on your PC, which opens each site's page and types the prompt there,
   signed in with the logins you made inside ego lite. The text therefore goes
-  to **Google** (Gemini), **Anthropic** (Claude), **Microsoft** (Copilot) and **xAI** (Grok),
+  to **Microsoft** (Copilot) and **xAI** (Grok),
   under your own accounts, and the terms of those sites apply. Automating a
   site may be restricted by its terms; that is your decision when you press the
   button.
@@ -235,7 +236,10 @@ and pressed the button; after that it starts at once.
 - **The integrated version.** When you leave **Auto integrate** on, the app
   sends the selected text and the web answers to the AI you already selected in
   the app, as for any other AI request, to combine them. It never switches to a
-  paid route for this.
+  paid route for this. Stop or closing the window cancels the current request.
+- **Blocked sites.** A CAPTCHA, login wall, missing prompt box or handover to you
+  blocks that engine for the rest of the run. The app never retries it or tries
+  to get around the block. Other enabled engines may continue.
 
 ## Google Drive
 

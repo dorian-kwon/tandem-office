@@ -22,10 +22,26 @@ export const nl = {
   aiAskBtn: 'Vraag AI',
   aiAskWebSearch: 'Zoeken',
   aiAskGoogleTranslate: 'Vertalen',
+  cmpStBlocked: 'Geblokkeerd',
+  cmpNoSource: 'Geen passend Koreaans origineel. Alleen de tekst van deze eenheid wordt verzonden.',
+  cmpNoUnits: 'Geen tekstalinea’s om te vergelijken.',
+  cmpApplied: 'Toegepast',
+  cmpScopeSelection: 'Selectie',
+  cmpScopeDocument: 'Hele document',
+  cmpPause: 'Pauzeren',
+  cmpResume: 'Hervatten',
+  cmpNoEngine: 'Schakel ten minste één engine in.',
+  cmpProgress: '{done} / {total} eenheden',
+  cmpRemaining: 'Nog {n} eenheden',
+  cmpContinue: 'Doorgaan met {n} eenheden',
+  cmpBlockedLine: '{name}: geblokkeerd ({reason}). Geen nieuwe poging tijdens deze uitvoering.',
+  cmpAllBlocked: 'Alle engines zijn geblokkeerd. Stop en handel de sites zelf af.',
+  cmpFlatNote:
+    'Kies één antwoord per eenheid. Vervangingen gebruiken platte tekst en kunnen afzonderlijk ongedaan worden gemaakt.',
+  cmpLeaves:
+    'De gekozen tekst en een beschikbaar Koreaans origineel worden via uw ego-browser naar {sites} gestuurd. Hun voorwaarden gelden. Delen kunnen niet worden verborgen. Kies het bereik en de engines en druk op Vergelijken om te verzenden.',
   cmpBtn: 'AI-vergelijking',
   cmpTitle: 'Vergelijken met andere AI’s',
-  cmpLeaves:
-    'De geselecteerde tekst (en het Koreaanse origineel, als dat er is) verlaat deze app: nadat u hieronder akkoord bent gegaan, stuurt een druk op AI-vergelijking hem meteen via uw ego-browseraanmeldingen naar de webpagina’s van {sites}, en de voorwaarden van die sites gelden. De editor kan in deze stap geen delen van de tekst verbergen. Vóór uw akkoord wordt niets verzonden.',
   cmpConsentAgree: 'Begrepen, doorgaan',
   cmpSourceLabel: 'Koreaanse brontekst',
   cmpSourceAuto:
@@ -55,7 +71,7 @@ export const nl = {
   cmpManual: 'Prompt kopiëren en {name} openen',
   cmpStale: 'De selectie is gewijzigd nadat dit venster openging. Er is niets vervangen.',
   cmpCannotReplace:
-    'Deze selectie kan hier niet worden vervangen (ze beslaat meerdere alinea’s of staat in een tabel).',
+    'Deze tekst kan hier niet worden vervangen (inline-objecten of een niet-ondersteund bereik).',
   cmpBlocked:
     'Verbind eerst een AI in het AI-paneel (of rond de eerstegebruiksmelding af) om samen te voegen.',
   cmpStop: 'Stoppen',

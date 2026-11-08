@@ -58,8 +58,8 @@ const NEEDS_USER = JOB.codes.needsUser;
 const BLOCKED = JOB.codes.blocked;
 // CAPTCHA and "unusual traffic" pages: the engine is blocked, nothing is clicked to get past them
 const WALL_URL = /google\.com\/sorry|\/captcha|\/challenge|recaptcha|hcaptcha|turnstile/i;
-const WALL_TEXT = /unusual traffic|automated quer|captcha|verify you are (a )?human|are you a robot|자동화된 쿼리|비정상적인 트래픽|로봇이 아닙니다|사람인지 확인/i;
-const wallText = () => WALL_TEXT.test(String(document.body ? document.body.innerText : '').slice(0, 4000));
+// This callback is serialized into the page; every binding it uses must be page-local.
+const wallText = () => /unusual traffic|automated quer|captcha|verify you are (a )?human|are you a robot|자동화된 쿼리|비정상적인 트래픽|로봇이 아닙니다|사람인지 확인/i.test(String(document.body ? document.body.innerText : '').slice(0, 4000));
 const inputState = (selector) => {
   const el = document.querySelector(selector);
   if (!el) return 'none';
@@ -106,6 +106,7 @@ async function main() {
     const here = String(await page.url());
     if (WALL_URL.test(here)) return { ok: false, reason: BLOCKED };
     if (loggedOutUrl && loggedOutUrl.test(here)) return { ok: false, reason: LOGIN_WALL };
+    if (await page.evaluate(wallText)) return { ok: false, reason: BLOCKED };
     boxState = await page.evaluate(inputState, SITE.inputSelector);
     if (boxState === 'ok') break;
     await sleep(500);
@@ -148,6 +149,7 @@ async function main() {
   else if (!(await sendByButton())) await page.press(SITE.inputSelector, 'Enter');
   // the text is still in the box: it was not sent, so try the other way
   await sleep(1500);
+  if (WALL_URL.test(String(await page.url())) || await page.evaluate(wallText)) return { ok: false, reason: BLOCKED };
   if ((await page.evaluate(boxText, SITE.inputSelector)) !== '') {
     if (SITE.submit === 'enter') await sendByButton();
     else await page.press(SITE.inputSelector, 'Enter');

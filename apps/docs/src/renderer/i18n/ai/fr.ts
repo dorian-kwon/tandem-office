@@ -22,10 +22,26 @@ export const fr = {
   aiAskBtn: "Demander à l'IA",
   aiAskWebSearch: 'Recherche web',
   aiAskGoogleTranslate: 'Traduire',
+  cmpStBlocked: 'Bloqué',
+  cmpNoSource: 'Aucun original coréen correspondant. Seul le texte de cette unité est envoyé.',
+  cmpNoUnits: 'Aucun paragraphe à comparer.',
+  cmpApplied: 'Appliqué',
+  cmpScopeSelection: 'Sélection',
+  cmpScopeDocument: 'Document entier',
+  cmpPause: 'Pause',
+  cmpResume: 'Reprendre',
+  cmpNoEngine: 'Activez au moins un moteur.',
+  cmpProgress: '{done} / {total} unités',
+  cmpRemaining: '{n} unités restantes',
+  cmpContinue: 'Continuer avec {n} unités',
+  cmpBlockedLine: '{name} : bloqué ({reason}). Aucun nouvel essai pendant cette exécution.',
+  cmpAllBlocked: 'Tous les moteurs sont bloqués. Arrêtez et intervenez vous-même sur les sites.',
+  cmpFlatNote:
+    'Choisissez une réponse par unité. Chaque remplacement en texte brut peut être annulé séparément.',
+  cmpLeaves:
+    'Le texte choisi et l’original coréen disponible sont envoyés à {sites} via votre navigateur ego. Leurs conditions s’appliquent. Aucun passage ne peut être masqué. Choisissez la portée et les moteurs, puis appuyez sur Comparer pour envoyer.',
   cmpBtn: 'Comparaison IA',
   cmpTitle: 'Comparer avec d’autres IA',
-  cmpLeaves:
-    'Le texte sélectionné (et l’original coréen, s’il y en a un) quitte cette application : une fois que vous avez accepté ci-dessous, appuyer sur Comparaison IA l’envoie aussitôt aux pages web de {sites} via vos connexions dans le navigateur ego, et les conditions de ces sites s’appliquent. L’éditeur ne peut pas masquer une partie du texte à cette étape. Rien n’est envoyé avant votre accord.',
   cmpConsentAgree: 'J’ai compris, continuer',
   cmpSourceLabel: 'Texte original en coréen',
   cmpSourceAuto:
@@ -55,7 +71,7 @@ export const fr = {
   cmpManual: 'Copier le prompt et ouvrir {name}',
   cmpStale: 'La sélection a changé depuis l’ouverture de cette fenêtre. Rien n’a été remplacé.',
   cmpCannotReplace:
-    'Cette sélection ne peut pas être remplacée ici (elle couvre plusieurs paragraphes ou se trouve dans un tableau).',
+    'Ce texte ne peut pas être remplacé ici (objets intégrés ou plage non prise en charge).',
   cmpBlocked:
     'Connectez d’abord une IA dans le volet IA (ou terminez son avis de première utilisation) pour intégrer.',
   cmpStop: 'Arrêter',

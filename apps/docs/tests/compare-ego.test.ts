@@ -12,9 +12,9 @@ import {
 } from '../src/main/compare/ego-driver'
 import {
   readCompareConsent,
-  readCompareRetranslate,
+  readComparePrefs,
   writeCompareConsent,
-  writeCompareRetranslate,
+  writeComparePrefs,
 } from '../src/main/compare/consent-store'
 import { translationSourceCopy } from '../src/main/compare/source-path'
 
@@ -37,7 +37,7 @@ describe('ego script generator', () => {
     }
     expect(job.prompt).toBe(nasty)
     expect(job.marker).toBe('@@M@@')
-    expect(job.site.id).toBe('gemini')
+    expect(job.site.id).toBe('copilot')
     // the raw text appears nowhere outside the escaped literal
     expect(script.replace(literal, '').includes('process.exit(1)')).toBe(false)
     expect(script.includes('\u2028')).toBe(false)
@@ -96,50 +96,57 @@ describe('ego script generator', () => {
     expect(script.match(/page\.click\(/g)?.length).toBeLessThanOrEqual(4)
   })
 
-  it('prepare steps come from the table and never fail a run', () => {
-    const gemini = COMPARE_SITES.find((s) => s.id === 'gemini')!
-    const withPrepare = buildEgoScript({ site: gemini, prompt: 'p', marker: '@@M@@' })
-    expect(withPrepare).toContain('SITE.prepare')
-    const literal = /^const JOB = JSON\.parse\((.*)\);\n/.exec(withPrepare)![1]!
-    const job = JSON.parse(new Script(literal).runInNewContext({}) as string) as {
-      site: typeof gemini
+  it.each([
+    ['https://grok.com/challenge', '', 'blocked'],
+    ['https://grok.com/', 'Verify you are human', 'blocked'],
+    ['https://grok.com/sign-in', '', 'login-wall'],
+  ])('blocks before entering any text at %s (%s)', async (url, bodyText, reason) => {
+    let typed = false
+    let output = ''
+    let time = 0
+    const input = { getBoundingClientRect: () => ({ left: 0, top: 0, width: 200, height: 100 }) }
+    const fakeDocument = {
+      body: { innerText: bodyText },
+      querySelector: () => input,
+      elementFromPoint: () => input,
     }
-    expect(job.site.prepare?.[0]?.match).toBe('\\bPro\\b')
-    const body = withPrepare.slice(withPrepare.indexOf('SITE.prepare'))
-    // the whole step sits in a try/catch that continues with the default mode, and runs before typing
-    expect(body.slice(0, 400)).toContain('try {')
-    expect(body.slice(0, 600)).toContain('continue with the default mode')
-    expect(withPrepare.indexOf('SITE.prepare')).toBeLessThan(
-      withPrepare.indexOf('keyboard.insertText'),
-    )
-  })
-
-  it('the reopen strategy reads the newest saved conversation and guards against an old one', () => {
-    const gemini = COMPARE_SITES.find((s) => s.id === 'gemini')!
-    const text = buildEgoScript({ site: gemini, prompt: 'p', marker: '@@M@@' })
-    expect(() => new Script(`(async () => {\n${text}\n})`)).not.toThrow()
-    expect(text).toContain('beforeLink')
-    expect(text).toContain('link.href !== beforeLink.href')
-    expect(text).toContain('promptStart')
-    expect(text).toContain('page.goto(conversation)')
-    // complete only when the text is unchanged across two reads and the stop button is gone
-    expect(text).toContain("!now.busy && now.text.trim() !== '' && now.text === previous")
-    // the sidebar link is captured before the prompt is sent
-    expect(text.indexOf('const beforeLink')).toBeLessThan(
-      text.indexOf("page.press(SITE.inputSelector, 'Enter')"),
-    )
-    // a live site has no reopen branch to take
-    const claude = buildEgoScript({
-      site: COMPARE_SITES.find((s) => s.id === 'claude')!,
-      prompt: 'p',
+    const page = {
+      goto: async () => {},
+      url: async () => url,
+      evaluate: async (fn: (arg?: unknown) => unknown, arg?: unknown) =>
+        new Script(`(${fn.toString()})(arg)`).runInNewContext({ document: fakeDocument, arg }),
+      mouse: {
+        click: async () => {
+          typed = true
+        },
+      },
+      keyboard: {
+        press: async () => {
+          typed = true
+        },
+        insertText: async () => {
+          typed = true
+        },
+      },
+    }
+    const text = buildEgoScript({
+      site: COMPARE_SITES[1]!,
+      prompt: 'private text',
       marker: '@@M@@',
     })
-    const job = JSON.parse(
-      new Script(/^const JOB = JSON\.parse\((.*)\);\n/.exec(claude)![1]!).runInNewContext(
-        {},
-      ) as string,
-    ) as { site: { readStrategy: string } }
-    expect(job.site.readStrategy).toBe('live')
+    await new Script(`(async () => {${text}})()`).runInNewContext({
+      taskSpace: async () => ({ page: () => page }),
+      document: fakeDocument,
+      Date: { now: () => (time += 100) },
+      setTimeout: (resolve: () => void) => resolve(),
+      console: {
+        log: (s: string) => {
+          output = s
+        },
+      },
+    })
+    expect(parseEgoOutput(output, '@@M@@')).toEqual({ ok: false, reason })
+    expect(typed).toBe(false)
   })
 
   it('jsonStringLiteral round-trips', () => {
@@ -439,7 +446,7 @@ describe('consent and source copy', () => {
     expect(await readCompareConsent(fs)).toBe(false)
     await writeCompareConsent(fs)
     expect(await readCompareConsent(fs)).toBe(true)
-    stored = '{"consentVersion":0}'
+    stored = '{"consentVersion":1}'
     expect(await readCompareConsent(fs)).toBe(false)
     stored = 'garbage'
     expect(await readCompareConsent(fs)).toBe(false)
@@ -448,17 +455,38 @@ describe('consent and source copy', () => {
   it('the re-translation switch is on by default, remembered, and independent of the consent', async () => {
     let stored: string | null = null
     const fs = { read: async () => stored, write: async (t: string) => void (stored = t) }
-    expect(await readCompareRetranslate(fs)).toBe(true)
+    expect((await readComparePrefs(fs)).retranslate ?? true).toBe(true)
     await writeCompareConsent(fs)
-    await writeCompareRetranslate(fs, false)
-    expect(await readCompareRetranslate(fs)).toBe(false)
+    await writeComparePrefs(fs, { retranslate: false })
+    expect((await readComparePrefs(fs)).retranslate).toBe(false)
     // writing one value keeps the other
     expect(await readCompareConsent(fs)).toBe(true)
-    await writeCompareRetranslate(fs, true)
+    await writeComparePrefs(fs, { retranslate: true })
     expect(await readCompareConsent(fs)).toBe(true)
-    expect(await readCompareRetranslate(fs)).toBe(true)
+    expect((await readComparePrefs(fs)).retranslate ?? true).toBe(true)
     stored = 'garbage'
-    expect(await readCompareRetranslate(fs)).toBe(true)
+    expect((await readComparePrefs(fs)).retranslate ?? true).toBe(true)
+  })
+
+  it('preserves simultaneous preference changes and consent writes', async () => {
+    let stored = '{}'
+    const fs = {
+      read: async () => stored,
+      write: async (text: string) => {
+        await Promise.resolve()
+        stored = text
+      },
+    }
+    await Promise.all([
+      writeComparePrefs(fs, { engines: { copilot: false } }),
+      writeComparePrefs(fs, { engines: { grok: false }, autoIntegrate: false }),
+      writeCompareConsent(fs),
+    ])
+    expect(await readComparePrefs(fs)).toEqual({
+      engines: { copilot: false, grok: false },
+      autoIntegrate: false,
+    })
+    expect(await readCompareConsent(fs)).toBe(true)
   })
 
   it('finds the source copy only inside a translation project', async () => {

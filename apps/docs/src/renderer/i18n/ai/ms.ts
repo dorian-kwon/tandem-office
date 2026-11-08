@@ -21,10 +21,26 @@ export const ms = {
   aiAskBtn: 'Tanya AI',
   aiAskWebSearch: 'Cari',
   aiAskGoogleTranslate: 'Terjemah',
+  cmpStBlocked: 'Disekat',
+  cmpNoSource: 'Tiada asal bahasa Korea yang sepadan. Hanya teks unit ini dihantar.',
+  cmpNoUnits: 'Tiada perenggan teks untuk dibandingkan.',
+  cmpApplied: 'Digunakan',
+  cmpScopeSelection: 'Pilihan',
+  cmpScopeDocument: 'Seluruh dokumen',
+  cmpPause: 'Jeda',
+  cmpResume: 'Sambung',
+  cmpNoEngine: 'Hidupkan sekurang-kurangnya satu enjin.',
+  cmpProgress: '{done} / {total} unit',
+  cmpRemaining: 'Baki {n} unit',
+  cmpContinue: 'Sambung {n} unit',
+  cmpBlockedLine: '{name}: disekat ({reason}). Tiada percubaan semula dalam sesi ini.',
+  cmpAllBlocked: 'Semua enjin disekat. Berhenti dan urus laman sendiri.',
+  cmpFlatNote:
+    'Pilih satu jawapan bagi setiap unit. Penggantian menggunakan teks biasa dan boleh dibuat asal secara berasingan.',
+  cmpLeaves:
+    'Teks yang dipilih dan asal bahasa Korea jika ada dihantar ke {sites} melalui pelayar ego. Syarat laman berkenaan terpakai. Bahagian teks tidak boleh disembunyikan. Pilih skop dan enjin, kemudian tekan Bandingkan untuk menghantar.',
   cmpBtn: 'Bandingkan AI',
   cmpTitle: 'Bandingkan dengan AI lain',
-  cmpLeaves:
-    'Teks yang dipilih (dan teks asal Korea, jika ada) keluar daripada aplikasi ini: selepas anda bersetuju di bawah, menekan Bandingkan AI terus menghantarnya ke halaman web {sites} melalui log masuk pelayar ego anda, dan terma tapak tersebut terpakai. Penyunting tidak dapat menyembunyikan sebahagian teks pada langkah ini. Tiada apa-apa dihantar sebelum anda bersetuju.',
   cmpConsentAgree: 'Saya faham, teruskan',
   cmpSourceLabel: 'Teks asal Korea',
   cmpSourceAuto:
@@ -54,7 +70,7 @@ export const ms = {
   cmpManual: 'Salin prompt dan buka {name}',
   cmpStale: 'Pilihan berubah selepas tetingkap ini dibuka. Tiada apa-apa diganti.',
   cmpCannotReplace:
-    'Pilihan ini tidak dapat diganti di sini (merentasi beberapa perenggan atau berada dalam jadual).',
+    'Teks ini tidak boleh diganti di sini (objek sebaris atau julat tidak disokong).',
   cmpBlocked:
     'Untuk menggabung, sambungkan dahulu AI dalam panel AI (atau selesaikan notis penggunaan pertamanya).',
   cmpStop: 'Henti',

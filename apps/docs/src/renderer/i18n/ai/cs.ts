@@ -21,10 +21,26 @@ export const cs = {
   aiAskBtn: 'Zeptat se AI',
   aiAskWebSearch: 'Hledat',
   aiAskGoogleTranslate: 'Přeložit',
+  cmpStBlocked: 'Zablokováno',
+  cmpNoSource: 'Chybí odpovídající korejský originál. Odešle se pouze text této jednotky.',
+  cmpNoUnits: 'Žádné textové odstavce k porovnání.',
+  cmpApplied: 'Použito',
+  cmpScopeSelection: 'Výběr',
+  cmpScopeDocument: 'Celý dokument',
+  cmpPause: 'Pozastavit',
+  cmpResume: 'Pokračovat',
+  cmpNoEngine: 'Zapněte alespoň jeden modul.',
+  cmpProgress: '{done} / {total} jednotek',
+  cmpRemaining: 'Zbývá {n} jednotek',
+  cmpContinue: 'Pokračovat s {n} jednotkami',
+  cmpBlockedLine: '{name}: zablokováno ({reason}). V tomto běhu se požadavek neopakuje.',
+  cmpAllBlocked: 'Všechny moduly jsou zablokované. Zastavte běh a stránky vyřešte sami.',
+  cmpFlatNote:
+    'Pro každou jednotku vyberte jednu odpověď. Náhrady používají prostý text a lze je vrátit jednotlivě.',
+  cmpLeaves:
+    'Vybraný text a dostupný korejský originál se přes prohlížeč ego odešlou na {sites}. Platí podmínky těchto webů. Části nelze skrýt. Vyberte rozsah a moduly a odešlete tlačítkem Porovnat.',
   cmpBtn: 'Porovnání AI',
   cmpTitle: 'Porovnat s jinými AI',
-  cmpLeaves:
-    'Vybraný text (a korejský originál, pokud existuje) opouští tuto aplikaci: po vašem souhlasu níže jej stisknutí Porovnání AI ihned odešle na webové stránky {sites} přes vaše přihlášení v prohlížeči ego a platí podmínky těchto služeb. Editor v tomto kroku nemůže skrýt části textu. Před vaším souhlasem se nic neodešle.',
   cmpConsentAgree: 'Rozumím, pokračovat',
   cmpSourceLabel: 'Korejský původní text',
   cmpSourceAuto:
@@ -53,7 +69,7 @@ export const cs = {
   cmpCardIntegrated: 'Sloučená verze',
   cmpManual: 'Zkopírovat prompt a otevřít {name}',
   cmpStale: 'Výběr se změnil po otevření tohoto okna. Nic nebylo nahrazeno.',
-  cmpCannotReplace: 'Tento výběr zde nelze nahradit (zasahuje do více odstavců nebo je v tabulce).',
+  cmpCannotReplace: 'Tento text zde nelze nahradit (vložené objekty nebo nepodporovaný rozsah).',
   cmpBlocked:
     'Pro sloučení nejprve připojte AI v panelu AI (nebo dokončete její upozornění při prvním použití).',
   cmpStop: 'Zastavit',

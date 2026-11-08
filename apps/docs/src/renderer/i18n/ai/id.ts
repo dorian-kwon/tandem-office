@@ -21,10 +21,26 @@ export const id = {
   aiAskBtn: 'Tanya AI',
   aiAskWebSearch: 'Cari',
   aiAskGoogleTranslate: 'Terjemah',
+  cmpStBlocked: 'Diblokir',
+  cmpNoSource: 'Tidak ada sumber bahasa Korea yang cocok. Hanya teks unit ini yang dikirim.',
+  cmpNoUnits: 'Tidak ada paragraf teks untuk dibandingkan.',
+  cmpApplied: 'Diterapkan',
+  cmpScopeSelection: 'Pilihan',
+  cmpScopeDocument: 'Seluruh dokumen',
+  cmpPause: 'Jeda',
+  cmpResume: 'Lanjutkan',
+  cmpNoEngine: 'Aktifkan setidaknya satu mesin.',
+  cmpProgress: '{done} / {total} unit',
+  cmpRemaining: 'Tersisa {n} unit',
+  cmpContinue: 'Lanjutkan {n} unit',
+  cmpBlockedLine: '{name}: diblokir ({reason}). Tidak dicoba lagi dalam proses ini.',
+  cmpAllBlocked: 'Semua mesin diblokir. Hentikan dan tangani situs sendiri.',
+  cmpFlatNote:
+    'Pilih satu jawaban per unit. Penggantian memakai teks biasa dan dapat dibatalkan satu per satu.',
+  cmpLeaves:
+    'Teks yang dipilih dan sumber bahasa Korea jika ada dikirim ke {sites} melalui peramban ego. Ketentuan situs berlaku. Bagian teks tidak dapat disembunyikan. Pilih cakupan dan mesin, lalu tekan Bandingkan untuk mengirim.',
   cmpBtn: 'Bandingkan AI',
   cmpTitle: 'Bandingkan dengan AI lain',
-  cmpLeaves:
-    'Teks yang dipilih (dan teks asli Korea, jika ada) keluar dari aplikasi ini: setelah Anda setuju di bawah, menekan Bandingkan AI langsung mengirimnya ke halaman web {sites} melalui login ego browser Anda, dan ketentuan situs tersebut berlaku. Editor tidak dapat menyembunyikan bagian teks pada langkah ini. Tidak ada yang dikirim sebelum Anda setuju.',
   cmpConsentAgree: 'Saya mengerti, lanjutkan',
   cmpSourceLabel: 'Teks asli Korea',
   cmpSourceAuto:
@@ -54,7 +70,7 @@ export const id = {
   cmpManual: 'Salin prompt dan buka {name}',
   cmpStale: 'Pilihan berubah setelah jendela ini dibuka. Tidak ada yang diganti.',
   cmpCannotReplace:
-    'Pilihan ini tidak dapat diganti di sini (mencakup beberapa paragraf atau berada di dalam tabel).',
+    'Teks ini tidak dapat diganti di sini (objek sebaris atau rentang tidak didukung).',
   cmpBlocked:
     'Untuk menggabungkan, hubungkan dulu AI di panel AI (atau selesaikan pemberitahuan pemakaian pertamanya).',
   cmpStop: 'Hentikan',

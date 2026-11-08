@@ -172,3 +172,33 @@ describe('source paragraph lookup by block position', () => {
     expect(textAt(src.state.doc, locateRange(doc, pos, pos + 3))).toBe('나')
   })
 })
+
+it('keeps comparison replacements separate from preceding and following typing in undo history', () => {
+  const editor = make([para(text('One')), para(text('Two'))])
+  editor.commands.insertContentAt(1, 'Typed ')
+  editor.commands.setTextSelection({ from: 1, to: 10 })
+  expect(replaceSnapshot(editor, snapshotSelection(editor)!, 'Changed')).toEqual({ ok: true })
+  editor.commands.insertContentAt(8, '!')
+  expect(editor.commands.undo()).toBe(true)
+  expect(editor.state.doc.child(0).textContent).toBe('Changed')
+  expect(editor.commands.undo()).toBe(true)
+  expect(editor.state.doc.child(0).textContent).toBe('Typed One')
+  expect(editor.commands.undo()).toBe(true)
+  expect(editor.state.doc.child(0).textContent).toBe('One')
+})
+
+it('does not guess an original when the matching block has a different structure', () => {
+  const out = make([para(text('Target paragraph'))])
+  const src = make([
+    {
+      type: 'docTable',
+      content: [
+        {
+          type: 'docTableRow',
+          content: [{ type: 'docTableCell', content: [para(text('Unrelated source'))] }],
+        },
+      ],
+    },
+  ])
+  expect(sourceTextFor(out.state.doc, src.state.doc, 1, 5)).toBeNull()
+})

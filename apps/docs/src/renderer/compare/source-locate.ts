@@ -82,6 +82,21 @@ export function sourceTextFor(
   if (outputDoc.childCount !== sourceDoc.childCount) return null
   const positions = locateRange(outputDoc, from, to)
   if (positions.length === 0 || positions.length > LOCATE_MAX_PARAGRAPHS) return null
+  for (const { index } of positions) {
+    const output = outputDoc.child(index)
+    const source = sourceDoc.child(index)
+    if (
+      output.type.name !== source.type.name ||
+      textBlocksOf(output).length !== textBlocksOf(source).length
+    )
+      return null
+    if (
+      typeof output.attrs.docxIndex === 'number' &&
+      typeof source.attrs.docxIndex === 'number' &&
+      output.attrs.docxIndex !== source.attrs.docxIndex
+    )
+      return null
+  }
   return textAt(sourceDoc, positions)
 }
 

@@ -21,10 +21,26 @@ export const en = {
   aiAskBtn: 'Ask AI',
   aiAskWebSearch: 'Web search',
   aiAskGoogleTranslate: 'Translate',
+  cmpStBlocked: 'Blocked',
+  cmpNoSource: 'No matching Korean original. Only this unit’s text is sent.',
+  cmpNoUnits: 'No text paragraphs to compare.',
+  cmpApplied: 'Applied',
+  cmpScopeSelection: 'Selection',
+  cmpScopeDocument: 'Whole document',
+  cmpPause: 'Pause',
+  cmpResume: 'Resume',
+  cmpNoEngine: 'Turn on at least one engine.',
+  cmpProgress: '{done} / {total} units',
+  cmpRemaining: '{n} units remaining',
+  cmpContinue: 'Continue with {n} units',
+  cmpBlockedLine: '{name}: blocked ({reason}). No retries in this run.',
+  cmpAllBlocked: 'All engines are blocked. Stop here and handle the sites yourself.',
+  cmpFlatNote:
+    'Choose one answer per unit. Replacements use plain text and each has its own undo step.',
+  cmpLeaves:
+    'The chosen text and any Korean original are sent to {sites} through your ego browser. Their terms apply. Parts cannot be hidden. Choose the scope and engines, then press Compare to send.',
   cmpBtn: 'AI compare',
   cmpTitle: 'Compare with other AIs',
-  cmpLeaves:
-    'The selected text (and the Korean original, if there is one) leaves this app: once you have agreed below, pressing AI compare sends it at once to the {sites} web pages through your ego browser logins, and those sites’ terms apply. The editor cannot hide parts of the text from this step. Nothing is sent before you agree.',
   cmpConsentAgree: 'I understand, continue',
   cmpSourceLabel: 'Original Korean text',
   cmpSourceAuto:
@@ -54,7 +70,7 @@ export const en = {
   cmpManual: 'Copy prompt and open {name}',
   cmpStale: 'The selection changed after this window opened. Nothing was replaced.',
   cmpCannotReplace:
-    'This selection cannot be replaced here (it spans several paragraphs or sits in a table).',
+    'This text cannot be replaced here (it contains inline objects or an unsupported range).',
   cmpBlocked: 'Connect an AI in the AI panel first (or finish its first-use notice) to integrate.',
   cmpStop: 'Stop',
   cmpStSkipped: 'Skipped (not logged in)',

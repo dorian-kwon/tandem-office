@@ -212,31 +212,8 @@ describe('drag clamp', () => {
 })
 
 describe('site table', () => {
-  it('reopen-strategy sites name their sidebar link; prepare steps are valid data', () => {
-    for (const site of COMPARE_SITES) {
-      if (site.readStrategy === 'reopen') expect(site.reopenLinkSelector).toBeTruthy()
-      for (const step of site.prepare ?? []) {
-        expect(step.open.trim()).not.toBe('')
-        expect(step.items.trim()).not.toBe('')
-        expect(() => new RegExp(step.match, 'i')).not.toThrow()
-        expect(() => new RegExp(step.exclude, 'i')).not.toThrow()
-      }
-    }
-    const gemini = COMPARE_SITES.find((s) => s.id === 'gemini')!
-    // a real mouse click on the send button makes the live view show the answer
-    expect(gemini.readStrategy).toBe('live')
-    // the mode step picks Pro (the only mode that answered on the owner's account), not Lite
-    const step = gemini.prepare![0]!
-    const wanted = (text: string) =>
-      new RegExp(step.match, 'i').test(text) && !new RegExp(step.exclude, 'i').test(text)
-    expect(wanted('3.1 Pro')).toBe(true)
-    expect(wanted('3.6 Flash')).toBe(false)
-    expect(wanted('3.8 사고 모델')).toBe(false)
-    expect(COMPARE_SITES.filter((s) => s.readStrategy === 'live').length).toBe(4)
-  })
-
-  it('lists Gemini, Claude, Copilot and Grok symmetrically; all four are verified on the real sites', () => {
-    expect(COMPARE_SITES.map((s) => s.id)).toEqual(['gemini', 'claude', 'copilot', 'grok'])
+  it('lists only Copilot and Grok and has usable site selectors', () => {
+    expect(COMPARE_SITES.map((s) => s.id)).toEqual(['copilot', 'grok'])
     for (const site of COMPARE_SITES) {
       expect(site.verified).toBe(true)
       expect(site.url).toMatch(/^https:\/\//)

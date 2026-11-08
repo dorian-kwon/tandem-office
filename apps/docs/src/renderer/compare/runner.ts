@@ -13,11 +13,7 @@
  * - pause takes effect between calls (the call in flight finishes), resume goes on, stop aborts the
  *   call in flight (the driver kills its process tree) and ends the run.
  */
-import {
-  isBlockReason,
-  type CompareAnswer,
-  type CompareDriverClient,
-} from '../../shared/compare'
+import { isBlockReason, type CompareAnswer, type CompareDriverClient } from '../../shared/compare'
 import { cleanCandidate, splitAnswer, type CandidateKind } from './prompts'
 
 /** units asked per run (and per "continue") */
@@ -90,7 +86,11 @@ export interface RunnerDeps {
   /** whether the prompt of this unit asks for a re-translation (replies are then split by markers) */
   retranslateFor(unit: RunnerUnit): boolean
   /** the app's own AI over the answers of one unit */
-  integrate(unit: RunnerUnit, answers: IntegrationCandidate[]): Promise<CompareAnswer>
+  integrate(
+    unit: RunnerUnit,
+    answers: IntegrationCandidate[],
+    signal: AbortSignal,
+  ): Promise<CompareAnswer>
   paceMs?: number
   batchSize?: number
   /** waits `ms`; stop ends the wait early (a fake in tests) */
@@ -198,7 +198,16 @@ export function createRunner(deps: RunnerDeps): Runner {
         })
       } else setEngine(unit.id, engine, { status: 'failed', reason: 'the answer was empty' })
     } else if (isBlockReason(answer.reason)) {
-      emit({ ...state, blocked: { ...state.blocked, [engine]: answer.reason } })
+      const reason = answer.reason
+      emit({
+        ...state,
+        blocked: { ...state.blocked, [engine]: reason },
+        units: state.units.map((u) =>
+          u.engines[engine]?.status === 'waiting'
+            ? { ...u, engines: { ...u.engines, [engine]: { status: 'blocked', reason } } }
+            : u,
+        ),
+      })
       setEngine(unit.id, engine, { status: 'blocked', reason: answer.reason })
     } else {
       setEngine(unit.id, engine, { status: 'failed', reason: answer.reason })
@@ -210,12 +219,15 @@ export function createRunner(deps: RunnerDeps): Runner {
     const answers = result ? candidatesOf(result) : []
     if (answers.length === 0) return
     patchUnit(unit.id, (u) => ({ ...u, integrate: { status: 'running' } }))
+    const controller = new AbortController()
+    abort = controller
     let reply: CompareAnswer
     try {
-      reply = await deps.integrate(unit, answers)
+      reply = await deps.integrate(unit, answers, controller.signal)
     } catch (error) {
       reply = { ok: false, reason: String(error).slice(0, 200) }
     }
+    if (abort === controller) abort = null
     if (gen !== generation) return
     if (reply.ok) {
       const text = cleanCandidate(reply.text)
@@ -255,8 +267,9 @@ export function createRunner(deps: RunnerDeps): Runner {
         emit({ ...state, phase: 'allBlocked' })
         return
       }
-      if (auto && (await gate(gen))) await integrateUnit(unit, gen)
-      if (gen !== generation) return
+      if (!(await gate(gen))) return
+      if (auto) await integrateUnit(unit, gen)
+      if (!(await gate(gen))) return
       patchUnit(unit.id, (u) => ({ ...u, visited: true }))
       emit({ ...state, next: state.next + 1 })
     }
@@ -277,6 +290,8 @@ export function createRunner(deps: RunnerDeps): Runner {
     },
     start(nextUnits, engines, autoIntegrate) {
       abort?.abort()
+      resumeGate?.()
+      resumeGate = null
       generation++
       units = nextUnits
       auto = autoIntegrate
@@ -341,19 +356,25 @@ export function createRunner(deps: RunnerDeps): Runner {
     retry(unitId, engineId) {
       const unit = unitOf(unitId)
       const e = resultOf(unitId)?.engines[engineId]
-      const idle = ['paused', 'stopped', 'batchDone', 'done', 'allBlocked'].includes(state.phase)
+      const idle = ['stopped', 'batchDone', 'done', 'allBlocked'].includes(state.phase)
       if (!unit || !e || !idle || state.blocked[engineId]) return
       if (e.status !== 'failed' && e.status !== 'stopped') return
       const gen = generation
       const before = state
       emit({ ...state, phase: 'running' })
-      void askEngine(unit, engineId, gen).then(() => {
-        if (gen === generation && state.phase === 'running') emit({ ...state, phase: before.phase })
+      void askEngine(unit, engineId, gen).then(async () => {
+        if (await gate(gen)) emit({ ...state, phase: before.phase })
       })
     },
     integrateNow(unitId) {
       const unit = unitOf(unitId)
-      if (unit && state.phase !== 'running') void integrateUnit(unit, generation)
+      if (!unit || ['idle', 'running', 'paused'].includes(state.phase)) return
+      const phase = state.phase
+      const gen = generation
+      emit({ ...state, phase: 'running' })
+      void integrateUnit(unit, gen).then(async () => {
+        if (await gate(gen)) emit({ ...state, phase })
+      })
     },
     setAutoIntegrate(on) {
       auto = on

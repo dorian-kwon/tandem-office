@@ -23,6 +23,7 @@ const cleanups: Array<() => void> = []
 afterEach(() => {
   for (const c of cleanups.splice(0)) c()
   vi.restoreAllMocks()
+  vi.useRealTimers()
   delete (window as unknown as { desktop?: unknown }).desktop
 })
 beforeAll(() => {
@@ -31,21 +32,20 @@ beforeAll(() => {
 
 function setup(
   desktop: Record<string, unknown>,
-  bodyText = 'Revenue grew eight percent.',
+  bodyText: string | string[] = 'Revenue grew eight percent.',
   range?: [number, number],
+  appSettings: AiSettings = settings,
 ) {
   const editor = new Editor({
     element: document.createElement('div'),
     extensions: editorExtensions,
     content: {
       type: 'doc',
-      content: [
-        {
-          type: 'docParagraph',
-          attrs: { docxIndex: null },
-          content: [{ type: 'text', text: bodyText }],
-        },
-      ],
+      content: (Array.isArray(bodyText) ? bodyText : [bodyText]).map((text) => ({
+        type: 'docParagraph',
+        attrs: { docxIndex: null },
+        content: [{ type: 'text', text }],
+      })),
     } as never,
   })
   editor.commands.setTextSelection(range ? { from: range[0], to: range[1] } : { from: 14, to: 27 })
@@ -66,7 +66,7 @@ function setup(
         createElement(AiComparePopover, {
           editor,
           snapshot,
-          settings,
+          settings: appSettings,
           trackChanges: false,
           onClose,
         }),
@@ -89,190 +89,351 @@ async function flush(): Promise<void> {
 const button = (c: HTMLElement, label: string): HTMLButtonElement | undefined =>
   [...c.querySelectorAll('button')].find((b) => b.textContent?.trim() === label)
 
+const ready = (extra: Record<string, unknown> = {}) => ({
+  compareDetect: async () => ({ installed: true, path: '/fake/ego' }),
+  compareGetConsent: async () => true,
+  compareGetPrefs: async () => ({ autoIntegrate: false, engines: { grok: false } }),
+  compareSetPrefs: async () => true,
+  compareCancel: async () => {},
+  ...extra,
+})
+async function start(container: HTMLElement): Promise<void> {
+  act(() => button(container, 'Compare')!.click())
+  await flush()
+}
+
 describe('AI compare popup', () => {
-  it('asks to install ego lite when it is missing, opens the install page only on request and offers a re-check', async () => {
+  it('offers an installation page, rechecks on request, and cannot start before installation', async () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null)
     const detect = vi
       .fn()
       .mockResolvedValueOnce({ installed: false })
-      .mockResolvedValueOnce({ installed: true, path: '/x' })
-    const { container } = setup({
-      compareDetect: detect,
-      compareGetConsent: async () => true,
-      compareSetConsent: async () => true,
-    })
+      .mockResolvedValueOnce({ installed: true })
+    const { container } = setup(ready({ compareDetect: detect }))
     await flush()
     expect(container.textContent).toContain('The ego browser is not installed. Install it?')
+    expect(button(container, 'Compare')?.disabled).toBe(true)
     expect(open).not.toHaveBeenCalled()
-    // the comparison cannot start while it is missing
-    expect(button(container, 'Compare')).toBeUndefined()
     act(() => button(container, 'Install')!.click())
     expect(open).toHaveBeenCalledWith(EGO_INSTALL_URL)
     expect(container.textContent).toContain('never downloads or runs the installer')
     act(() => button(container, 'Check again')!.click())
     await flush()
-    expect(detect).toHaveBeenCalledTimes(2)
-    expect(button(container, 'Compare')).toBeDefined()
+    expect(button(container, 'Compare')?.disabled).toBe(false)
   })
 
-  it('shows consent first, remembers it, sends nothing before then and starts at once after', async () => {
-    const setConsent = vi.fn(async () => true)
-    const ask = vi.fn(async () => ({ ok: true as const, text: 'x' }))
-    const { container } = setup({
-      compareDetect: async () => ({ installed: true, path: '/x' }),
-      compareGetConsent: async () => false,
-      compareSetConsent: setConsent,
-      compareAsk: ask,
-      compareCancel: async () => {},
-    })
-    await flush()
-    expect(container.textContent).toContain('Gemini, Claude, Copilot, Grok')
-    expect(container.querySelector('.cmp-cards')).toBeNull()
-    expect(ask).not.toHaveBeenCalled()
-    act(() => button(container, 'I understand, continue')!.click())
-    await flush()
-    expect(setConsent).toHaveBeenCalledTimes(1)
-    // no input needed: it started by itself, with only the selection
-    expect(ask).toHaveBeenCalledTimes(4)
-  })
-
-  const noOriginalDesktop = (ask: unknown, extra: Record<string, unknown> = {}) => ({
-    compareDetect: async () => ({ installed: true, path: '/x' }),
-    compareGetConsent: async () => true,
-    compareSetConsent: async () => true,
-    compareAsk: ask,
-    compareCancel: async () => {},
-    ...extra,
-  })
-
-  it('starts by itself with only the selection, shows per-engine results, and "use this" replaces it', async () => {
-    const ask = vi.fn(async (req: { siteId: string; prompt: string }) =>
-      req.siteId === 'claude'
-        ? { ok: false as const, reason: 'not signed in' }
-        : req.siteId === 'grok'
-          ? { ok: false as const, reason: 'login-wall' }
-          : { ok: true as const, text: `${req.siteId} translated` },
-    )
-    const chat = vi.fn()
-    const { container, editor, onClose } = setup(
-      noOriginalDesktop(ask, {
-        aiChat: chat,
-        getTranslationLanguages: async () => ({ sourceLang: 'ko', targetLang: 'ja' }),
+  it('requires consent and explicit start before sending to the enabled engine', async () => {
+    const asks: Array<{ siteId: string; prompt: string }> = []
+    const { container } = setup(
+      ready({
+        compareGetConsent: async () => false,
+        compareSetConsent: async () => true,
+        compareAsk: async (request: { siteId: string; prompt: string }) => {
+          asks.push(request)
+          return { ok: true, text: 'Answer' }
+        },
       }),
     )
     await flush()
-    // nothing was typed or clicked: the run is already going, in selection-only mode
-    expect(ask).toHaveBeenCalledTimes(4)
-    const prompts = new Set(ask.mock.calls.map((c) => c[0].prompt))
-    expect(prompts.size).toBe(1)
-    const prompt = [...prompts][0]!
-    expect(prompt).toContain('Translate the following text into Japanese.')
-    expect(prompt).toContain('\n\neight percent')
-    expect(prompt).not.toContain('Original Korean:')
-    // the original field is collapsed and the re-translation switch is hidden in this mode
-    expect(container.querySelector('textarea')).toBeNull()
-    expect(button(container, 'Add original')).toBeDefined()
-    expect(container.textContent).not.toContain('Include re-translation')
-    expect(container.textContent).toContain('not signed in')
-    const grokCard = [...container.querySelectorAll('.cmp-card')].find((c) =>
-      c.textContent?.includes('Grok'),
-    )!
-    expect(grokCard.textContent).toContain('Skipped (not logged in)')
-    expect(grokCard.textContent).not.toContain('login-wall')
-    expect(grokCard.querySelector('.cmp-chip-failed')).toBeNull()
-    expect(button(container, 'Retry')).toBeDefined()
-    // integration is blocked (no connected AI in this fake): nothing sent
-    expect(chat).not.toHaveBeenCalled()
-    const copilot = [...container.querySelectorAll('.cmp-card')].find((card) =>
-      card.textContent?.includes('Copilot'),
-    )!
-    act(() =>
-      [...copilot.querySelectorAll('button')].find((b) => b.textContent === 'Use this')!.click(),
+    expect(container.textContent).toContain('Copilot, Grok')
+    expect(asks).toEqual([])
+    act(() => button(container, 'I understand, continue')!.click())
+    await flush()
+    expect(asks).toEqual([])
+    await start(container)
+    expect(asks).toHaveLength(1)
+    expect(asks[0]?.siteId).toBe('copilot')
+    expect(asks[0]?.prompt).toContain('eight percent')
+  })
+
+  it('lets the person select one answer and keeps the popup available for other units', async () => {
+    const { container, editor, onClose } = setup(
+      ready({ compareAsk: async () => ({ ok: true, text: '8%' }) }),
     )
-    expect(editor.state.doc.textContent).toBe('Revenue grew copilot translated.')
-    expect(onClose).toHaveBeenCalled()
+    await flush()
+    await start(container)
+    const copilot = [...container.querySelectorAll('.cmp-card')].find(
+      (c) => c.querySelector('.cmp-card-title')?.textContent === 'Copilot',
+    )!
+    act(() => button(copilot as HTMLElement, 'Use this')!.click())
+    expect(editor.state.doc.textContent).toBe('Revenue grew 8%.')
+    expect(container.textContent).toContain('Applied')
+    expect(button(copilot as HTMLElement, 'Use this')?.disabled).toBe(true)
+    expect(onClose).not.toHaveBeenCalled()
+    editor.commands.undo()
+    expect(editor.state.doc.textContent).toBe('Revenue grew eight percent.')
   })
 
-  it('with an added original it asks for the polish plus a re-translation and shows two cards per engine', async () => {
-    const reply = '[POLISHED]\nPolished by site\n[RETRANSLATION]\nFresh by site'
-    const ask = vi.fn(async () => ({ ok: true as const, text: reply }))
-    const setRe = vi.fn(async () => true)
-    const { container } = setup(noOriginalDesktop(ask, { compareSetRetranslate: setRe }))
+  it('disables Compare when every engine switch is off and remembers the switch', async () => {
+    const prefs: unknown[] = []
+    const { container } = setup(
+      ready({
+        compareSetPrefs: async (patch: unknown) => {
+          prefs.push(patch)
+          return true
+        },
+      }),
+    )
     await flush()
-    expect(ask).toHaveBeenCalledTimes(4)
-    act(() => button(container, 'Add original')!.click())
-    const area = container.querySelector('textarea')!
+    const copilot = container.querySelector('input[role="switch"]') as HTMLInputElement
+    act(() => copilot.click())
+    expect(button(container, 'Compare')?.disabled).toBe(true)
+    expect(container.textContent).toContain('Turn on at least one engine.')
+    expect(prefs).toEqual([{ engines: { copilot: false } }])
+  })
+
+  it('asks about the whole document in paragraph order, not just the captured selection', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const asks: string[] = []
+    const { container, editor } = setup(
+      ready({
+        compareAsk: async (req: { prompt: string }) => {
+          asks.push(req.prompt)
+          return { ok: true, text: 'Answer' }
+        },
+      }),
+    )
     await act(async () => {
-      const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!
-      set.call(area, '매출이 8퍼센트 늘었다.')
-      area.dispatchEvent(new Event('input', { bubbles: true }))
+      await vi.advanceTimersByTimeAsync(0)
     })
-    expect(container.textContent).toContain('Include re-translation')
-    ask.mockClear()
+    act(() =>
+      editor.commands.setContent({
+        type: 'doc',
+        content: ['First paragraph', 'Second paragraph'].map((text) => ({
+          type: 'docParagraph',
+          content: [{ type: 'text', text }],
+        })),
+      }),
+    )
+    const documentScope = container.querySelectorAll('input[type="radio"]')[1] as HTMLInputElement
+    act(() => documentScope.click())
     act(() => button(container, 'Compare')!.click())
-    await flush()
-    expect(ask).toHaveBeenCalledTimes(4)
-    const prompt = (ask.mock.calls[0] as unknown as [{ prompt: string }])[0].prompt
-    expect(prompt).toContain('Original Korean:\n매출이 8퍼센트 늘었다.')
-    expect(prompt).toContain('[RETRANSLATION]')
-    const titles = [...container.querySelectorAll('.cmp-card-title')].map((e) => e.textContent)
-    expect(titles).toContain('Gemini · Polished')
-    expect(titles).toContain('Gemini · Re-translated')
-    expect(titles.filter((x) => x?.startsWith('Claude'))).toHaveLength(2)
-    // the switch is remembered and, when off, the prompt is the polishing-only one
-    const box = [
-      ...container.querySelectorAll('label.cmp-retranslate input'),
-    ][0] as HTMLInputElement
-    act(() => box.click())
-    expect(setRe).toHaveBeenCalledWith(false)
-    ask.mockClear()
-    act(() => button(container, 'Compare')!.click())
-    await flush()
-    const plain = (ask.mock.calls[0] as unknown as [{ prompt: string }])[0].prompt
-    expect(plain).toContain('Reply with the polished English text only')
-    expect(plain).not.toContain('[RETRANSLATION]')
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(asks).toHaveLength(1)
+    expect(asks[0]).toContain('First paragraph')
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4000)
+    })
+    expect(asks).toHaveLength(2)
+    expect(asks[1]).toContain('Second paragraph')
+    expect(container.querySelectorAll('.cmp-unit')).toHaveLength(2)
   })
 
-  it('cuts a very long selection, says so and turns "use this" off', async () => {
-    const ask = vi.fn(async () => ({ ok: true as const, text: 'short' }))
-    const long = 'word '.repeat(1200)
-    const { container } = setup(noOriginalDesktop(ask), long, [1, long.length])
+  it('never retries a blocked engine and displays why the run stopped', async () => {
+    const asks: string[] = []
+    const { container } = setup(
+      ready({
+        compareAsk: async (req: { siteId: string }) => {
+          asks.push(req.siteId)
+          return { ok: false, reason: 'blocked' }
+        },
+      }),
+    )
     await flush()
-    const prompt = (ask.mock.calls[0] as unknown as [{ prompt: string }])[0].prompt
-    expect(prompt.length).toBeLessThan(4400)
+    await start(container)
+    expect(asks).toEqual(['copilot'])
+    expect(container.textContent).toContain('All engines are blocked.')
+    expect(button(container, 'Retry')).toBeUndefined()
+  })
+
+  it('warns about a truncated unit and disables replacement', async () => {
+    const long = 'word '.repeat(1200)
+    const { container } = setup(
+      ready({ compareAsk: async () => ({ ok: true, text: 'Short' }) }),
+      long,
+      [1, long.length],
+    )
+    await flush()
+    await start(container)
     expect(container.textContent).toContain('Only the first 4000 characters were sent')
-    const use = [...container.querySelectorAll('button')].filter(
+    const uses = [...container.querySelectorAll('button')].filter(
       (b) => b.textContent === 'Use this',
     )
-    expect(use.length).toBeGreaterThan(0)
-    for (const b of use) expect((b as HTMLButtonElement).disabled).toBe(true)
+    expect(uses.length).toBeGreaterThan(0)
+    expect(uses.every((b) => b.disabled)).toBe(true)
   })
 
-  it('says so and offers the manual fallback when no engine answered', async () => {
-    const ask = vi.fn(async (req: { siteId: string }) =>
-      req.siteId === 'claude'
-        ? { ok: false as const, reason: 'needs-user' }
-        : { ok: false as const, reason: 'no-prompt-box' },
+  it('refuses a candidate when the paragraph was edited after the request', async () => {
+    const { container, editor } = setup(
+      ready({ compareAsk: async () => ({ ok: true, text: '8%' }) }),
     )
-    const { container } = setup(noOriginalDesktop(ask))
     await flush()
-    expect(container.textContent).toContain('No engine answered.')
-    expect(container.textContent).toContain(
-      'handle the prompt or close the site’s cookie notice once',
-    )
-    expect(button(container, 'Copy prompt and open Gemini')).toBeDefined()
-    expect(container.textContent).not.toContain('Done')
+    await start(container)
+    act(() => editor.commands.insertContentAt(15, 'X'))
+    const copilot = [...container.querySelectorAll('.cmp-card')].find(
+      (c) => c.querySelector('.cmp-card-title')?.textContent === 'Copilot',
+    )!
+    act(() => button(copilot as HTMLElement, 'Use this')!.click())
+    expect(container.textContent).toContain('Nothing was replaced.')
+    expect(editor.state.doc.textContent).toContain('eXight')
   })
 
-  it('Escape closes it', async () => {
-    const { onClose } = setup({
-      compareDetect: async () => ({ installed: true, path: '/x' }),
-      compareGetConsent: async () => true,
-    })
+  it('does not send a captured selection after its text was edited before Compare', async () => {
+    const asks: string[] = []
+    const { container, editor } = setup(
+      ready({
+        compareAsk: async () => {
+          asks.push('sent')
+          return { ok: true, text: 'Answer' }
+        },
+      }),
+    )
     await flush()
+    act(() => editor.commands.insertContentAt(15, 'X'))
+    await start(container)
+    expect(asks).toEqual([])
+    expect(container.textContent).toContain('Nothing was replaced.')
+  })
+
+  it('uses the app stream for optional integration and cancels that request on Stop', async () => {
+    let listener: ((chunk: { requestId: string; type: string; text?: string }) => void) | undefined
+    const requests: Array<{ requestId: string; tools: unknown[] }> = []
+    const cancelled: string[] = []
+    const appSettings: AiSettings = {
+      ...settings,
+      providers: {
+        ...settings.providers,
+        anthropic: { ...settings.providers.anthropic, apiKey: 'fake-key' },
+      },
+    }
+    const { container } = setup(
+      ready({
+        compareGetPrefs: async () => ({ autoIntegrate: true, engines: { grok: false } }),
+        compareAsk: async () => ({ ok: true, text: 'Candidate' }),
+        onAiStream: (fn: typeof listener) => {
+          listener = fn
+          return () => {
+            listener = undefined
+          }
+        },
+        aiStream: async (req: { requestId: string; tools: unknown[] }) => {
+          requests.push(req)
+          listener?.({ requestId: req.requestId, type: 'delta', text: 'partial' })
+        },
+        aiStreamCancel: async (id: string) => {
+          cancelled.push(id)
+        },
+      }),
+      undefined,
+      undefined,
+      appSettings,
+    )
+    await flush()
+    await start(container)
+    expect(requests).toHaveLength(1)
+    expect(requests[0]?.tools).toEqual([])
+    act(() => button(container, 'Stop')!.click())
+    await flush()
+    expect(cancelled).toEqual([requests[0]!.requestId])
+    expect(container.textContent).not.toContain('partial')
+  })
+
+  it('shows both polishing and retranslation candidates when an original is entered', async () => {
+    const prompts: string[] = []
+    const { container } = setup(
+      ready({
+        compareAsk: async (req: { prompt: string }) => {
+          prompts.push(req.prompt)
+          return { ok: true, text: '[POLISHED]\nPolished\n[RETRANSLATION]\nFresh' }
+        },
+      }),
+    )
+    await flush()
+    act(() => button(container, 'Add original')!.click())
+    const area = container.querySelector('textarea')!
     act(() => {
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
+        area,
+        '매출 증가',
+      )
+      area.dispatchEvent(new Event('input', { bubbles: true }))
     })
+    await start(container)
+    expect(prompts[0]).toContain('Original Korean:\n매출 증가')
+    expect(container.textContent).toContain('Copilot · Polished')
+    expect(container.textContent).toContain('Copilot · Re-translated')
+  })
+
+  it('keeps prompt options fixed when project language loading finishes during a run', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    let loadLanguage!: (pair: { targetLang: string }) => void
+    const prompts: string[] = []
+    const { container } = setup(
+      ready({
+        compareGetPrefs: async () => ({ autoIntegrate: false }),
+        getTranslationLanguages: () =>
+          new Promise((resolve) => {
+            loadLanguage = resolve
+          }),
+        compareAsk: async (req: { prompt: string }) => {
+          prompts.push(req.prompt)
+          return { ok: true, text: 'Answer' }
+        },
+      }),
+    )
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    act(() => button(container, 'Compare')!.click())
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    await act(async () => {
+      loadLanguage({ targetLang: 'ja' })
+      await Promise.resolve()
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4000)
+    })
+    expect(prompts).toHaveLength(2)
+    expect(prompts[1]).toBe(prompts[0])
+  })
+
+  it('selection scope sends and replaces only the selected portions of its boundary paragraphs', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const prompts: string[] = []
+    const { container, editor } = setup(
+      ready({
+        compareAsk: async (req: { prompt: string }) => {
+          prompts.push(req.prompt)
+          return { ok: true, text: 'Changed' }
+        },
+      }),
+      ['Outside before FIRST', 'MIDDLE', 'LAST outside after'],
+      [16, 35],
+    )
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    act(() => button(container, 'Compare')!.click())
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(8000)
+    })
+    expect(prompts).toHaveLength(3)
+    expect(prompts[0]).toContain('FIRST')
+    expect(prompts[1]).toContain('MIDDLE')
+    expect(prompts[2]).toContain('LAST')
+    expect(prompts.join('')).not.toContain('Outside before')
+    expect(prompts.join('')).not.toContain('outside after')
+    const unitRows = [...container.querySelectorAll('.cmp-unit')]
+    act(() => (unitRows[2]!.querySelector('.cmp-unit-row') as HTMLElement).click())
+    for (const index of [0, 2]) {
+      const card = [...unitRows[index]!.querySelectorAll('.cmp-card')].find(
+        (c) => c.querySelector('.cmp-card-title')?.textContent === 'Copilot',
+      )!
+      act(() => button(card as HTMLElement, 'Use this')!.click())
+    }
+    expect(editor.state.doc.child(0).textContent).toBe('Outside before Changed')
+    expect(editor.state.doc.child(1).textContent).toBe('MIDDLE')
+    expect(editor.state.doc.child(2).textContent).toBe('Changed outside after')
+  })
+
+  it('Escape closes the popup', async () => {
+    const { onClose } = setup(ready())
+    await flush()
+    act(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })))
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 })

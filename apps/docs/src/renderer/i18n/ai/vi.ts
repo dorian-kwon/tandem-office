@@ -20,10 +20,26 @@ export const vi = {
   aiAskBtn: 'Hỏi AI',
   aiAskWebSearch: 'Tìm kiếm',
   aiAskGoogleTranslate: 'Dịch',
+  cmpStBlocked: 'Bị chặn',
+  cmpNoSource: 'Không có bản gốc tiếng Hàn phù hợp. Chỉ gửi văn bản của đơn vị này.',
+  cmpNoUnits: 'Không có đoạn văn bản để so sánh.',
+  cmpApplied: 'Đã áp dụng',
+  cmpScopeSelection: 'Vùng chọn',
+  cmpScopeDocument: 'Toàn bộ tài liệu',
+  cmpPause: 'Tạm dừng',
+  cmpResume: 'Tiếp tục',
+  cmpNoEngine: 'Bật ít nhất một công cụ.',
+  cmpProgress: '{done} / {total} đơn vị',
+  cmpRemaining: 'Còn {n} đơn vị',
+  cmpContinue: 'Tiếp tục {n} đơn vị',
+  cmpBlockedLine: '{name}: bị chặn ({reason}). Không thử lại trong lần chạy này.',
+  cmpAllBlocked: 'Tất cả công cụ đều bị chặn. Hãy dừng và tự xử lý các trang web.',
+  cmpFlatNote:
+    'Chọn một câu trả lời cho mỗi đơn vị. Nội dung thay thế là văn bản thuần và có thể hoàn tác riêng từng lần.',
+  cmpLeaves:
+    'Văn bản đã chọn và bản gốc tiếng Hàn nếu có được gửi tới {sites} qua trình duyệt ego. Điều khoản của các trang web được áp dụng. Không thể ẩn một phần văn bản. Chọn phạm vi và công cụ rồi nhấn So sánh để gửi.',
   cmpBtn: 'So sánh AI',
   cmpTitle: 'So sánh với AI khác',
-  cmpLeaves:
-    'Văn bản đã chọn (và bản gốc tiếng Hàn, nếu có) rời khỏi ứng dụng này: sau khi bạn đồng ý bên dưới, nhấn So sánh AI sẽ gửi ngay tới các trang web {sites} qua các đăng nhập trong trình duyệt ego của bạn, và điều khoản của các trang đó được áp dụng. Trình soạn thảo không thể ẩn một phần văn bản ở bước này. Không có gì được gửi trước khi bạn đồng ý.',
   cmpConsentAgree: 'Tôi hiểu, tiếp tục',
   cmpSourceLabel: 'Văn bản gốc tiếng Hàn',
   cmpSourceAuto: 'Đã điền từ dự án dịch (cùng vị trí đoạn). Hãy kiểm tra và sửa nếu cần.',
@@ -52,7 +68,7 @@ export const vi = {
   cmpManual: 'Sao chép lời nhắc và mở {name}',
   cmpStale: 'Vùng chọn đã thay đổi sau khi cửa sổ này mở. Chưa thay thế gì.',
   cmpCannotReplace:
-    'Không thể thay thế vùng chọn này tại đây (trải dài nhiều đoạn hoặc nằm trong bảng).',
+    'Không thể thay văn bản này tại đây (đối tượng nội dòng hoặc phạm vi không được hỗ trợ).',
   cmpBlocked:
     'Để tích hợp, hãy kết nối một AI trong bảng AI trước (hoặc hoàn tất thông báo dùng lần đầu).',
   cmpStop: 'Dừng',

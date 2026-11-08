@@ -14,7 +14,7 @@ import type { Node as PmNodeType } from '@tiptap/pm/model'
 import type { Mapping } from '@tiptap/pm/transform'
 import { isTrackedDeleted } from '../ai/doc-utils'
 import { textblocksOf } from '../ai/translate-runs'
-import { rangeText, type SelectionSnapshot } from './replace-selection'
+import { rangeText } from './replace-selection'
 
 export interface TextUnit {
   id: string
@@ -58,23 +58,23 @@ export function enumerateUnits(doc: PmNodeType): TextUnit[] {
   return units
 }
 
-/** the selection as the one unit of a selection comparison */
-export function selectionUnit(editor: Editor, snap: SelectionSnapshot): TextUnit {
-  const { doc } = editor.state
-  const text = doc.textBetween(snap.from, snap.to, '\n', '\n').trim()
-  let hasObjects = false
-  doc.nodesBetween(snap.from, snap.to, (node) => {
-    if (node.isInline && !node.isText) hasObjects = true
+/** Only the selected text, divided at paragraph boundaries. Nothing outside the range is sent. */
+export function enumerateSelectionUnits(
+  doc: PmNodeType,
+  range: { from: number; to: number },
+): TextUnit[] {
+  return enumerateUnits(doc).flatMap((unit) => {
+    const from = Math.max(unit.from, range.from)
+    const to = Math.min(unit.to, range.to)
+    if (to <= from) return []
+    const text = doc.textBetween(from, to, ' ', ' ').replace(/\s+/g, ' ').trim()
+    if (!text || !hasLetters(text)) return []
+    let hasObjects = false
+    doc.nodesBetween(from, to, (node) => {
+      if (node.isInline && !node.isText) hasObjects = true
+    })
+    return [{ ...unit, from, to, text, hasObjects }]
   })
-  const $from = doc.resolve(snap.from)
-  return {
-    id: 'selection',
-    from: snap.from,
-    to: snap.to,
-    text,
-    block: $from.depth >= 1 ? $from.index(0) : 0,
-    hasObjects,
-  }
 }
 
 export interface LiveRange {

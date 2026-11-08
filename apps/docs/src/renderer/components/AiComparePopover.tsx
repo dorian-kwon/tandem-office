@@ -20,7 +20,9 @@ import React, {
 } from 'react'
 import type { Editor } from '@tiptap/core'
 import type { Node as PmNodeType } from '@tiptap/pm/model'
-import { aiSendGate } from '@genoffice/ui'
+import { aiSendGate, AiInputTruncatedNotice } from '@genoffice/ui'
+import { createElectronTransport } from '../ai/transport'
+import { integrateComparison } from '../compare/integration'
 import type { AiSettings } from '@genoffice/ai-provider/browser'
 import { useI18n, type StringKey } from '../i18n/locale'
 import { setInactiveSelectionShown } from '../editor/inactive-selection'
@@ -48,12 +50,12 @@ import {
   type RunnerUnit,
   type UnitResult,
 } from '../compare/runner'
-import { replaceSnapshot, type SelectionSnapshot } from '../compare/replace-selection'
+import { rangeText, replaceSnapshot, type SelectionSnapshot } from '../compare/replace-selection'
 import { loadSourceDoc, sourceTextFor } from '../compare/source-locate'
 import {
   enumerateUnits,
   mapRange,
-  selectionUnit,
+  enumerateSelectionUnits,
   type LiveRange,
   type TextUnit,
 } from '../compare/units'
@@ -149,7 +151,7 @@ export function AiComparePopover({
   const sourceDoc = useRef<PmNodeType | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
   const [notice, setNotice] = useState<StringKey | null>(null)
-  const [noticeCount, setNoticeCount] = useState<number | null>(null)
+  const [inputTruncated, setInputTruncated] = useState(false)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
 
@@ -159,27 +161,27 @@ export function AiComparePopover({
   const enabledEngines = COMPARE_SITES.filter((s) => engineOn(s.id)).map((s) => s.id)
   const savePrefs = (patch: ComparePrefs): void => {
     setPrefs((p) => ({ ...p, ...patch, engines: { ...p.engines, ...patch.engines } }))
-    void window.desktop?.compareSetPrefs?.(patch)
+    void window.desktop?.compareSetPrefs?.(patch)?.catch(() => {})
   }
 
   const targetName = languageName(targetCode ?? lang)
+  const runOptions = useRef({ retranslate, target: targetName })
   // latest values for the long-lived runner (its prompt and integration steps read them when they run)
   const live = useRef({
     settings,
     statuses: subscription.statuses,
     target: targetName,
     retranslate,
-    korean: new Map<string, string>(),
   })
   live.current = {
     settings,
     statuses: subscription.statuses,
     target: targetName,
     retranslate,
-    korean: live.current.korean,
   }
   /** the ranges and fingerprints of the units of the current run, carried through edits */
   const infos = useRef(new Map<string, UnitInfo>())
+  const selectionRange = useRef(snapshot ? { ...snapshot, gone: false } : null)
 
   const driver = useMemo(ipcDriver, [])
   const runner = useMemo(
@@ -188,14 +190,19 @@ export function AiComparePopover({
         driver,
         promptFor: (unit) =>
           buildComparePrompt(unit.korean, unit.text, {
-            retranslate: live.current.retranslate && unit.korean !== '',
-            targetLanguage: live.current.target,
+            retranslate: runOptions.current.retranslate && unit.korean !== '',
+            targetLanguage: runOptions.current.target,
           }),
-        retranslateFor: (unit) => live.current.retranslate && unit.korean !== '',
-        integrate: async (unit, answers): Promise<CompareAnswer> => {
-          const { settings: s, statuses, target } = live.current
+        retranslateFor: (unit) => runOptions.current.retranslate && unit.korean !== '',
+        integrate: async (unit, answers, signal): Promise<CompareAnswer> => {
+          const { settings: s, statuses } = live.current
+          const { target } = runOptions.current
           // the app's own AI only, and only when its send gate lets a run through
-          if (aiSendGate(s, statuses).kind !== 'run' || !window.desktop?.aiChat)
+          if (
+            aiSendGate(s, statuses).kind !== 'run' ||
+            !window.desktop?.aiStream ||
+            !window.desktop?.onAiStream
+          )
             return { ok: false, reason: t('cmpBlocked') }
           const request = buildIntegrationRequest({
             korean: unit.korean,
@@ -206,10 +213,10 @@ export function AiComparePopover({
               text: a.text,
             })),
           })
-          const reply = await window.desktop.aiChat({ settings: s, ...request })
-          return reply.ok && reply.content
-            ? { ok: true, text: reply.content }
-            : { ok: false, reason: reply.error ?? 'no answer' }
+          const transport = createElectronTransport(() => s, {
+            onInputTruncated: () => setInputTruncated(true),
+          })
+          return integrateComparison(transport, request, signal)
         },
       }),
     // `t` is deliberately not a dependency: the runner is created once per popup
@@ -233,6 +240,11 @@ export function AiComparePopover({
       transaction: { docChanged: boolean; mapping: Parameters<typeof mapRange>[1] }
     }): void => {
       if (!transaction.docChanged) return
+      if (selectionRange.current)
+        selectionRange.current = {
+          ...selectionRange.current,
+          ...mapRange(selectionRange.current, transaction.mapping),
+        }
       for (const [id, info] of infos.current)
         infos.current.set(id, { ...info, ...mapRange(info, transaction.mapping) })
     }
@@ -348,8 +360,8 @@ export function AiComparePopover({
   /** the units of the chosen scope, with the Korean original of each when the project has one */
   const buildUnits = (): { runner: RunnerUnit[]; infos: Map<string, UnitInfo> } => {
     const raw: TextUnit[] =
-      scope === 'selection' && snapshot
-        ? [selectionUnit(editor, snapshot)]
+      scope === 'selection' && selectionRange.current
+        ? enumerateSelectionUnits(editor.state.doc, selectionRange.current)
         : enumerateUnits(editor.state.doc)
     const out: RunnerUnit[] = []
     const map = new Map<string, UnitInfo>()
@@ -357,17 +369,22 @@ export function AiComparePopover({
       const sent = capText(unit.text)
       if (sent.text === '') continue
       let korean = ''
-      if (scope === 'selection' && typedOriginal.trim() !== '') korean = typedOriginal
-      else if (sourceDoc.current)
-        korean =
-          sourceTextFor(editor.state.doc, sourceDoc.current, unit.from, unit.to) ?? ''
+      if (scope === 'selection' && raw.length === 1 && typedOriginal.trim() !== '')
+        korean = typedOriginal
+      else if (
+        sourceDoc.current &&
+        editor.state.doc.resolve(unit.from).parentOffset === 0 &&
+        editor.state.doc.resolve(unit.to).parentOffset ===
+          editor.state.doc.resolve(unit.to).parent.content.size
+      )
+        korean = sourceTextFor(editor.state.doc, sourceDoc.current, unit.from, unit.to) ?? ''
       const koreanSent = capText(korean)
       out.push({ id: unit.id, text: sent.text, korean: koreanSent.text })
       map.set(unit.id, {
         from: unit.from,
         to: unit.to,
         gone: false,
-        fingerprint: scope === 'selection' && snapshot ? snapshot.fingerprint : unit.text,
+        fingerprint: unit.text,
         shown: unit.text,
         hasObjects: unit.hasObjects,
         cut: sent.cut || koreanSent.cut,
@@ -379,12 +396,22 @@ export function AiComparePopover({
 
   const start = (): void => {
     setNotice(null)
-    setNoticeCount(null)
+    setInputTruncated(false)
+    const selection = selectionRange.current
+    if (
+      scope === 'selection' &&
+      selection &&
+      (selection.gone || rangeText(editor, selection.from, selection.to) !== selection.fingerprint)
+    ) {
+      setNotice('cmpStale')
+      return
+    }
     const built = buildUnits()
     if (built.runner.length === 0) {
       setNotice('cmpNoUnits')
       return
     }
+    runOptions.current = { retranslate, target: targetName }
     infos.current = built.infos
     setExpanded(new Set(scope === 'selection' ? [built.runner[0]!.id] : []))
     runner.start(built.runner, enabledEngines, autoIntegrate)
@@ -400,7 +427,7 @@ export function AiComparePopover({
     )
   }
   const manual = (siteUrl: string, unitId?: string): void => {
-    const info = unitId ? infos.current.get(unitId) : undefined
+    const info = unitId ? infos.current.get(unitId) : buildUnits().infos.values().next().value
     const text = info ? capText(info.shown).text : ''
     copy(
       'prompt',
@@ -432,18 +459,6 @@ export function AiComparePopover({
     runner.markApplied(unitId)
     return true
   }
-  const applyAll = (): void => {
-    let count = 0
-    for (const unit of state.units) {
-      if (unit.applied || unit.integrate.status !== 'done' || !unit.integrate.text) continue
-      if (applyUnit(unit.id, unit.integrate.text)) count++
-    }
-    setNotice(null)
-    setNoticeCount(count)
-  }
-  const appliable = state.units.filter(
-    (u) => !u.applied && u.integrate.status === 'done' && u.integrate.text,
-  ).length
 
   const toggle = (id: string): void =>
     setExpanded((current) => {
@@ -533,7 +548,18 @@ export function AiComparePopover({
         </div>
         {open && (
           <div className="cmp-cards">
-            {card(result.id, 'original', t('cmpCardOriginal'), info?.shown ?? '', info?.shown ?? null, true)}
+            {!info?.korean && <div className="cmp-hint">{t('cmpNoSource')}</div>}
+            {info?.cut && (
+              <div className="cmp-warn">{t('cmpCut', { max: COMPARE_TEXT_MAX_CHARS })}</div>
+            )}
+            {card(
+              result.id,
+              'original',
+              t('cmpCardOriginal'),
+              info?.shown ?? '',
+              info?.shown ?? null,
+              true,
+            )}
             {state.engines.map((id) => {
               const site = COMPARE_SITES.find((s) => s.id === id)
               const e = result.engines[id]
@@ -572,8 +598,8 @@ export function AiComparePopover({
                     e.retranslation ? `${site.name} · ${t(firstKind)}` : site.name,
                     e.status === 'done' ? (
                       first
-                    ) : e.status === 'blocked' && e.reason === 'needs-user' ? (
-                      <span className="cmp-reason">{t('cmpNeedsUserHint')}</span>
+                    ) : e.status === 'blocked' ? (
+                      <span className="cmp-reason">{blockText(e.reason ?? '')}</span>
                     ) : e.reason ? (
                       <span className="cmp-reason">{e.reason}</span>
                     ) : null,
@@ -650,6 +676,14 @@ export function AiComparePopover({
   const done = Math.max(0, Math.min(state.next, state.batchEnd) - state.batchStart)
   const batchTotal = state.batchEnd - state.batchStart
   const blockedList = Object.entries(state.blocked)
+  const blockText = (reason: string): string =>
+    t(
+      reason === 'login-wall'
+        ? 'cmpStSkipped'
+        : reason === 'needs-user'
+          ? 'cmpStNeedsUser'
+          : 'cmpStBlocked',
+    )
   const started = state.phase !== 'idle'
   const canStart = consent === true && installed && enabledEngines.length > 0 && !active
 
@@ -707,7 +741,7 @@ export function AiComparePopover({
               className="ai-ask-confirm"
               onClick={() => {
                 setConsent(true)
-                void window.desktop?.compareSetConsent?.()
+                void window.desktop?.compareSetConsent?.()?.catch(() => {})
               }}
             >
               {t('cmpConsentAgree')}
@@ -764,7 +798,7 @@ export function AiComparePopover({
                       type="checkbox"
                       role="switch"
                       checked={engineOn(site.id)}
-                      disabled={active}
+                      disabled={active || state.phase === 'batchDone'}
                       onChange={(e) => savePrefs({ engines: { [site.id]: e.target.checked } })}
                     />
                     {site.name}
@@ -777,7 +811,7 @@ export function AiComparePopover({
                     type="radio"
                     name="cmp-scope"
                     checked={scope === 'selection'}
-                    disabled={!snapshot || active}
+                    disabled={!snapshot || active || state.phase === 'batchDone'}
                     onChange={() => setScope('selection')}
                   />
                   {t('cmpScopeSelection')}
@@ -787,7 +821,7 @@ export function AiComparePopover({
                     type="radio"
                     name="cmp-scope"
                     checked={scope === 'document'}
-                    disabled={active}
+                    disabled={active || state.phase === 'batchDone'}
                     onChange={() => setScope('document')}
                   />
                   {t('cmpScopeDocument')}
@@ -806,6 +840,7 @@ export function AiComparePopover({
                   <input
                     type="checkbox"
                     checked={retranslate}
+                    disabled={active || state.phase === 'batchDone'}
                     onChange={(e) => savePrefs({ retranslate: e.target.checked })}
                   />
                   {t('cmpRetranslate')}
@@ -835,34 +870,40 @@ export function AiComparePopover({
                 )}
               </div>
               {enabledEngines.length === 0 && <div className="cmp-hint">{t('cmpNoEngine')}</div>}
-              {scope === 'selection' && snapshot && (
-                <div>
-                  {!showOriginal ? (
-                    <button
-                      type="button"
-                      className="cmp-link"
-                      onClick={() => setShowOriginal(true)}
-                    >
-                      {t('cmpAddOriginal')}
-                    </button>
-                  ) : (
-                    <>
-                      <label className="cmp-label" htmlFor="cmp-korean">
-                        {t('cmpSourceLabel')}
-                      </label>
-                      <textarea
-                        id="cmp-korean"
-                        className="ai-ask-pop-input cmp-text"
-                        value={typedOriginal}
-                        rows={3}
-                        disabled={active}
-                        placeholder={t('cmpSourcePlaceholder')}
-                        onChange={(e) => setTypedOriginal(e.target.value)}
-                      />
-                    </>
-                  )}
-                </div>
-              )}
+              {scope === 'selection' &&
+                snapshot &&
+                selectionRange.current &&
+                !selectionRange.current.gone &&
+                editor.state.doc
+                  .resolve(selectionRange.current.from)
+                  .sameParent(editor.state.doc.resolve(selectionRange.current.to)) && (
+                  <div>
+                    {!showOriginal ? (
+                      <button
+                        type="button"
+                        className="cmp-link"
+                        onClick={() => setShowOriginal(true)}
+                      >
+                        {t('cmpAddOriginal')}
+                      </button>
+                    ) : (
+                      <>
+                        <label className="cmp-label" htmlFor="cmp-korean">
+                          {t('cmpSourceLabel')}
+                        </label>
+                        <textarea
+                          id="cmp-korean"
+                          className="ai-ask-pop-input cmp-text"
+                          value={typedOriginal}
+                          rows={3}
+                          disabled={active}
+                          placeholder={t('cmpSourcePlaceholder')}
+                          onChange={(e) => setTypedOriginal(e.target.value)}
+                        />
+                      </>
+                    )}
+                  </div>
+                )}
             </div>
             {started && (
               <div className="cmp-progress" role="status">
@@ -873,7 +914,11 @@ export function AiComparePopover({
                   </span>
                 )}
                 {state.phase === 'batchDone' && (
-                  <button type="button" className="ai-ask-confirm" onClick={() => runner.continueNext()}>
+                  <button
+                    type="button"
+                    className="ai-ask-confirm"
+                    onClick={() => runner.continueNext()}
+                  >
                     {t('cmpContinue', {
                       n: Math.min(COMPARE_BATCH_SIZE, state.total - state.batchEnd),
                     })}
@@ -881,11 +926,11 @@ export function AiComparePopover({
                 )}
               </div>
             )}
-            {blockedList.map(([id, reason]) => (
+            {blockedList.map(([id]) => (
               <div className="cmp-warn" key={id}>
                 {t('cmpBlockedLine', {
                   name: COMPARE_SITES.find((s) => s.id === id)?.name ?? id,
-                  reason: reason === 'needs-user' ? t('cmpNeedsUserHint') : reason,
+                  reason: blockText(state.blocked[id] ?? ''),
                 })}
               </div>
             ))}
@@ -897,15 +942,8 @@ export function AiComparePopover({
             )}
             {started && <div className="cmp-hint">{t('cmpFlatNote')}</div>}
             {notice && <div className="cmp-warn">{t(notice)}</div>}
-            {noticeCount !== null && (
-              <div className="cmp-warn">{t('cmpApplyAllDone', { n: noticeCount })}</div>
-            )}
-            {appliable > 0 && (
-              <div className="ai-ask-pop-foot">
-                <button type="button" className="ai-ask-confirm" onClick={applyAll}>
-                  {t('cmpApplyAll')}
-                </button>
-              </div>
+            {inputTruncated && (
+              <AiInputTruncatedNotice lang={lang} onDismiss={() => setInputTruncated(false)} />
             )}
             <div className="cmp-units">{state.units.map((u, i) => unitRow(u, i))}</div>
           </>

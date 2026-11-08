@@ -11,6 +11,7 @@
  */
 import type { Editor } from '@tiptap/core'
 import type { Mark } from '@tiptap/pm/model'
+import { closeHistory } from '@tiptap/pm/history'
 import { replaceInlineRange, type AiTrack } from '../ai/protocol'
 
 export interface SelectionSnapshot {
@@ -63,6 +64,8 @@ export function replaceSnapshot(
   const inherited: readonly Mark[] = (anchor?.marks ?? []).filter(
     (mark) => !REVISION_MARKS.has(mark.type.name),
   )
+  editor.view.dispatch(closeHistory(editor.state.tr))
   replaceInlineRange(editor, snap.from, snap.to, [editor.schema.text(next, inherited)], track)
+  editor.view.dispatch(closeHistory(editor.state.tr))
   return { ok: true }
 }

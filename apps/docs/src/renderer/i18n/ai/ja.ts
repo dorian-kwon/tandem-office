@@ -20,10 +20,25 @@ export const ja = {
   aiAskBtn: 'AI に依頼',
   aiAskWebSearch: 'ウェブ検索',
   aiAskGoogleTranslate: 'Google翻訳',
+  cmpStBlocked: 'ブロック中',
+  cmpNoSource: '対応する韓国語原文がないため、この単位の文章だけを送信します。',
+  cmpNoUnits: '比較できる文章の段落がありません。',
+  cmpApplied: '適用済み',
+  cmpScopeSelection: '選択範囲',
+  cmpScopeDocument: '文書全体',
+  cmpPause: '一時停止',
+  cmpResume: '再開',
+  cmpNoEngine: 'エンジンを1つ以上有効にしてください。',
+  cmpProgress: '{done} / {total} 単位',
+  cmpRemaining: '残り {n} 単位',
+  cmpContinue: '次の {n} 単位へ',
+  cmpBlockedLine: '{name}：ブロックされました（{reason}）。今回の実行では再試行しません。',
+  cmpAllBlocked: 'すべてのエンジンがブロックされました。停止してサイトを直接確認してください。',
+  cmpFlatNote: '単位ごとに回答を1つ選びます。置換はプレーンテキストで、適用ごとに元に戻せます。',
+  cmpLeaves:
+    '選択した文章と韓国語原文があれば、ego ブラウザー経由で {sites} に送ります。各サイトの規約が適用され、一部を隠すことはできません。範囲とエンジンを選び、比較を押すと送信します。',
   cmpBtn: 'AI 比較',
   cmpTitle: '他の AI と比較',
-  cmpLeaves:
-    '選択した文章(韓国語の原文がある場合は原文も)はこのアプリの外に送られます。下で同意すると、AI 比較を押した時点ですぐに、ego ブラウザーのログインを通じて {sites} の Web ページに送信され、各サイトの利用規約が適用されます。エディターはこの段階で文章の一部を隠せません。同意するまで何も送信されません。',
   cmpConsentAgree: '理解しました。続ける',
   cmpSourceLabel: '韓国語の原文',
   cmpSourceAuto:
@@ -53,7 +68,7 @@ export const ja = {
   cmpManual: 'プロンプトをコピーして {name} を開く',
   cmpStale: 'このウィンドウを開いた後に選択範囲が変わったため、何も置き換えていません。',
   cmpCannotReplace:
-    'この選択範囲はここでは置き換えられません(複数の段落にまたがっているか、表の中にあります)。',
+    'この文章はここでは置換できません（インラインオブジェクトまたは未対応の範囲）。',
   cmpBlocked:
     '統合するには、先に AI パネルで AI を接続してください(または初回利用の案内を完了してください)。',
   cmpStop: '停止',

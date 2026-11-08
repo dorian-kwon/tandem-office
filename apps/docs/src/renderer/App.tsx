@@ -1074,7 +1074,9 @@ export function App() {
   const [commentComposing, setCommentComposing] = useState(false)
   const [trackChanges, setTrackChanges] = useState(false)
   /** the selection the "AI compare" popup is open on, or null when it is closed */
-  const [compareOpen, setCompareOpen] = useState<{ snapshot: SelectionSnapshot | null } | null>(null)
+  const [compareOpen, setCompareOpen] = useState<{ snapshot: SelectionSnapshot | null } | null>(
+    null,
+  )
   const [revisionDisplay, setRevisionDisplay] = useState<RevisionDisplayMode>('all')
   /** the user picked a Markup view this session: opening another document keeps it */
   const markupPickedRef = useRef(false)
@@ -5320,7 +5322,9 @@ export function App() {
       const parsed = fileCtxRef.current.doc?.parsed
       const live = liveStylesRef.current
       if (parsed) {
-        setDocCss(docStyleCss(live?.parsed === parsed ? { ...parsed, styles: live.styles } : parsed))
+        setDocCss(
+          docStyleCss(live?.parsed === parsed ? { ...parsed, styles: live.styles } : parsed),
+        )
       }
       return true
     }

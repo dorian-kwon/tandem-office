@@ -21,10 +21,27 @@ export const pl = {
   aiAskBtn: 'Zapytaj AI',
   aiAskWebSearch: 'Szukaj',
   aiAskGoogleTranslate: 'Tłumacz',
+  cmpStBlocked: 'Zablokowano',
+  cmpNoSource: 'Brak pasującego koreańskiego oryginału. Wysyłany jest tylko tekst tej jednostki.',
+  cmpNoUnits: 'Brak akapitów tekstu do porównania.',
+  cmpApplied: 'Zastosowano',
+  cmpScopeSelection: 'Zaznaczenie',
+  cmpScopeDocument: 'Cały dokument',
+  cmpPause: 'Wstrzymaj',
+  cmpResume: 'Wznów',
+  cmpNoEngine: 'Włącz co najmniej jeden silnik.',
+  cmpProgress: '{done} / {total} jednostek',
+  cmpRemaining: 'Pozostało jednostek: {n}',
+  cmpContinue: 'Kontynuuj: {n} jednostek',
+  cmpBlockedLine: '{name}: zablokowano ({reason}). Bez ponawiania w tym przebiegu.',
+  cmpAllBlocked:
+    'Wszystkie silniki są zablokowane. Zatrzymaj działanie i samodzielnie sprawdź witryny.',
+  cmpFlatNote:
+    'Wybierz jedną odpowiedź dla każdej jednostki. Zamiany używają zwykłego tekstu i można je cofać osobno.',
+  cmpLeaves:
+    'Wybrany tekst i dostępny koreański oryginał są wysyłane do {sites} przez przeglądarkę ego. Obowiązują warunki tych witryn. Nie można ukryć części tekstu. Wybierz zakres i silniki, a następnie naciśnij Porównaj, aby wysłać.',
   cmpBtn: 'Porównanie AI',
   cmpTitle: 'Porównaj z innymi AI',
-  cmpLeaves:
-    'Zaznaczony tekst (i koreański oryginał, jeśli jest) opuszcza tę aplikację: po wyrażeniu zgody poniżej naciśnięcie Porównanie AI od razu wysyła go do stron {sites} przez Twoje logowania w przeglądarce ego, a obowiązują regulaminy tych serwisów. Edytor nie może w tym kroku ukryć części tekstu. Przed Twoją zgodą nic nie jest wysyłane.',
   cmpConsentAgree: 'Rozumiem, dalej',
   cmpSourceLabel: 'Koreański tekst oryginalny',
   cmpSourceAuto:
@@ -53,8 +70,7 @@ export const pl = {
   cmpCardIntegrated: 'Wersja scalona',
   cmpManual: 'Skopiuj prompt i otwórz {name}',
   cmpStale: 'Zaznaczenie zmieniło się po otwarciu tego okna. Nic nie zostało zastąpione.',
-  cmpCannotReplace:
-    'Tego zaznaczenia nie można tu zastąpić (obejmuje kilka akapitów lub jest w tabeli).',
+  cmpCannotReplace: 'Nie można tu zastąpić tekstu (obiekty osadzone lub nieobsługiwany zakres).',
   cmpBlocked:
     'Aby scalić, najpierw połącz AI w panelu AI (lub zakończ jego informację przy pierwszym użyciu).',
   cmpStop: 'Zatrzymaj',
