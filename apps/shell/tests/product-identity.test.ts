@@ -303,7 +303,7 @@ describe('coexistence with the upstream app on one machine', () => {
 describe('repository coordinates', () => {
   it('feeds auto-update from the GitHub releases of the product repository', () => {
     expect(config.publish).toEqual([
-      { provider: 'github', owner: GITHUB_REPO_OWNER, repo: GITHUB_REPO_NAME },
+      { provider: 'github', owner: GITHUB_REPO_OWNER, repo: GITHUB_REPO_NAME, private: true },
     ])
     // no environment variable switches the feed on or moves it elsewhere
     const withOldEnv = loadBuilderConfig({ GENOFFICE_UPDATE_URL: 'https://updates.example.test/x' })
