@@ -204,44 +204,52 @@ app's own features:
 
 ## Comparing AI answers (Word editor)
 
-The **AI compare** window compares Copilot’s web answer with the AI currently
-connected in this app. **Connected AI** keeps the provider and model selected in
-this app; it does not require a ChatGPT website login or switch providers. You
-choose the engines and selection or whole-document scope, then press Compare.
+The **AI compare** window lists the app’s connected AIs and an optional Copilot
+web engine. You turn candidate engines on or off, choose the selection or whole
+document, then press Compare. Each enabled AI returns one answer; the main AI
+selected in the app integrates the available answers into one final result.
 Accepting the first-use notice alone sends nothing.
 
 - **What is sent.** Enabled engines receive one paragraph or selected paragraph
   portion at a time, up to 4,000 characters, and a matching Korean original when
   available. Partial paragraphs do not borrow an entire source paragraph.
-  Truncated units cannot be applied. Both engines receive the same single translation or improvement request
-  for that unit and return one answer each. The app AI is asked for read-only
-  text without document tools. Nothing changes until you choose and apply an
-  answer. Parts cannot be hidden from this step.
+  Truncated units cannot be applied. All engines receive the same single
+  translation or improvement task and return one answer each. App AI requests
+  use no document tools. Nothing changes until you apply an answer. Parts cannot
+  be hidden from this step.
+- **Connected AI list.** Ready subscription connections (Claude, ChatGPT and
+  Codex) and the explicitly selected, runnable main AI are available as
+  candidates, without duplicates. Each has a remembered participation switch.
+  Saved API keys or unused metered connections are not automatically added.
+  Candidate switches are separate from the main AI’s integration role: turning
+  its candidate switch off does not disable final integration. Provider, model,
+  target language and participant choices are fixed for the run.
 - **Where it goes.** Copilot uses the installed ego lite browser and its existing
-  web login. Its text goes to Microsoft under that site’s terms. Connected AI
-  uses this app’s normal AI selection and send gate with the current connection
-  and model, under the same terms as an ordinary AI-panel request. The app does
+  web login; its text goes to Microsoft under that site’s terms. Internal AI
+  requests use the app’s normal transport and send gate under the same terms as
+  ordinary AI-panel requests. Each participant receives its own unit prompt;
+  the main AI also receives successful candidates for integration. The app does
   not open ChatGPT’s website, read or copy Codex/Claude authentication files, or
-  copy browser cookies for this engine. There is no fallback to another provider.
-- **Scheduling and cancellation.** Both enabled engines process the same unit
-  concurrently; their results settle before the next unit. Each engine handles
-  one unit at a time. Runs pause after 20 units for Continue. Stop or closing the
-  window cancels every active comparison request. A failing engine does not
-  cancel the other engine’s answer.
+  copy browser cookies. Unavailable providers are reported without fallback.
+- **Scheduling and cancellation.** Enabled candidates process the same unit
+  concurrently. Once they settle, the main AI integrates successful answers
+  before the next unit. Each engine handles one unit at a time. Runs pause after
+  20 units for Continue. Stop or closing the window cancels every active request.
+  A failing engine does not cancel another engine’s answer.
 - **Failed requests.** Individual retry and Retry all failed resend failed
   unit-engine pairs only. Successful and applied results stay in place. Blocked
   engines, stopped pairs and text changed since the request are excluded from
-  bulk retry. Retries use the original unit and target language. A new comparison
-  is needed for changed text or a changed target. Stop cancels active retries.
-- **Integration.** Automatic integration is off by default and is suppressed
-  when Connected AI already supplies a candidate. You can explicitly request
-  Integrate now after seeing the candidates; that is a separate app AI request.
-  With only Copilot enabled, optional automatic integration remains available.
-- **Consent and installation.** Version 4 of the first-use acknowledgement and
-  engine preferences are kept in `web-compare.json`. Old Grok or web ChatGPT
-  preferences do not enable a replacement engine implicitly. Only Copilot needs
-  ego lite. The app never downloads or runs its installer; you install it and
-  handle its login yourself.
+  bulk retry. Retries use the original unit, target and provider/model choices.
+  When a candidate is retried, its old final integration is cleared and the main
+  AI recomputes it when successful candidates change; if every retry fails again,
+  the previous final answer is retained. Integration failures
+  can also be retried. If no candidate succeeds, no empty integration request
+  is sent. Stop cancels active retries.
+- **Consent and installation.** Version 5 of the first-use acknowledgement and
+  engine preferences are kept in `web-compare.json`. Retired engine preferences
+  do not silently enable replacement engines. Only Copilot needs ego lite. The
+  app never downloads or runs its installer; you install it and handle its login
+  yourself.
 - **Blocked sites.** A CAPTCHA, login wall or handover blocks Copilot for the
   rest of the run without retry or bypass. Missing inputs, rejected text and
   unavailable send buttons are interaction failures; the app submits nothing

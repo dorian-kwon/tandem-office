@@ -14,7 +14,7 @@ export interface ConsentFs {
 }
 
 /** bump when the wording of what is sent changes: an older acknowledgement then asks again */
-export const COMPARE_CONSENT_VERSION = 4
+export const COMPARE_CONSENT_VERSION = 5
 
 interface Stored {
   consentVersion?: unknown

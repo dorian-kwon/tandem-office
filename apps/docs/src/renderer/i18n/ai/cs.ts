@@ -40,13 +40,15 @@ export const cs = {
   cmpAllBlocked: 'Všechny moduly jsou zablokované. Zastavte běh a stránky vyřešte sami.',
   cmpFlatNote:
     'Pro každou jednotku vyberte jednu odpověď. Náhrady používají prostý text a lze je vrátit jednotlivě.',
+  cmpMetered: 'Placené využití',
+  cmpConnectionReady: 'Připojeno',
   cmpConnectedAi: 'Připojená AI',
   cmpConnectedUnavailable:
     'Vybraná AI není dostupná. V panelu AI zkontrolujte připojení a upozornění prvního použití.',
   cmpIntegrationSeparate:
-    'Připojená AI již poskytuje odpověď. Automatické sloučení je vypnuté; Sloučit nyní vytvoří samostatný požadavek.',
+    'Hlavní AI {name} automaticky sloučí odpovědi. Vypnutí její kandidatury sloučení nevypne.',
   cmpLeaves:
-    'Zapnuté moduly obdrží vybranou jednotku a dostupný korejský originál. {sites} používá ego; připojená AI používá současné připojení a model této aplikace bez přihlášení na web ChatGPT. Platí jejich podmínky. Části nelze skrýt. Zvolte rozsah a moduly a stiskněte Porovnat.',
+    'Zapnuté připojené AI dostanou vybranou část a původní kontext souběžně, každá dá jednu odpověď. Vybraná hlavní AI odpovědi automaticky sloučí. {sites} po zapnutí používá ego. Uložené placené klíče se nepřidávají automaticky. Platí podmínky poskytovatelů; odeslání nelze vzít zpět.',
   cmpBtn: 'Porovnání AI',
   cmpTitle: 'Porovnat s jinými AI',
   cmpConsentAgree: 'Rozumím, pokračovat',

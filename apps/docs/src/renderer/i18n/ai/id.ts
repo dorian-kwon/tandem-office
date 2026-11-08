@@ -40,13 +40,15 @@ export const id = {
   cmpAllBlocked: 'Semua mesin diblokir. Hentikan dan tangani situs sendiri.',
   cmpFlatNote:
     'Pilih satu jawaban per unit. Penggantian memakai teks biasa dan dapat dibatalkan satu per satu.',
+  cmpMetered: 'Penggunaan berbayar',
+  cmpConnectionReady: 'Terhubung',
   cmpConnectedAi: 'AI terhubung',
   cmpConnectedUnavailable:
     'AI yang dipilih tidak tersedia. Periksa koneksi dan pemberitahuan penggunaan pertama di panel AI.',
   cmpIntegrationSeparate:
-    'AI terhubung sudah memberi jawaban. Integrasi otomatis dimatikan; Integrasikan sekarang membuat permintaan terpisah.',
+    'AI utama {name} menggabungkan otomatis. Mematikan kandidatnya tidak mematikan penggabungan.',
   cmpLeaves:
-    'Mesin yang diaktifkan menerima unit pilihan dan sumber Korea jika ada. {sites} memakai ego; AI terhubung memakai koneksi dan model aplikasi saat ini tanpa masuk ke situs ChatGPT. Ketentuan layanan berlaku dan bagian tidak dapat disembunyikan. Pilih cakupan dan mesin lalu tekan Bandingkan.',
+    'AI terhubung yang aktif menerima setiap unit dan konteks asli secara paralel, masing-masing satu jawaban. AI utama terpilih menerima jawaban dan menggabungkannya otomatis. {sites} memakai ego jika aktif. Kunci berbayar tersimpan tidak ditambahkan otomatis. Ketentuan penyedia berlaku; kiriman tidak dapat ditarik.',
   cmpBtn: 'Bandingkan AI',
   cmpTitle: 'Bandingkan dengan AI lain',
   cmpConsentAgree: 'Saya mengerti, lanjutkan',

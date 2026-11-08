@@ -27,10 +27,11 @@ describe('AI compare strings', () => {
     }
   })
 
-  it('discloses the currently connected AI without a ChatGPT website login in every locale', () => {
+  it('discloses connected candidates and the main integrator in every locale', () => {
     for (const path of Object.keys(shards)) {
       const dict = Object.values(shards[path]!)[0]!
-      expect(dict.cmpLeaves, path).toContain('ChatGPT')
+      expect(dict.cmpIntegrationSeparate, path).toContain('{name}')
+      expect(dict.cmpConnectionReady?.trim(), path).toBeTruthy()
       expect(dict.cmpConnectedAi?.trim(), path).toBeTruthy()
       expect(dict.cmpConnectedUnavailable?.trim(), path).toBeTruthy()
       expect(dict.cmpIntegrationSeparate?.trim(), path).toBeTruthy()

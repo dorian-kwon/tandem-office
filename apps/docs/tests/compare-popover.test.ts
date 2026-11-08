@@ -25,6 +25,7 @@ afterEach(() => {
   vi.restoreAllMocks()
   vi.useRealTimers()
   delete (window as unknown as { desktop?: unknown }).desktop
+  delete (window as unknown as { aiOfficeSubscription?: unknown }).aiOfficeSubscription
 })
 beforeAll(() => {
   Element.prototype.scrollTo ??= () => {}
@@ -37,6 +38,16 @@ function setup(
   appSettings: AiSettings = settings,
   initial: 'en' | 'ko' = 'en',
 ) {
+  const offline = Object.fromEntries(
+    ['claude-code', 'codex', 'chatgpt'].map((provider) => [
+      provider,
+      { provider, state: 'signed-out' },
+    ]),
+  )
+  ;(window as unknown as { aiOfficeSubscription: unknown }).aiOfficeSubscription = {
+    statuses: async () => desktop.subscriptionStatuses ?? offline,
+    onChanged: () => () => {},
+  }
   const editor = new Editor({
     element: document.createElement('div'),
     extensions: editorExtensions,
@@ -93,7 +104,10 @@ const button = (c: HTMLElement, label: string): HTMLButtonElement | undefined =>
 const ready = (extra: Record<string, unknown> = {}) => ({
   compareDetect: async () => ({ installed: true, path: '/fake/ego' }),
   compareGetConsent: async () => true,
-  compareGetPrefs: async () => ({ autoIntegrate: false, engines: { 'connected-ai': false } }),
+  compareGetPrefs: async () => ({
+    autoIntegrate: false,
+    engines: { 'connected-anthropic': false },
+  }),
   compareSetPrefs: async () => true,
   compareCancel: async () => {},
   ...extra,
@@ -184,6 +198,9 @@ describe('AI compare popup', () => {
           listener?.({ requestId: request.requestId, type: 'done' })
         },
       }),
+      undefined,
+      undefined,
+      current,
     )
     await flush()
     expect(appRequests).toEqual([])
@@ -191,19 +208,96 @@ describe('AI compare popup', () => {
     await flush()
     expect(appRequests).toEqual([])
     expect(
-      [...container.querySelectorAll('label')].some((l) => l.textContent === 'Connected AI'),
+      [...container.querySelectorAll('label')].some((l) =>
+        l.textContent?.includes('Claude · current-model'),
+      ),
     ).toBe(true)
     await start(container)
     expect(web).toEqual([])
-    expect(appRequests).toHaveLength(1)
-    expect(appRequests[0]?.settings).toBe(current)
+    expect(appRequests).toHaveLength(2)
+    expect(appRequests[0]?.settings).toEqual(current)
     expect(container.textContent).toContain('Connected answer')
     expect(button(container, 'Copy prompt and open ChatGPT')).toBeUndefined()
     expect(
       [...container.querySelectorAll('.cmp-card-title')].some(
-        (c) => c.textContent === 'Connected AI',
+        (c) => c.textContent === 'Claude · current-model',
       ),
     ).toBe(true)
+  })
+
+  it('lists ready providers with default-on switches, pins the main AI and integrates with its candidate off', async () => {
+    const current: AiSettings = {
+      ...settings,
+      provider: 'claude-code',
+      subscriptionNoticeSeen: true,
+    }
+    const statuses = Object.fromEntries(
+      ['claude-code', 'chatgpt', 'codex'].map((provider) => [
+        provider,
+        { provider, state: 'ready' },
+      ]),
+    )
+    const listeners = new Set<(chunk: { requestId: string; type: string; text?: string }) => void>()
+    const requests: Array<{ requestId: string; settings: AiSettings }> = []
+    const prefs: unknown[] = []
+    const { container } = setup(
+      ready({
+        subscriptionStatuses: statuses,
+        compareGetPrefs: async () => ({ engines: { copilot: false } }),
+        compareSetPrefs: async (patch: unknown) => {
+          prefs.push(patch)
+        },
+        onAiStream: (fn: (chunk: { requestId: string; type: string; text?: string }) => void) => {
+          listeners.add(fn)
+          return () => {
+            listeners.delete(fn)
+          }
+        },
+        aiStream: async (req: { requestId: string; settings: AiSettings }) => {
+          requests.push(req)
+        },
+      }),
+      undefined,
+      undefined,
+      current,
+    )
+    await flush()
+    const switches = [...container.querySelectorAll<HTMLInputElement>('input[role="switch"]')]
+    expect(switches).toHaveLength(4)
+    expect(switches.slice(1).every((input) => input.checked)).toBe(true)
+    expect(container.textContent).toContain('Claude Code')
+    expect(container.textContent).toContain('ChatGPT')
+    expect(container.textContent).toContain('Codex CLI')
+    expect(container.querySelectorAll('.cmp-switches .cmp-chip').length).toBe(3)
+    const mainSwitch = [...container.querySelectorAll('label')]
+      .find((label) => label.textContent?.startsWith('Claude Code'))!
+      .querySelector('input')!
+    act(() => mainSwitch.click())
+    expect(prefs).toEqual([{ engines: { 'connected-claude-code': false } }])
+    await start(container)
+    expect(requests.map((r) => r.settings.provider).sort()).toEqual(['chatgpt', 'codex'])
+    expect(switches.every((input) => input.disabled)).toBe(true)
+    // Changing the original settings must not change the run's main route/model.
+    current.provider = 'codex'
+    await act(async () => {
+      for (const req of [...requests]) {
+        for (const fn of [...listeners])
+          fn({ requestId: req.requestId, type: 'delta', text: 'One candidate' })
+        for (const fn of [...listeners]) fn({ requestId: req.requestId, type: 'done' })
+      }
+      await Promise.resolve()
+    })
+    await flush()
+    expect(requests).toHaveLength(3)
+    expect(requests[2]?.settings.provider).toBe('claude-code')
+    await act(async () => {
+      const req = requests[2]!
+      for (const fn of [...listeners])
+        fn({ requestId: req.requestId, type: 'delta', text: 'Final combined answer' })
+      for (const fn of [...listeners]) fn({ requestId: req.requestId, type: 'done' })
+    })
+    await flush()
+    expect(container.textContent).toContain('Final combined answer')
   })
 
   it('lets the person select one answer and keeps the popup available for other units', async () => {
@@ -358,7 +452,7 @@ describe('AI compare popup', () => {
     expect(container.textContent).toContain('Nothing was replaced.')
   })
 
-  it('keeps app AI integration off by default and calls it only after the person turns it on', async () => {
+  it('automatically integrates through the main AI even when its candidate switch is off', async () => {
     let listener: ((chunk: { requestId: string; type: string; text?: string }) => void) | undefined
     const requests: Array<{ requestId: string }> = []
     const preferences: unknown[] = []
@@ -371,7 +465,7 @@ describe('AI compare popup', () => {
     }
     const { container } = setup(
       ready({
-        compareGetPrefs: async () => ({ engines: { 'connected-ai': false } }),
+        compareGetPrefs: async () => ({ engines: { 'connected-anthropic': false } }),
         compareSetPrefs: async (patch: unknown) => {
           preferences.push(patch)
           return true
@@ -394,21 +488,20 @@ describe('AI compare popup', () => {
       appSettings,
     )
     await flush()
-    const automatic = [...container.querySelectorAll('label')]
-      .find((label) => label.textContent?.trim() === 'Auto integrate')!
-      .querySelector('input')!
-    expect(automatic.checked).toBe(false)
-    await start(container)
-    expect(requests).toEqual([])
-    expect(container.textContent).toContain('Web candidate')
-    act(() => automatic.click())
-    expect(preferences).toEqual([{ autoIntegrate: true }])
+    expect(container.textContent).toContain('Claude')
+    expect(container.textContent).toContain('Automatically')
+    expect(
+      [...container.querySelectorAll('label')].some(
+        (label) => label.textContent?.trim() === 'Auto integrate',
+      ),
+    ).toBe(false)
     await start(container)
     expect(requests).toHaveLength(1)
+    expect(preferences).toEqual([])
     expect(container.textContent).toContain('Combined answer')
   })
 
-  it('uses the app stream for optional integration and cancels that request on Stop', async () => {
+  it('uses the app stream for automatic integration and cancels that request on Stop', async () => {
     let listener: ((chunk: { requestId: string; type: string; text?: string }) => void) | undefined
     const requests: Array<{ requestId: string; tools: unknown[] }> = []
     const cancelled: string[] = []
@@ -421,7 +514,10 @@ describe('AI compare popup', () => {
     }
     const { container } = setup(
       ready({
-        compareGetPrefs: async () => ({ autoIntegrate: true, engines: { 'connected-ai': false } }),
+        compareGetPrefs: async () => ({
+          autoIntegrate: true,
+          engines: { 'connected-anthropic': false },
+        }),
         compareAsk: async () => ({ ok: true, text: 'Candidate' }),
         onAiStream: (fn: typeof listener) => {
           listener = fn
@@ -586,7 +682,10 @@ describe('AI compare popup', () => {
     const prompts: string[] = []
     const { container } = setup(
       ready({
-        compareGetPrefs: async () => ({ autoIntegrate: false, engines: { 'connected-ai': false } }),
+        compareGetPrefs: async () => ({
+          autoIntegrate: false,
+          engines: { 'connected-anthropic': false },
+        }),
         getTranslationLanguages: () =>
           new Promise((resolve) => {
             loadLanguage = resolve
@@ -651,6 +750,9 @@ describe('AI compare popup', () => {
           cancelledApp.push(id)
         },
       }),
+      undefined,
+      undefined,
+      current,
     )
     await flush()
     await start(container)

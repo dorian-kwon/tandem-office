@@ -40,13 +40,15 @@ export const en = {
   cmpAllBlocked: 'All engines are blocked. Stop here and handle the sites yourself.',
   cmpFlatNote:
     'Choose one answer per unit. Replacements use plain text and each has its own undo step.',
+  cmpMetered: 'Paid usage',
+  cmpConnectionReady: 'Connected',
   cmpConnectedAi: 'Connected AI',
   cmpConnectedUnavailable:
     'The selected AI is unavailable. Check its connection and first-use notice in the AI panel.',
   cmpIntegrationSeparate:
-    'The connected AI already supplies a candidate. Automatic integration is off; use Integrate now for a separate request.',
+    'Automatically combined by main AI: {name}. Its candidate switch does not disable integration.',
   cmpLeaves:
-    'Enabled comparison engines receive the chosen unit and any Korean original. {sites} uses ego; Connected AI uses this app’s current connection and model without a ChatGPT website login. Their terms apply. Parts cannot be hidden. Choose the scope and engines, then press Compare to send.',
+    'Enabled connected AIs receive each chosen unit and any original context in parallel, one answer each. The main selected AI receives these answers and combines them automatically. {sites} uses ego when enabled. Saved paid keys are not added automatically. Provider terms apply; content cannot be unsent.',
   cmpBtn: 'AI compare',
   cmpTitle: 'Compare with other AIs',
   cmpConsentAgree: 'I understand, continue',

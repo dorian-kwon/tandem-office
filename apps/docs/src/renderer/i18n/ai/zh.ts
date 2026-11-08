@@ -37,12 +37,13 @@ export const zh = {
   cmpBlockedLine: '{name}：已阻止（{reason}）。本次运行不再重试。',
   cmpAllBlocked: '所有引擎均被阻止。请停止并自行处理网站。',
   cmpFlatNote: '每个单元选择一个回答。替换使用纯文本，每次应用都可单独撤销。',
+  cmpMetered: '按量付费',
+  cmpConnectionReady: '已连接',
   cmpConnectedAi: '已连接的 AI',
   cmpConnectedUnavailable: '所选 AI 不可用。请在 AI 面板检查连接和首次使用提示。',
-  cmpIntegrationSeparate:
-    '已连接的 AI 已提供比较答案。自动整合已关闭；如需单独请求，请点击立即整合。',
+  cmpIntegrationSeparate: '主 AI {name} 自动整合。关闭其候选开关不会关闭整合。',
   cmpLeaves:
-    '启用的比较引擎会收到所选单元及可用的韩语原文。{sites} 使用 ego；已连接的 AI 使用本应用当前的连接和模型，不使用 ChatGPT 网站登录。适用各服务条款，无法隐藏部分内容。选择范围和引擎后，按比较才会发送。',
+    '已启用的连接 AI 同时接收所选单元和原文背景，各返回一个答案。当前主 AI 接收答案并自动整合。启用 {sites} 时使用 ego。不会自动加入已保存的付费密钥。适用提供商条款；发送后无法撤回。',
   cmpBtn: 'AI 对比',
   cmpTitle: '与其他 AI 对比',
   cmpConsentAgree: '我已了解,继续',

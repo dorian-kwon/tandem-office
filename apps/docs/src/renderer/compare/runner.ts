@@ -1,6 +1,6 @@
 /**
  * One comparison advances in paragraph order. Enabled web engines start together for a unit;
- * all of their answers settle before optional app AI integration and the next unit. A single
+ * all of their answers settle before app AI integration and the next unit. A single
  * engine never handles two units concurrently. Browser, IPC and editor details stay in deps.
  *
  * Blocked engines remain excluded without retries; their peers finish normally. Pause collects
@@ -8,7 +8,6 @@
  * active request and ignores late replies. Each batch handles at most `batchSize` units.
  */
 import { isBlockReason, type CompareAnswer, type CompareDriverClient } from '../../shared/compare'
-import { CONNECTED_AI_ENGINE_ID } from '../../shared/compare-engines'
 import { cleanCandidate } from './prompts'
 
 /** units asked per run (and per "continue") */
@@ -208,7 +207,13 @@ export function createRunner(deps: RunnerDeps): Runner {
   async function integrateUnit(unit: RunnerUnit, gen: number): Promise<void> {
     const result = resultOf(unit.id)
     const answers = result ? candidatesOf(result) : []
-    if (answers.length === 0) return
+    if (answers.length === 0) {
+      patchUnit(unit.id, (u) => ({
+        ...u,
+        integrate: { status: 'failed', reason: 'no-candidates' },
+      }))
+      return
+    }
     patchUnit(unit.id, (u) => ({ ...u, integrate: { status: 'running' } }))
     const controller = new AbortController()
     active.add(controller)
@@ -258,7 +263,7 @@ export function createRunner(deps: RunnerDeps): Runner {
         return
       }
       if (!(await gate(gen))) return
-      if (auto && !state.engines.includes(CONNECTED_AI_ENGINE_ID)) await integrateUnit(unit, gen)
+      if (auto) await integrateUnit(unit, gen)
       if (!(await gate(gen))) return
       patchUnit(unit.id, (u) => ({ ...u, visited: true }))
       emit({ ...state, next: state.next + 1 })
@@ -309,8 +314,17 @@ export function createRunner(deps: RunnerDeps): Runner {
         const current = engines.filter((id) => eligible(unit, id))
         if (!current.length) continue
         attempted = true
+        const previousFinal = resultOf(unit.id)?.integrate ?? { status: 'idle' as const }
+        if (auto) patchUnit(unit.id, (u) => ({ ...u, integrate: { status: 'idle' } }))
         await Promise.all(current.map((id) => askEngine(unit, id, gen)))
         if (gen !== generation) return
+        if (!(await gate(gen))) return
+        if (auto) {
+          if (current.some((id) => resultOf(unit.id)?.engines[id]?.status === 'done'))
+            await integrateUnit(unit, gen)
+          else patchUnit(unit.id, (u) => ({ ...u, integrate: previousFinal }))
+        }
+        if (!(await gate(gen))) return
       }
       if (await gate(gen)) emit({ ...state, phase })
     })()
@@ -408,7 +422,13 @@ export function createRunner(deps: RunnerDeps): Runner {
     },
     integrateNow(unitId) {
       const unit = unitOf(unitId)
-      if (!unit || ['idle', 'running', 'paused'].includes(state.phase)) return
+      if (
+        !unit ||
+        resultOf(unitId)?.applied ||
+        !(deps.canRetry?.(unit) ?? true) ||
+        ['idle', 'running', 'paused'].includes(state.phase)
+      )
+        return
       const phase = state.phase
       const gen = generation
       emit({ ...state, phase: 'running' })

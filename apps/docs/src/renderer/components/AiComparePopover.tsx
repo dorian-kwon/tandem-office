@@ -23,8 +23,10 @@ import { LANGS } from '@genoffice/i18n'
 import { aiSendGate, AiInputTruncatedNotice } from '@genoffice/ui'
 import { createElectronTransport } from '../ai/transport'
 import { integrateComparison } from '../compare/integration'
-import { createConnectedCompareAsk } from '../compare/connected-ai'
-import { CONNECTED_AI_ENGINE_ID } from '../../shared/compare-engines'
+import {
+  enumerateConnectedComparisons,
+  createPinnedConnectedCompareAsk,
+} from '../compare/connected-ai'
 import type { AiSettings } from '@genoffice/ai-provider/browser'
 import { useI18n, type StringKey } from '../i18n/locale'
 import { setInactiveSelectionShown } from '../editor/inactive-selection'
@@ -158,15 +160,14 @@ export function AiComparePopover({
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
 
+  const connections = enumerateConnectedComparisons(settings, subscription.statuses)
   const engineOn = (id: string): boolean => prefs.engines?.[id] !== false
   const engineOptions = [
-    ...COMPARE_SITES.map((s) => ({ id: s.id, name: s.name })),
-    { id: CONNECTED_AI_ENGINE_ID, name: t('cmpConnectedAi') },
+    ...COMPARE_SITES.map((s) => ({ id: s.id, name: s.name, metered: false })),
+    ...connections.candidates,
   ]
-  const engineName = (id: string): string => engineOptions.find((s) => s.id === id)?.name ?? id
   const enabledEngines = engineOptions.filter((s) => engineOn(s.id)).map((s) => s.id)
-  const connectedSelected = enabledEngines.includes(CONNECTED_AI_ENGINE_ID)
-  const autoIntegrate = prefs.autoIntegrate === true && !connectedSelected
+  const autoIntegrate = true
   const needsWeb = COMPARE_SITES.some((site) => enabledEngines.includes(site.id))
   const savePrefs = (patch: ComparePrefs): void => {
     setPrefs((p) => ({ ...p, ...patch, engines: { ...p.engines, ...patch.engines } }))
@@ -174,7 +175,13 @@ export function AiComparePopover({
   }
 
   const targetName = languageName(targetCode)
-  const runOptions = useRef({ target: targetName })
+  const runOptions = useRef({
+    target: targetName,
+    connections,
+    names: new Map(engineOptions.map((e) => [e.id, e.name])),
+  })
+  const engineName = (id: string): string =>
+    runOptions.current.names.get(id) ?? engineOptions.find((e) => e.id === id)?.name ?? id
   // latest values for the long-lived runner (its prompt and integration steps read them when they run)
   const live = useRef({
     settings,
@@ -191,30 +198,27 @@ export function AiComparePopover({
   const selectionRange = useRef(snapshot ? { ...snapshot, gone: false } : null)
 
   const webDriver = useMemo(ipcDriver, [])
-  const connectedAsk = useMemo(
-    () =>
-      createConnectedCompareAsk({
-        getSettings: async () => (await window.desktop?.getAiSettings?.()) ?? live.current.settings,
-        getStatuses: () => live.current.statuses,
-        transportFor: (current) =>
-          createElectronTransport(() => current, {
-            onInputTruncated: () => setInputTruncated(true),
-          }),
-        unavailableText: () => t('cmpConnectedUnavailable'),
-      }),
-    // The long-lived client reads current settings/statuses for each unit.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  )
   const driver = useMemo<CompareDriverClient>(
     () => ({
       detect: webDriver.detect,
-      ask: (id, prompt, signal) =>
-        id === CONNECTED_AI_ENGINE_ID
-          ? connectedAsk(prompt, signal)
-          : webDriver.ask(id, prompt, signal),
+      ask: (id, prompt, signal) => {
+        if (!id.startsWith('connected-')) return webDriver.ask(id, prompt, signal)
+        const candidate = runOptions.current.connections.candidates.find((c) => c.id === id)
+        if (!candidate) return Promise.resolve({ ok: false, reason: t('cmpConnectedUnavailable') })
+        return createPinnedConnectedCompareAsk({
+          settings: candidate.settings,
+          getStatuses: () => live.current.statuses,
+          transportFor: (pinned) =>
+            createElectronTransport(() => pinned, {
+              onInputTruncated: () => setInputTruncated(true),
+            }),
+          unavailableText: () => t('cmpConnectedUnavailable'),
+        })(prompt, signal)
+      },
     }),
-    [webDriver, connectedAsk],
+    // The run snapshot owns provider/model choices; status changes can only reject them.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [webDriver],
   )
   const runner = useMemo(
     () =>
@@ -226,10 +230,12 @@ export function AiComparePopover({
           }),
         canRetry: (unit) => retryTextIsCurrent(unit.id),
         integrate: async (unit, answers, signal): Promise<CompareAnswer> => {
-          const { settings: s, statuses } = live.current
+          const s = runOptions.current.connections.main?.settings
+          const { statuses } = live.current
           const { target } = runOptions.current
           // the app's own AI only, and only when its send gate lets a run through
           if (
+            !s ||
             aiSendGate(s, statuses).kind !== 'run' ||
             !window.desktop?.aiStream ||
             !window.desktop?.onAiStream
@@ -240,7 +246,7 @@ export function AiComparePopover({
             original: unit.text,
             targetLanguage: target,
             answers: answers.map((a) => ({
-              label: `${a.id === CONNECTED_AI_ENGINE_ID ? t('cmpConnectedAi') : (COMPARE_SITES.find((site) => site.id === a.id)?.name ?? a.id)}`,
+              label: runOptions.current.names.get(a.id) ?? a.id,
               text: a.text,
             })),
           })
@@ -475,7 +481,11 @@ export function AiComparePopover({
       return
     }
     targetChosen.current = true
-    runOptions.current = { target: targetName }
+    runOptions.current = {
+      target: targetName,
+      connections,
+      names: new Map(engineOptions.map((e) => [e.id, e.name])),
+    }
     infos.current = built.infos
     setExpanded(new Set(scope === 'selection' ? [built.runner[0]!.id] : []))
     runner.start(built.runner, enabledEngines, autoIntegrate)
@@ -625,7 +635,7 @@ export function AiComparePopover({
             )}
             {state.engines.map((id) => {
               const site = COMPARE_SITES.find((s) => s.id === id)
-              const engine = engineOptions.find((s) => s.id === id)
+              const engine = { name: engineName(id) }
               const e = result.engines[id]
               if (!engine || !e) return null
               const retry =
@@ -677,7 +687,11 @@ export function AiComparePopover({
                 result.integrate.status === 'done' ? (
                   result.integrate.text
                 ) : result.integrate.reason ? (
-                  <span className="cmp-reason">{result.integrate.reason}</span>
+                  <span className="cmp-reason">
+                    {result.integrate.reason === 'no-candidates'
+                      ? t('cmpStFailed')
+                      : result.integrate.reason}
+                  </span>
                 ) : null,
                 result.integrate.status === 'done' ? (result.integrate.text ?? null) : null,
                 result.applied,
@@ -690,6 +704,7 @@ export function AiComparePopover({
                         ? chip('failed')
                         : null}
                   {idle &&
+                    !result.applied &&
                     result.integrate.status !== 'running' &&
                     Object.values(result.engines).some((e) => e.status === 'done') && (
                       <button
@@ -740,9 +755,20 @@ export function AiComparePopover({
     if (reason === 'submit-not-ready') return t('cmpSendUnavailable')
     return reason
   }
+  const controlOptions =
+    active || state.phase === 'batchDone'
+      ? [
+          ...COMPARE_SITES.map((s) => ({ id: s.id, name: s.name, metered: false })),
+          ...runOptions.current.connections.candidates,
+        ]
+      : engineOptions
   const started = state.phase !== 'idle'
   const canStart =
-    consent === true && (!needsWeb || installed) && enabledEngines.length > 0 && !active
+    consent === true &&
+    (!needsWeb || installed) &&
+    enabledEngines.length > 0 &&
+    !connections.checking &&
+    !active
 
   return (
     <div
@@ -852,8 +878,8 @@ export function AiComparePopover({
               </div>
             )}
             <div className="cmp-controls">
-              <div className="cmp-switches" role="group">
-                {engineOptions.map((site) => (
+              <div className="cmp-switches" role="group" aria-label={t('cmpConnectedAi')}>
+                {controlOptions.map((site) => (
                   <label key={site.id} className="cmp-auto">
                     <input
                       type="checkbox"
@@ -863,6 +889,10 @@ export function AiComparePopover({
                       onChange={(e) => savePrefs({ engines: { [site.id]: e.target.checked } })}
                     />
                     {site.name}
+                    {site.metered && <span className="cmp-warn">{t('cmpMetered')}</span>}
+                    {site.id.startsWith('connected-') && (
+                      <span className="cmp-chip cmp-chip-done">{t('cmpConnectionReady')}</span>
+                    )}
                   </label>
                 ))}
               </div>
@@ -889,15 +919,6 @@ export function AiComparePopover({
                 </label>
               </div>
               <div className="cmp-actions">
-                <label className="cmp-auto">
-                  <input
-                    type="checkbox"
-                    checked={autoIntegrate}
-                    disabled={connectedSelected}
-                    onChange={(e) => savePrefs({ autoIntegrate: e.target.checked })}
-                  />
-                  {t('cmpAutoIntegrate')}
-                </label>
                 <label className="cmp-auto">
                   {t('cmpTargetLanguage')}
                   <select
@@ -979,7 +1000,17 @@ export function AiComparePopover({
                   </div>
                 )}
             </div>
-            {connectedSelected && <div className="cmp-hint">{t('cmpIntegrationSeparate')}</div>}
+            <div className="cmp-hint">
+              {t('cmpIntegrationSeparate', {
+                name:
+                  (started ? runOptions.current.connections.main : connections.main)?.name ??
+                  t('cmpConnectedUnavailable'),
+              })}
+              {(started ? runOptions.current.connections.main : connections.main)?.metered && (
+                <span className="cmp-warn"> {t('cmpMetered')}</span>
+              )}
+            </div>
+            {connections.checking && <div className="cmp-hint">{t('cmpStWaiting')}</div>}
             {state.units.some(
               (u) =>
                 !u.applied &&

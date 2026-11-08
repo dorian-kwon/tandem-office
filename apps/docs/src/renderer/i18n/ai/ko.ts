@@ -39,13 +39,14 @@ export const ko = {
   cmpAllBlocked: '모든 AI가 차단되었습니다. 여기서 멈추고 사이트를 직접 확인해 주세요.',
   cmpFlatNote:
     '단위마다 답변 하나를 골라 주세요. 일반 글자로 바꾸며, 각 적용은 따로 되돌릴 수 있습니다.',
+  cmpMetered: '사용량 요금',
+  cmpConnectionReady: '연결됨',
   cmpConnectedAi: '연결된 AI',
   cmpConnectedUnavailable:
     '선택한 AI를 사용할 수 없습니다. AI 패널에서 연결 상태와 첫 사용 안내를 확인해 주세요.',
-  cmpIntegrationSeparate:
-    '연결된 AI가 이미 비교 답변을 만듭니다. 자동 통합은 꺼지며, 별도 요청은 지금 통합을 눌러 주세요.',
+  cmpIntegrationSeparate: '메인 AI {name}가 자동 통합합니다. 후보 스위치를 꺼도 통합은 유지됩니다.',
   cmpLeaves:
-    '켠 비교 엔진에 고른 단위의 글과 한국어 원문이 있으면 원문도 보냅니다. {sites}은 ego를 쓰고 연결된 AI는 이 앱의 현재 연결과 모델을 그대로 쓰며, ChatGPT 웹사이트 로그인은 사용하지 않습니다. 각 서비스 약관이 적용되며 일부를 가릴 수 없습니다. 범위와 엔진을 고른 뒤 비교를 눌러야 보냅니다.',
+    '켠 연결 AI에 선택한 단위와 원문 맥락을 동시에 보내 답변을 하나씩 받습니다. 현재 메인 AI가 답변들을 받아 자동 통합합니다. {sites}은 켰을 때 ego를 사용합니다. 저장된 유료 키는 자동 추가하지 않습니다. 제공자 약관이 적용되며 전송은 취소할 수 없습니다.',
   cmpBtn: 'AI 비교',
   cmpTitle: '다른 AI와 비교',
   cmpConsentAgree: '이해했습니다, 계속',

@@ -235,7 +235,7 @@ describe('comparison scheduler', () => {
     expect(runner.getState().engines).toEqual(['copilot', 'connected-ai'])
   })
 
-  it('does not auto-integrate a connected AI candidate but keeps explicit manual integration', async () => {
+  it('automatically integrates even when the main AI was also a candidate', async () => {
     let integrations = 0
     const { runner } = setup({
       integrate: async () => {
@@ -245,12 +245,73 @@ describe('comparison scheduler', () => {
     })
     runner.start(units.slice(0, 1), ['copilot', 'connected-ai'], true)
     await settle()
-    expect(integrations).toBe(0)
-    expect(runner.getState().units[0]?.integrate.status).toBe('idle')
-    runner.integrateNow('u0')
-    await settle()
+    expect(runner.getState().units[0]?.integrate.status).toBe('done')
     expect(integrations).toBe(1)
     expect(runner.getState().units[0]?.integrate.text).toBe('Explicit integration')
+  })
+
+  it('invalidates and recomputes a final once after successful failed-candidate retries', async () => {
+    let retry = false
+    const finals: string[][] = []
+    const pending = deferred<CompareAnswer>()
+    const { runner } = setup({
+      driver: {
+        detect: async () => ({ installed: true }),
+        ask: async (id) => {
+          if (id === 'copilot') return { ok: true, text: 'Preserved' }
+          return retry ? pending.promise : { ok: false, reason: 'temporary' }
+        },
+      },
+      integrate: async (_, answers) => {
+        finals.push(answers.map((a) => a.text))
+        return { ok: true, text: finals.length === 1 ? 'Old final' : 'New final' }
+      },
+    })
+    runner.start(units.slice(0, 1), ['copilot', 'connected-codex'], true)
+    await settle()
+    expect(finals).toEqual([['Preserved']])
+    retry = true
+    runner.retryFailed()
+    await settle()
+    expect(runner.getState().units[0]?.integrate.text).toBeUndefined()
+    expect(runner.getState().units[0]?.engines.copilot?.text).toBe('Preserved')
+    pending.resolve({ ok: true, text: 'Recovered' })
+    await settle()
+    expect(finals).toEqual([['Preserved'], ['Preserved', 'Recovered']])
+    expect(runner.getState().units[0]?.integrate.text).toBe('New final')
+  })
+
+  it('does not spend another integration request when all candidate retries still fail', async () => {
+    const integrate = vi.fn(async () => ({ ok: true as const, text: 'Preserved final' }))
+    const { runner } = setup({
+      driver: {
+        detect: async () => ({ installed: true }),
+        ask: async (id) =>
+          id === 'copilot' ? { ok: true, text: 'Success' } : { ok: false, reason: 'temporary' },
+      },
+      integrate,
+    })
+    runner.start(units.slice(0, 1), ['copilot', 'connected-codex'], true)
+    await settle()
+    runner.retryFailed()
+    await settle()
+    expect(integrate).toHaveBeenCalledTimes(1)
+    expect(runner.getState().units[0]?.integrate.text).toBe('Preserved final')
+  })
+
+  it('marks no-candidate integration retryable without calling the main AI', async () => {
+    const integrate = vi.fn()
+    const { runner } = setup({
+      driver: {
+        detect: async () => ({ installed: true }),
+        ask: async () => ({ ok: false, reason: 'temporary' }),
+      },
+      integrate,
+    })
+    runner.start(units.slice(0, 1), ['connected-codex'], true)
+    await settle()
+    expect(integrate).not.toHaveBeenCalled()
+    expect(runner.getState().units[0]?.integrate.status).toBe('failed')
   })
 
   it('marks blocked engines once and skips them in later units and manual retries', async () => {

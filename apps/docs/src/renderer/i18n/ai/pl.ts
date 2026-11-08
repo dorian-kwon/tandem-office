@@ -41,13 +41,15 @@ export const pl = {
     'Wszystkie silniki są zablokowane. Zatrzymaj działanie i samodzielnie sprawdź witryny.',
   cmpFlatNote:
     'Wybierz jedną odpowiedź dla każdej jednostki. Zamiany używają zwykłego tekstu i można je cofać osobno.',
+  cmpMetered: 'Płatne użycie',
+  cmpConnectionReady: 'Połączono',
   cmpConnectedAi: 'Połączona AI',
   cmpConnectedUnavailable:
     'Wybrana AI jest niedostępna. Sprawdź połączenie i komunikat pierwszego użycia w panelu AI.',
   cmpIntegrationSeparate:
-    'Połączona AI już dostarcza odpowiedź. Automatyczna integracja jest wyłączona; Integruj teraz tworzy osobne żądanie.',
+    'Główna AI {name} automatycznie łączy odpowiedzi. Wyłączenie jej kandydatury nie wyłącza łączenia.',
   cmpLeaves:
-    'Włączone silniki otrzymują wybraną jednostkę i dostępny koreański oryginał. {sites} używa ego; połączona AI używa bieżącego połączenia i modelu tej aplikacji, bez logowania w witrynie ChatGPT. Obowiązują ich warunki. Nie można ukryć fragmentów. Wybierz zakres i silniki, a następnie naciśnij Porównaj.',
+    'Włączone połączone AI otrzymują równolegle wybrany fragment i kontekst oryginału, po jednej odpowiedzi każda. Wybrana główna AI otrzymuje odpowiedzi i automatycznie je łączy. {sites} używa ego po włączeniu. Zapisane płatne klucze nie są dodawane automatycznie. Obowiązują warunki dostawców; wysłania nie można cofnąć.',
   cmpBtn: 'Porównanie AI',
   cmpTitle: 'Porównaj z innymi AI',
   cmpConsentAgree: 'Rozumiem, dalej',

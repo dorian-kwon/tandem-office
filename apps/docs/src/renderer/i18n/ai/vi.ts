@@ -39,13 +39,15 @@ export const vi = {
   cmpAllBlocked: 'Tất cả công cụ đều bị chặn. Hãy dừng và tự xử lý các trang web.',
   cmpFlatNote:
     'Chọn một câu trả lời cho mỗi đơn vị. Nội dung thay thế là văn bản thuần và có thể hoàn tác riêng từng lần.',
+  cmpMetered: 'Sử dụng trả phí',
+  cmpConnectionReady: 'Đã kết nối',
   cmpConnectedAi: 'AI đã kết nối',
   cmpConnectedUnavailable:
     'AI đã chọn chưa khả dụng. Kiểm tra kết nối và thông báo lần đầu trong bảng AI.',
   cmpIntegrationSeparate:
-    'AI đã kết nối đã cung cấp câu trả lời. Tự động tổng hợp đã tắt; Tổng hợp ngay tạo yêu cầu riêng.',
+    'AI chính {name} tự động tổng hợp. Tắt ứng viên của nó không tắt tổng hợp.',
   cmpLeaves:
-    'Các công cụ được bật nhận đơn vị đã chọn và bản gốc tiếng Hàn nếu có. {sites} dùng ego; AI đã kết nối dùng kết nối và mô hình hiện tại của ứng dụng, không dùng đăng nhập trang ChatGPT. Áp dụng điều khoản dịch vụ và không thể ẩn một phần. Chọn phạm vi và công cụ rồi nhấn So sánh.',
+    'Các AI kết nối được bật nhận từng phần đã chọn và ngữ cảnh gốc đồng thời, mỗi AI trả lời một lần. AI chính được chọn nhận các câu trả lời và tự động tổng hợp. {sites} dùng ego khi bật. Khóa trả phí đã lưu không được tự thêm. Áp dụng điều khoản nhà cung cấp; không thể thu hồi nội dung đã gửi.',
   cmpBtn: 'So sánh AI',
   cmpTitle: 'So sánh với AI khác',
   cmpConsentAgree: 'Tôi hiểu, tiếp tục',

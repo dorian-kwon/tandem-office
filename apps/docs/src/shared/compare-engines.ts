@@ -1,4 +1,8 @@
-/** App AI candidates never pass through the web comparison driver. */
-export const CONNECTED_AI_ENGINE_ID = 'connected-ai'
-export const COMPARE_ENGINE_IDS = ['copilot', CONNECTED_AI_ENGINE_ID] as const
-export type CompareEngineId = (typeof COMPARE_ENGINE_IDS)[number]
+import { AI_PROVIDERS, type AiProviderId } from '@genoffice/ai-provider/browser'
+
+/** App candidates route through pinned provider settings, never through the browser driver. */
+export const COMPARE_ENGINE_IDS: readonly string[] = [
+  'copilot',
+  ...AI_PROVIDERS.map((provider) => `connected-${provider.id}`),
+]
+export type CompareEngineId = 'copilot' | `connected-${AiProviderId}`

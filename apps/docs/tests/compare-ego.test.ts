@@ -479,7 +479,7 @@ describe('consent and source copy', () => {
     expect(await readCompareConsent(fs)).toBe(false)
   })
 
-  it.each([2, 3])(
+  it.each([2, 3, 4])(
     'does not inherit web consent v%s or retired engine switches for the connected AI',
     async (version) => {
       let stored = JSON.stringify({
@@ -489,10 +489,10 @@ describe('consent and source copy', () => {
       const fs = { read: async () => stored, write: async (text: string) => void (stored = text) }
       expect(await readCompareConsent(fs)).toBe(false)
       expect(await readComparePrefs(fs)).toEqual({
-        engines: { copilot: false, 'connected-ai': false },
+        engines: { copilot: false },
       })
       await writeCompareConsent(fs)
-      expect(JSON.parse(stored).consentVersion).toBe(4)
+      expect(JSON.parse(stored).consentVersion).toBe(5)
       expect(COMPARE_SITES.map((site) => site.id)).toEqual(['copilot'])
     },
   )
@@ -523,11 +523,11 @@ describe('consent and source copy', () => {
     }
     await Promise.all([
       writeComparePrefs(fs, { engines: { copilot: false } }),
-      writeComparePrefs(fs, { engines: { 'connected-ai': false }, autoIntegrate: false }),
+      writeComparePrefs(fs, { engines: { 'connected-codex': false }, autoIntegrate: false }),
       writeCompareConsent(fs),
     ])
     expect(await readComparePrefs(fs)).toEqual({
-      engines: { copilot: false, 'connected-ai': false },
+      engines: { copilot: false, 'connected-codex': false },
       autoIntegrate: false,
     })
     expect(await readCompareConsent(fs)).toBe(true)

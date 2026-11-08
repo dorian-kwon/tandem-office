@@ -40,13 +40,15 @@ export const ms = {
   cmpAllBlocked: 'Semua enjin disekat. Berhenti dan urus laman sendiri.',
   cmpFlatNote:
     'Pilih satu jawapan bagi setiap unit. Penggantian menggunakan teks biasa dan boleh dibuat asal secara berasingan.',
+  cmpMetered: 'Penggunaan berbayar',
+  cmpConnectionReady: 'Disambungkan',
   cmpConnectedAi: 'AI disambungkan',
   cmpConnectedUnavailable:
     'AI yang dipilih tidak tersedia. Semak sambungan dan notis penggunaan pertama dalam panel AI.',
   cmpIntegrationSeparate:
-    'AI disambungkan sudah memberikan jawapan. Penggabungan automatik dimatikan; Gabungkan sekarang membuat permintaan berasingan.',
+    'AI utama {name} menggabungkan secara automatik. Mematikan calonnya tidak mematikan gabungan.',
   cmpLeaves:
-    'Enjin yang dihidupkan menerima unit pilihan dan asal Korea jika ada. {sites} menggunakan ego; AI disambungkan menggunakan sambungan dan model semasa aplikasi tanpa log masuk laman ChatGPT. Syarat perkhidmatan terpakai dan bahagian tidak boleh disembunyikan. Pilih skop dan enjin kemudian tekan Bandingkan.',
+    'AI tersambung yang diaktifkan menerima setiap unit dipilih dan konteks asal secara serentak, satu jawapan setiap AI. AI utama dipilih menerima jawapan dan menggabungkannya secara automatik. {sites} menggunakan ego apabila diaktifkan. Kunci berbayar tersimpan tidak ditambah secara automatik. Syarat penyedia terpakai; kandungan dihantar tidak dapat ditarik balik.',
   cmpBtn: 'Bandingkan AI',
   cmpTitle: 'Bandingkan dengan AI lain',
   cmpConsentAgree: 'Saya faham, teruskan',

@@ -38,12 +38,13 @@ export const zhTW = {
   cmpBlockedLine: '{name}：已封鎖（{reason}）。本次執行不再重試。',
   cmpAllBlocked: '所有引擎均遭封鎖。請停止並自行處理網站。',
   cmpFlatNote: '每個單元選一個回答。替換使用純文字，每次套用皆可單獨復原。',
+  cmpMetered: '按量付費',
+  cmpConnectionReady: '已連線',
   cmpConnectedAi: '已連線的 AI',
   cmpConnectedUnavailable: '所選 AI 無法使用。請在 AI 面板檢查連線與首次使用提示。',
-  cmpIntegrationSeparate:
-    '已連線的 AI 已提供比較答案。自動整合已關閉；如需另行要求，請按立即整合。',
+  cmpIntegrationSeparate: '主 AI {name} 自動整合。關閉其候選開關不會關閉整合。',
   cmpLeaves:
-    '啟用的比較引擎會收到所選單元及可用的韓語原文。{sites} 使用 ego；已連線的 AI 使用本應用程式目前的連線與模型，不使用 ChatGPT 網站登入。適用各服務條款，無法隱藏部分內容。選好範圍與引擎後，按比較才會傳送。',
+    '已啟用的連線 AI 同時接收所選單元和原文脈絡，各回傳一個答案。目前主 AI 接收答案並自動整合。啟用 {sites} 時使用 ego。不會自動加入已儲存的付費金鑰。適用提供者條款；傳送後無法撤回。',
   cmpBtn: 'AI 比較',
   cmpTitle: '與其他 AI 比較',
   cmpConsentAgree: '我了解,繼續',

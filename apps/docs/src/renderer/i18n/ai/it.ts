@@ -44,13 +44,15 @@ export const it = {
   cmpAllBlocked: 'Tutti i motori sono bloccati. Fermati e intervieni personalmente sui siti.',
   cmpFlatNote:
     'Scegli una risposta per unità. Le sostituzioni usano testo semplice e si possono annullare singolarmente.',
+  cmpMetered: 'Uso a pagamento',
+  cmpConnectionReady: 'Connesso',
   cmpConnectedAi: 'IA collegata',
   cmpConnectedUnavailable:
     'L’IA scelta non è disponibile. Controlla connessione e avviso del primo utilizzo nel pannello IA.',
   cmpIntegrationSeparate:
-    'L’IA collegata fornisce già una risposta. L’integrazione automatica è disattivata; Integra ora avvia una richiesta separata.',
+    'Sintesi automatica tramite l’IA principale: {name}. Disattivarla come candidata non disattiva la sintesi.',
   cmpLeaves:
-    'I motori attivati ricevono l’unità scelta e l’eventuale originale coreano. {sites} usa ego; l’IA collegata usa la connessione e il modello attuali di questa app, senza accesso al sito ChatGPT. Si applicano i loro termini. Non si possono nascondere parti. Scegli ambito e motori e premi Confronta per inviare.',
+    'Le IA connesse abilitate ricevono in parallelo ogni unità scelta e il contesto originale, con una risposta ciascuna. L’IA principale selezionata riceve le risposte e le combina automaticamente. {sites} usa ego se abilitato. Le chiavi a pagamento salvate non vengono aggiunte automaticamente. Valgono i termini dei fornitori; gli invii non sono revocabili.',
   cmpBtn: 'Confronto IA',
   cmpTitle: 'Confronta con altre IA',
   cmpConsentAgree: 'Ho capito, continua',

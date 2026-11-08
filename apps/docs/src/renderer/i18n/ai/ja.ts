@@ -38,13 +38,14 @@ export const ja = {
   cmpBlockedLine: '{name}：ブロックされました（{reason}）。今回の実行では再試行しません。',
   cmpAllBlocked: 'すべてのエンジンがブロックされました。停止してサイトを直接確認してください。',
   cmpFlatNote: '単位ごとに回答を1つ選びます。置換はプレーンテキストで、適用ごとに元に戻せます。',
+  cmpMetered: '従量課金',
+  cmpConnectionReady: '接続済み',
   cmpConnectedAi: '接続済み AI',
   cmpConnectedUnavailable:
     '選択した AI を利用できません。AI パネルで接続と初回使用の案内を確認してください。',
-  cmpIntegrationSeparate:
-    '接続済み AI が比較回答を作るため自動統合はオフです。別の要求には今すぐ統合を使います。',
+  cmpIntegrationSeparate: 'メイン AI {name} が自動統合します。候補をオフにしても統合は続きます。',
   cmpLeaves:
-    '有効な比較エンジンに選択した単位と韓国語原文があれば送ります。{sites} は ego を使い、接続済み AI はこのアプリの現在の接続とモデルを使います。ChatGPT サイトのログインは使いません。各サービスの規約が適用され、一部を隠せません。範囲とエンジンを選び比較を押すと送信します。',
+    '有効な接続 AI に選択単位と原文の文脈を並列送信し、各 AI から回答を一つ得ます。現在のメイン AI が回答を受け取り自動統合します。{sites} は有効時に ego を使います。保存した有料キーは自動追加しません。提供者の規約が適用され、送信は取り消せません。',
   cmpBtn: 'AI 比較',
   cmpTitle: '他の AI と比較',
   cmpConsentAgree: '理解しました。続ける',
