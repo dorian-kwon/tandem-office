@@ -131,6 +131,8 @@ import { hfFooterLine, hfLayoutResolved, hfPhantomSpec, hfWithPhantom } from './
 import { textColorValue } from './editor/text-color'
 import { textOutlineCssValue } from './editor/text-outline'
 import { AiAskPopover } from './components/AiAskPopover'
+import { AiComparePopover } from './components/AiComparePopover'
+import type { SelectionSnapshot } from './compare/replace-selection'
 import { EDIT_QUEUE_MAX, selectionForAnchor, type DocsEditQueueItem } from './ai/edit-queue'
 import { addQueueAnchor, clearQueueAnchors, removeQueueAnchors } from './editor/ai-queue-anchors'
 import {
@@ -1071,6 +1073,8 @@ export function App() {
   const [themeColorsDirty, setThemeColorsDirty] = useState(false)
   const [commentComposing, setCommentComposing] = useState(false)
   const [trackChanges, setTrackChanges] = useState(false)
+  /** the selection the "AI compare" popup is open on, or null when it is closed */
+  const [compareSelection, setCompareSelection] = useState<SelectionSnapshot | null>(null)
   const [revisionDisplay, setRevisionDisplay] = useState<RevisionDisplayMode>('all')
   /** the user picked a Markup view this session: opening another document keeps it */
   const markupPickedRef = useRef(false)
@@ -7706,6 +7710,16 @@ export function App() {
                 onQueueAdd={queueAdd}
                 onQueueUpdate={queueUpdate}
                 onQueueRemove={queueRemove}
+                onCompare={setCompareSelection}
+              />
+            )}
+            {doc && compareSelection && (
+              <AiComparePopover
+                editor={editor}
+                snapshot={compareSelection}
+                settings={settings}
+                trackChanges={trackChanges}
+                onClose={() => setCompareSelection(null)}
               />
             )}
             {doc && <PasteOptionsChip editor={editor} />}

@@ -16,6 +16,7 @@ import { CellSelection } from '@tiptap/pm/tables'
 import { useI18n, type StringKey } from '../i18n/locale'
 import { AI_QUEUE_ANCHOR_CLICK, queueAnchorRange } from '../editor/ai-queue-anchors'
 import { setInactiveSelectionShown } from '../editor/inactive-selection'
+import { snapshotSelection, type SelectionSnapshot } from '../compare/replace-selection'
 import {
   EDIT_INSTRUCTION_MAX,
   EDIT_QUEUE_MAX,
@@ -40,6 +41,8 @@ interface Props {
   onQueueAdd: (text: string) => void
   onQueueUpdate: (qid: string, text: string) => void
   onQueueRemove: (qid: string) => void
+  /** open the "AI compare" popup on the current selection */
+  onCompare?: (selection: SelectionSnapshot) => void
 }
 
 type OpenState = { mode: 'new' } | { mode: 'edit'; qid: string }
@@ -139,6 +142,7 @@ export function AiAskPopover({
   onQueueAdd,
   onQueueUpdate,
   onQueueRemove,
+  onCompare,
 }: Props): React.JSX.Element | null {
   const { t, lang } = useI18n()
   // the project's target language when this document belongs to a translation project,
@@ -507,6 +511,27 @@ export function AiAskPopover({
                 />
               </svg>
               {t('aiAskGoogleTranslate')}
+            </button>
+          )}
+          {onCompare && searchQuery(editor) && (
+            <button
+              className="ai-ask-trigger ai-ask-search"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                const snap = snapshotSelection(editor)
+                if (snap) onCompare(snap)
+              }}
+            >
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" aria-hidden>
+                <path
+                  d="M4 8h13M13 4l4 4-4 4M20 16H7M11 12l-4 4 4 4"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              {t('cmpBtn')}
             </button>
           )}
         </div>

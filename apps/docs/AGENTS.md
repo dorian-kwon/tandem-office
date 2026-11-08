@@ -61,6 +61,12 @@ Word 문서(.docx)와 ODT(.odt) 에디터다. 그리고 배포되는 앱 전체�
 - 문서 바이트는 IPC 응답이 아니라 미디어 프로토콜의 일회용 주소로 렌더러에 건넨다(`byte-handoff.ts`). IPC 직렬화가 버퍼를 통째로 복사해 1GB 파일에서 메인 프로세스가 죽었기 때문이다.
 - 디자인 템플릿 글꼴은 설치 파일에 한 번만 들어 있고(`resources/template-fonts`) 렌더러 빌드 자산으로 import하지 않는다. 같은 미디어 프로토콜의 `template-fonts` 호스트가 목록에 있는 파일만 내주고(`main/lazy-media.ts`가 `@genoffice/electron-utils/template-font-response`로 답한다. 면 목록과 주소는 `@genoffice/ui/template-fonts`에 있다), 렌더러가 시작할 때 실제 패밀리 이름으로 등록한다(`renderer/template-fonts.ts`). 인쇄와 PDF 내보내기(창 없는 내보내기 포함)는 같은 렌더러에서 돌므로 따로 등록하지 않는다.
 
+## AI 비교 (웹 AI 비교 창)
+
+- 선택 단추 "AI 비교"(`AiAskPopover`)가 `components/AiComparePopover.tsx`를 연다. 안에서 도는 규칙은 `renderer/compare/`(프롬프트와 정리 `prompts.ts`, 상태 기계 `run-state.ts`, 끌기 제한 `drag-clamp.ts`, 선택 바꾸기 `replace-selection.ts`, 원문 찾기 `source-locate.ts`)에 순수 함수로 있다. 뒷단은 `src/main/compare/`(`ego-driver.ts` 실제 구동, `ego-script.ts` 스크립트 만들기, `ego-detect.ts`, `compare-ipc.ts`)이고 `registerAiIpc`가 등록한다.
+- 웹 쪽은 `CompareDriver` 인터페이스 뒤에만 있다. 시험은 가짜 구동기를 쓴다. 사이트별 값은 `src/shared/compare-sites.ts` 한 곳이고 전부 `verified: false`다(확인 방법: `docs/superpowers/notes/manual-checks.md`의 "AI compare").
+- 바꾸기는 `replaceInlineRange`(replace_selection과 같은 길)를 쓰고 창을 열 때 저장한 범위와 글 지문이 다르면 거절한다. ego lite 설치 파일은 받지도 실행하지도 않는다(`docs/security.md`의 "웹 AI 비교").
+
 ## 로컬 AI (결정 0067)
 
 - `registerAiIpc`가 `ai:local-models`·`ai:local-inspect`·`ai:local-test`·`ai:local-test-cancel`을 등록한다. 입력은 `local-ipc.ts` 파서로 검사하고, 실패는 `shape`로 답한다. 연결 테스트는 보낸 창(`event.sender.id`)과 `testId`로 끊을 수 있고, 보낸 창이 닫혀도 끊긴다(`abortOnDestroyed`).

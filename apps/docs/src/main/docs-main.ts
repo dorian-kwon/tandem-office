@@ -255,6 +255,7 @@ import {
   writeStarredItems,
 } from './starred-files'
 import { registerFreeAiIpc } from './free-ai-ipc'
+import { registerCompareIpc } from './compare/compare-ipc'
 import { normalizeReadUrlRequest, unexpectedReadUrlFailure } from './read-url-ipc'
 import { initDocsAutoUpdater } from './updater'
 import { registerZoteroIpc, teardownZoteroIpc } from './zotero-ipc'
@@ -4399,6 +4400,9 @@ export function registerAiIpc(): void {
       return aiChatFailure(err, () => tm('errAiBusy'))
     }
   })
+
+  // the "AI compare" popup: ego lite driver, the Korean original of a translated document, consent
+  registerCompareIpc({ openPathOf: (wcId) => openDocByWc.get(wcId) })
 }
 
 // ── project-store IPC (shared across docs / slides / sheets) ──────────────

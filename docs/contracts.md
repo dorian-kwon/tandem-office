@@ -586,6 +586,13 @@ metadata:
 
 **편집기 다리.** 편집기 9곳과 홈 창의 preload가 `window.aiOfficeMcpTools`(`@genoffice/electron-utils/mcp-tools-bridge`)로 내준다. `list()`, `call(server, tool, input, callId)`, `cancel(callId)`, `onChanged(listener)`, `retry(server)`, `openSettings(server)`가 있고, 목록의 도구에는 서버가 `destructiveHint: true`를 붙였을 때만 `destructive: true`가 붙는다(허락 카드의 "지우거나 바꿀 수 있음" 표시). `call`의 답은 두 종류의 서버 모두 뒷단에서 거르고 자른 글 `{ ok: true, output, isError }`이거나 거절 `{ ok: false, error }`다(`@genoffice/agent-core/user-mcp/result`의 `McpCallAnswer`). 서버가 돌려준 결과 그대로는 창으로 건너가지 않는다. 창이 닫히면 그 창의 호출은 끊긴다. 창구는 `mcp-tools:list`, `mcp-tools:call`, `mcp-tools:cancel`, `mcp-tools:retry`, `mcp-tools:open-settings`와 변경 알림 `mcp-tools:changed`다. 목록에는 승인된 도구 정의와 상태만 있고 비밀값은 없다. 껍데기 앱이 없는 창은 빈 목록과 거절을 받는다. 설정 화면의 창구(`mcp-servers:*`)는 껍데기 앱의 메인 창에만 답한다. 바깥 프로그램에 약속하는 것은 아니다.
 
+## 웹 AI 비교 (`web-compare.json`, ego lite 구동)
+
+- 데이터 폴더의 `web-compare.json`은 `{ "consentVersion": 1 }` 하나다. Word 편집기 "AI 비교" 창의 첫 사용 확인을 기억한다. 값이 없거나 다른 판이면 다시 묻는다. 앱만 읽고 쓴다. 터미널 명령어와 MCP는 읽지 않는다.
+- IPC 채널(`apps/docs/src/shared/compare.ts`): `compare:detect`(`{ installed, path? }`), `compare:ask`(`{ id, siteId, prompt }` → `{ ok: true, text } | { ok: false, reason }`), `compare:cancel`(id), `compare:read-source`(번역 프로젝트의 `source/` 사본 바이트, 같은 이름의 `.docx`만, 40 MiB까지), `compare:get-consent`, `compare:set-consent`.
+- `reason`의 코드: `login-wall`(로그인·가입 쪽으로 넘어가거나 벽이 입력칸을 덮음), `no-prompt-box`(제한 시간 안에 입력칸이 없음)은 그 엔진을 조용히 건너뛴다(오류 아님). `needs-user`는 ego lite가 사람에게 창을 넘긴 것(브라우저 권한 창)이고 앱은 돌아가서 다시 시도하지 않는다. 입력칸이 있고 보낼 수 있는 손님(로그아웃) 상태는 그대로 쓴다. 그 밖의 `reason`은 사람이 읽는 짧은 진단 글이다.
+- 사이트 표(`apps/docs/src/shared/compare-sites.ts`)가 엔진 목록이다. 한 줄을 더하거나 빼면 상태 줄, 카드, 프롬프트, 다시 시도가 따라 바뀐다.
+
 ## 구독 연결 상태 (앱 안의 창구)
 
 앱 안에서 뒷단이 화면에 주는 값이다. 바깥 프로그램에는 나가지 않는다.

@@ -14,6 +14,7 @@ import { splitPaneBridge } from '@genoffice/electron-utils/split-pane-bridge'
 import type { IpcRendererEvent } from 'electron'
 import { SUBSCRIPTION_IPC_CHANNELS } from '@genoffice/ai-provider/browser'
 import { VIEW_IMAGE_CHANNEL } from '../shared/ipc'
+import { COMPARE_CHANNELS } from '../shared/compare'
 import { subscriptionLaunchResultOf, subscriptionStatusMapOf } from '../shared/subscription-api'
 import type { SubscriptionApi } from '../shared/subscription-api'
 import type { AiPanelPrefs } from '@genoffice/ui'
@@ -68,6 +69,12 @@ const api: DesktopApi = {
   isTranslationOutput: () => ipcRenderer.invoke('app:is-translation-output'),
   getTranslationLanguages: () => ipcRenderer.invoke('app:get-translation-languages'),
   isTranslationSource: () => ipcRenderer.invoke('app:is-translation-source'),
+  compareDetect: () => ipcRenderer.invoke(COMPARE_CHANNELS.detect),
+  compareAsk: (request) => ipcRenderer.invoke(COMPARE_CHANNELS.ask, request),
+  compareCancel: (id) => ipcRenderer.invoke(COMPARE_CHANNELS.cancel, id),
+  compareReadSource: () => ipcRenderer.invoke(COMPARE_CHANNELS.readSource),
+  compareGetConsent: () => ipcRenderer.invoke(COMPARE_CHANNELS.getConsent),
+  compareSetConsent: () => ipcRenderer.invoke(COMPARE_CHANNELS.setConsent),
   onAutoSaveDefaultChanged: (handler) => {
     const listener = (_event: IpcRendererEvent, value: AutoSaveDefault) => handler(value)
     ipcRenderer.on('app:auto-save-default-changed', listener)

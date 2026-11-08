@@ -202,6 +202,37 @@ app's own features:
   in the editors. Searches are not asked about: a search query goes only to
   the search service.
 
+## Comparing with other AIs on the web (Word editor)
+
+The **AI compare** button next to a text selection in the Word editor asks
+Gemini, Claude, Copilot and Grok, through their own web pages, to check and polish the
+selected English text against its Korean original. It exists only so that you can
+compare their answers with the original, and it does nothing until you press
+**Compare** in its window.
+
+- **What is sent.** The selected text and the Korean original (filled in from the
+  translation project, or typed or pasted by you), together with one fixed
+  instruction. Nothing else from the document. The editor cannot hide parts of
+  the text from this step, so the window says that the text leaves the app. The
+  first time, the window asks you to acknowledge this; the acknowledgement is
+  kept in `web-compare.json` in the app's data folder.
+- **Where it goes.** The app starts the **ego lite** browser's command-line
+  program on your PC, which opens each site's page and types the prompt there,
+  signed in with the logins you made inside ego lite. The text therefore goes
+  to **Google** (Gemini), **Anthropic** (Claude), **Microsoft** (Copilot) and **xAI** (Grok),
+  under your own accounts, and the terms of those sites apply. Automating a
+  site may be restricted by its terms; that is your decision when you press the
+  button.
+- **What the app never does.** It never reads, copies or stores a cookie, token
+  or login of ego lite or of any of those sites, and it has no login form for
+  them. It never downloads or runs the ego lite installer: when ego lite is
+  missing it asks whether to open the install page (https://github.com/citrolabs/ego-lite)
+  in your browser and you install it yourself.
+- **The integrated version.** When you leave **Auto integrate** on, the app
+  sends the selected text and the web answers to the AI you already selected in
+  the app, as for any other AI request, to combine them. It never switches to a
+  paid route for this.
+
 ## Google Drive
 
 Connecting Google Drive is optional and starts only when you press **Connect

@@ -1,3 +1,5 @@
+import type { CompareAnswer, CompareSourceBytes, EgoDetection } from './compare'
+
 export interface OpenFileResult {
   path: string
   name: string
@@ -448,6 +450,14 @@ export interface DesktopApi {
   /** the language pair of the translation project this document belongs to, or null */
   getTranslationLanguages?(): Promise<{ sourceLang: string; targetLang: string } | null>
   isTranslationSource(): Promise<boolean>
+  /** AI compare popup (ego lite driver in the main process); absent where the preload is older */
+  compareDetect?(): Promise<EgoDetection>
+  compareAsk?(request: { id: string; siteId: string; prompt: string }): Promise<CompareAnswer>
+  compareCancel?(id: string): Promise<void>
+  /** the bytes of the Korean original of the open translated document, or {ok:false} */
+  compareReadSource?(): Promise<CompareSourceBytes>
+  compareGetConsent?(): Promise<boolean>
+  compareSetConsent?(): Promise<boolean>
   onAutoSaveDefaultChanged(handler: (value: AutoSaveDefault) => void): () => void
   /** author of comments and tracked changes (Settings → General, falling back to the OS account) */
   getAuthorName(): Promise<string>

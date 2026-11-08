@@ -8972,6 +8972,208 @@ body.docs-crop-active
   cursor: default;
 }
 
+/* AI compare popup: an in-page floating panel, movable by its title, kept inside the editor area */
+.cmp-pop {
+  position: fixed;
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-12);
+  background: var(--surface);
+  box-shadow: var(--docs-shadow-menu);
+  color: var(--text);
+}
+
+.cmp-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px 8px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.cmp-title:active {
+  cursor: grabbing;
+}
+
+.cmp-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.cmp-close:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.cmp-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  overflow: auto;
+}
+
+.cmp-note,
+.cmp-hint {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+.cmp-label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.cmp-text {
+  resize: vertical;
+  min-height: 54px;
+}
+
+.cmp-missing {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-8);
+  background: var(--color-bg-subtle);
+  font-size: 12.5px;
+}
+
+.cmp-manual {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cmp-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.cmp-auto {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-right: auto;
+  font-size: 12px;
+}
+
+.cmp-warn {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-8);
+  background: var(--color-bg-subtle);
+  font-size: 12px;
+}
+
+.cmp-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cmp-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-8);
+  background: var(--color-bg-page);
+}
+
+.cmp-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.cmp-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 400;
+}
+
+.cmp-card-body {
+  max-height: 140px;
+  overflow: auto;
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.cmp-card-body:empty {
+  display: none;
+}
+
+.cmp-reason {
+  color: var(--text-dim);
+}
+
+.cmp-card-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.cmp-chip {
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.cmp-chip-running {
+  color: var(--color-ai-action);
+}
+
+.cmp-chip-done {
+  color: var(--text);
+}
+
+.cmp-chip-failed {
+  border-color: var(--danger-border);
+  color: var(--danger);
+}
+
+.cmp-link {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-ai-action);
+  font-size: 11.5px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 /* queue card above the composer */
 .ai-queue {
   margin-bottom: 8px;
