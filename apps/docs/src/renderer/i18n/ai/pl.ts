@@ -61,7 +61,7 @@ export const pl = {
   cmpStSkipped: 'Pominięto (brak logowania)',
   cmpStNeedsUser: 'Potrzebna Twoja reakcja',
   cmpNeedsUserHint:
-    'ego lite czeka na Ciebie. Obsłuż komunikat w oknie ego lite, a potem naciśnij Ponów.',
+    'ego lite czeka na Ciebie. W oknie ego lite obsłuż komunikat albo raz zamknij informację o plikach cookie witryny, a potem naciśnij Ponów.',
   cmpNoAnswer:
     'Żaden silnik nie odpowiedział. Możesz skopiować prompt i zapytać samodzielnie na tych stronach.',
   aiAskTitle: 'Poproś o zmianę zaznaczenia',

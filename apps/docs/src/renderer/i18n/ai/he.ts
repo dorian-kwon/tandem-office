@@ -56,7 +56,8 @@ export const he = {
   cmpStop: 'עצור',
   cmpStSkipped: 'דולג (לא מחובר)',
   cmpStNeedsUser: 'נדרשת פעולה שלך',
-  cmpNeedsUserHint: 'ego lite ממתין לך. טפל בהודעה בחלון של ego lite ואז לחץ על נסה שוב.',
+  cmpNeedsUserHint:
+    'ego lite ממתין לך. בחלון של ego lite טפל בהודעה או סגור פעם אחת את הודעת העוגיות של האתר, ואז לחץ על נסה שוב.',
   cmpNoAnswer: 'אף מנוע לא ענה. אפשר להעתיק את ההנחיה ולשאול בעצמך באתרים.',
   aiAskTitle: 'בקש שינוי בקטע שנבחר',
   aiAskEditTitle: 'ערוך הוראה זו בתור',

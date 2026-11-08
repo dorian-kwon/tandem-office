@@ -100,20 +100,39 @@ describe('drag clamp', () => {
 })
 
 describe('site table', () => {
-  it('lists Gemini, Claude, Copilot and Grok symmetrically, all unverified', () => {
+  it('reopen-strategy sites name their sidebar link; prepare steps are valid data', () => {
+    for (const site of COMPARE_SITES) {
+      if (site.readStrategy === 'reopen') expect(site.reopenLinkSelector).toBeTruthy()
+      for (const step of site.prepare ?? []) {
+        expect(step.open.trim()).not.toBe('')
+        expect(step.items.trim()).not.toBe('')
+        expect(() => new RegExp(step.match, 'i')).not.toThrow()
+        expect(() => new RegExp(step.exclude, 'i')).not.toThrow()
+      }
+    }
+    const gemini = COMPARE_SITES.find((s) => s.id === 'gemini')!
+    expect(gemini.readStrategy).toBe('reopen')
+    // the Flash step picks Flash but not Flash-Lite
+    const step = gemini.prepare![0]!
+    const wanted = (text: string) =>
+      new RegExp(step.match, 'i').test(text) && !new RegExp(step.exclude, 'i').test(text)
+    expect(wanted('3.6 Flash')).toBe(true)
+    expect(wanted('3.6 Flash-Lite')).toBe(false)
+    expect(wanted('3.8 사고 모델')).toBe(false)
+    expect(COMPARE_SITES.filter((s) => s.readStrategy === 'live').length).toBe(3)
+  })
+
+  it('lists Gemini, Claude, Copilot and Grok symmetrically; all four are verified on the real sites', () => {
     expect(COMPARE_SITES.map((s) => s.id)).toEqual(['gemini', 'claude', 'copilot', 'grok'])
     for (const site of COMPARE_SITES) {
-      expect(site.verified).toBe(false)
+      expect(site.verified).toBe(true)
       expect(site.url).toMatch(/^https:\/\//)
-      for (const field of [
-        site.inputSelector,
-        site.submitSelector,
-        site.busySelector,
-        site.answerSelector,
-      ])
+      for (const field of [site.inputSelector, site.submitSelector, site.answerSelector])
         expect(field.trim()).not.toBe('')
       expect(() => new RegExp(site.loginHint, 'i')).not.toThrow()
       expect(() => new RegExp(site.loggedOutUrl, 'i')).not.toThrow()
+      // a site may have no stop button: its answer then counts as complete when the text settles
+      expect(typeof site.busySelector).toBe('string')
       expect(['insertText', 'paste', 'fill']).toContain(site.inputMode)
     }
   })

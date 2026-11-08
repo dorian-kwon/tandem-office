@@ -61,7 +61,7 @@ export const ms = {
   cmpStSkipped: 'Dilangkau (belum log masuk)',
   cmpStNeedsUser: 'Tindakan anda diperlukan',
   cmpNeedsUserHint:
-    'ego lite menunggu anda. Uruskan permintaan dalam tetingkap ego lite, kemudian tekan Cuba lagi.',
+    'ego lite menunggu anda. Dalam tetingkap ego lite, uruskan permintaan atau tutup sekali notis kuki tapak, kemudian tekan Cuba lagi.',
   cmpNoAnswer:
     'Tiada enjin yang menjawab. Anda boleh menyalin prompt dan bertanya sendiri di tapak tersebut.',
   aiAskTitle: 'Minta perubahan pada pilihan',

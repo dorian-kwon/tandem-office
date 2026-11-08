@@ -24,10 +24,12 @@ function readSites() {
   const text = readFileSync(tablePath, 'utf8')
   const sites = []
   for (const block of text.split(/\n {2}\{\n/).slice(1)) {
-    const field = (name) =>
-      new RegExp(`\\n    ${name}: ('(?:[^'\\\\]|\\\\.)*'|\\d[\\d_]*),`).exec('\n' + block)?.[1]
-    const str = (name) => {
-      const raw = field(name)
+    const field = (name, indent = 4) =>
+      new RegExp(
+        `\\n {${indent}}${name}:\\s+('(?:[^'\\\\]|\\\\.)*'|"(?:[^"\\\\]|\\\\.)*"|\\d[\\d_]*),`,
+      ).exec('\n' + block)?.[1]
+    const str = (name, indent = 4) => {
+      const raw = field(name, indent)
       return raw ? raw.slice(1, -1).replace(/\\'/g, "'") : ''
     }
     const id = str('id')
@@ -41,7 +43,11 @@ function readSites() {
         send: str('submitSelector'),
         busy: str('busySelector'),
         answer: str('answerSelector'),
+        sidebarLink: str('reopenLinkSelector'),
+        prepareOpen: str('open', 8),
+        prepareItems: str('items', 8),
       },
+      readStrategy: str('readStrategy'),
       loadTimeoutMs: Number((field('loadTimeoutMs') ?? '30000').replace(/_/g, '')),
     })
   }
@@ -67,7 +73,8 @@ catch (e) { console.log('input selector did not show up: ' + SITE.selectors.inpu
 const counts = await page.evaluate((s) => Object.fromEntries(Object.entries(s).map(([k, v]) => {
   try { return [k, v ? document.querySelectorAll(v).length : 'n/a']; } catch (e) { return [k, 'bad selector']; }
 })), SITE.selectors);
-console.log('selector matches (input/send/busy/answer; busy and answer may legitimately be 0 before a prompt):');
+console.log('read strategy: ' + SITE.readStrategy);
+console.log('selector matches (input, send, busy, answer, sidebarLink, prepareOpen, prepareItems; busy, answer and the menu items may legitimately be 0 before a prompt or before the menu opens):');
 console.log(JSON.stringify(counts));
 console.log(await page.snapshot());
 await task.finish({ keep: [] });

@@ -59,7 +59,7 @@ export const vi = {
   cmpStSkipped: 'Đã bỏ qua (chưa đăng nhập)',
   cmpStNeedsUser: 'Cần bạn xử lý',
   cmpNeedsUserHint:
-    'ego lite đang chờ bạn. Hãy xử lý yêu cầu trong cửa sổ ego lite rồi nhấn Thử lại.',
+    'ego lite đang chờ bạn. Trong cửa sổ ego lite, hãy xử lý yêu cầu hoặc đóng thông báo cookie của trang một lần, rồi nhấn Thử lại.',
   cmpNoAnswer:
     'Không có công cụ nào trả lời. Bạn có thể sao chép lời nhắc và tự hỏi trên các trang đó.',
   aiAskTitle: 'Hỏi AI về phần đã chọn',

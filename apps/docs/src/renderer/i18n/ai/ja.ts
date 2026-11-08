@@ -60,7 +60,7 @@ export const ja = {
   cmpStSkipped: 'スキップ(ログインされていません)',
   cmpStNeedsUser: '操作が必要',
   cmpNeedsUserHint:
-    'ego lite があなたの操作を待っています。ego lite のウィンドウで確認を済ませてから「再試行」を押してください。',
+    'ego lite があなたの操作を待っています。ego lite のウィンドウで確認を済ませるか、サイトの Cookie 通知を一度閉じてから「再試行」を押してください。',
   cmpNoAnswer: '回答したエンジンがありません。プロンプトをコピーして、各サイトで直接質問できます。',
   aiAskTitle: '選択範囲への修正を依頼',
   aiAskEditTitle: 'この修正指示を編集',

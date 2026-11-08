@@ -60,7 +60,7 @@ export const cs = {
   cmpStSkipped: 'Přeskočeno (nepřihlášen)',
   cmpStNeedsUser: 'Je potřeba váš zásah',
   cmpNeedsUserHint:
-    'ego lite na vás čeká. Vyřiďte výzvu v okně ego lite a poté stiskněte Zkusit znovu.',
+    'ego lite na vás čeká. V okně ego lite vyřiďte výzvu nebo jednou zavřete upozornění webu na cookies a poté stiskněte Zkusit znovu.',
   cmpNoAnswer:
     'Žádný engine neodpověděl. Můžete zkopírovat prompt a zeptat se sami na těchto stránkách.',
   aiAskTitle: 'Zeptat se AI na výběr',

@@ -60,7 +60,7 @@ export const en = {
   cmpStSkipped: 'Skipped (not logged in)',
   cmpStNeedsUser: 'Needs you',
   cmpNeedsUserHint:
-    'ego lite is waiting for you. Handle the prompt in the ego lite window, then press Retry.',
+    'ego lite is waiting for you. In the ego lite window, handle the prompt or close the site’s cookie notice once, then press Retry.',
   cmpNoAnswer: 'No engine answered. You can copy the prompt and ask on the sites yourself.',
   aiAskTitle: 'Ask AI about the selection',
   aiAskEditTitle: 'Edit this queued instruction',

@@ -62,7 +62,7 @@ export const fr = {
   cmpStSkipped: 'Ignoré (non connecté)',
   cmpStNeedsUser: 'Votre action est requise',
   cmpNeedsUserHint:
-    'ego lite vous attend. Traitez la demande dans la fenêtre d’ego lite, puis appuyez sur Réessayer.',
+    'ego lite vous attend. Dans la fenêtre d’ego lite, traitez la demande ou fermez une fois l’avis de cookies du site, puis appuyez sur Réessayer.',
   cmpNoAnswer:
     'Aucun moteur n’a répondu. Vous pouvez copier le prompt et poser la question vous-même sur les sites.',
   aiAskTitle: 'Demander une modification de la sélection',

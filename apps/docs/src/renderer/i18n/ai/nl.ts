@@ -62,7 +62,7 @@ export const nl = {
   cmpStSkipped: 'Overgeslagen (niet aangemeld)',
   cmpStNeedsUser: 'Uw actie is nodig',
   cmpNeedsUserHint:
-    'ego lite wacht op u. Handel de melding af in het ego lite-venster en druk op Opnieuw proberen.',
+    'ego lite wacht op u. Handel in het ego lite-venster de melding af of sluit eenmalig de cookiemelding van de site en druk op Opnieuw proberen.',
   cmpNoAnswer:
     'Geen enkele engine heeft geantwoord. U kunt de prompt kopiëren en het zelf op de sites vragen.',
   aiAskTitle: 'Vraag een wijziging van de selectie',

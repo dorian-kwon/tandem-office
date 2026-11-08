@@ -63,7 +63,7 @@ export const de = {
   cmpStSkipped: 'Übersprungen (nicht angemeldet)',
   cmpStNeedsUser: 'Ihre Eingabe nötig',
   cmpNeedsUserHint:
-    'ego lite wartet auf Sie. Bearbeiten Sie die Abfrage im ego-lite-Fenster und klicken Sie dann auf Erneut versuchen.',
+    'ego lite wartet auf Sie. Bearbeiten Sie im ego-lite-Fenster die Abfrage oder schließen Sie einmalig den Cookie-Hinweis der Seite und klicken Sie dann auf Erneut versuchen.',
   cmpNoAnswer:
     'Keine Engine hat geantwortet. Sie können den Prompt kopieren und selbst auf den Seiten nachfragen.',
   aiAskTitle: 'Änderung an der Auswahl anfragen',

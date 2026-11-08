@@ -64,7 +64,7 @@ export const it = {
   cmpStSkipped: 'Saltato (accesso non effettuato)',
   cmpStNeedsUser: 'Serve il tuo intervento',
   cmpNeedsUserHint:
-    'ego lite ti sta aspettando. Gestisci la richiesta nella finestra di ego lite, poi premi Riprova.',
+    'ego lite ti sta aspettando. Nella finestra di ego lite gestisci la richiesta o chiudi una volta l’avviso cookie del sito, poi premi Riprova.',
   cmpNoAnswer: 'Nessun motore ha risposto. Puoi copiare il prompt e chiedere tu stesso sui siti.',
   aiAskTitle: 'Richiedi una modifica alla selezione',
   aiAskEditTitle: 'Modifica questa istruzione in coda',

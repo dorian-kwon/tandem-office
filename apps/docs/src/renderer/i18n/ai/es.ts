@@ -62,7 +62,7 @@ export const es = {
   cmpStSkipped: 'Omitido (sin iniciar sesión)',
   cmpStNeedsUser: 'Requiere su acción',
   cmpNeedsUserHint:
-    'ego lite le está esperando. Atienda el aviso en la ventana de ego lite y pulse Reintentar.',
+    'ego lite le está esperando. En la ventana de ego lite, atienda el aviso o cierre una vez el aviso de cookies del sitio y pulse Reintentar.',
   cmpNoAnswer:
     'Ningún motor respondió. Puede copiar el prompt y preguntar usted mismo en los sitios.',
   aiAskTitle: 'Pedir un cambio sobre la selección',

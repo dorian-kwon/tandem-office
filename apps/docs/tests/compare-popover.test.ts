@@ -201,7 +201,9 @@ describe('AI compare popup', () => {
     act(() => button(container, 'Compare')!.click())
     await flush()
     expect(container.textContent).toContain('No engine answered.')
-    expect(container.textContent).toContain('Handle the prompt in the ego lite window')
+    expect(container.textContent).toContain(
+      'handle the prompt or close the site’s cookie notice once',
+    )
     expect(button(container, 'Copy prompt and open Gemini')).toBeDefined()
     expect(container.textContent).not.toContain('Done')
   })

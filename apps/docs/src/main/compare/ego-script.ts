@@ -56,9 +56,27 @@ const inputState = (selector) => {
   const box = el.getBoundingClientRect();
   if (box.width <= 0 || box.height <= 0) return 'none';
   const top = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
-  // something else on top of the box (a login or consent wall) means nothing can be typed
-  return top && (top === el || el.contains(top) || top.contains(el)) ? 'ok' : 'covered';
+  if (top && (top === el || el.contains(top) || top.contains(el))) return 'ok';
+  // something else is on top of the box: a cookie or consent notice only the person should
+  // answer, or a login wall
+  const layer = top ? top.closest('[role="dialog"], [aria-modal="true"], dialog') : null;
+  const words = String((layer || top || document.body).innerText || '').slice(0, 600);
+  return /cookie|쿠키|consent|동의|privacy|개인정보/i.test(words) ? 'consent' : 'covered';
 };
+const firstLink = (selector) => {
+  const link = document.querySelector(selector);
+  return link ? { href: link.getAttribute('href') || '', text: String(link.innerText || link.textContent || '') } : null;
+};
+const clickMatching = (arg) => {
+  const match = new RegExp(arg.match, 'i');
+  const exclude = arg.exclude ? new RegExp(arg.exclude, 'i') : null;
+  for (const item of document.querySelectorAll(arg.items)) {
+    const text = String(item.innerText || item.textContent || '');
+    if (match.test(text) && !(exclude && exclude.test(text))) { item.click(); return true; }
+  }
+  return false;
+};
+const norm = (text) => String(text).toLowerCase().replace(/\s+/g, ' ').trim();
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const pageState = (arg) => {
   const answers = document.querySelectorAll(arg.answer);
@@ -82,6 +100,8 @@ async function main() {
     if (boxState === 'ok') break;
     await sleep(500);
   }
+  // a cookie or consent notice is the person's choice, never clicked for them
+  if (boxState === 'consent') return { ok: false, reason: NEEDS_USER };
   if (boxState === 'covered') return { ok: false, reason: LOGIN_WALL };
   if (boxState !== 'ok') {
     const shot = await page.snapshot();
@@ -89,7 +109,18 @@ async function main() {
     const wall = SITE.loginHint && new RegExp(SITE.loginHint, 'i').test(text);
     return { ok: false, reason: wall ? LOGIN_WALL : NO_PROMPT_BOX };
   }
+  // a preparation (a faster model mode) never fails a run: without it the site's default is used
+  for (const step of SITE.prepare || []) {
+    try {
+      await page.click(step.open);
+      await page.waitForSelector(step.items, { state: 'visible', timeout: 5000 });
+      await page.evaluate(clickMatching, step);
+      await sleep(500);
+    } catch (e) { /* continue with the default mode */ }
+  }
   const arg = { answer: SITE.answerSelector, busy: SITE.busySelector };
+  const reopen = SITE.readStrategy === 'reopen' && SITE.reopenLinkSelector;
+  const beforeLink = reopen ? await page.evaluate(firstLink, SITE.reopenLinkSelector) : null;
   const before = (await page.evaluate(pageState, arg)).count;
   if (SITE.inputMode === 'fill') {
     await page.fill(SITE.inputSelector, JOB.prompt);
@@ -100,6 +131,34 @@ async function main() {
   }
   if (SITE.submit === 'button') await page.click(SITE.submitSelector);
   else await page.press(SITE.inputSelector, 'Enter');
+  if (reopen) {
+    // the live view does not show the answer: read it from the saved conversation, which is the
+    // newest link in the sidebar (and not the one that was there before sending)
+    const promptStart = norm(JOB.prompt).slice(0, 20);
+    await sleep(4000);
+    const reopenEnd = Date.now() + SITE.answerTimeoutMs;
+    let conversation = '';
+    let previous = '';
+    while (Date.now() < reopenEnd) {
+      if (!conversation) {
+        const link = await page.evaluate(firstLink, SITE.reopenLinkSelector);
+        const isNew = link && link.href && ((!beforeLink || link.href !== beforeLink.href) || norm(link.text).includes(promptStart));
+        if (isNew) conversation = new URL(link.href, SITE.url).href;
+      }
+      if (conversation) {
+        await page.goto(conversation);
+        try { await page.waitForSelector(SITE.answerSelector, { state: 'visible', timeout: 8000 }); } catch (e) { /* not rendered yet */ }
+        const now = await page.evaluate(pageState, arg);
+        if (!now.busy && now.text.trim() !== '' && now.text === previous) {
+          await task.finish({ keep: [] });
+          return { ok: true, text: now.text };
+        }
+        previous = now.text;
+      }
+      await sleep(5000);
+    }
+    return { ok: false, reason: 'timeout' };
+  }
   try {
     await page.waitForFunction(
       (a) => {

@@ -61,7 +61,7 @@ export const id = {
   cmpStSkipped: 'Dilewati (belum login)',
   cmpStNeedsUser: 'Perlu tindakan Anda',
   cmpNeedsUserHint:
-    'ego lite menunggu Anda. Tangani permintaan di jendela ego lite, lalu tekan Coba lagi.',
+    'ego lite menunggu Anda. Di jendela ego lite, tangani permintaan atau tutup sekali pemberitahuan cookie situs, lalu tekan Coba lagi.',
   cmpNoAnswer:
     'Tidak ada mesin yang menjawab. Anda dapat menyalin prompt dan bertanya sendiri di situs-situs itu.',
   aiAskTitle: 'Minta perubahan pada teks terpilih',

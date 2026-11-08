@@ -58,7 +58,7 @@ export const ko = {
   cmpStSkipped: '건너뜀 (로그인 안 됨)',
   cmpStNeedsUser: '확인 필요',
   cmpNeedsUserHint:
-    'ego lite가 사용자를 기다리고 있습니다. ego lite 창에서 요청을 처리한 뒤 다시 시도를 누르세요.',
+    'ego lite가 사용자를 기다리고 있습니다. ego lite 창에서 요청을 처리하거나 사이트의 쿠키 안내를 한 번 닫은 뒤 다시 시도를 누르세요.',
   cmpNoAnswer: '답한 곳이 없습니다. 프롬프트를 복사해 직접 사이트에서 물어볼 수 있습니다.',
   aiAskTitle: '선택 영역에 대한 수정 요청',
   aiAskEditTitle: '이 수정 지시 편집',

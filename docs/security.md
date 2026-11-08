@@ -152,7 +152,7 @@
 - **설치 파일은 앱이 받지도 실행하지도 않는다.** ego lite 설치 파일에는 문서로 밝힌 체크섬이나 서명이 없다. ego lite가 없으면 창이 "설치할까요?"라고 묻고, "설치"를 누르면 안전한 외부 주소 관문(`window.open` → `safeExternalUrl`)으로 https://github.com/citrolabs/ego-lite 만 연다. 받기와 설치와 로그인은 사람이 한다.
 - **보내는 것.** 선택한 글, 한국어 원문, 고정 지시문 하나. 창이 첫 사용 때 한 번 확인을 받고(`web-compare.json`, `consentVersion`) 글이 앱 밖으로 나간다는 문장을 늘 보인다. Word 편집기에는 일부를 가리는 길이 없고, 이 단계는 가리기의 범위 밖이다(PRIVACY.md "Comparing with other AIs on the web").
 - **통합은 앱 자신의 AI로, 요금 경로는 바꾸지 않는다.** 웹 답변이 오면 사람이 이미 고른 제공자로 `ai:chat`(`resolveAiRun`)을 한 번 부른다. 보내기 문지기(`aiSendGate`)가 `run`이 아니면 보내지 않고 안내만 한다. 종량 경로로 스스로 바꾸지 않는다.
-- **사이트 쪽은 확인 전이다.** `apps/docs/src/shared/compare-sites.ts`의 사이트 항목(입력칸·보내기·끝났는지·답 위치)은 모두 `verified: false`이고, `tools/ego-probe.mjs`로 사람이 고친다.
+- **사이트 항목은 `apps/docs/src/shared/compare-sites.ts` 한 곳이다.** 네 사이트(Gemini, Claude, Copilot, Grok)의 입력칸·보내기·끝났는지·답 위치는 실제 사이트에서 확인했고(보내기 단추와 Gemini 중지 단추 제외), 어긋나면 `tools/ego-probe.mjs`로 사람이 고친다. 자동화를 숨기거나 흉내 내는 기법(지문 가리기 등)은 쓰지 않는다. 사이트가 막으면 그대로 알리고 복사 후 열기 길로 넘어간다. 쿠키·동의 안내가 입력칸을 덮으면 앱은 대신 누르지 않고 `needs-user`로 끝낸다.
 
 ## 사용자 MCP 서버 (결정 0100)
 

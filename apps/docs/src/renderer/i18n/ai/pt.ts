@@ -62,7 +62,7 @@ export const pt = {
   cmpStSkipped: 'Ignorado (sem login)',
   cmpStNeedsUser: 'Precisa de você',
   cmpNeedsUserHint:
-    'O ego lite está esperando por você. Resolva o aviso na janela do ego lite e clique em Tentar de novo.',
+    'O ego lite está esperando por você. Na janela do ego lite, resolva o aviso ou feche uma vez o aviso de cookies do site e clique em Tentar de novo.',
   cmpNoAnswer:
     'Nenhum mecanismo respondeu. Você pode copiar o prompt e perguntar nos sites por conta própria.',
   aiAskTitle: 'Pedir uma alteração na seleção',

@@ -56,7 +56,8 @@ export const zhTW = {
   cmpStop: '停止',
   cmpStSkipped: '已略過(未登入)',
   cmpStNeedsUser: '需要你操作',
-  cmpNeedsUserHint: 'ego lite 正在等你。請在 ego lite 視窗中處理該提示,然後按「重試」。',
+  cmpNeedsUserHint:
+    'ego lite 正在等你。請在 ego lite 視窗中處理該提示,或關閉該網站的 Cookie 提示(只需一次),然後按「重試」。',
   cmpNoAnswer: '沒有任何引擎回答。你可以複製提示,自行到這些網站提問。',
   aiAskTitle: '對選中內容提出修改',
   aiAskEditTitle: '編輯這條修改意見',

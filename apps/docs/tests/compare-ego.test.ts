@@ -79,6 +79,61 @@ describe('ego script generator', () => {
     expect(handover).not.toContain('finish(')
   })
 
+  it("a cookie or consent notice over the box is the person's to close: needs-user, never clicked", () => {
+    expect(script).toContain("boxState === 'consent'")
+    expect(script).toMatch(/cookie\|쿠키\|consent/)
+    const consent = script.slice(script.indexOf("boxState === 'consent'"))
+    expect(consent.slice(0, 120)).toContain('NEEDS_USER')
+    // nothing in the script clicks anything but the prompt box, a menu named in the table and send
+    expect(script.match(/page\.click\(/g)?.length).toBeLessThanOrEqual(4)
+  })
+
+  it('prepare steps come from the table and never fail a run', () => {
+    const gemini = COMPARE_SITES.find((s) => s.id === 'gemini')!
+    const withPrepare = buildEgoScript({ site: gemini, prompt: 'p', marker: '@@M@@' })
+    expect(withPrepare).toContain('SITE.prepare')
+    const literal = /^const JOB = JSON\.parse\((.*)\);\n/.exec(withPrepare)![1]!
+    const job = JSON.parse(new Script(literal).runInNewContext({}) as string) as {
+      site: typeof gemini
+    }
+    expect(job.site.prepare?.[0]?.match).toBe('\\bFlash\\b')
+    const body = withPrepare.slice(withPrepare.indexOf('SITE.prepare'))
+    // the whole step sits in a try/catch that continues with the default mode, and runs before typing
+    expect(body.slice(0, 400)).toContain('try {')
+    expect(body.slice(0, 600)).toContain('continue with the default mode')
+    expect(withPrepare.indexOf('SITE.prepare')).toBeLessThan(
+      withPrepare.indexOf('keyboard.insertText'),
+    )
+  })
+
+  it('the reopen strategy reads the newest saved conversation and guards against an old one', () => {
+    const gemini = COMPARE_SITES.find((s) => s.id === 'gemini')!
+    const text = buildEgoScript({ site: gemini, prompt: 'p', marker: '@@M@@' })
+    expect(() => new Script(`(async () => {\n${text}\n})`)).not.toThrow()
+    expect(text).toContain('beforeLink')
+    expect(text).toContain('link.href !== beforeLink.href')
+    expect(text).toContain('promptStart')
+    expect(text).toContain('page.goto(conversation)')
+    // complete only when the text is unchanged across two reads and the stop button is gone
+    expect(text).toContain("!now.busy && now.text.trim() !== '' && now.text === previous")
+    // the sidebar link is captured before the prompt is sent
+    expect(text.indexOf('const beforeLink')).toBeLessThan(
+      text.indexOf("page.press(SITE.inputSelector, 'Enter')"),
+    )
+    // a live site has no reopen branch to take
+    const claude = buildEgoScript({
+      site: COMPARE_SITES.find((s) => s.id === 'claude')!,
+      prompt: 'p',
+      marker: '@@M@@',
+    })
+    const job = JSON.parse(
+      new Script(/^const JOB = JSON\.parse\((.*)\);\n/.exec(claude)![1]!).runInNewContext(
+        {},
+      ) as string,
+    ) as { site: { readStrategy: string } }
+    expect(job.site.readStrategy).toBe('live')
+  })
+
   it('jsonStringLiteral round-trips', () => {
     expect(JSON.parse(JSON.parse(jsonStringLiteral({ a: '\u2029"x' })))).toEqual({ a: '\u2029"x' })
   })
