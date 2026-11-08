@@ -5,7 +5,7 @@
  * the provider code and these values are not provider choices, hence their own
  * file. Reads never throw; anything unreadable counts as "not yet" / the default.
  */
-import { COMPARE_SITES } from '../../shared/compare-sites'
+import { COMPARE_ENGINE_IDS } from '../../shared/compare-engines'
 import type { ComparePrefs } from '../../shared/compare'
 
 export interface ConsentFs {
@@ -14,7 +14,7 @@ export interface ConsentFs {
 }
 
 /** bump when the wording of what is sent changes: an older acknowledgement then asks again */
-export const COMPARE_CONSENT_VERSION = 3
+export const COMPARE_CONSENT_VERSION = 4
 
 interface Stored {
   consentVersion?: unknown
@@ -83,7 +83,8 @@ function sanitizePrefs(value: unknown): ComparePrefs {
   if (raw.engines && typeof raw.engines === 'object' && !Array.isArray(raw.engines)) {
     const engines: Record<string, boolean> = {}
     for (const [id, on] of Object.entries(raw.engines as Record<string, unknown>)) {
-      if (typeof on === 'boolean' && COMPARE_SITES.some((site) => site.id === id)) engines[id] = on
+      if (typeof on === 'boolean' && COMPARE_ENGINE_IDS.some((engineId) => engineId === id))
+        engines[id] = on
     }
     out.engines = engines
   }

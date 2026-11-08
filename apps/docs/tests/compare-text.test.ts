@@ -212,10 +212,10 @@ describe('drag clamp', () => {
 })
 
 describe('site table', () => {
-  it('lists Copilot and ChatGPT with explicit verification status and site selectors', () => {
-    expect(COMPARE_SITES.map((s) => s.id)).toEqual(['copilot', 'chatgpt'])
+  it('lists only Copilot as a web destination with usable site selectors', () => {
+    expect(COMPARE_SITES.map((s) => s.id)).toEqual(['copilot'])
     for (const site of COMPARE_SITES) {
-      expect(site.verified).toBe(site.id === 'copilot')
+      expect(site.verified).toBe(true)
       expect(site.url).toMatch(/^https:\/\//)
       for (const field of [site.inputSelector, site.submitSelector, site.answerSelector])
         expect(field.trim()).not.toBe('')

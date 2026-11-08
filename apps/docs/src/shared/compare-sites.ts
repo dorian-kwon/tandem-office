@@ -1,8 +1,7 @@
 /**
- * The one table of the web AIs the "AI compare" popup asks (Copilot and ChatGPT; Gemini and Claude
- * were taken out). Every engine of the feature (switches, status chips, candidate cards,
- * prompts, retry, the driver) is derived from COMPARE_SITES, so a site is added or removed by
- * editing this list only.
+ * The web destinations used by AI compare (Copilot). The app's connected AI uses its
+ * existing renderer transport; the complete engine ID list lives in compare-engines.ts.
+ * Browser selectors and timing settings belong only in this table.
  *
  * Page details were checked on the real sites with `tools/ego-probe.mjs`; correct them there
  * when a site changes its page.
@@ -44,10 +43,6 @@ export interface CompareSite {
    * (a guest session) are NOT a signal.
    */
   loginHint: string
-  /** Reject an explicit login button even when the site offers a guest composer. */
-  requiresLogin?: boolean
-  /** A visible signed-in account control must exist before using a login-only site. */
-  sessionSelector?: string
   /** how long to wait for the input to show up after the page opens */
   loadTimeoutMs: number
   /** the longest the site may take to finish its answer */
@@ -81,27 +76,6 @@ export const COMPARE_SITES: readonly CompareSite[] = [
     settleMs: 3_000,
     // checked 2026-11-08 on the real site: input, Enter, answer element
     verified: true,
-  },
-  {
-    id: 'chatgpt',
-    name: 'ChatGPT',
-    url: 'https://chatgpt.com/',
-    inputSelector: '#prompt-textarea',
-    inputMode: 'insertText',
-    submit: 'button',
-    submitSelector: 'button[data-testid="send-button"]',
-    busySelector: 'button[data-testid="stop-button"]',
-    answerSelector: '[data-message-author-role="assistant"] .markdown',
-    loggedOutUrl: 'auth\\.openai\\.com|auth\\.chatgpt\\.com|/auth/|/login|/sign-in|/sign-up',
-    loginHint: '^(log in|sign in|로그인)$',
-    requiresLogin: true,
-    sessionSelector: '[data-testid="accounts-profile-button"]',
-    loadTimeoutMs: 30_000,
-    answerTimeoutMs: 120_000,
-    settleMs: 3_000,
-    // Checked 2026-11-09: the guest page has a usable mobile composer and explicit login
-    // buttons. An existing signed-in session is required; signed-in selectors await a check.
-    verified: false,
   },
 ]
 

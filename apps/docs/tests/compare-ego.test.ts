@@ -97,9 +97,9 @@ describe('ego script generator', () => {
   })
 
   it.each([
-    ['https://chatgpt.com/challenge', '', 'blocked'],
-    ['https://chatgpt.com/', 'Verify you are human', 'blocked'],
-    ['https://chatgpt.com/sign-in', '', 'login-wall'],
+    ['https://copilot.com/challenge', '', 'blocked'],
+    ['https://copilot.com/chat', 'Verify you are human', 'blocked'],
+    ['https://login.microsoftonline.com/', '', 'login-wall'],
   ])('blocks before entering any text at %s (%s)', async (url, bodyText, reason) => {
     let typed = false
     let output = ''
@@ -130,7 +130,7 @@ describe('ego script generator', () => {
       },
     }
     const text = buildEgoScript({
-      site: COMPARE_SITES[1]!,
+      site: COMPARE_SITES[0]!,
       prompt: 'private text',
       marker: '@@M@@',
     })
@@ -479,15 +479,23 @@ describe('consent and source copy', () => {
     expect(await readCompareConsent(fs)).toBe(false)
   })
 
-  it('does not inherit Grok consent or engine switches for ChatGPT', async () => {
-    let stored = JSON.stringify({ consentVersion: 2, engines: { copilot: false, grok: true } })
-    const fs = { read: async () => stored, write: async (text: string) => void (stored = text) }
-    expect(await readCompareConsent(fs)).toBe(false)
-    expect(await readComparePrefs(fs)).toEqual({ engines: { copilot: false } })
-    await writeCompareConsent(fs)
-    expect(JSON.parse(stored).consentVersion).toBe(3)
-    expect(COMPARE_SITES.map((site) => site.id)).toEqual(['copilot', 'chatgpt'])
-  })
+  it.each([2, 3])(
+    'does not inherit web consent v%s or retired engine switches for the connected AI',
+    async (version) => {
+      let stored = JSON.stringify({
+        consentVersion: version,
+        engines: { copilot: false, grok: true, chatgpt: true, 'connected-ai': false },
+      })
+      const fs = { read: async () => stored, write: async (text: string) => void (stored = text) }
+      expect(await readCompareConsent(fs)).toBe(false)
+      expect(await readComparePrefs(fs)).toEqual({
+        engines: { copilot: false, 'connected-ai': false },
+      })
+      await writeCompareConsent(fs)
+      expect(JSON.parse(stored).consentVersion).toBe(4)
+      expect(COMPARE_SITES.map((site) => site.id)).toEqual(['copilot'])
+    },
+  )
 
   it('the re-translation switch is on by default, remembered, and independent of the consent', async () => {
     let stored: string | null = null
@@ -516,11 +524,11 @@ describe('consent and source copy', () => {
     }
     await Promise.all([
       writeComparePrefs(fs, { engines: { copilot: false } }),
-      writeComparePrefs(fs, { engines: { chatgpt: false }, autoIntegrate: false }),
+      writeComparePrefs(fs, { engines: { 'connected-ai': false }, autoIntegrate: false }),
       writeCompareConsent(fs),
     ])
     expect(await readComparePrefs(fs)).toEqual({
-      engines: { copilot: false, chatgpt: false },
+      engines: { copilot: false, 'connected-ai': false },
       autoIntegrate: false,
     })
     expect(await readCompareConsent(fs)).toBe(true)

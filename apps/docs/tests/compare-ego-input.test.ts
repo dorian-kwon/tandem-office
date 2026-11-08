@@ -5,32 +5,15 @@ import { compareSiteById } from '../src/shared/compare-sites'
 import { isBlockReason } from '../src/shared/compare'
 
 async function runInput(
-  options: {
-    acceptInput?: boolean
-    inputDelay?: number
-    enableSend?: boolean
-    siteId?: string
-    loggedOut?: boolean
-    missingSession?: boolean
-    sessionDelay?: number
-  } = {},
+  options: { acceptInput?: boolean; inputDelay?: number; enableSend?: boolean } = {},
 ) {
-  const site = compareSiteById(options.siteId ?? 'copilot')!
+  const site = compareSiteById('copilot')!
   const prompt = 'A neutral test prompt'
-  // A candidate signed-in ChatGPT DOM fixture. This checks actual CSS matching, without
-  // claiming these attributes have been verified against a signed-in production session.
-  const fixture = document.implementation.createHTMLDocument()
-  fixture.body.innerHTML =
-    '<button data-testid="accounts-profile-button"></button><div id="prompt-textarea" contenteditable="true"></div><button data-testid="send-button"></button><div data-message-author-role="assistant"><div class="markdown"></div></div>'
-  const selectorMatches = (selector: string, role: string) =>
-    site.id !== 'chatgpt' || fixture.querySelector(selector) === fixture.querySelector(role)
-
   let time = 0
   let rawInput = ''
   let pendingInput = ''
   let sent = 0
   let entered = 0
-  let inserted = 0
   let output = ''
   const sends: Array<{ time: number; text: string }> = []
   const normalize = (s: string) =>
@@ -61,43 +44,18 @@ async function runInput(
     body: { innerText: '' },
     elementFromPoint: () => input,
     querySelector(selector: string) {
-      if (site.sessionSelector && selector === site.sessionSelector)
-        return options.missingSession ||
-          time < (options.sessionDelay ?? 0) ||
-          !selectorMatches(selector, '[data-testid="accounts-profile-button"]')
-          ? null
-          : input
-      if (selector === site.inputSelector && selectorMatches(selector, '#prompt-textarea'))
-        return input
-      if (
-        selector === site.submitSelector &&
-        selectorMatches(selector, '[data-testid="send-button"]')
-      )
-        return button
+      if (selector === site.inputSelector) return input
+      if (selector === site.submitSelector) return button
       return null
     },
     querySelectorAll(selector: string) {
-      if (selector === 'button, a')
-        return options.loggedOut
-          ? [{ innerText: 'Log in', getBoundingClientRect: () => ({ width: 100, height: 30 }) }]
-          : []
-      if (selector === site.inputSelector && selectorMatches(selector, '#prompt-textarea'))
-        return [input]
-      if (
-        selector === site.submitSelector &&
-        selectorMatches(selector, '[data-testid="send-button"]')
-      )
-        return [button]
-      if (
-        selector === site.answerSelector &&
-        selectorMatches(selector, '[data-message-author-role="assistant"] .markdown')
-      )
-        return sent ? [answer] : []
+      if (selector === site.inputSelector) return [input]
+      if (selector === site.submitSelector) return [button]
+      if (selector === site.answerSelector) return sent ? [answer] : []
       return []
     },
   }
   const insert = async (value: string) => {
-    inserted++
     if (options.acceptInput === false) return
     pendingInput = value
     if (!options.inputDelay) rawInput = value + '\u200b\u200c'
@@ -153,7 +111,7 @@ async function runInput(
       },
     },
   })
-  return { answer: parseEgoOutput(output, '@@TEST@@'), sends, entered, inserted }
+  return { answer: parseEgoOutput(output, '@@TEST@@'), sends, entered }
 }
 
 describe('web comparison input verification', () => {
@@ -175,35 +133,6 @@ describe('web comparison input verification', () => {
     const result = await runInput({ enableSend: false })
     expect(result.answer).toEqual({ ok: false, reason: 'submit-not-ready' })
     expect(result.sends).toEqual([])
-    expect(result.entered).toBe(0)
-  })
-  it('requires an existing ChatGPT login even when a guest composer is usable', async () => {
-    const result = await runInput({ siteId: 'chatgpt', loggedOut: true })
-    expect(result.inserted).toBe(0)
-    expect(result.answer).toEqual({ ok: false, reason: 'login-wall' })
-    expect(result.sends).toEqual([])
-  })
-  it('does not infer a ChatGPT login merely from missing login controls', async () => {
-    const result = await runInput({ siteId: 'chatgpt', missingSession: true })
-    expect(result.answer).toEqual({ ok: false, reason: 'login-wall' })
-    expect(result.inserted).toBe(0)
-    expect(result.sends).toEqual([])
-  })
-  it('waits for the signed-in account control after the composer appears', async () => {
-    const result = await runInput({ siteId: 'chatgpt', sessionDelay: 1500 })
-    expect(result.answer).toEqual({ ok: true, text: 'Answer' })
-    expect(result.sends).toHaveLength(1)
-    expect(result.sends[0]?.time).toBeGreaterThanOrEqual(1500)
-  })
-  it('never submits ChatGPT text that failed readback', async () => {
-    const result = await runInput({ siteId: 'chatgpt', acceptInput: false })
-    expect(result.answer).toEqual({ ok: false, reason: 'input-not-accepted' })
-    expect(result.sends).toEqual([])
-  })
-  it('reads back ChatGPT input and clicks send exactly once', async () => {
-    const result = await runInput({ siteId: 'chatgpt', inputDelay: 1200 })
-    expect(result.answer).toEqual({ ok: true, text: 'Answer' })
-    expect(result.sends).toHaveLength(1)
     expect(result.entered).toBe(0)
   })
   it('keeps selector and input failures distinct from a real site wall', () => {
