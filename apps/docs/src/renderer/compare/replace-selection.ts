@@ -55,8 +55,9 @@ export function replaceSnapshot(
     return { ok: false, reason: 'stale' }
   const $from = doc.resolve(snap.from)
   const $to = doc.resolve(snap.to)
-  // same limit as replace_selection: text inside one top-level paragraph, heading or list item
-  if ($from.depth !== 1 || !$from.sameParent($to) || !$from.parent.isTextblock)
+  // text inside ONE paragraph, heading or list item: at the top level or inside a table cell or
+  // another container (a selection across several paragraphs is not replaced)
+  if ($from.depth < 1 || !$from.sameParent($to) || !$from.parent.isTextblock)
     return { ok: false, reason: 'unsupported' }
   const anchor = $from.parent.childAfter($from.parentOffset).node
   const inherited: readonly Mark[] = (anchor?.marks ?? []).filter(

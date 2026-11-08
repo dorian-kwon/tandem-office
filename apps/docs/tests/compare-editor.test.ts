@@ -68,6 +68,36 @@ describe('AI compare replacement', () => {
     expect(editor.state.doc.textContent).toBe(before)
   })
 
+  it('replaces text inside one paragraph of a table cell and flags only that paragraph', () => {
+    const cell = (t: string) => ({
+      type: 'docTableCell',
+      attrs: { colwidth: [100] },
+      content: [para(text(t))],
+    })
+    const table = {
+      type: 'docTable',
+      attrs: { docxIndex: 3 },
+      content: [
+        { type: 'docTableRow', content: [cell('Inscription of the Archives'), cell('Other')] },
+      ],
+    }
+    const editor = make([para(text('Before')), table])
+    let from = -1
+    editor.state.doc.descendants((node, pos) => {
+      if (node.isText && node.text === 'Inscription of the Archives') from = pos
+    })
+    editor.commands.setTextSelection({ from: from + 15, to: from + 27 })
+    const snap = snapshotSelection(editor)!
+    expect(snap.fingerprint).toBe('the Archives')
+    expect(replaceSnapshot(editor, snap, 'THE RECORDS')).toEqual({ ok: true })
+    expect(editor.state.doc.textContent).toContain('Inscription of THE RECORDS')
+    expect(editor.state.doc.textContent).toContain('Other')
+    // only the cell's paragraph is flagged as changed, not the whole table
+    expect(editor.state.doc.child(1).attrs.aiChanged ?? false).toBe(false)
+    expect(editor.commands.undo()).toBe(true)
+    expect(editor.state.doc.textContent).toContain('Inscription of the Archives')
+  })
+
   it('is refused across paragraphs and for empty text', () => {
     const editor = make(styled())
     editor.commands.setTextSelection({ from: 5, to: 50 })

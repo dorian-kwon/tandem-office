@@ -1405,7 +1405,10 @@ export function replaceInlineRange(
   track?: AiTrack,
 ): void {
   const tr = editor.state.tr
-  const blockPos = tr.doc.resolve(from).before(1)
+  // the paragraph that holds the range: at the top level this is the top-level block, in a table
+  // cell it is the cell's paragraph (never the whole table)
+  const $from = tr.doc.resolve(from)
+  const blockPos = $from.before($from.depth)
   const inserted = nodes.reduce((size, n) => size + n.nodeSize, 0)
   if (track) {
     const date = revisionDate()
