@@ -9,6 +9,10 @@ import { useComposerPickers, type AiComposerDocs } from './use-doc-mention'
 // Keep in sync with the CSS `max-height` on `.ai-input-box textarea` (7 lines à 24px)
 const MAX_TEXTAREA_HEIGHT = 168
 
+/** true where `field-sizing: content` exists (Chromium 123+) */
+const SIZES_TO_CONTENT =
+  typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('field-sizing', 'content')
+
 /**
  * The AI panel input box shared by docs and sheets: auto-growing textarea
  * (Enter sends, Shift+Enter newline, Esc stops) plus a footer with optional
@@ -107,6 +111,15 @@ export function AiComposer({
   useEffect(() => {
     const ta = ref.current
     if (!ta) return
+    // The browser can size a textarea to its content by itself. Measuring in script
+    // (height auto, then scrollHeight) forces a synchronous layout of the whole page on
+    // every keystroke, which is costly next to a large document in the same window.
+    if (SIZES_TO_CONTENT) {
+      ta.style.height = ''
+      ta.style.setProperty('field-sizing', 'content')
+      ta.style.maxHeight = `${MAX_TEXTAREA_HEIGHT}px`
+      return
+    }
     if (value === '') {
       ta.style.height = ''
       return
