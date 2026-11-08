@@ -56,7 +56,7 @@ describe('ego script generator', () => {
       // input like a person: a real click into the box, the box emptied, a real click on send
       'page.mouse.click(boxAt.x, boxAt.y',
       "page.keyboard.press('ControlOrMeta+a')",
-      "page.mouse.click(at.x, at.y, { label: 'send message' })",
+      "page.mouse.click(sendAt.x, sendAt.y, { label: 'send message' })",
     ])
       expect(script).toContain(call)
     expect(script).not.toMatch(
@@ -384,6 +384,33 @@ describe('ego driver', () => {
     f.err.emit('data', 'Error: The user now controls this task space')
     f.child.emit('close', 1)
     expect(await p).toEqual({ ok: false, reason: 'needs-user' })
+  })
+
+  it('does not spawn or send a prompt when stopped while detection is pending', async () => {
+    const f = fakeChild()
+    let finishDetection!: (found: { installed: boolean; path: string }) => void
+    let spawned = 0
+    const controller = new AbortController()
+    const driver = createEgoDriver({
+      ...base(f),
+      detect: () =>
+        new Promise((resolve) => {
+          finishDetection = resolve
+        }),
+      spawn: () => {
+        spawned++
+        return f.child
+      },
+    })
+    const pending = driver.ask(site, 'neutral prompt', controller.signal)
+    controller.abort()
+    finishDetection({ installed: true, path: '/fake/ego' })
+    for (let i = 0; i < 5; i++) await Promise.resolve()
+    f.child.emit('close', 0)
+    const answer = await pending
+    expect(spawned).toBe(0)
+    expect(f.child.written).toBe('')
+    expect(answer).toEqual({ ok: false, reason: 'stopped' })
   })
 
   it('abort kills the process tree and answers stopped; an already aborted signal never spawns', async () => {

@@ -22,6 +22,10 @@ export const de = {
   aiAskBtn: 'KI fragen',
   aiAskWebSearch: 'Websuche',
   aiAskGoogleTranslate: 'Übersetzen',
+  cmpInputMissing: 'Kein nutzbares Nachrichtenfeld gefunden. Es wurde nichts gesendet.',
+  cmpInputFailed:
+    'Die Website hat den eingegebenen Text nicht übernommen. Es wurde nichts gesendet.',
+  cmpSendUnavailable: 'Die Senden-Schaltfläche wurde nicht bereit. Es wurde nichts gesendet.',
   cmpStBlocked: 'Blockiert',
   cmpNoSource: 'Kein passendes koreanisches Original. Nur der Text dieser Einheit wird gesendet.',
   cmpNoUnits: 'Keine Textabsätze zum Vergleichen.',

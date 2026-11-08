@@ -17,10 +17,10 @@ export const COMPARE_CHANNELS = {
  * people). Each of these means the site cannot be used right now and the engine is BLOCKED for
  * the rest of the run: it is shown as blocked and never retried by itself or worked around.
  * - `login-wall`: a redirect to a login or sign-up page, or a wall covering the prompt box
- * - `no-prompt-box`: no prompt box within the bounded wait
  * - `needs-user`: ego lite handed the space to the person (a browser permission prompt, a cookie
  *   notice over the box); they handle it in ego lite and start again
  * - `blocked`: a CAPTCHA or "unusual traffic" page
+ * Missing prompt boxes and failed input/send interactions are ordinary failures, not site blocks.
  * A logged-out site whose prompt box works (guest chat) is simply used.
  */
 export const COMPARE_LOGIN_WALL = 'login-wall'
@@ -31,10 +31,7 @@ export const COMPARE_BLOCKED = 'blocked'
 /** the reasons that block an engine for the rest of the run */
 export function isBlockReason(reason: string): boolean {
   return (
-    reason === COMPARE_LOGIN_WALL ||
-    reason === COMPARE_NO_PROMPT_BOX ||
-    reason === COMPARE_NEEDS_USER ||
-    reason === COMPARE_BLOCKED
+    reason === COMPARE_LOGIN_WALL || reason === COMPARE_NEEDS_USER || reason === COMPARE_BLOCKED
   )
 }
 

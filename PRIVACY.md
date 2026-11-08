@@ -238,9 +238,12 @@ nothing. Paragraphs are processed in order, one engine at a time, in batches of
   sends the selected text and the web answers to the AI you already selected in
   the app, as for any other AI request, to combine them. It never switches to a
   paid route for this. Stop or closing the window cancels the current request.
-- **Blocked sites.** A CAPTCHA, login wall, missing prompt box or handover to you
+- **Blocked sites.** A CAPTCHA, login wall or handover to you
   blocks that engine for the rest of the run. The app never retries it or tries
-  to get around the block. Other enabled engines may continue.
+  to get around the block. Other enabled engines may continue. Missing inputs,
+  text that was not accepted, and unavailable send buttons are interaction
+  failures; the app reports that nothing was sent and does not try another
+  submission route.
 
 ## Google Drive
 

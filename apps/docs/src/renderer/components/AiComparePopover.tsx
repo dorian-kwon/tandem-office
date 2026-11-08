@@ -601,7 +601,7 @@ export function AiComparePopover({
                     ) : e.status === 'blocked' ? (
                       <span className="cmp-reason">{blockText(e.reason ?? '')}</span>
                     ) : e.reason ? (
-                      <span className="cmp-reason">{e.reason}</span>
+                      <span className="cmp-reason">{interactionText(e.reason)}</span>
                     ) : null,
                     e.status === 'done' ? first : null,
                     result.applied,
@@ -684,6 +684,12 @@ export function AiComparePopover({
           ? 'cmpStNeedsUser'
           : 'cmpStBlocked',
     )
+  const interactionText = (reason: string): string => {
+    if (reason === 'no-prompt-box') return t('cmpInputMissing')
+    if (reason === 'input-not-accepted') return t('cmpInputFailed')
+    if (reason === 'submit-not-ready') return t('cmpSendUnavailable')
+    return reason
+  }
   const started = state.phase !== 'idle'
   const canStart = consent === true && installed && enabledEngines.length > 0 && !active
 

@@ -6,7 +6,7 @@
  * passed in, so tests use fakes and a fake clock.
  *
  * Rules:
- * - an engine that reports a block (login wall, no prompt box, a hand-over to the person, a CAPTCHA
+ * - an engine that reports a block (login wall, a hand-over to the person, a CAPTCHA
  *   page) is BLOCKED for the rest of the run: shown as blocked, never asked again, never worked
  *   around. The other engines go on; when every enabled engine is blocked the run stops;
  * - a run asks at most `batchSize` units; "continue" asks the next batch;

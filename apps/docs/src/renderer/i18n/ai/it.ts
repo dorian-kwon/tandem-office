@@ -23,6 +23,10 @@ export const it = {
   aiAskBtn: "Chiedi all'IA",
   aiAskWebSearch: 'Cerca',
   aiAskGoogleTranslate: 'Traduci',
+  cmpInputMissing: 'Nessun campo messaggio utilizzabile trovato. Non è stato inviato nulla.',
+  cmpInputFailed: 'Il sito non ha mantenuto il testo inserito. Non è stato inviato nulla.',
+  cmpSendUnavailable:
+    'Il pulsante di invio non è diventato disponibile. Non è stato inviato nulla.',
   cmpStBlocked: 'Bloccato',
   cmpNoSource:
     'Nessun originale coreano corrispondente. Viene inviato solo il testo di questa unità.',

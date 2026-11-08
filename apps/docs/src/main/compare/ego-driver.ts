@@ -107,6 +107,7 @@ export function createEgoDriver(deps: EgoDriverDeps): CompareDriver {
     async ask(site: CompareSite, prompt: string, signal: AbortSignal): Promise<CompareAnswer> {
       if (signal.aborted) return { ok: false, reason: 'stopped' }
       const found = await deps.detect()
+      if (signal.aborted) return { ok: false, reason: 'stopped' }
       if (!found.installed || !found.path)
         return { ok: false, reason: 'ego browser is not installed' }
       const marker = `@@TANDEM_COMPARE_${deps.nonce()}@@`

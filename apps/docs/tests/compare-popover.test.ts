@@ -238,6 +238,17 @@ describe('AI compare popup', () => {
     expect(button(container, 'Retry')).toBeUndefined()
   })
 
+  it('describes failed input as an interaction failure rather than a site block', async () => {
+    const { container } = setup(
+      ready({ compareAsk: async () => ({ ok: false, reason: 'input-not-accepted' }) }),
+    )
+    await flush()
+    await start(container)
+    expect(container.textContent).toContain('The site did not retain the text. Nothing was sent.')
+    expect(container.querySelector('.cmp-chip-failed')).not.toBeNull()
+    expect(container.querySelector('.cmp-chip-blocked')).toBeNull()
+  })
+
   it('warns about a truncated unit and disables replacement', async () => {
     const long = 'word '.repeat(1200)
     const { container } = setup(

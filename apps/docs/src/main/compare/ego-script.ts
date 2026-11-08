@@ -74,10 +74,14 @@ const inputState = (selector) => {
   return /cookie|쿠키|consent|동의|privacy|개인정보/i.test(words) ? 'consent' : 'covered';
 };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-// the text still sitting in the (visible) prompt box: empty after a message was sent
-const boxText = (selector) => {
+// Copilot's Lexical editor appends invisible caret markers; compare the real input value,
+// not those markers, and never infer success from an input method merely returning.
+const inputMatches = ({ selector, prompt }) => {
+  const normalize = (text) => String(text).replace(/[\u200b\u200c\u200d\u2060\ufeff]/g, '').replace(/\s+/g, ' ').trim();
   const box = [...document.querySelectorAll(selector)].find((n) => { const r = n.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
-  return box ? String(box.innerText || box.textContent || '').trim() : '';
+  if (!box) return false;
+  const text = typeof box.value === 'string' ? box.value : box.innerText || box.textContent || '';
+  return normalize(text) !== '' && normalize(text) === normalize(prompt);
 };
 // the centre of the first visible, enabled match of a selector (list): where a real mouse click goes
 const rectOf = (selector) => {
@@ -137,23 +141,28 @@ async function main() {
     if (SITE.inputMode === 'paste') await page.keyboard.paste({ text: JOB.prompt });
     else await page.keyboard.insertText(JOB.prompt);
   }
-  // an editor needs a moment to take the typed text into its state before it can send it
-  await sleep(700);
-  const sendByButton = async () => {
-    const at = SITE.submitSelector ? await page.evaluate(rectOf, SITE.submitSelector) : null;
-    if (!at) return false;
-    await page.mouse.click(at.x, at.y, { label: 'send message' });
-    return true;
-  };
-  if (SITE.submit === 'enter') await page.press(SITE.inputSelector, 'Enter');
-  else if (!(await sendByButton())) await page.press(SITE.inputSelector, 'Enter');
-  // the text is still in the box: it was not sent, so try the other way
-  await sleep(1500);
-  if (WALL_URL.test(String(await page.url())) || await page.evaluate(wallText)) return { ok: false, reason: BLOCKED };
-  if ((await page.evaluate(boxText, SITE.inputSelector)) !== '') {
-    if (SITE.submit === 'enter') await sendByButton();
-    else await page.press(SITE.inputSelector, 'Enter');
+  // Wait for framework state to retain the intended text and enable the send control.
+  // A failed input or changed selector is an interaction failure, not a security wall.
+  const readyEnd = Date.now() + Math.min(SITE.loadTimeoutMs, 5000);
+  let inputReady = false;
+  let sendAt = null;
+  while (Date.now() < readyEnd) {
+    const here = String(await page.url());
+    if (WALL_URL.test(here) || await page.evaluate(wallText)) return { ok: false, reason: BLOCKED };
+    if (loggedOutUrl && loggedOutUrl.test(here)) return { ok: false, reason: LOGIN_WALL };
+    inputReady = await page.evaluate(inputMatches, { selector: SITE.inputSelector, prompt: JOB.prompt });
+    if (inputReady) {
+      if (SITE.submit === 'enter') break;
+      sendAt = SITE.submitSelector ? await page.evaluate(rectOf, SITE.submitSelector) : null;
+      if (sendAt) break;
+    }
+    await sleep(100);
   }
+  if (!inputReady) return { ok: false, reason: 'input-not-accepted' };
+  if (SITE.submit === 'enter') await page.press(SITE.inputSelector, 'Enter');
+  else if (sendAt) await page.mouse.click(sendAt.x, sendAt.y, { label: 'send message' });
+  else return { ok: false, reason: 'submit-not-ready' };
+  // Submit once. Never try a second route just because the site has not cleared its editor.
   // poll (a page that is still navigating after the send answers evaluate with an error for a moment)
   const waitEnd = Date.now() + SITE.answerTimeoutMs;
   let lastError = '';
