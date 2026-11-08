@@ -151,6 +151,8 @@ export const ko = {
   aiSumReadRuns: '블록 {start}-{end} 글자 묶음 읽기',
   aiSumTranslateBlocks: '블록 번역',
   aiSumTranslatedBlocks: '문단 {count}개 번역함',
+  aiSumReviseBlocks: '블록 감수',
+  aiSumRevisedBlocks: '감수로 {count}곳 고침',
   aiSumAddBilingual: '원문과 번역 나란히',
   aiSumAddedBilingual: '번역 문단 {count}개 추가함',
   aiSumInsertChart: '차트 삽입',
@@ -193,6 +195,8 @@ export const ko = {
   aiStarterTranslateRest: '번역되지 않고 남은 부분을 찾아 번역해 줘',
   aiStarterTranslateTerms: '용어와 말투가 일관되는지 점검해 줘',
   aiStarterTranslateNatural: '어색한 번역 문장을 더 자연스럽게 다듬어 줘',
+  aiStarterTranslateReview:
+    '원문과 대조해서 번역을 감수해 줘. 고친 곳은 변경 내용 추적으로 남기고, 이유는 메모로 달아 줘',
   aiMindMapBtn: 'AI 마인드맵',
   aiMindMapPrompt:
     '이 문서의 마인드맵을 생성하고, 장 구조에 따라 주요 주제와 핵심 개념을 정리해 주세요',

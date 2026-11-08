@@ -69,6 +69,7 @@ import {
 import {
   blockRangePositions,
   buildCommentsContext,
+  commentAnchors,
   buildDocumentContext,
   buildRevisionsContext,
   insertBlocksAfter,
@@ -93,11 +94,13 @@ import {
   readRunGroups,
   recordHandled,
   remainingUntranslated,
+  sourceScriptOf,
   type NoteTranslationItem,
   type RunParagraph,
   type RunTranslationItem,
   type RunTranslationReport,
 } from './translate-runs'
+import { applyRevisions, type ReviseItem, type ReviseReport } from './revise-runs'
 
 /**
  * Local agent tools: a document-context reader plus a script-style execution
@@ -201,13 +204,18 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       'Read a block range for TRANSLATION: one JSON line per paragraph with its text as numbered segments, one segment per run of equal formatting (footnote references, tabs, breaks and other inline objects sit between segments and are not shown). Table blocks list each cell paragraph with its "paragraph" number. Empty paragraphs are listed as "empty":true; leave them alone. ' +
       'Long ranges are paged: a truncated result says which startBlockIndex to continue from. ' +
       'With notes:true it lists every footnote and endnote the same way ({"note","id","fp","segments"}; no block range needed). ' +
-      'With checkRemaining:true (and sourceLanguage) it lists the body paragraphs and notes that still look untranslated; translation is finished only when it reports none.',
+      'With checkRemaining:true (and sourceLanguage) it lists the body paragraphs and notes that still look untranslated; translation is finished only when it reports none. ' +
+      'With review:true (for revise_blocks) both sides of a bilingual pair are listed: the translation with its fp, the original as "role":"original" without one (read-only).',
     inputSchema: {
       type: 'object',
       properties: {
         startBlockIndex: { type: 'integer', description: 'start block index (0-based, inclusive)' },
         endBlockIndex: { type: 'integer', description: 'end block index (inclusive)' },
         notes: { type: 'boolean', description: 'list footnotes and endnotes instead of blocks' },
+        review: {
+          type: 'boolean',
+          description: 'a translation review read: also list the original side of a bilingual pair',
+        },
         checkRemaining: {
           type: 'boolean',
           description: 'report what is still untranslated, in the body and in the notes',
@@ -258,6 +266,49 @@ export const AGENT_TOOLS: AgentToolDef[] = [
               },
             },
             required: ['fp', 'segments'],
+          },
+        },
+      },
+      required: ['blocks'],
+    },
+  },
+  {
+    name: 'revise_blocks',
+    description:
+      'Translation REVIEW (감수/검수/proofreading) of text that is already translated: correct mistakes in place, every correction recorded as a TRACKED CHANGE (always, whatever the track-changes switch says) under the author "<AI author> (review)", so the person accepts or rejects each one. Never use translate_blocks, replace_blocks or write_document for a review. ' +
+      'Same input as translate_blocks: read_runs first, then per paragraph its "fp" unchanged and the REVISED text of every segment, in the same order and exactly the same number (repeat a correct segment as it is). The tool diffs each segment against its current text word by word and marks only the changed words, inside their own run, so run formatting is kept; a segment you return unchanged makes no change at all. Revise only what is wrong (mistranslation, omission, added content, wrong number/name/date, glossary or style-rule inconsistency, phrasing that is awkward in the target language); do not restyle a correct translation. ' +
+      'Empty paragraphs, footnote references, tabs and breaks stay as they are. Footnotes and endnotes cannot carry tracked changes: do not revise them, mention a doubt about one in the summary. An item whose fp no longer matches is refused, and the original of a bilingual pair is never edited. With sourceLanguage, a paragraph that is still mostly in that language is not revised (translate it with translate_blocks first). ' +
+      'After a non-trivial correction or a doubt, attach a short reason with add_comment (blockIndex of that paragraph); no comment for trivial fixes, never the same comment twice. Block indexes do not change.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sourceLanguage: {
+          type: 'string',
+          description:
+            'the language of the original, e.g. Korean or ko: paragraphs still written in it are reported, not revised',
+        },
+        blocks: {
+          type: 'array',
+          description: 'one entry per reviewed paragraph',
+          items: {
+            type: 'object',
+            properties: {
+              index: { type: 'integer', description: 'block index from read_runs' },
+              paragraph: {
+                type: 'integer',
+                description: 'for a table block: the "paragraph" number from read_runs',
+              },
+              fp: {
+                type: 'string',
+                description: 'the "fp" read_runs gave for this paragraph, unchanged',
+              },
+              segments: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'the revised text of each segment, in read_runs order',
+              },
+            },
+            required: ['index', 'fp', 'segments'],
           },
         },
       },
@@ -984,6 +1035,7 @@ const INDEX_WRITE_SUMMARIES: Record<string, () => string> = {
   replace_blocks: () => t('aiSumReplaceContent'),
   translate_blocks: () => t('aiSumTranslateBlocks'),
   add_bilingual: () => t('aiSumAddBilingual'),
+  revise_blocks: () => t('aiSumReviseBlocks'),
   replace_selection: () => t('aiSumReplaceSelection'),
   apply_ops: () => t('aiSumApplyCommands'),
   insert_chart: () => t('aiSumInsertChart'),
@@ -1856,7 +1908,9 @@ function executeSyncTool(
       const lines: string[] = []
       let size = 0
       let next: number | null = null
-      for (const entry of readRunGroups(editor, range.start, range.end)) {
+      for (const entry of readRunGroups(editor, range.start, range.end, {
+        review: call.input.review === true,
+      })) {
         const line = JSON.stringify(entry)
         // pages end on a block boundary so a block's paragraphs are never split across reads
         if (size + line.length > READ_MAX_CHARS && lines.length > 0) {
@@ -1970,6 +2024,92 @@ function executeSyncTool(
         output: lines.join('\n'),
         mutated: count > 0,
         summary: t('aiSumAddedBilingual', { count }),
+      }
+    }
+
+    case 'revise_blocks': {
+      const summary = t('aiSumReviseBlocks')
+      const raw = call.input.blocks
+      if (!Array.isArray(raw) || raw.length === 0)
+        return fail(summary, 'blocks must be a non-empty array of { index, fp, segments }')
+      const items: ReviseItem[] = []
+      for (const entry of raw as unknown[]) {
+        const e = (entry ?? {}) as {
+          index?: unknown
+          note?: unknown
+          paragraph?: unknown
+          fp?: unknown
+          segments?: unknown
+        }
+        const name = `block ${String(e.index)}`
+        if (e.note !== undefined && e.note !== null)
+          return fail(
+            summary,
+            'footnotes and endnotes cannot carry tracked changes and are not revised; leave them and mention a doubt in the summary',
+          )
+        if (!Number.isInteger(e.index))
+          return fail(summary, 'every entry needs an integer index from read_runs')
+        if (e.paragraph !== undefined && e.paragraph !== null && !Number.isInteger(e.paragraph))
+          return fail(summary, `${name}: paragraph must be an integer`)
+        if (typeof e.fp !== 'string' || e.fp === '')
+          return fail(
+            summary,
+            `${name}: fp is missing; pass the "fp" read_runs gave for this paragraph (call read_runs if you have none)`,
+          )
+        const segments = e.segments as string[]
+        const joined = Array.isArray(segments) ? segments.join('\n') : ''
+        const echo = toolEchoError(joined) ?? contextMarkerError(joined)
+        if (echo) return fail(summary, `${name}: ${echo.replace(/^html/, 'a segment')}`)
+        items.push({
+          index: Number(e.index),
+          fp: e.fp,
+          segments,
+          ...(e.paragraph === undefined || e.paragraph === null
+            ? {}
+            : { paragraph: Number(e.paragraph) }),
+        })
+      }
+      const sourceScript = sourceScriptOf(
+        typeof call.input.sourceLanguage === 'string' ? call.input.sourceLanguage : undefined,
+      )
+      const outcome = applyRevisions(editor, items, track, { sourceScript })
+      if (!outcome.ok) {
+        return fail(
+          summary,
+          `Nothing was changed: ${outcome.errors.join('; ')}. Call read_runs (review:true for a bilingual document) for the current blocks, then retry.`,
+        )
+      }
+      // a reviewed paragraph counts as handled: a review never reports the document as untranslated
+      recordHandled(
+        editor,
+        outcome.reports.filter((r) => !r.untranslated).map((r) => r.fp),
+      )
+      const label = (r: ReviseReport) =>
+        r.paragraph === undefined ? `block ${r.index}` : `block ${r.index} paragraph ${r.paragraph}`
+      const revised = outcome.reports.filter((r) => r.changes > 0)
+      const changes = revised.reduce((n, r) => n + r.changes, 0)
+      const unchanged = outcome.reports.filter(
+        (r) => r.changes === 0 && !r.empty && !r.untranslated,
+      )
+      const untranslated = outcome.reports.filter((r) => r.untranslated)
+      const lines = [
+        revised.length === 0
+          ? `No change: all ${unchanged.length} reviewed paragraph(s) were returned as they are.`
+          : `Recorded ${changes} tracked change(s) in ${revised.length} paragraph(s) (${revised.map(label).join(', ')}) under the author "${outcome.author}"; each can be accepted or rejected on its own. Run formatting, footnote references and empty paragraphs were kept. Block indexes are unchanged. Comment the non-trivial ones with add_comment; do not comment trivial fixes.`,
+      ]
+      if (revised.length > 0 && unchanged.length > 0)
+        lines.push(`${unchanged.length} paragraph(s) needed no change.`)
+      if (untranslated.length > 0)
+        lines.push(
+          `NOT revised (still look untranslated, translate them first with translate_blocks): ${untranslated.map(label).join(', ')}.`,
+        )
+      const empty = outcome.reports.filter((r) => r.empty).map(label)
+      if (empty.length > 0)
+        lines.push(`Ignored (empty paragraphs, left as they are): ${empty.join(', ')}.`)
+      return {
+        output: lines.join('\n'),
+        mutated: changes > 0,
+        summary: t('aiSumRevisedBlocks', { count: changes }),
       }
     }
 
@@ -2504,6 +2644,18 @@ function executeSyncTool(
         occurrence: call.input.occurrence,
       })
       if ('error' in anchor) return fail(t('aiSumAddComment'), anchor.error)
+      // the same comment twice on one block is noise (a review that runs again, a retried call)
+      const norm = (v: string) => v.replace(/\s+/g, ' ').trim().toLowerCase()
+      const anchors = commentAnchors(editor)
+      const twin = comments.list().find((c) => {
+        if (c.parentId || norm(c.text) !== norm(body)) return false
+        return anchors.get(c.id)?.blockIndex === Number(call.input.blockIndex)
+      })
+      if (twin)
+        return fail(
+          t('aiSumAddComment'),
+          `block ${call.input.blockIndex} already has this exact comment (id ${twin.id}); not added again`,
+        )
       const meta: CommentAuthorMeta = {}
       if (typeof call.input.author === 'string' && call.input.author.trim()) {
         meta.author = call.input.author.trim()

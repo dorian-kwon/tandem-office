@@ -148,6 +148,8 @@ export const he = {
   aiSumReadRuns: 'קריאת קטעי טקסט בבלוקים {start}-{end}',
   aiSumTranslateBlocks: 'תרגום בלוקים',
   aiSumTranslatedBlocks: 'תורגמו {count} פסקאות',
+  aiSumReviseBlocks: 'סקירת פסקאות',
+  aiSumRevisedBlocks: 'סקירה: {count} שינויים במעקב',
   aiSumAddBilingual: 'הוספת תרגום דו-לשוני',
   aiSumAddedBilingual: 'נוספו {count} פסקאות דו-לשוניות',
   aiSumInsertChart: 'הוספת תרשים',
@@ -190,6 +192,7 @@ export const he = {
   aiStarterTranslateRest: 'מצא ותרגם חלקים שנשארו ללא תרגום',
   aiStarterTranslateTerms: 'בדוק שהמונחים והנימה עקביים',
   aiStarterTranslateNatural: 'הפוך משפטים מתורגמים מסורבלים לטבעיים יותר',
+  aiStarterTranslateReview: 'סקור את התרגום מול המקור: כל תיקון כשינוי במעקב, והסיבות בהערות',
   aiMindMapBtn: 'מפת חשיבה AI',
   aiMindMapPrompt:
     'צור מפת חשיבה של המסמך הזה וארגן את הנושאים המרכזיים והמושגים המפתח לפי מבח הסעיפים',

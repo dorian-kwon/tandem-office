@@ -326,6 +326,7 @@ const TRANSLATE_STARTER_PROMPTS: StringKey[] = [
   'aiStarterTranslateRest',
   'aiStarterTranslateTerms',
   'aiStarterTranslateNatural',
+  'aiStarterTranslateReview',
 ]
 
 /** resizable panel width: persisted, clamped so neither pane collapses */

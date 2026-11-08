@@ -158,6 +158,8 @@ export const it = {
   aiSumReadRuns: 'Leggi i segmenti dei blocchi {start}-{end}',
   aiSumTranslateBlocks: 'Traduci blocchi',
   aiSumTranslatedBlocks: '{count} paragrafo/i tradotto/i',
+  aiSumReviseBlocks: 'Revisiona blocchi',
+  aiSumRevisedBlocks: 'Revisione: {count} modifica/che registrata/e',
   aiSumAddBilingual: 'Aggiungi traduzione bilingue',
   aiSumAddedBilingual: '{count} paragrafo/i bilingue/i aggiunto/i',
   aiSumInsertChart: 'Inserisci grafico',
@@ -196,11 +198,14 @@ export const it = {
   aiStarterMindMap: 'Genera una mappa mentale di questo documento',
   aiEmptyTranslateTitle: 'Affida la traduzione all’IA',
   aiEmptyTranslateBody1: 'Indica l’ambito e il tono, oppure fai subito una domanda.',
-  aiEmptyTranslateBody2: 'Se selezioni del testo, le istruzioni di traduzione si applicano alla selezione.',
+  aiEmptyTranslateBody2:
+    'Se selezioni del testo, le istruzioni di traduzione si applicano alla selezione.',
   aiStarterTranslateAll: 'Traduci tutto il documento',
   aiStarterTranslateRest: 'Trova e traduci le parti rimaste non tradotte',
   aiStarterTranslateTerms: 'Controlla che termini e tono siano coerenti',
   aiStarterTranslateNatural: 'Rendi più naturali le frasi tradotte poco scorrevoli',
+  aiStarterTranslateReview:
+    'Revisiona la traduzione rispetto all’originale: ogni correzione come modifica registrata e i motivi nei commenti',
   aiMindMapBtn: 'Mappa mentale IA',
   aiMindMapPrompt:
     'Genera una mappa mentale di questo documento, organizzando i temi principali e i concetti chiave secondo la struttura delle sezioni',

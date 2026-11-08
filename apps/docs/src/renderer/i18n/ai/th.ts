@@ -151,6 +151,8 @@ export const th = {
   aiSumReadRuns: 'อ่านส่วนข้อความของบล็อก {start}-{end}',
   aiSumTranslateBlocks: 'แปลบล็อก',
   aiSumTranslatedBlocks: 'แปลแล้ว {count} ย่อหน้า',
+  aiSumReviseBlocks: 'ตรวจทานบล็อก',
+  aiSumRevisedBlocks: 'ตรวจทาน: {count} การเปลี่ยนแปลงที่ติดตาม',
   aiSumAddBilingual: 'เพิ่มคำแปลสองภาษา',
   aiSumAddedBilingual: 'เพิ่มย่อหน้าสองภาษาแล้ว {count} ย่อหน้า',
   aiSumInsertChart: 'แทรกแผนภูมิ',
@@ -193,6 +195,8 @@ export const th = {
   aiStarterTranslateRest: 'ค้นหาและแปลส่วนที่ยังไม่ได้แปล',
   aiStarterTranslateTerms: 'ตรวจว่าคำศัพท์และน้ำเสียงสอดคล้องกัน',
   aiStarterTranslateNatural: 'ปรับประโยคที่แปลแล้วฟังขัดให้เป็นธรรมชาติขึ้น',
+  aiStarterTranslateReview:
+    'ตรวจทานคำแปลเทียบกับต้นฉบับ: บันทึกทุกการแก้ไขเป็นการติดตามการเปลี่ยนแปลง และอธิบายเหตุผลในความคิดเห็น',
   aiMindMapBtn: 'แผนที่ความคิด AI',
   aiMindMapPrompt:
     'สร้างแผนที่ความคิดของเอกสารนี้ โดยจัดเรียงหัวข้อหลักและแนวคิดสำคัญตามโครงสร้างส่วนต่างๆ',

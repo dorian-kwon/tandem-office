@@ -154,6 +154,8 @@ export const ja = {
   aiSumReadRuns: 'ブロック {start}-{end} のテキスト区間を読む',
   aiSumTranslateBlocks: 'ブロックを翻訳',
   aiSumTranslatedBlocks: '{count} 段落を翻訳',
+  aiSumReviseBlocks: '段落を校閲',
+  aiSumRevisedBlocks: '校閲：{count} 件の変更履歴',
   aiSumAddBilingual: '原文と訳文を併記',
   aiSumAddedBilingual: '訳文の段落を {count} 件追加',
   aiSumInsertChart: 'グラフを挿入',
@@ -197,6 +199,8 @@ export const ja = {
   aiStarterTranslateRest: '翻訳されずに残っている部分を探して翻訳して',
   aiStarterTranslateTerms: '用語と文体が統一されているか確認して',
   aiStarterTranslateNatural: '不自然な訳文をより自然に整えて',
+  aiStarterTranslateReview:
+    '原文と照らして訳文を校閲して。修正は変更履歴で残し、理由はコメントで書いて',
   aiMindMapBtn: 'AI マインドマップ',
   aiMindMapPrompt:
     'このドキュメントのマインドマップを生成し、章構成に沿って主要トピックとキーワードを整理してください',

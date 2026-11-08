@@ -153,6 +153,8 @@ export const en = {
   aiSumReadRuns: 'Read text runs {start}-{end}',
   aiSumTranslateBlocks: 'Translate blocks',
   aiSumTranslatedBlocks: 'Translated {count} paragraph(s)',
+  aiSumReviseBlocks: 'Review blocks',
+  aiSumRevisedBlocks: 'Review: {count} tracked change(s)',
   aiSumAddBilingual: 'Add bilingual translation',
   aiSumAddedBilingual: 'Added {count} bilingual paragraph(s)',
   aiSumInsertChart: 'Insert chart',
@@ -196,6 +198,8 @@ export const en = {
   aiStarterTranslateRest: 'Find and translate the parts left untranslated',
   aiStarterTranslateTerms: 'Check that terms and tone are consistent',
   aiStarterTranslateNatural: 'Make awkward translated sentences sound more natural',
+  aiStarterTranslateReview:
+    'Review the translation against the original: record each fix as a tracked change and explain the reasons in comments',
   aiMindMapBtn: 'AI Mind Map',
   aiMindMapPrompt:
     'Generate a mind map of this document, organizing the main topics and key concepts by its section structure',

@@ -156,6 +156,8 @@ export const fr = {
   aiSumReadRuns: 'Lire les segments des blocs {start}-{end}',
   aiSumTranslateBlocks: 'Traduire les blocs',
   aiSumTranslatedBlocks: '{count} paragraphe(s) traduit(s)',
+  aiSumReviseBlocks: 'Relire les blocs',
+  aiSumRevisedBlocks: 'Relecture : {count} modification(s) suivie(s)',
   aiSumAddBilingual: 'Ajouter la traduction bilingue',
   aiSumAddedBilingual: '{count} paragraphe(s) bilingue(s) ajouté(s)',
   aiSumInsertChart: 'Insérer un graphique',
@@ -194,11 +196,14 @@ export const fr = {
   aiStarterMindMap: 'Générer une carte mentale de ce document',
   aiEmptyTranslateTitle: 'Confiez la traduction à l’IA',
   aiEmptyTranslateBody1: 'Indiquez la portée et le ton, ou posez directement une question.',
-  aiEmptyTranslateBody2: 'Si vous sélectionnez du texte, les consignes de traduction s’appliquent à la sélection.',
+  aiEmptyTranslateBody2:
+    'Si vous sélectionnez du texte, les consignes de traduction s’appliquent à la sélection.',
   aiStarterTranslateAll: 'Traduire tout le document',
   aiStarterTranslateRest: 'Trouver et traduire les passages restés non traduits',
   aiStarterTranslateTerms: 'Vérifier la cohérence des termes et du ton',
   aiStarterTranslateNatural: 'Rendre les phrases traduites maladroites plus naturelles',
+  aiStarterTranslateReview:
+    'Relis la traduction par rapport à l’original : chaque correction en modification suivie, les raisons en commentaires',
   aiMindMapBtn: 'Carte mentale IA',
   aiMindMapPrompt:
     'Génère une carte mentale de ce document en organisant les thèmes principaux et les concepts clés selon sa structure de sections',

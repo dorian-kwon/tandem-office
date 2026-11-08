@@ -158,6 +158,8 @@ export const de = {
   aiSumReadRuns: 'Textabschnitte der Blöcke {start}-{end} lesen',
   aiSumTranslateBlocks: 'Blöcke übersetzen',
   aiSumTranslatedBlocks: '{count} Absatz/Absätze übersetzt',
+  aiSumReviseBlocks: 'Absätze prüfen',
+  aiSumRevisedBlocks: 'Prüfung: {count} nachverfolgte Änderung(en)',
   aiSumAddBilingual: 'Zweisprachige Übersetzung ergänzen',
   aiSumAddedBilingual: '{count} zweisprachige(r) Absatz/Absätze ergänzt',
   aiSumInsertChart: 'Diagramm einfügen',
@@ -201,6 +203,8 @@ export const de = {
   aiStarterTranslateRest: 'Noch nicht übersetzte Stellen finden und übersetzen',
   aiStarterTranslateTerms: 'Prüfen, ob Begriffe und Ton einheitlich sind',
   aiStarterTranslateNatural: 'Holprige Übersetzungen natürlicher formulieren',
+  aiStarterTranslateReview:
+    'Prüfe die Übersetzung gegen das Original: jede Korrektur als nachverfolgte Änderung, Begründungen als Kommentare',
   aiMindMapBtn: 'KI-Mindmap',
   aiMindMapPrompt:
     'Erstelle eine Mindmap zu diesem Dokument und ordne die Hauptthemen und Schlüsselkonzepte nach seiner Abschnittsstruktur',

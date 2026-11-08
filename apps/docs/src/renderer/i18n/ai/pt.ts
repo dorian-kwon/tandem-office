@@ -157,6 +157,8 @@ export const pt = {
   aiSumReadRuns: 'Ler trechos dos blocos {start}-{end}',
   aiSumTranslateBlocks: 'Traduzir blocos',
   aiSumTranslatedBlocks: '{count} parágrafo(s) traduzido(s)',
+  aiSumReviseBlocks: 'Revisar blocos',
+  aiSumRevisedBlocks: 'Revisão: {count} alteração(ões) controlada(s)',
   aiSumAddBilingual: 'Adicionar tradução bilíngue',
   aiSumAddedBilingual: '{count} parágrafo(s) bilíngue(s) adicionado(s)',
   aiSumInsertChart: 'Inserir gráfico',
@@ -200,6 +202,8 @@ export const pt = {
   aiStarterTranslateRest: 'Encontrar e traduzir as partes que ficaram sem tradução',
   aiStarterTranslateTerms: 'Verificar se os termos e o tom estão consistentes',
   aiStarterTranslateNatural: 'Deixar mais naturais as frases traduzidas desajeitadas',
+  aiStarterTranslateReview:
+    'Revise a tradução em relação ao original: cada correção como alteração controlada e os motivos em comentários',
   aiMindMapBtn: 'Mapa mental IA',
   aiMindMapPrompt:
     'Gere um mapa mental deste documento, organizando os temas principais e conceitos-chave pela estrutura de seções',

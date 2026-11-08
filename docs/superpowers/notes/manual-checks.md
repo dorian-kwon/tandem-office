@@ -338,3 +338,19 @@ Needs a rebuild of the shell app (`npm run build -w @genoffice/shell`). Uses rea
 4. Table with merged cells: choose right. The AI tells you it fell back to rows below because of the merged cells; each row group tied by merges is repeated as one block right after the group with the same merges, and the grid is not broken (open the saved file in Word to check).
 5. Track changes on: the added paragraphs, rows and cells show as insertions by the AI author; reject all returns the original document.
 6. Undo once after one add_bilingual call restores the document before it. A numbered heading (numbering from the heading style) gets its twin numbered too: note it if it looks wrong.
+
+
+## Translation review (감수): revise_blocks with tracked changes
+
+Needs a rebuild of the shell and docs apps (`npm run build -w @genoffice/shell`). Uses real AI turns (your subscription limit). Use a translation project whose output copy is already translated (a Word document with mixed run formatting, a footnote, a table, an empty paragraph), and one bilingual output.
+
+1. Open the translation view and the AI panel empty state: a sixth starter "Review the translation..." (in your language) sits after the other translation starters. Click it: the composer is filled with the review instruction and nothing is sent.
+2. Send it with the panel's track-changes switch OFF. While the AI runs the output is locked; afterwards the changes still show as tracked changes whose author is "AI Assistant (review)" (check the review pane filter by author). Only the wrong words are marked deleted/inserted, not whole paragraphs; italic, bold and font of each run are unchanged; the footnote mark and empty paragraphs are unchanged.
+3. Accept one change and reject another: the text follows. Undo once after a revise call restores the text before it. Save, reopen the file in Word: the revisions and their author survive and can be accepted there.
+4. Comments: non-trivial fixes and doubts have one short comment with the reason; trivial fixes have none; ask for the review again: no identical comment is added twice. Neither the file in `source/` nor the original is changed.
+5. Original comparison: the AI says where it read the original (the file in `source/` through project_read, or the bilingual twin). Check it catches a deliberately wrong number, a dropped sentence and a glossary term you changed in the output. With an unreadable original (for example a scan) it says so and reviews fluency and consistency only.
+6. Bilingual output: only the translation next to each original is revised; the original paragraphs are never changed (a revise call on one is refused).
+7. A paragraph you left untranslated is reported as not revised (with the source language known), and the AI offers to translate it. After the review, "is anything left untranslated" does not list the reviewed paragraphs.
+8. Footnotes and endnotes carry no tracked changes: the AI only mentions doubts about them in the summary. Finish: the summary gives counts by kind of fix and the open doubts.
+9. An ODT document: the review tool is not offered (tracked changes are off there).
+

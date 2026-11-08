@@ -153,6 +153,8 @@ export const hi = {
   aiSumReadRuns: 'ब्लॉक {start}-{end} के पाठ खंड पढ़ें',
   aiSumTranslateBlocks: 'ब्लॉक का अनुवाद करें',
   aiSumTranslatedBlocks: '{count} अनुच्छेद अनूदित',
+  aiSumReviseBlocks: 'अनुच्छेदों की समीक्षा',
+  aiSumRevisedBlocks: 'समीक्षा: {count} ट्रैक किए गए बदलाव',
   aiSumAddBilingual: 'द्विभाषी अनुवाद जोड़ें',
   aiSumAddedBilingual: '{count} द्विभाषी अनुच्छेद जोड़े गए',
   aiSumInsertChart: 'चार्ट सम्मिलित करें',
@@ -195,6 +197,8 @@ export const hi = {
   aiStarterTranslateRest: 'जो हिस्से अनुवाद से छूट गए हैं उन्हें खोजकर अनुवाद करें',
   aiStarterTranslateTerms: 'जाँचें कि शब्दावली और लहजा एक जैसे हैं',
   aiStarterTranslateNatural: 'अटपटे अनूदित वाक्यों को और स्वाभाविक बनाएँ',
+  aiStarterTranslateReview:
+    'मूल पाठ से मिलाकर अनुवाद की समीक्षा करो: हर सुधार ट्रैक किए गए बदलाव के रूप में दर्ज करो और कारण टिप्पणियों में लिखो',
   aiMindMapBtn: 'AI माइंड मैप',
   aiMindMapPrompt:
     'इस दस्तावेज़ का माइंड मैप बनाएँ और मुख्य विषयों तथा प्रमुख अवधारणाओं को अनुभाग संरचना के अनुसार व्यवस्थित करें',

@@ -153,6 +153,8 @@ export const id = {
   aiSumReadRuns: 'Baca potongan teks blok {start}-{end}',
   aiSumTranslateBlocks: 'Terjemahkan blok',
   aiSumTranslatedBlocks: '{count} paragraf diterjemahkan',
+  aiSumReviseBlocks: 'Tinjau blok',
+  aiSumRevisedBlocks: 'Tinjauan: {count} perubahan terlacak',
   aiSumAddBilingual: 'Tambahkan terjemahan dwibahasa',
   aiSumAddedBilingual: '{count} paragraf dwibahasa ditambahkan',
   aiSumInsertChart: 'Sisipkan bagan',
@@ -190,11 +192,14 @@ export const id = {
   aiStarterMindMap: 'Buat peta pikiran dari dokumen ini',
   aiEmptyTranslateTitle: 'Serahkan terjemahan kepada AI',
   aiEmptyTranslateBody1: 'Sebutkan cakupan dan nadanya, atau langsung ajukan pertanyaan.',
-  aiEmptyTranslateBody2: 'Jika Anda memilih teks, instruksi terjemahan berlaku pada bagian yang dipilih.',
+  aiEmptyTranslateBody2:
+    'Jika Anda memilih teks, instruksi terjemahan berlaku pada bagian yang dipilih.',
   aiStarterTranslateAll: 'Terjemahkan seluruh dokumen',
   aiStarterTranslateRest: 'Temukan dan terjemahkan bagian yang belum diterjemahkan',
   aiStarterTranslateTerms: 'Periksa apakah istilah dan nadanya konsisten',
   aiStarterTranslateNatural: 'Buat kalimat terjemahan yang kaku terdengar lebih alami',
+  aiStarterTranslateReview:
+    'Tinjau terjemahan dengan membandingkannya dengan teks asli: catat tiap perbaikan sebagai perubahan terlacak dan jelaskan alasannya di komentar',
   aiMindMapBtn: 'Peta Pikiran AI',
   aiMindMapPrompt:
     'Buat peta pikiran dari dokumen ini, susun topik utama dan konsep kunci menurut struktur bagiannya',

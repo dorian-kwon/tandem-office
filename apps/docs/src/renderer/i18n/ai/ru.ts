@@ -155,6 +155,8 @@ export const ru = {
   aiSumReadRuns: 'Чтение фрагментов текста блоков {start}-{end}',
   aiSumTranslateBlocks: 'Перевести блоки',
   aiSumTranslatedBlocks: 'Переведено абзацев: {count}',
+  aiSumReviseBlocks: 'Вычитка абзацев',
+  aiSumRevisedBlocks: 'Вычитка: исправлений с отслеживанием — {count}',
   aiSumAddBilingual: 'Добавить двуязычный перевод',
   aiSumAddedBilingual: 'Добавлено двуязычных абзацев: {count}',
   aiSumInsertChart: 'Вставка диаграммы',
@@ -197,6 +199,8 @@ export const ru = {
   aiStarterTranslateRest: 'Найти и перевести непереведённые фрагменты',
   aiStarterTranslateTerms: 'Проверить единообразие терминов и тона',
   aiStarterTranslateNatural: 'Сделать неуклюжие переводы более естественными',
+  aiStarterTranslateReview:
+    'Вычитай перевод по оригиналу: каждую правку оформляй как исправление с отслеживанием, а причины поясняй в примечаниях',
   aiMindMapBtn: 'ИИ-ментальная карта',
   aiMindMapPrompt:
     'Создай ментальную карту этого документа, организовав основные темы и ключевые понятия по структуре разделов',

@@ -264,6 +264,8 @@ export const TRANSLATION_EDITING_RULES = [
   '- Never delete, fill or restyle empty paragraphs, or move, delete or retype a footnote reference mark.',
   '- Footnotes and endnotes are translated too: read_runs notes:true, then translate_blocks entries with "note" and "id". Tool results state the note counts and what is left; trust them. Translation is not finished until read_runs with checkRemaining:true and sourceLanguage reports nothing left.',
   '- Pass each paragraph\'s "fp" from read_runs to translate_blocks unchanged; a refused fp means call read_runs again.',
+  '- Review (감수, 검수, proofreading) of a translated document: read_runs then revise_blocks, never translate_blocks; every fix is a tracked change (author "AI Assistant (review)"). Original: project_read of the file in source/ (match paragraphs by content and order), else the bilingual twin (read_runs review:true) or what the person pasted; if none is readable, say so, review only fluency and consistency, never invent an original. Never edit anything in source/.',
+  '- Review procedure: compare range by range; revise only real errors (mistranslation, omission, addition, number/name/date, glossary, writing style, kept choices, awkward phrasing), never restyle a correct translation. add_comment only for non-trivial fixes or doubts, never twice; notes cannot carry tracked changes, so mention doubts. Finish with a summary: counts by kind and open doubts.',
 ].join('\n')
 
 /** The registered translation project at `root` (any spelling of the path), or undefined */

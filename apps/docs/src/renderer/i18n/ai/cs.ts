@@ -155,6 +155,8 @@ export const cs = {
   aiSumReadRuns: 'Čtení textů bloků {start}–{end}',
   aiSumTranslateBlocks: 'Přeložit bloky',
   aiSumTranslatedBlocks: 'Přeloženo odstavců: {count}',
+  aiSumReviseBlocks: 'Zkontrolovat odstavce',
+  aiSumRevisedBlocks: 'Kontrola: {count} sledovaných změn',
   aiSumAddBilingual: 'Přidat dvojjazyčný překlad',
   aiSumAddedBilingual: 'Přidáno dvojjazyčných odstavců: {count}',
   aiSumInsertChart: 'Vložit graf',
@@ -197,6 +199,8 @@ export const cs = {
   aiStarterTranslateRest: 'Najít a přeložit části, které zůstaly nepřeložené',
   aiStarterTranslateTerms: 'Zkontrolovat, zda jsou termíny a tón jednotné',
   aiStarterTranslateNatural: 'Upravit neobratné překlady, aby zněly přirozeněji',
+  aiStarterTranslateReview:
+    'Zkontroluj překlad podle originálu: každou opravu zaznamenej jako sledovanou změnu a důvody napiš do komentářů',
   aiMindMapBtn: 'Myšlenková mapa AI',
   aiMindMapPrompt:
     'Vytvoř myšlenkovou mapu tohoto dokumentu a uspořádej hlavní témata a klíčové pojmy podle struktury sekcí',

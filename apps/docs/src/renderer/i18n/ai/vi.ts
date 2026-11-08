@@ -154,6 +154,8 @@ export const vi = {
   aiSumReadRuns: 'Đọc các đoạn văn bản của khối {start}-{end}',
   aiSumTranslateBlocks: 'Dịch các khối',
   aiSumTranslatedBlocks: 'Đã dịch {count} đoạn',
+  aiSumReviseBlocks: 'Hiệu đính các đoạn',
+  aiSumRevisedBlocks: 'Hiệu đính: {count} thay đổi được theo dõi',
   aiSumAddBilingual: 'Thêm bản dịch song ngữ',
   aiSumAddedBilingual: 'Đã thêm {count} đoạn song ngữ',
   aiSumInsertChart: 'Chèn biểu đồ',
@@ -196,6 +198,8 @@ export const vi = {
   aiStarterTranslateRest: 'Tìm và dịch những phần còn chưa được dịch',
   aiStarterTranslateTerms: 'Kiểm tra thuật ngữ và giọng văn có nhất quán không',
   aiStarterTranslateNatural: 'Chỉnh các câu dịch gượng gạo cho tự nhiên hơn',
+  aiStarterTranslateReview:
+    'Hiệu đính bản dịch đối chiếu với bản gốc: ghi mỗi chỗ sửa thành thay đổi được theo dõi và giải thích lý do trong chú thích',
   aiMindMapBtn: 'Bản đồ tư duy AI',
   aiMindMapPrompt:
     'Tạo bản đồ tư duy cho tài liệu này, sắp xếp các chủ đề chính và khái niệm then chốt theo cấu trúc các phần',

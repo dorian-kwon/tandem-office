@@ -156,6 +156,8 @@ export const nl = {
   aiSumReadRuns: 'Tekstsegmenten van blokken {start}-{end} lezen',
   aiSumTranslateBlocks: 'Blokken vertalen',
   aiSumTranslatedBlocks: '{count} alinea(’s) vertaald',
+  aiSumReviseBlocks: 'Blokken nakijken',
+  aiSumRevisedBlocks: 'Nagekeken: {count} bijgehouden wijziging(en)',
   aiSumAddBilingual: 'Tweetalige vertaling toevoegen',
   aiSumAddedBilingual: '{count} tweetalige alinea(’s) toegevoegd',
   aiSumInsertChart: 'Grafiek invoegen',
@@ -199,6 +201,8 @@ export const nl = {
   aiStarterTranslateRest: 'Onvertaalde delen zoeken en vertalen',
   aiStarterTranslateTerms: 'Controleren of termen en toon consistent zijn',
   aiStarterTranslateNatural: 'Onhandige vertaalde zinnen natuurlijker maken',
+  aiStarterTranslateReview:
+    'Controleer de vertaling aan de hand van het origineel: elke correctie als bijgehouden wijziging en de redenen in opmerkingen',
   aiMindMapBtn: 'AI-mindmap',
   aiMindMapPrompt:
     'Maak een mindmap van dit document en orden de hoofdonderwerpen en kernconcepten naar de sectiestructuur',

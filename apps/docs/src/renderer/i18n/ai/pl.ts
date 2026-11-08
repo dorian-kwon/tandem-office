@@ -155,6 +155,8 @@ export const pl = {
   aiSumReadRuns: 'Odczyt fragmentów tekstu bloków {start}-{end}',
   aiSumTranslateBlocks: 'Przetłumacz bloki',
   aiSumTranslatedBlocks: 'Przetłumaczono akapity: {count}',
+  aiSumReviseBlocks: 'Zredaguj akapity',
+  aiSumRevisedBlocks: 'Redakcja: {count} śledzonych zmian',
   aiSumAddBilingual: 'Dodaj tłumaczenie dwujęzyczne',
   aiSumAddedBilingual: 'Dodano akapity dwujęzyczne: {count}',
   aiSumInsertChart: 'Wstaw wykres',
@@ -198,6 +200,8 @@ export const pl = {
   aiStarterTranslateRest: 'Znajdź i przetłumacz fragmenty, które pozostały nieprzetłumaczone',
   aiStarterTranslateTerms: 'Sprawdź, czy terminy i ton są spójne',
   aiStarterTranslateNatural: 'Spraw, by niezgrabne tłumaczenia brzmiały naturalniej',
+  aiStarterTranslateReview:
+    'Zweryfikuj tłumaczenie z oryginałem: każdą poprawkę zapisz jako śledzoną zmianę, a powody opisz w komentarzach',
   aiMindMapBtn: 'Mapa myśli AI',
   aiMindMapPrompt:
     'Wygeneruj mapę myśli tego dokumentu, porządkując główne tematy i kluczowe pojęcia według struktury sekcji',

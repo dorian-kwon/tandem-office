@@ -210,4 +210,20 @@ describe('TRANSLATION_EDITING_RULES', () => {
     expect(TRANSLATION_EDITING_RULES).toMatch(/tidies spacing itself; do not fix spacing by hand/)
     expect(TRANSLATION_EDITING_RULES).not.toMatch(/fix spacing with/)
   })
+
+  it('has a short review (감수) procedure: revise_blocks, tracked, original from source/', () => {
+    const rules = TRANSLATION_EDITING_RULES
+    expect(rules).toMatch(/Review \(감수[^\n]*read_runs then revise_blocks, never translate_blocks/)
+    expect(rules).toMatch(/tracked change \(author "AI Assistant \(review\)"\)/)
+    expect(rules).toMatch(/project_read of the file in source\//)
+    expect(rules).toMatch(/review:true/)
+    expect(rules).toMatch(/never invent an original/)
+    expect(rules).toMatch(/Never edit anything in source\//)
+    expect(rules.length).toBeLessThan(2100)
+    expect(rules).toMatch(/Review procedure:[^\n]*never restyle a correct translation/)
+    expect(rules).toMatch(/add_comment only for non-trivial fixes or doubts, never twice/)
+    expect(rules).toMatch(/Finish with a summary/)
+    // short: the whole forced rules block stays a few lines
+    expect(rules.split('\n').length).toBeLessThanOrEqual(12)
+  })
 })

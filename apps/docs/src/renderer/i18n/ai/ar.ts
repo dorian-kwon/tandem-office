@@ -151,6 +151,8 @@ export const ar = {
   aiSumReadRuns: 'قراءة نصوص الكتل {start}-{end}',
   aiSumTranslateBlocks: 'ترجمة الكتل',
   aiSumTranslatedBlocks: 'تمت ترجمة {count} فقرة',
+  aiSumReviseBlocks: 'مراجعة الفقرات',
+  aiSumRevisedBlocks: 'مراجعة: {count} تغيير متتبَّع',
   aiSumAddBilingual: 'إضافة ترجمة ثنائية اللغة',
   aiSumAddedBilingual: 'تمت إضافة {count} فقرة ثنائية اللغة',
   aiSumInsertChart: 'إدراج مخطط',
@@ -193,6 +195,8 @@ export const ar = {
   aiStarterTranslateRest: 'العثور على الأجزاء غير المترجمة وترجمتها',
   aiStarterTranslateTerms: 'التحقق من اتساق المصطلحات والنبرة',
   aiStarterTranslateNatural: 'جعل الجمل المترجمة الركيكة أكثر طبيعية',
+  aiStarterTranslateReview:
+    'راجع الترجمة مقارنةً بالأصل: سجّل كل تصحيح كتغيير متتبَّع واشرح الأسباب في تعليقات',
   aiMindMapBtn: 'خريطة ذهنية بالذكاء الاصطناعي',
   aiMindMapPrompt:
     'أنشئ خريطة ذهنية لهذا المستند، ونظّم المواضيع الرئيسية والمفاهيم الأساسية وفق بنية أقسامه',

@@ -258,9 +258,9 @@ describe('translationContextForFolder', () => {
   it('keeps the whole text within the limit with the editing rules added', async () => {
     writeTranslationProjects(settingsPath, [{ dir, lastOpened: 1 }])
     writeTranslationSystemPrompt(settingsPath, 'x'.repeat(5000))
-    const context = await translationContextForFolder(dir, { settingsPath, limitChars: 2000 })
+    const context = await translationContextForFolder(dir, { settingsPath, limitChars: 2300 })
     expect((context?.prompts.length ?? 0) + (context?.material.length ?? 0)).toBeLessThanOrEqual(
-      2000,
+      2300,
     )
     expect(context?.prompts).toContain('translate_blocks')
     expect(context?.cut).toBe(true)
@@ -343,12 +343,12 @@ describe('reference chunks', () => {
     expect(context?.references).toContain('[a.md — One]')
     const small = await translationContextForFolder(
       dir,
-      { settingsPath, limitChars: 1500 },
+      { settingsPath, limitChars: 2300 },
       'first',
     )
     const total =
       (small?.prompts.length ?? 0) + (small?.material.length ?? 0) + (small?.references.length ?? 0)
-    expect(total).toBeLessThanOrEqual(1500)
+    expect(total).toBeLessThanOrEqual(2300)
     expect(small?.references).toBe('')
   })
 

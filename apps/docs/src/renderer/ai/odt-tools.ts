@@ -15,6 +15,7 @@ const ODT_OFF_TOOLS: Record<string, string> = {
   resolve_comment: 'resolving comments',
   accept_changes: 'tracked changes',
   reject_changes: 'tracked changes',
+  revise_blocks: 'tracked changes',
   insert_chart: 'charts',
   edit_chart: 'charts',
   set_watermark: 'watermarks',

@@ -56,6 +56,8 @@ export interface RunParagraph {
   empty?: true
   /** not translatable by these tools (an image, a protected block, a pending deletion) */
   skip?: string
+  /** review reads only: the side of a bilingual pair ("original" has no fp: it is never edited) */
+  role?: 'original' | 'translation'
 }
 
 export interface Group {
@@ -243,7 +245,12 @@ const TWIN_SKIP: Record<TwinRole, string> = {
 }
 
 /** read_runs: the run groups of blocks start..end (inclusive), text only */
-export function readRunGroups(editor: Editor, start: number, end: number): RunParagraph[] {
+export function readRunGroups(
+  editor: Editor,
+  start: number,
+  end: number,
+  options: { review?: boolean } = {},
+): RunParagraph[] {
   const doc = editor.state.doc
   const out: RunParagraph[] = []
   for (let index = start; index <= end; index++) {
@@ -272,6 +279,16 @@ export function readRunGroups(editor: Editor, start: number, end: number): RunPa
       }
       const fp = fps[paragraph]!
       const role = inTable ? roles[paragraph] : plainTwinRole(editor, doc, index, fp)
+      if (role && options.review) {
+        // a review lists both sides: the twin is what gets revised, the original is read-only (no fp)
+        const where = inTable ? { index, paragraph } : { index }
+        out.push(
+          role === 'twin'
+            ? { ...where, role: 'translation', fp, segments }
+            : { ...where, role: 'original', segments },
+        )
+        return
+      }
       if (role) {
         out.push(
           inTable ? { index, paragraph, skip: TWIN_SKIP[role] } : { index, skip: TWIN_SKIP[role] },

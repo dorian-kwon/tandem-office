@@ -154,6 +154,8 @@ export const ms = {
   aiSumReadRuns: 'Baca segmen teks blok {start}-{end}',
   aiSumTranslateBlocks: 'Terjemah blok',
   aiSumTranslatedBlocks: '{count} perenggan diterjemah',
+  aiSumReviseBlocks: 'Semak blok',
+  aiSumRevisedBlocks: 'Semakan: {count} perubahan dijejak',
   aiSumAddBilingual: 'Tambah terjemahan dwibahasa',
   aiSumAddedBilingual: '{count} perenggan dwibahasa ditambah',
   aiSumInsertChart: 'Sisipkan carta',
@@ -191,11 +193,14 @@ export const ms = {
   aiStarterMindMap: 'Jana peta minda dokumen ini',
   aiEmptyTranslateTitle: 'Serahkan terjemahan kepada AI',
   aiEmptyTranslateBody1: 'Nyatakan skop dan nadanya, atau terus bertanya.',
-  aiEmptyTranslateBody2: 'Jika anda memilih teks, arahan terjemahan dikenakan pada bahagian yang dipilih.',
+  aiEmptyTranslateBody2:
+    'Jika anda memilih teks, arahan terjemahan dikenakan pada bahagian yang dipilih.',
   aiStarterTranslateAll: 'Terjemahkan keseluruhan dokumen',
   aiStarterTranslateRest: 'Cari dan terjemahkan bahagian yang belum diterjemahkan',
   aiStarterTranslateTerms: 'Semak sama ada istilah dan nada konsisten',
   aiStarterTranslateNatural: 'Jadikan ayat terjemahan yang kaku lebih semula jadi',
+  aiStarterTranslateReview:
+    'Semak terjemahan berbanding teks asal: catat setiap pembetulan sebagai perubahan dijejak dan terangkan sebabnya dalam komen',
   aiMindMapBtn: 'Peta Minda AI',
   aiMindMapPrompt:
     'Jana peta minda dokumen ini, susun topik utama dan konsep utama mengikut struktur bahagiannya',
