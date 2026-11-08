@@ -36,7 +36,13 @@ export function composeContext(input: {
   const { project } = input
   const system = input.systemPrompt.trim()
   const projectPrompt = project.projectPrompt.trim()
-  const languageLine = `번역: ${project.sourceLang} → ${project.targetLang}`
+  // the direction is fixed by the project; the language the person writes the
+  // request in must never flip it
+  const languageLine =
+    `번역: ${project.sourceLang} → ${project.targetLang}\n` +
+    `Translation direction is fixed: translate the document from ${project.sourceLang} into ${project.targetLang}. ` +
+    `The language of the person's instruction (even if it is ${project.sourceLang} or any other language) never changes this; ` +
+    `never translate into ${project.sourceLang}, and write the translated text in ${project.targetLang} only.`
   const styleRule = writingStyleRule(project.writingStyle)
   const choicesRule = translationChoicesRule(project.choices)
   const projectText = [projectPrompt, languageLine, styleRule, choicesRule]

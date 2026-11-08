@@ -156,9 +156,11 @@ describe('buildTranslationInstructions', () => {
     await addReference(dir, ref)
     const built = await buildTranslationInstructions(dir, '', { settingsPath })
     // an undecided project also tells the AI which questions to ask before writing
-    expect(built.promptText).toBe(
-      `GLOBAL\n\nPROJECT\n번역: en → ko\n${translationChoicesRule(undefined)}`,
-    )
+    expect(built.promptText.startsWith('GLOBAL\n\nPROJECT\n번역: en → ko\n')).toBe(true)
+    // the direction is stated as fixed, whatever language the request is written in
+    expect(built.promptText).toContain('translate the document from en into ko')
+    expect(built.promptText).toContain('never translate into en')
+    expect(built.promptText.endsWith(`\n${translationChoicesRule(undefined)}`)).toBe(true)
     expect(built.materialText).toBe('단어집:\nengine → 엔진\n\n참고자료:\n- style.pdf')
     expect(`${built.promptText}\n\n${built.materialText}`).toBe(built.text)
   })
