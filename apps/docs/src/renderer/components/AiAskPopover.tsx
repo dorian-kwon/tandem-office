@@ -124,6 +124,7 @@ export function AiAskPopover({
   const [rect, setRect] = useState<AnchorRect | null>(null)
   const boxRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const triggersRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const openRef = useRef(open)
@@ -178,6 +179,15 @@ export function AiAskPopover({
       window.removeEventListener('resize', update)
     }
   }, [editor])
+
+  // the entry sits right of the selection; near the window's right edge it is pushed back
+  // inside instead of being squeezed (the buttons never wrap)
+  useLayoutEffect(() => {
+    const el = triggersRef.current
+    if (!el || !trigger) return
+    const left = Math.min(trigger.left, window.innerWidth - el.offsetWidth - EDGE)
+    el.style.left = `${Math.max(EDGE, left)}px`
+  }, [trigger])
 
   // clicking a queued anchor in the document re-opens the popover on that item
   useEffect(() => {
@@ -410,7 +420,7 @@ export function AiAskPopover({
   return (
     <>
       {trigger && !open && (
-        <div className="ai-ask-triggers" style={{ left: trigger.left, top: trigger.top }}>
+        <div ref={triggersRef} className="ai-ask-triggers" style={{ top: trigger.top }}>
           <button
             ref={triggerRef}
             className="ai-ask-trigger"

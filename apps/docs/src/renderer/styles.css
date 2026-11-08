@@ -8821,10 +8821,12 @@ body.docs-crop-active
   z-index: 59;
   display: flex;
   gap: 6px;
+  width: max-content;
 }
 
 .ai-ask-triggers .ai-ask-trigger {
   position: static;
+  white-space: nowrap;
 }
 
 .ai-ask-search {
