@@ -7,6 +7,7 @@ import {
   mkdtempSync,
   renameSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs'
@@ -245,6 +246,35 @@ describe('translate IPC handlers', () => {
     expect(await h.pickParentDir()).toBeNull()
     expect(JSON.stringify(dialogOptions[0])).toContain('csv')
     expect(JSON.stringify(dialogOptions[1])).toContain('openDirectory')
+  })
+
+  it('makeFolder makes a folder inside a picked one and the new folder becomes the place', async () => {
+    const h = handlers()
+    dialogResult = { canceled: false, filePaths: [root] }
+    const picked = await h.pickParentDir()
+    const made = await h.makeFolder({ parentToken: picked!.token, name: 'Books' })
+    expect(made.dir).toBe(join(root, 'Books'))
+    expect(statSync(made.dir).isDirectory()).toBe(true)
+    // a project can be created in the new place
+    const { dir } = await h.create({
+      parentToken: made.token,
+      name: 'Demo',
+      sourceLang: 'ko',
+      targetLang: 'en',
+    })
+    expect(dir).toBe(join(root, 'Books', 'Demo'))
+    // an existing folder, a bad name and an unpicked parent are refused
+    await expect(h.makeFolder({ parentToken: picked!.token, name: 'Books' })).rejects.toMatchObject(
+      {
+        code: 'PROJECT_EXISTS',
+      },
+    )
+    await expect(h.makeFolder({ parentToken: picked!.token, name: '..' })).rejects.toMatchObject({
+      code: 'INVALID_PROJECT_NAME',
+    })
+    await expect(h.makeFolder({ parentToken: 'nope', name: 'X' })).rejects.toMatchObject({
+      code: 'NOT_REGISTERED',
+    })
   })
 
   it('create only accepts a picked parent folder', async () => {

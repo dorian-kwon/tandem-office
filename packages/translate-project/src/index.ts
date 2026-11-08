@@ -43,6 +43,7 @@ export {
   ProjectExistsError,
   createProject,
   loadProject,
+  makeFolder,
   projectStatus,
   removeProject,
   saveProject,

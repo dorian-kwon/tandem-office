@@ -1248,3 +1248,21 @@
   color: var(--text-muted);
   font-size: 12px;
 }
+
+/* the place row of the new-project form: choose a folder, or make one inside it */
+.translate-place-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.translate-new-folder {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.translate-new-folder input {
+  flex: 1;
+  min-width: 0;
+}

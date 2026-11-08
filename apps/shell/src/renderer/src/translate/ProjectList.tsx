@@ -71,6 +71,9 @@ export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
   const [sourceLang, setSourceLang] = useState('ko')
   const [targetLang, setTargetLang] = useState('en')
   const [parent, setParent] = useState<TranslatePickedParentDir | null>(null)
+  /** the inline "new folder" row under the chosen place */
+  const [newFolderOpen, setNewFolderOpen] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
   const [busy, setBusy] = useState(false)
   const [deleting, setDeleting] = useState<Deleting | null>(null)
   /** the project whose name is being edited in its row */
@@ -126,6 +129,20 @@ export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
     try {
       const picked = await api.pickParentDir()
       if (picked) setParent(picked)
+    } catch (err) {
+      fail(err)
+    }
+  }
+
+  /** make a folder inside the chosen place; the new folder becomes the place */
+  const makeNewFolder = async () => {
+    if (!parent || !newFolderName.trim()) return
+    try {
+      const made = await api.makeFolder({ parentToken: parent.token, name: newFolderName.trim() })
+      setParent(made)
+      setNewFolderName('')
+      setNewFolderOpen(false)
+      setError(null)
     } catch (err) {
       fail(err)
     }
@@ -357,7 +374,8 @@ export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
     ? filterProjects(
         sortProjects(projects, sort, lang),
         query,
-        (entry) => `${languageName(lang, entry.sourceLang)} ${languageName(lang, entry.targetLang)}`,
+        (entry) =>
+          `${languageName(lang, entry.sourceLang)} ${languageName(lang, entry.targetLang)}`,
       )
     : []
   const slice = paginate(matched, page, PROJECT_PAGE_SIZE)
@@ -431,11 +449,45 @@ export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
             <div className="projects-field">
               <span className="projects-field-label">{s('parentLabel')}</span>
               <p className="projects-location">{parent ? parent.dir : s('noFolderChosen')}</p>
-              <div>
+              <div className="translate-place-actions">
                 <button type="button" className="projects-ghost" onClick={() => void choosePlace()}>
                   {s('chooseFolder')}
                 </button>
+                <button
+                  type="button"
+                  className="projects-ghost"
+                  disabled={!parent}
+                  onClick={() => setNewFolderOpen((open) => !open)}
+                >
+                  {s('newFolder')}
+                </button>
               </div>
+              {newFolderOpen && parent && (
+                <div className="translate-new-folder">
+                  <input
+                    value={newFolderName}
+                    placeholder={s('newFolderName')}
+                    aria-label={s('newFolderName')}
+                    autoFocus
+                    onChange={(e) => setNewFolderName(e.target.value)}
+                    onKeyDown={(e) => {
+                      // Enter makes the folder; it must not submit the project form
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        void makeNewFolder()
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="projects-ghost"
+                    disabled={!newFolderName.trim()}
+                    onClick={() => void makeNewFolder()}
+                  >
+                    {s('newFolderCreate')}
+                  </button>
+                </div>
+              )}
             </div>
             <div className="projects-buttons">
               <button

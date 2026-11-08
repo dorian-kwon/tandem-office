@@ -718,6 +718,7 @@ const translateApi: TranslateApi = {
   removeMaterial: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.removeMaterial, args),
   pickMaterials: (kind) => ipcRenderer.invoke(TRANSLATE_CHANNELS.pickMaterials, kind),
   pickParentDir: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.pickParentDir),
+  makeFolder: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.makeFolder, args),
   openTranslation: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.openTranslation, args),
   setPaneHidden: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.setPaneHidden, args),
   ocrPrepare: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrPrepare, args),

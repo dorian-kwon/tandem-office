@@ -8,6 +8,7 @@ import {
   addReference,
   addSource,
   createProject,
+  makeFolder,
   DEFAULT_GLOSSARY_LIMIT,
   EDITABLE_SOURCE_EXTENSIONS,
   IMAGE_SOURCE_EXTENSIONS,
@@ -66,6 +67,7 @@ import {
   type TranslateExportResult,
   type TranslateAdoptedProject,
   type TranslateCreateArgs,
+  type TranslateMakeFolderArgs,
   type TranslateInstructions,
   type TranslateInstructionsForArgs,
   type TranslateMaterialKind,
@@ -234,6 +236,7 @@ export function createTranslateHandlers(deps: TranslateIpcDeps) {
     removeMaterial: guard(raw.removeMaterial),
     pickMaterials: guard(raw.pickMaterials),
     pickParentDir: guard(raw.pickParentDir),
+    makeFolder: guard(raw.makeFolder),
     openTranslation: guard(raw.openTranslation),
     setPaneHidden: guard(raw.setPaneHidden),
     ocrPrepare: guard(raw.ocrPrepare),
@@ -657,6 +660,19 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       return { token: parentPicks.add(null, [dir]), dir }
     },
 
+    async makeFolder(args: TranslateMakeFolderArgs): Promise<TranslatePickedParentDir> {
+      // only inside a folder the person picked in the dialog (or made here from one)
+      const parentToken = requireString(args?.parentToken, 'parentToken')
+      const parentDir = parentPicks.path(parentToken, 0)
+      if (!parentDir)
+        throw new TranslateIpcError(
+          'NOT_REGISTERED',
+          'the parent folder was not picked (or the pick expired)',
+        )
+      const dir = await makeFolder(parentDir, requireString(args.name, 'name'))
+      return { token: parentPicks.add(null, [dir]), dir }
+    },
+
     async openTranslation(
       args: TranslateOpenTranslationArgs,
     ): Promise<TranslateOpenTranslationResult> {
@@ -987,6 +1003,7 @@ export function registerTranslateIpc(
     h.pickMaterials(kind),
   )
   handle(TRANSLATE_CHANNELS.pickParentDir, () => h.pickParentDir())
+  handle(TRANSLATE_CHANNELS.makeFolder, (_e, args: TranslateMakeFolderArgs) => h.makeFolder(args))
   handle(TRANSLATE_CHANNELS.openTranslation, (_e, args: TranslateOpenTranslationArgs) =>
     h.openTranslation(args),
   )

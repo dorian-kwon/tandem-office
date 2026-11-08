@@ -40,6 +40,7 @@ export const TRANSLATE_CHANNELS = {
   removeMaterial: 'translate:remove-material',
   pickMaterials: 'translate:pick-materials',
   pickParentDir: 'translate:pick-parent-dir',
+  makeFolder: 'translate:make-folder',
   openTranslation: 'translate:open-translation',
   setPaneHidden: 'translate:set-pane-hidden',
   ocrPrepare: 'translate:ocr-prepare',
@@ -126,6 +127,13 @@ export interface TranslateRecentDocument {
   openedAt: number
   /** false when the project folder, the source entry or its copy in source/ is gone */
   available: boolean
+}
+
+/** Make a new folder inside a folder the person picked; the new folder becomes the place. */
+export interface TranslateMakeFolderArgs {
+  /** token from `pickParentDir` (or an earlier `makeFolder`) */
+  parentToken: string
+  name: string
 }
 
 export interface TranslateCreateArgs {
@@ -385,6 +393,7 @@ export interface TranslateApi {
   pickMaterials(kind: TranslateMaterialKind): Promise<TranslatePickedMaterials | null>
   /** opens the native folder dialog; null when cancelled */
   pickParentDir(): Promise<TranslatePickedParentDir | null>
+  makeFolder(args: TranslateMakeFolderArgs): Promise<TranslatePickedParentDir>
   /** the translation view: the source copy read-only on the left, the output copy on the right */
   openTranslation(args: TranslateOpenTranslationArgs): Promise<TranslateOpenTranslationResult>
   /** after the person agreed: copy the translation into source/ as the original, then open again */

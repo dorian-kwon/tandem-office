@@ -9,6 +9,7 @@ import {
   ProjectExistsError,
   createProject,
   loadProject,
+  makeFolder,
   projectStatus,
   removeProject,
   saveProject,
@@ -38,6 +39,23 @@ afterEach(async () => {
 
 const isDir = async (p: string): Promise<boolean> =>
   (await stat(p).catch(() => null))?.isDirectory() === true
+
+describe('makeFolder', () => {
+  it('makes a plain folder inside the parent and never reuses an existing one', async () => {
+    const dir = await makeFolder(root, 'My Place')
+    expect(dir).toBe(join(root, 'My Place'))
+    expect(await isDir(dir)).toBe(true)
+    await expect(makeFolder(root, 'My Place')).rejects.toBeInstanceOf(ProjectExistsError)
+  })
+
+  it('applies the project folder name rules', async () => {
+    await expect(makeFolder(root, '  ')).rejects.toBeInstanceOf(InvalidProjectNameError)
+    await expect(makeFolder(root, '..')).rejects.toBeInstanceOf(InvalidProjectNameError)
+    await expect(makeFolder(root, 'con')).rejects.toBeInstanceOf(InvalidProjectNameError)
+    // characters invalid on Windows are stripped, so the name stays a single folder
+    expect(await makeFolder(root, 'a/b')).toBe(join(root, 'ab'))
+  })
+})
 
 describe('createProject', () => {
   it('starts with Claude for OCR, or with the provider it is given', async () => {

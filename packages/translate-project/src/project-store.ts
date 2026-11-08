@@ -50,6 +50,21 @@ function safeFolderName(name: string): string {
   return trimmed
 }
 
+/**
+ * Make one plain folder named `name` inside `parentDir` (a place for projects). The name goes
+ * through the same checks as a project folder name; an existing folder is never reused.
+ */
+export async function makeFolder(parentDir: string, name: string): Promise<string> {
+  const dir = join(parentDir, safeFolderName(name))
+  try {
+    await mkdir(dir)
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'EEXIST') throw new ProjectExistsError(dir)
+    throw e
+  }
+  return dir
+}
+
 export async function createProject(
   parentDir: string,
   name: string,
