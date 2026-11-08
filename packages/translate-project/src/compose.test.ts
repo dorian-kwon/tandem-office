@@ -311,7 +311,10 @@ describe('composeContext reference chunks', () => {
     })
 
     it('tells the bilingual tool and asks the table direction every time, never remembered', () => {
-      for (const choices of [{}, { outputMode: 'Keep', bilingual: 'After the paragraph' }]) {
+      for (const choices of [
+        {} as Record<string, string>,
+        { outputMode: 'Keep', bilingual: 'After the paragraph' },
+      ]) {
         const { text } = composeContext({ ...base, project: withChoices(choices) })
         expect(text).toContain('use add_bilingual, never translate_blocks or replace_blocks')
         expect(text).toContain('right cell (left original, right translation)')
