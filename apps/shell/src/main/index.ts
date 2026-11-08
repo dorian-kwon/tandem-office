@@ -1072,10 +1072,8 @@ function autoSaveFor(webContentsId: number): AutoSaveDefault {
   const manager = tabManager
   if (
     manager &&
-    isTranslationOutputTab(
-      manager.tabIdForWebContents(webContentsId),
-      manager.splitState(),
-      (id) => manager.isReadOnlyTab(id),
+    isTranslationOutputTab(manager.tabIdForWebContents(webContentsId), manager.splitState(), (id) =>
+      manager.isReadOnlyTab(id),
     )
   )
     return { ...base, on: true, locked: true }
@@ -6482,13 +6480,11 @@ function registerHomeIpc(): void {
     return authorNameSetting()
   })
 
-  ipcMain.handle(
-    HOME_CHANNELS.getAutoSaveDefault,
-    (event): AutoSaveDefault => autoSaveFor(event.sender.id),
+  ipcMain.handle(HOME_CHANNELS.getAutoSaveDefault, (event): AutoSaveDefault =>
+    autoSaveFor(event.sender.id),
   )
-  ipcMain.handle(
-    'app:get-auto-save-default',
-    (event): AutoSaveDefault => autoSaveFor(event.sender.id),
+  ipcMain.handle('app:get-auto-save-default', (event): AutoSaveDefault =>
+    autoSaveFor(event.sender.id),
   )
 
   // an editor asks whether it is the translation view's output pane (the AI run lock)
