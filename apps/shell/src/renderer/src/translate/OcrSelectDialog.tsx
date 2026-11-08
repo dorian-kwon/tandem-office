@@ -251,7 +251,7 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
   }
 
   /** go on with what was read; the pictures without text are named for the chat */
-  const useRead = async (problems: OcrProblem[]) => {
+  const acceptRead = async (problems: OcrProblem[]) => {
     if (!api || !prepared) return
     const indices = [...collectedRef.current.keys()].sort((a, b) => a - b)
     if (indices.length === 0) return
@@ -388,7 +388,7 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
                 )
               } else {
                 // a retry that completed the set: the analysis needs a lease naming all of it
-                await useRead([])
+                await acceptRead([])
               }
               return null
             },
@@ -775,7 +775,7 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
                 className="btn btn-secondary"
                 data-action="use-read"
                 disabled={collectedRef.current.size === 0}
-                onClick={() => void useRead(step.problems)}
+                onClick={() => void acceptRead(step.problems)}
               >
                 {s('ocrUseRead')}
               </button>

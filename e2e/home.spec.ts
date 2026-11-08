@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { PRODUCT_NAME } from '../packages/i18n/src/product'
-import { launchShell, closeAndSaveVideo, screenshotPath, waitForPageWithUrl } from './helpers'
+import { launchShell, closeAndSaveVideo, screenshotPath } from './helpers'
 
 test.describe('home screen', () => {
   test('translation-only home: sidebar shows Translation and opens on its project list', async () => {
