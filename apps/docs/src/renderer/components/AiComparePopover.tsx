@@ -606,11 +606,10 @@ export function AiComparePopover({
                           {t('cmpRetry')}
                         </button>
                       )}
-                      {engine.status === 'failed' && (
-                        <button type="button" className="cmp-link" onClick={() => manual(site.url)}>
-                          {t('cmpManual', { name: site.name })}
-                        </button>
-                      )}
+                      {/* always offered: copy the prompt and open the site to do it by hand */}
+                      <button type="button" className="cmp-link" onClick={() => manual(site.url)}>
+                        {t('cmpManual', { name: site.name })}
+                      </button>
                     </span>
                   )
                   // the first card carries the status; a second one holds the re-translation

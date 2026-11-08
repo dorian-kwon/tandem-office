@@ -46,7 +46,8 @@ describe('compare run state machine', () => {
       },
     })
     run.start('PROMPT', true)
-    expect(run.getState().engines.map((e) => e.status)).toEqual(['running', 'running', 'running'])
+    // one engine at a time: real mouse and keyboard input only reaches the page in front
+    expect(run.getState().engines.map((e) => e.status)).toEqual(['running', 'waiting', 'waiting'])
     await flush()
     const s = run.getState()
     expect(prompts).toEqual(['PROMPT', 'PROMPT', 'PROMPT'])

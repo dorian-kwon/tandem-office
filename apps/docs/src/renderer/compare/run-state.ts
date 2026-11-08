@@ -72,8 +72,12 @@ export interface CompareRun {
   integrateNow(): void
 }
 
-/** how many web engines are asked at once */
-export const COMPARE_CONCURRENCY = 3
+/**
+ * How many web engines are asked at once. One: the engines type and click with real mouse and
+ * keyboard input, which only reaches the page that is in front, so engines running side by side
+ * left the later ones (Copilot, Grok) without their message ever being sent.
+ */
+export const COMPARE_CONCURRENCY = 1
 
 export function createCompareRun(deps: CompareRunDeps): CompareRun {
   const concurrency = Math.max(1, deps.concurrency ?? COMPARE_CONCURRENCY)
