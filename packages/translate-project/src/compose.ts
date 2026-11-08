@@ -132,7 +132,11 @@ export function writingStyleRule(style: WritingStyle | undefined): string {
     )
   const custom = oneLine(style.custom ?? '')
   if (custom !== '') lines.push(`- Custom instruction: ${custom}`)
-  return lines.length === 0 ? '' : `Writing style:\n${lines.join('\n')}`
+  // the style is for the text being translated; a review must not rewrite a correct
+  // translation only to enforce it
+  return lines.length === 0
+    ? ''
+    : `Writing style (applies when you translate; when reviewing, do not change correct text only to enforce it):\n${lines.join('\n')}`
 }
 
 /**

@@ -337,9 +337,10 @@ describe('translate IPC handlers', () => {
   it('update-settings saves a writing style and rejects unknown values', async () => {
     const h = handlers()
     const { dir } = await createIn(h, { name: 'S', sourceLang: 'en', targetLang: 'ko' })
+    // a new project starts with the Oxford comma and punctuation inside the quotes
     expect((await h.getProject(dir)).writingStyle).toEqual({
-      serialComma: 'default',
-      quotePunctuation: 'default',
+      serialComma: 'with',
+      quotePunctuation: 'inside',
       custom: '',
     })
     const style = { serialComma: 'without', quotePunctuation: 'outside', custom: 'x' } as const

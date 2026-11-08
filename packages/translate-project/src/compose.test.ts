@@ -215,8 +215,13 @@ describe('composeContext reference chunks', () => {
       project({ writingStyle: { serialComma, quotePunctuation, custom } })
 
     it('adds nothing for the default style', () => {
-      const { text } = composeContext({ ...base, project: project() })
+      const { text } = composeContext({ ...base, project: style('default', 'default') })
       expect(text).not.toContain('Writing style')
+    })
+
+    it('tells a review not to rewrite correct text only to enforce the style', () => {
+      const { text } = composeContext({ ...base, project: style('with', 'inside') })
+      expect(text).toContain('when reviewing, do not change correct text only to enforce it')
     })
 
     it('states the Oxford comma rule', () => {

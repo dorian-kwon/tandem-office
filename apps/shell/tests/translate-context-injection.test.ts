@@ -168,7 +168,8 @@ describe('buildTranslationInstructions', () => {
   it('drops whole glossary entries from the end when the text is over the limit', async () => {
     await addGlossaryRows(rows(100))
     const full = await buildTranslationInstructions(dir, '', { settingsPath })
-    const limitChars = Math.floor(full.text.length / 2)
+    // leave the fixed part (prompts and rules) whole and make room for part of the glossary
+    const limitChars = full.text.length - 600
     const built = await buildTranslationInstructions(dir, '', { settingsPath, limitChars })
     expect(built.text.length).toBeLessThanOrEqual(limitChars)
     expect(built.glossaryIncluded).toBeGreaterThan(0)
@@ -219,9 +220,14 @@ describe('translationContextForFolder', () => {
 
   it('sends the writing style rule with the project prompts, nothing for the default', async () => {
     writeTranslationProjects(settingsPath, [{ dir, lastOpened: 1 }])
+    const project = await loadProject(dir)
+    // a new project starts with the Oxford comma and inside punctuation; the plain default is explicit here
+    await saveProject(dir, {
+      ...project,
+      writingStyle: { serialComma: 'default', quotePunctuation: 'default', custom: '' },
+    })
     const plain = await translationContextForFolder(dir, { settingsPath })
     expect(plain?.prompts).not.toContain('Writing style')
-    const project = await loadProject(dir)
     await saveProject(dir, {
       ...project,
       writingStyle: { serialComma: 'with', quotePunctuation: 'inside', custom: 'Be brief.' },

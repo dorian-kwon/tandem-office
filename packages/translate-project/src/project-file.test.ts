@@ -65,10 +65,10 @@ describe('project file', () => {
   })
 
   describe('writing style', () => {
-    it('defaults to the target language convention with no custom text', () => {
+    it('starts a new project with the Oxford comma and punctuation inside the quotes', () => {
       expect(defaultProjectFile('x', 'ko', 'en').writingStyle).toEqual({
-        serialComma: 'default',
-        quotePunctuation: 'default',
+        serialComma: 'with',
+        quotePunctuation: 'inside',
         custom: '',
       })
     })

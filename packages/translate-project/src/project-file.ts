@@ -60,6 +60,15 @@ export function defaultWritingStyle(): WritingStyle {
   return { serialComma: 'default', quotePunctuation: 'default', custom: '' }
 }
 
+/**
+ * What a NEW project starts with: the serial (Oxford) comma and punctuation inside the
+ * quotes. Reading an older project file still falls back to `defaultWritingStyle`, so a
+ * project that never chose a style does not change behind its owner's back.
+ */
+export function newProjectWritingStyle(): WritingStyle {
+  return { serialComma: 'with', quotePunctuation: 'inside', custom: '' }
+}
+
 export function defaultProjectFile(
   name: string,
   sourceLang: string,
@@ -73,7 +82,7 @@ export function defaultProjectFile(
     targetLang,
     projectPrompt: '',
     ocr,
-    writingStyle: defaultWritingStyle(),
+    writingStyle: newProjectWritingStyle(),
     sources: [],
     references: [],
     glossaryFiles: [],
