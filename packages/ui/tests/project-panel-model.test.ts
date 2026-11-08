@@ -293,11 +293,11 @@ describe('notice and event text', () => {
       ],
     }
     expect(projectNoticeView('ko', notice)).toEqual({
-      text: '번역 맥락을 함께 보냈습니다: 시스템 프롬프트 · 프로젝트 프롬프트 · 단어집 12개 · 참고자료 3개',
+      text: '번역 맥락을 함께 보냈습니다: 단어집 12개 · 참고자료 3개',
       tone: 'info',
     })
     expect(projectNoticeView('en', notice).text).toBe(
-      'Translation context sent: system prompt · project prompt · glossary (12) · references (3)',
+      'Translation context sent: glossary (12) · references (3)',
     )
   })
 
@@ -312,10 +312,10 @@ describe('notice and event text', () => {
       ],
     }
     expect(projectNoticeView('ko', notice).text).toBe(
-      '번역 맥락을 함께 보냈습니다: 프로젝트 프롬프트 · 단어집 350개 중 맞는 3개',
+      '번역 맥락을 함께 보냈습니다: 단어집 350개 중 맞는 3개',
     )
     expect(projectNoticeView('en', notice).text).toBe(
-      'Translation context sent: project prompt · glossary (3 matching of 350)',
+      'Translation context sent: glossary (3 matching of 350)',
     )
   })
 
@@ -330,10 +330,10 @@ describe('notice and event text', () => {
       ],
     }
     expect(projectNoticeView('ko', partial).text).toBe(
-      '번역 맥락을 함께 보냈습니다: 프로젝트 프롬프트 · 단어집 350개 중 200개',
+      '번역 맥락을 함께 보냈습니다: 단어집 350개 중 200개',
     )
     expect(projectNoticeView('en', partial).text).toBe(
-      'Translation context sent: project prompt · glossary (200 of 350)',
+      'Translation context sent: glossary (200 of 350)',
     )
     const cut: ProjectNotice = {
       kind: 'translation-context',
@@ -346,8 +346,21 @@ describe('notice and event text', () => {
       cut: true,
     }
     expect(projectNoticeView('ko', cut).text).toBe(
-      '번역 맥락을 함께 보냈습니다: 시스템 프롬프트 · 프로젝트 프롬프트 · 단어집 40개 중 0개 (프롬프트가 길어 뒤쪽이 빠졌습니다)',
+      '번역 맥락을 함께 보냈습니다: 단어집 40개 중 0개 (프롬프트가 길어 뒤쪽이 빠졌습니다)',
     )
+  })
+
+  it('names nothing when only the prompts were sent', () => {
+    const onlyPrompts: ProjectNotice = {
+      kind: 'translation-context',
+      items: [
+        { kind: 'system', included: true },
+        { kind: 'project', included: true },
+        { kind: 'glossary', included: false, count: 0 },
+        { kind: 'reference', included: false, count: 0 },
+      ],
+    }
+    expect(projectNoticeView('ko', onlyPrompts).text).toBe('')
   })
 
   it('never names the sync service', () => {

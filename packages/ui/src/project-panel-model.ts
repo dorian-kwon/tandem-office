@@ -366,10 +366,10 @@ function translationContextText(
   const parts: string[] = []
   for (const item of notice.items) {
     const count = item.count ?? 0
-    if (item.kind === 'system' && item.included) {
-      parts.push(projectPanelText(lang, 'translationSystem'))
-    } else if (item.kind === 'project' && item.included) {
-      parts.push(projectPanelText(lang, 'translationProject'))
+    // the system and project prompts are not listed: they are always sent and the
+    // person asked not to see them named in the chat
+    if (item.kind === 'system' || item.kind === 'project') {
+      continue
     } else if (item.kind === 'glossary') {
       const total = item.total ?? count
       if (item.selection === 'matching') {
@@ -383,8 +383,13 @@ function translationContextText(
       parts.push(projectPanelText(lang, 'translationReferences', { count }))
     }
   }
-  const text = projectPanelText(lang, 'translationContext', { items: parts.join(' · ') })
-  return notice.cut ? `${text} ${projectPanelText(lang, 'translationCut')}` : text
+  // nothing worth naming (only the prompts were sent): no notice line at all
+  if (parts.length === 0 && !notice.cut) return ''
+  const text =
+    parts.length === 0
+      ? ''
+      : projectPanelText(lang, 'translationContext', { items: parts.join(' · ') })
+  return notice.cut ? `${text} ${projectPanelText(lang, 'translationCut')}`.trim() : text
 }
 
 /** The label of a notice action's button */

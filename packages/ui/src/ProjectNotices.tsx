@@ -57,8 +57,10 @@ export function ProjectNoticeLine({
   /** "[Tidy up]": run the person-triggered memory consolidation */
   readonly onConsolidate?: (() => void) | undefined
   readonly onDismiss?: (() => void) | undefined
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const view = projectNoticeView(lang, notice)
+  // a notice with no text (a translation context that names nothing) draws no line
+  if (view.text === '') return null
   const action = view.action
   const handler =
     action?.type === 'view'
