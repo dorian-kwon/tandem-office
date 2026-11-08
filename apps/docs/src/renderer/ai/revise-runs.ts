@@ -3,6 +3,13 @@ import type { Mark, Node as ProseMirrorNode } from '@tiptap/pm/model'
 import type { Transaction } from '@tiptap/pm/state'
 import { TRACK_IGNORE } from '../editor/revisions'
 import { isTrackedDeleted } from './doc-utils'
+import {
+  parseItalicSegment,
+  placeSpans,
+  sliceSpans,
+  textNodes,
+  type SpanOffsets,
+} from './italic-spans'
 import type { AiTrack } from './protocol'
 import {
   groupsOf,
@@ -184,6 +191,8 @@ interface ReviseEdit {
   to: number
   text: string
   marks: readonly Mark[]
+  /** italic spans (offsets in `text`) added on top of `marks` */
+  italics?: SpanOffsets
 }
 
 type Plan =
@@ -275,12 +284,14 @@ function planParagraph(
       ok: false,
       error: `${where}: this is the original text of a bilingual pair; never edit the original (revise its translation next to it)`,
     }
+  // italic spans ride along as ranges; the diff and every check use the plain text
+  const parsed = item.segments.map(parseItalicSegment)
   if (item.segments.length !== groups.length)
     return {
       ok: false,
       error: `${where}: give exactly one string per segment (${groups.length}, in read_runs order; repeat an unchanged segment as it is), got ${item.segments.length}`,
     }
-  if (item.segments.every((s) => s.trim() === ''))
+  if (parsed.every((p) => p.plain.trim() === ''))
     return {
       ok: false,
       error: `${where}: every segment is empty, which would delete the paragraph's text; pass the revised text`,
@@ -295,21 +306,37 @@ function planParagraph(
     return { ok: true, edits: [], report: { ...report, untranslated: true } }
   const edits: ReviseEdit[] = []
   groups.forEach((group, i) => {
-    const next = keepEdges(group.text, item.segments[i])
+    const next = keepEdges(group.text, parsed[i].plain)
+    // an italic-only change of text that stays the same is skipped: a review never restyles
     if (next === group.text) return
+    const italics = placeSpans(next, parsed[i])
+    const withItalics = (text: string, at: number): { italics?: SpanOffsets } => {
+      const own = sliceSpans(italics, at, at + text.length)
+      return own.length > 0 ? { italics: own } : {}
+    }
     if (group.to - group.from !== group.text.length) {
       // positions do not follow the characters: replace the group as one piece
-      edits.push({ from: group.from, to: group.to, text: next, marks: group.marks })
+      edits.push({
+        from: group.from,
+        to: group.to,
+        text: next,
+        marks: group.marks,
+        ...withItalics(next, 0),
+      })
       report.changes++
       return
     }
+    // only inserted words take an italic span; the unchanged words around them keep theirs
+    let delta = 0
     for (const span of diffSpans(group.text, next)) {
       edits.push({
         from: group.from + span.start,
         to: group.from + span.end,
         text: span.text,
         marks: group.marks,
+        ...withItalics(span.text, span.start + delta),
       })
+      delta += span.text.length - (span.end - span.start)
       report.changes++
     }
   })
@@ -334,10 +361,12 @@ function applyRevisionEdits(editor: Editor, edits: ReviseEdit[], author: string)
     const own = edit.marks.some((m) => m.type.name === 'ins' && m.attrs.author === author)
     if (own) {
       if (edit.text === '') tr.delete(edit.from, edit.to)
-      else tr.replaceWith(edit.from, edit.to, schema.text(edit.text, edit.marks))
+      else
+        tr.replaceWith(edit.from, edit.to, textNodes(schema, edit.text, edit.marks, edit.italics))
       continue
     }
-    if (edit.text !== '') tr.insert(edit.to, schema.text(edit.text, ins.addToSet(edit.marks)))
+    if (edit.text !== '')
+      tr.insert(edit.to, textNodes(schema, edit.text, ins.addToSet(edit.marks), edit.italics))
     if (edit.to > edit.from) tr.addMark(edit.from, edit.to, del)
   }
   tr.setMeta(TRACK_IGNORE, true)

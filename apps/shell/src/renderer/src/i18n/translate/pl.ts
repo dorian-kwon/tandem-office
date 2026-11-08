@@ -305,6 +305,15 @@ export const pl = {
   exQuoteOutside: '"jabłka", "marchewki"',
   exQuoteInside: '"jabłka," "marchewki,"',
   exFollow: 'Żadna reguła nie jest wysyłana. AI stosuje zwykłą konwencję języka docelowego.',
+  italicsLabel: 'Kursywa',
+  italicsApply: 'Stosuj automatycznie (tytuły, obce terminy, nazwy naukowe)',
+  italicsOff: 'Nie dodawaj kursywy',
+  italicsFollow: 'Zgodnie ze źródłem (bez reguły)',
+  exItalicsApply:
+    'Hamlet, hanbok, Homo sapiens kursywą. Nigdy dla zwykłego wyróżnienia; pomijane w językach, które nie używają tak kursywy.',
+  exItalicsOff: 'AI nie dodaje kursywy na własną rękę.',
+  exItalicsFollow:
+    'Żadna reguła nie jest wysyłana. Kursywa zostaje tylko tam, gdzie ma ją już źródło.',
   styleCustomLabel: 'Własna instrukcja',
   styleCustomPlaceholder: 'np. używaj pisowni brytyjskiej',
   choicesTitle: 'Wybory tłumaczenia',

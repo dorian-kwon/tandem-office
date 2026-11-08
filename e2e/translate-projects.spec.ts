@@ -143,7 +143,7 @@ test('translation project: create, upload, split view, read-only source, remove'
         const p = JSON.parse(await readFile(join(projectDir, '.tandem', 'project.json'), 'utf8'))
         return p.writingStyle
       })
-      .toEqual({ serialComma: 'with', quotePunctuation: 'inside', custom: '' })
+      .toEqual({ serialComma: 'with', quotePunctuation: 'inside', italics: 'apply', custom: '' })
 
     // renaming changes the display name only: the folder keeps its name
     await page.locator('[data-action="rename-title"]').click()

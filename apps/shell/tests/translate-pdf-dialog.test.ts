@@ -86,7 +86,12 @@ function project(patch: Partial<ProjectFile> = {}): ProjectFile {
     targetLang: 'de',
     projectPrompt: '',
     ocr: { kind: 'ai', provider: 'claude' },
-    writingStyle: { serialComma: 'default', quotePunctuation: 'default', custom: '' },
+    writingStyle: {
+      serialComma: 'default',
+      quotePunctuation: 'default',
+      italics: 'default',
+      custom: '',
+    },
     sources: [
       { file: 'report.pdf', sha256: 'x', kind: 'pdf' },
       { file: 'scan.pdf', sha256: 'y', kind: 'scan' },

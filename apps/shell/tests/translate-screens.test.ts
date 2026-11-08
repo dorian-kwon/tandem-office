@@ -38,7 +38,12 @@ function project(patch: Partial<ProjectFile> = {}): ProjectFile {
     targetLang: 'ko',
     projectPrompt: '',
     ocr: { kind: 'ai', provider: 'claude' },
-    writingStyle: { serialComma: 'default', quotePunctuation: 'default', custom: '' },
+    writingStyle: {
+      serialComma: 'default',
+      quotePunctuation: 'default',
+      italics: 'default',
+      custom: '',
+    },
     sources: [],
     references: [],
     glossaryFiles: [],
@@ -1079,7 +1084,12 @@ describe('ProjectDetail table and settings', () => {
     expect(api.updateSettings).toHaveBeenCalledWith({
       dir: '/p/a',
       patch: {
-        writingStyle: { serialComma: 'with', quotePunctuation: 'default', custom: '' },
+        writingStyle: {
+          serialComma: 'with',
+          quotePunctuation: 'default',
+          italics: 'default',
+          custom: '',
+        },
       },
     })
     expect(host.querySelector('[data-style-card] [role="status"]')?.textContent).toBe('Saved')
@@ -1087,6 +1097,33 @@ describe('ProjectDetail table and settings', () => {
       (host.querySelector('[data-style-option="serialComma:with"] input') as HTMLInputElement)
         .checked,
     ).toBe(true)
+  })
+
+  it('the italics question offers apply, off and no rule, and saves the choice', async () => {
+    await render(ProjectDetail, props())
+    const card = host.querySelector('[data-style-card]') as HTMLElement
+    const italics = card.querySelectorAll('[data-style-question="italics"] .tt-option')
+    expect(italics).toHaveLength(3)
+    expect(italics[0]!.textContent).toContain('Apply automatically')
+    expect(italics[1]!.textContent).toContain('Do not add italics')
+    expect(italics[2]!.textContent).toContain('Follow the source')
+    // a project without a stored choice shows the neutral option
+    expect(
+      (card.querySelector('[data-style-option="italics:default"] input') as HTMLInputElement)
+        .checked,
+    ).toBe(true)
+    await click(host.querySelector('[data-style-option="italics:apply"] input')!)
+    expect(api.updateSettings).toHaveBeenCalledWith({
+      dir: '/p/a',
+      patch: {
+        writingStyle: {
+          serialComma: 'default',
+          quotePunctuation: 'default',
+          italics: 'apply',
+          custom: '',
+        },
+      },
+    })
   })
 
   it('the custom instruction saves when the field is left, not on every key', async () => {
@@ -1107,6 +1144,7 @@ describe('ProjectDetail table and settings', () => {
         writingStyle: {
           serialComma: 'default',
           quotePunctuation: 'default',
+          italics: 'default',
           custom: 'Use British spelling',
         },
       },

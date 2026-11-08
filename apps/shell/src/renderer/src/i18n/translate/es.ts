@@ -307,6 +307,15 @@ export const es = {
   exQuoteOutside: '"manzanas", "zanahorias"',
   exQuoteInside: '"manzanas," "zanahorias,"',
   exFollow: 'No se envía ninguna regla. La IA sigue la convención habitual del idioma de destino.',
+  italicsLabel: 'Cursiva',
+  italicsApply: 'Aplicar automáticamente (títulos, términos extranjeros, nombres científicos)',
+  italicsOff: 'No añadir cursiva',
+  italicsFollow: 'Seguir el original (sin regla)',
+  exItalicsApply:
+    'Hamlet, hanbok, Homo sapiens en cursiva. Nunca para un simple énfasis; se omite en idiomas que no usan la cursiva así.',
+  exItalicsOff: 'La IA no añade cursiva por su cuenta.',
+  exItalicsFollow:
+    'No se envía ninguna regla. La cursiva solo se conserva donde el original ya la tiene.',
   styleCustomLabel: 'Instrucción personalizada',
   styleCustomPlaceholder: 'p. ej. Usar ortografía británica',
   choicesTitle: 'Decisiones de traducción',

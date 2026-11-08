@@ -310,6 +310,15 @@ export const nl = {
   exQuoteInside: '"appels," "wortels,"',
   exFollow:
     'Er wordt geen regel meegestuurd. De AI volgt de gebruikelijke conventie van de doeltaal.',
+  italicsLabel: 'Cursief',
+  italicsApply: 'Automatisch toepassen (titels, vreemde termen, wetenschappelijke namen)',
+  italicsOff: 'Geen cursief toevoegen',
+  italicsFollow: 'De bron volgen (geen regel)',
+  exItalicsApply:
+    'Hamlet, hanbok, Homo sapiens in cursief. Nooit voor gewone nadruk; overgeslagen in talen die cursief zo niet gebruiken.',
+  exItalicsOff: 'De AI voegt zelf geen cursief toe.',
+  exItalicsFollow:
+    'Er wordt geen regel verstuurd. Cursief blijft alleen staan waar de bron het al heeft.',
   styleCustomLabel: 'Eigen instructie',
   styleCustomPlaceholder: 'bijv. Britse spelling gebruiken',
   choicesTitle: 'Vertaalkeuzes',

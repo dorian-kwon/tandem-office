@@ -304,6 +304,15 @@ export const hi = {
   exQuoteOutside: '"apples", "carrots"',
   exQuoteInside: '"apples," "carrots,"',
   exFollow: 'कोई नियम नहीं भेजा जाता। AI लक्ष्य भाषा की सामान्य परिपाटी का पालन करता है।',
+  italicsLabel: 'तिरछे अक्षर (इटैलिक)',
+  italicsApply: 'अपने आप लागू करें (कृतियों के शीर्षक, विदेशी शब्द, वैज्ञानिक नाम)',
+  italicsOff: 'तिरछे अक्षर न जोड़ें',
+  italicsFollow: 'मूल पाठ का अनुसरण करें (कोई नियम नहीं)',
+  exItalicsApply:
+    'Hamlet, hanbok, Homo sapiens तिरछे अक्षरों में। सामान्य ज़ोर देने के लिए कभी नहीं; जिन भाषाओं में यह परंपरा नहीं है वहाँ छोड़ दिया जाता है।',
+  exItalicsOff: 'AI अपनी ओर से तिरछे अक्षर नहीं जोड़ता।',
+  exItalicsFollow:
+    'कोई नियम नहीं भेजा जाता। तिरछे अक्षर केवल वहीं रहते हैं जहाँ मूल पाठ में पहले से हों।',
   styleCustomLabel: 'अपना निर्देश',
   styleCustomPlaceholder: 'जैसे: ब्रिटिश वर्तनी का उपयोग करें',
   choicesTitle: 'अनुवाद के विकल्प',

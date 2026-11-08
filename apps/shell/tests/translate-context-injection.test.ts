@@ -224,18 +224,29 @@ describe('translationContextForFolder', () => {
     // a new project starts with the Oxford comma and inside punctuation; the plain default is explicit here
     await saveProject(dir, {
       ...project,
-      writingStyle: { serialComma: 'default', quotePunctuation: 'default', custom: '' },
+      writingStyle: {
+        serialComma: 'default',
+        quotePunctuation: 'default',
+        italics: 'default',
+        custom: '',
+      },
     })
     const plain = await translationContextForFolder(dir, { settingsPath })
     expect(plain?.prompts).not.toContain('Writing style')
     await saveProject(dir, {
       ...project,
-      writingStyle: { serialComma: 'with', quotePunctuation: 'inside', custom: 'Be brief.' },
+      writingStyle: {
+        serialComma: 'with',
+        quotePunctuation: 'inside',
+        italics: 'apply',
+        custom: 'Be brief.',
+      },
     })
     const styled = await translationContextForFolder(dir, { settingsPath })
     expect(styled?.prompts).toContain('Use the serial (Oxford) comma')
     expect(styled?.prompts).toContain('inside the closing quotation mark')
     expect(styled?.prompts).toContain('Custom instruction: Be brief.')
+    expect(styled?.prompts).toContain('<i>…</i>')
     // the rule sits in the project block, before the editing rules
     expect(styled?.prompts.indexOf('Writing style')).toBeLessThan(
       styled?.prompts.indexOf('read_runs') ?? 0,

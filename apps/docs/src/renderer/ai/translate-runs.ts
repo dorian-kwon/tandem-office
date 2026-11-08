@@ -8,6 +8,17 @@ import { isTrackedDeleted } from './doc-utils'
 import type { NoteInfo, NoteRun } from '@genoffice/docx-engine'
 import type { AiTrack } from './protocol'
 import type { AiNotesAccess, NoteKind } from './note-ops'
+import {
+  italicTagError,
+  joinParsed,
+  parseItalicSegment,
+  placeSpans,
+  sliceSpans,
+  stripItalicTags,
+  textNodes,
+  type ParsedSegment,
+  type SpanOffsets,
+} from './italic-spans'
 
 /**
  * Run-preserving translation (read_runs / translate_blocks).
@@ -466,6 +477,8 @@ interface Edit {
   marks: readonly Mark[]
   /** the textblock to flag aiChanged (untracked edits) */
   blockPos: number
+  /** italic spans (character offsets in `text`) added on top of `marks` */
+  italics?: SpanOffsets
 }
 
 const LEAD = /^\s*/
@@ -693,7 +706,12 @@ export function segmentsError(where: string, segments: unknown): string | null {
     return `${where}: segments must be an array of strings`
   if (segments.some((s: string) => /[\r\n]/.test(s)))
     return `${where}: a segment contains a line break; segments are plain text inside one run (breaks and tabs between segments stay as they are)`
-  if (segments.some((s: string) => TAG_LIKE.test(s)))
+  for (const s of segments as string[]) {
+    const wrong = italicTagError(s)
+    if (wrong)
+      return `${where}: ${wrong}; the only tag allowed in a segment is a flat <i>…</i> (no attributes, no nesting)`
+  }
+  if (segments.some((s: string) => TAG_LIKE.test(stripItalicTags(s))))
     return `${where}: a segment contains HTML-like tags; give plain translated text only (each segment keeps its own formatting)`
   return null
 }
@@ -710,6 +728,27 @@ export function fitSegments(
   }
   if (given.length < groups) report.incomplete = { groups, given: given.length }
   return given
+}
+
+/**
+ * `fitSegments` for segments that may carry italic spans: the plain texts are fitted and
+ * the spans of segments joined into the last group follow their text.
+ */
+export function fitParsed(
+  groups: number,
+  given: readonly ParsedSegment[],
+  report: { extra?: number; incomplete?: { groups: number; given: number } },
+): ParsedSegment[] {
+  const plain = fitSegments(
+    groups,
+    given.map((g) => g.plain),
+    report,
+  )
+  if (given.length <= groups)
+    return plain.map((text, i) => ({ plain: text, spans: given[i].spans }))
+  const head = given.slice(0, groups - 1)
+  const tail = joinParsed(given.slice(groups - 1), plain[groups - 1])
+  return [...head.map((g, i) => ({ plain: plain[i], spans: g.spans })), tail]
 }
 
 type PlanResult =
@@ -757,13 +796,16 @@ function planParagraph(doc: ProseMirrorNode, item: RunTranslationItem): PlanResu
       stale: true,
       error: `${where} changed since read_runs (fingerprint mismatch); read it again`,
     }
+  // italic spans ride along as ranges; everything below works on the plain text
+  const parsed = item.segments.map(parseItalicSegment)
   // one empty segment is a piece with no counterpart; all of them would delete the paragraph's text
-  if (item.segments.length > 0 && item.segments.every((s) => s.trim() === ''))
+  if (parsed.length > 0 && parsed.every((p) => p.plain.trim() === ''))
     return {
       ok: false,
       error: `${where}: every segment is empty, which would delete the paragraph's text; give the translation`,
     }
-  const segments = fitSegments(groups.length, item.segments, report)
+  const fitted = fitParsed(groups.length, parsed, report)
+  const segments = fitted.map((p) => p.plain)
   const edits: Edit[] = []
   const settled = settleTexts(
     groups.map((g) => g.text),
@@ -787,7 +829,14 @@ function planParagraph(doc: ProseMirrorNode, item: RunTranslationItem): PlanResu
     const next = settled[i]
     if (next === group.text) return
     const range = edgeTrimmed(group, next)
-    edits.push({ ...range, marks: group.marks, blockPos: block.pos })
+    const offset = range.from - group.from
+    const italics = sliceSpans(placeSpans(next, fitted[i]), offset, offset + range.text.length)
+    edits.push({
+      ...range,
+      marks: group.marks,
+      blockPos: block.pos,
+      ...(italics.length > 0 ? { italics } : {}),
+    })
     report.changed++
   })
   return { ok: true, edits, report }
@@ -807,7 +856,8 @@ function applyEdits(editor: Editor, edits: Edit[], track?: AiTrack): Transaction
     const ins = schema.marks.ins.create({ author: track.author, date })
     const del = schema.marks.del.create({ author: track.author, date })
     for (const edit of ordered) {
-      if (edit.text !== '') tr.insert(edit.to, schema.text(edit.text, ins.addToSet(edit.marks)))
+      if (edit.text !== '')
+        tr.insert(edit.to, textNodes(schema, edit.text, ins.addToSet(edit.marks), edit.italics))
       if (edit.to > edit.from) tr.addMark(edit.from, edit.to, del)
     }
     tr.setMeta(TRACK_IGNORE, true)
@@ -816,7 +866,7 @@ function applyEdits(editor: Editor, edits: Edit[], track?: AiTrack): Transaction
   const flagged = new Set<number>()
   for (const edit of ordered) {
     if (edit.text === '') tr.delete(edit.from, edit.to)
-    else tr.replaceWith(edit.from, edit.to, schema.text(edit.text, edit.marks))
+    else tr.replaceWith(edit.from, edit.to, textNodes(schema, edit.text, edit.marks, edit.italics))
     flagged.add(edit.blockPos)
   }
   // edits in earlier blocks shift a block's start: map the pre-edit position
@@ -1093,13 +1143,15 @@ export function planNoteTranslations(
       errors.push(`${where} changed since read_runs (fingerprint mismatch); read it again`)
       continue
     }
-    if (item.segments.length > 0 && item.segments.every((s) => s.trim() === '')) {
+    // notes live outside the document model: italic tags are dropped, the text stays plain
+    const plainSegments = item.segments.map(stripItalicTags)
+    if (plainSegments.length > 0 && plainSegments.every((s) => s.trim() === '')) {
       errors.push(
         `${where}: every segment is empty, which would delete the note's text; give the translation`,
       )
       continue
     }
-    const segments = fitSegments(target.groups.length, item.segments, report)
+    const segments = fitSegments(target.groups.length, plainSegments, report)
     const settled = settleTexts(
       target.groups.map((g) => g.text),
       segments,

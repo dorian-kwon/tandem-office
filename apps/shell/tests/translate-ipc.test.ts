@@ -371,9 +371,15 @@ describe('translate IPC handlers', () => {
     expect((await h.getProject(dir)).writingStyle).toEqual({
       serialComma: 'with',
       quotePunctuation: 'inside',
+      italics: 'apply',
       custom: '',
     })
-    const style = { serialComma: 'without', quotePunctuation: 'outside', custom: 'x' } as const
+    const style = {
+      serialComma: 'without',
+      quotePunctuation: 'outside',
+      italics: 'off',
+      custom: 'x',
+    } as const
     const updated = await h.updateSettings({ dir, patch: { writingStyle: style } })
     expect(updated.writingStyle).toEqual(style)
     expect((await h.getProject(dir)).writingStyle).toEqual(style)
@@ -383,6 +389,8 @@ describe('translate IPC handlers', () => {
       })
     await bad({ ...style, serialComma: 'sometimes' })
     await bad({ ...style, quotePunctuation: 'both' })
+    await bad({ ...style, italics: 'always' })
+    await bad({ ...style, italics: true })
     await bad({ ...style, custom: 5 })
     await bad({ ...style, custom: 'x'.repeat(501) })
     await bad(null)

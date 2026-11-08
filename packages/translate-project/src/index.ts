@@ -9,6 +9,7 @@ export {
   withChoice,
 } from './project-file'
 export type {
+  ItalicsStyle,
   OcrMode,
   ProjectFile,
   QuotePunctuation,

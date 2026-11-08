@@ -34,3 +34,4 @@ Added with the project table look, writing style and project rename (2026-11-05,
 
 Added with the translation choices card (2026-11-05, same 19 drafted languages): `apps/shell/src/renderer/src/i18n/translate/<lang>.ts` keys `choicesTitle`, `choicesHint`, `choiceOutputMode`, `choiceBilingual`, `choiceOcrPlacement`, `choiceUndecided`, `choiceReset`, `choiceResetOne`.
 
+Added with the writing style italics option (2026-11-08, all 21 languages, drafted by the model and not reviewed by a native speaker): `apps/shell/src/renderer/src/i18n/translate/<lang>.ts` keys `italicsLabel`, `italicsApply`, `italicsOff`, `italicsFollow`, `exItalicsApply`, `exItalicsOff`, `exItalicsFollow`.

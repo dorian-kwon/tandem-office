@@ -6,9 +6,17 @@ export type SerialComma = 'default' | 'with' | 'without'
 /** Where a comma or period goes relative to a closing quotation mark. */
 export type QuotePunctuation = 'default' | 'outside' | 'inside'
 
+/**
+ * Italics for titles of standalone works, foreign terms, scientific names, ship names and
+ * words used as words. `default` gives no instruction (old files), `apply` has the AI mark
+ * them, `off` forbids added italics.
+ */
+export type ItalicsStyle = 'default' | 'apply' | 'off'
+
 export type WritingStyle = {
   serialComma: SerialComma
   quotePunctuation: QuotePunctuation
+  italics: ItalicsStyle
   /** free-text instruction from the person; '' when none */
   custom: string
 }
@@ -57,16 +65,16 @@ export class ProjectFileError extends Error {
 const SOURCE_KINDS: readonly string[] = ['editable', 'pdf', 'scan', 'image']
 
 export function defaultWritingStyle(): WritingStyle {
-  return { serialComma: 'default', quotePunctuation: 'default', custom: '' }
+  return { serialComma: 'default', quotePunctuation: 'default', italics: 'default', custom: '' }
 }
 
 /**
- * What a NEW project starts with: the serial (Oxford) comma and punctuation inside the
- * quotes. Reading an older project file still falls back to `defaultWritingStyle`, so a
+ * What a NEW project starts with: the serial (Oxford) comma, punctuation inside the
+ * quotes and automatic italics. Reading an older project file still falls back to `defaultWritingStyle`, so a
  * project that never chose a style does not change behind its owner's back.
  */
 export function newProjectWritingStyle(): WritingStyle {
-  return { serialComma: 'with', quotePunctuation: 'inside', custom: '' }
+  return { serialComma: 'with', quotePunctuation: 'inside', italics: 'apply', custom: '' }
 }
 
 export function defaultProjectFile(
@@ -141,6 +149,11 @@ function parseWritingStyle(v: unknown): WritingStyle {
     )
       throw new ProjectFileError('writingStyle.quotePunctuation is unknown')
     out.quotePunctuation = v.quotePunctuation
+  }
+  if (v.italics !== undefined) {
+    if (v.italics !== 'default' && v.italics !== 'apply' && v.italics !== 'off')
+      throw new ProjectFileError('writingStyle.italics is unknown')
+    out.italics = v.italics
   }
   if (v.custom !== undefined) {
     if (typeof v.custom !== 'string')

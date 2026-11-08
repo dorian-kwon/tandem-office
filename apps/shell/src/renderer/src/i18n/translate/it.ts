@@ -310,6 +310,15 @@ export const it = {
   exQuoteInside: '"mele," "carote,"',
   exFollow:
     'Nessuna regola viene inviata. L’IA segue la convenzione abituale della lingua di destinazione.',
+  italicsLabel: 'Corsivo',
+  italicsApply: 'Applica automaticamente (titoli, termini stranieri, nomi scientifici)',
+  italicsOff: 'Non aggiungere il corsivo',
+  italicsFollow: 'Segui l’originale (nessuna regola)',
+  exItalicsApply:
+    'Hamlet, hanbok, Homo sapiens in corsivo. Mai per una semplice enfasi; ignorato nelle lingue che non usano il corsivo in questo modo.',
+  exItalicsOff: 'L’IA non aggiunge il corsivo di sua iniziativa.',
+  exItalicsFollow:
+    'Non viene inviata alcuna regola. Il corsivo resta solo dove l’originale lo ha già.',
   styleCustomLabel: 'Istruzione personalizzata',
   styleCustomPlaceholder: 'es. usa l’ortografia britannica',
   choicesTitle: 'Scelte di traduzione',

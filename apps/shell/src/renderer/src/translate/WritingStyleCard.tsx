@@ -1,11 +1,17 @@
 import { useState } from 'react'
-import type { QuotePunctuation, SerialComma, WritingStyle } from '@genoffice/translate-project'
+import type {
+  ItalicsStyle,
+  QuotePunctuation,
+  SerialComma,
+  WritingStyle,
+} from '@genoffice/translate-project'
 import type { TranslateStringKey } from '../i18n/strings-translate'
 
 /** What a project without a stored choice shows (the package default; the renderer cannot import it). */
 export const DEFAULT_WRITING_STYLE: WritingStyle = {
   serialComma: 'default',
   quotePunctuation: 'default',
+  italics: 'default',
   custom: '',
 }
 
@@ -27,6 +33,12 @@ const QUOTE_OPTIONS: Option<QuotePunctuation>[] = [
   { value: 'outside', label: 'quoteOutside', example: 'exQuoteOutside' },
   { value: 'inside', label: 'quoteInside', example: 'exQuoteInside' },
   { value: 'default', label: 'styleFollow', example: 'exFollow' },
+]
+
+const ITALICS_OPTIONS: Option<ItalicsStyle>[] = [
+  { value: 'apply', label: 'italicsApply', example: 'exItalicsApply' },
+  { value: 'off', label: 'italicsOff', example: 'exItalicsOff' },
+  { value: 'default', label: 'italicsFollow', example: 'exItalicsFollow' },
 ]
 
 /** One question: numbered options (1, 2, 3), each with a small example line. */
@@ -76,7 +88,7 @@ function Question<V extends string>({
 
 /**
  * The project's writing style: serial comma, comma/period placement with quotation marks,
- * and a free instruction. Choices save at once; the text saves when you leave the field.
+ * italics for titles and foreign terms, and a free instruction. Choices save at once; the text saves when you leave the field.
  */
 export function WritingStyleCard({
   style,
@@ -127,6 +139,14 @@ export function WritingStyleCard({
           options={QUOTE_OPTIONS}
           value={style.quotePunctuation}
           onPick={(quotePunctuation) => void save({ ...style, custom, quotePunctuation })}
+          s={s}
+        />
+        <Question
+          name="italics"
+          legend={s('italicsLabel')}
+          options={ITALICS_OPTIONS}
+          value={style.italics}
+          onPick={(italics) => void save({ ...style, custom, italics })}
           s={s}
         />
       </div>

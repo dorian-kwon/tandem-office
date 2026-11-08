@@ -316,6 +316,15 @@ export const de = {
   exQuoteOutside: '"Äpfel", "Karotten"',
   exQuoteInside: '"Äpfel," "Karotten,"',
   exFollow: 'Es wird keine Regel gesendet. Die KI folgt dem üblichen Brauch der Zielsprache.',
+  italicsLabel: 'Kursivschrift',
+  italicsApply: 'Automatisch anwenden (Titel, Fremdwörter, wissenschaftliche Namen)',
+  italicsOff: 'Keine Kursivschrift hinzufügen',
+  italicsFollow: 'Dem Original folgen (keine Regel)',
+  exItalicsApply:
+    'Hamlet, hanbok, Homo sapiens erscheinen kursiv. Nie für bloße Hervorhebung; übersprungen, wo die Sprache Kursivschrift so nicht nutzt.',
+  exItalicsOff: 'Die KI fügt von sich aus keine Kursivschrift hinzu.',
+  exItalicsFollow:
+    'Es wird keine Regel gesendet. Kursivschrift bleibt nur dort, wo das Original sie schon hat.',
   styleCustomLabel: 'Eigene Anweisung',
   styleCustomPlaceholder: 'z. B. britische Schreibweise verwenden',
   choicesTitle: 'Übersetzungsentscheidungen',

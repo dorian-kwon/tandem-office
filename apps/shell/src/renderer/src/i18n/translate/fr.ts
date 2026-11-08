@@ -311,6 +311,15 @@ export const fr = {
   exQuoteOutside: '"pommes", "carottes"',
   exQuoteInside: '"pommes," "carottes,"',
   exFollow: 'Aucune règle n’est envoyée. L’IA suit l’usage habituel de la langue cible.',
+  italicsLabel: 'Italique',
+  italicsApply: 'Appliquer automatiquement (titres, termes étrangers, noms scientifiques)',
+  italicsOff: 'Ne pas ajouter d’italique',
+  italicsFollow: 'Suivre l’original (aucune règle)',
+  exItalicsApply:
+    'Hamlet, hanbok, Homo sapiens en italique. Jamais pour une simple emphase ; ignoré lorsque la langue n’utilise pas l’italique ainsi.',
+  exItalicsOff: 'L’IA n’ajoute aucun italique de sa propre initiative.',
+  exItalicsFollow:
+    'Aucune règle n’est envoyée. L’italique reste seulement là où l’original en a déjà.',
   styleCustomLabel: 'Consigne personnalisée',
   styleCustomPlaceholder: 'p. ex. Utiliser l’orthographe britannique',
   choicesTitle: 'Choix de traduction',

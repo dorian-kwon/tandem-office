@@ -306,6 +306,15 @@ export const id = {
   exQuoteOutside: '"apel", "wortel"',
   exQuoteInside: '"apel," "wortel,"',
   exFollow: 'Tidak ada aturan yang dikirim. AI mengikuti kebiasaan umum bahasa target.',
+  italicsLabel: 'Huruf miring',
+  italicsApply: 'Terapkan otomatis (judul karya, istilah asing, nama ilmiah)',
+  italicsOff: 'Jangan tambahkan huruf miring',
+  italicsFollow: 'Ikuti sumber (tanpa aturan)',
+  exItalicsApply:
+    'Hamlet, hanbok, Homo sapiens dengan huruf miring. Tidak pernah untuk penekanan biasa; dilewati pada bahasa yang tidak memakai huruf miring seperti ini.',
+  exItalicsOff: 'AI tidak menambahkan huruf miring atas inisiatif sendiri.',
+  exItalicsFollow:
+    'Tidak ada aturan yang dikirim. Huruf miring hanya tersisa di tempat sumber sudah memilikinya.',
   styleCustomLabel: 'Instruksi khusus',
   styleCustomPlaceholder: 'mis. Gunakan ejaan Inggris Britania',
   choicesTitle: 'Pilihan terjemahan',

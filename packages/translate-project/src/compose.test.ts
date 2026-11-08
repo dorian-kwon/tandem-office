@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { composeContext } from './compose'
+import { composeContext, writingStyleRule } from './compose'
 import { defaultProjectFile } from './project-file'
 import type { GlossaryEntry } from './glossary'
 
@@ -211,8 +211,12 @@ describe('composeContext reference chunks', () => {
   })
 
   describe('writing style rule', () => {
-    const style = (serialComma: string, quotePunctuation: string, custom = '') =>
-      project({ writingStyle: { serialComma, quotePunctuation, custom } })
+    const style = (
+      serialComma: string,
+      quotePunctuation: string,
+      custom = '',
+      italics = 'default',
+    ) => project({ writingStyle: { serialComma, quotePunctuation, italics, custom } })
 
     it('adds nothing for the default style', () => {
       const { text } = composeContext({ ...base, project: style('default', 'default') })
@@ -261,6 +265,38 @@ describe('composeContext reference chunks', () => {
         project: style('default', 'default', 'Be terse.'),
       })
       expect(text).toContain('Custom instruction: Be terse.')
+    })
+
+    it('adds an italics clause only for apply and a ban for off', () => {
+      const none = composeContext({ ...base, project: style('default', 'default') }).text
+      expect(none).not.toContain('Italics')
+      const apply = composeContext({
+        ...base,
+        project: style('default', 'default', '', 'apply'),
+      }).text
+      expect(apply).toContain('Writing style')
+      expect(apply).toContain('<i>…</i>')
+      expect(apply).toContain('titles of standalone works')
+      expect(apply).toContain('foreign')
+      expect(apply).toContain('scientific names')
+      expect(apply).toContain('never for plain emphasis')
+      expect(apply).toContain('apply only where it makes sense in the target language')
+      expect(apply).toContain('nothing for Korean, Chinese or Japanese')
+      // a review must not enforce it
+      expect(apply).toContain('when reviewing, do not change correct text only to enforce it')
+      const off = composeContext({ ...base, project: style('default', 'default', '', 'off') }).text
+      expect(off).toContain('Do not add italics of your own')
+      expect(off).not.toContain('scientific names')
+    })
+
+    it('keeps the italics clause short', () => {
+      const clause = writingStyleRule({
+        serialComma: 'default',
+        quotePunctuation: 'default',
+        italics: 'apply',
+        custom: '',
+      })
+      expect(clause.length).toBeLessThan(700)
     })
 
     it('puts the style inside the project block, after the language line', () => {
@@ -338,7 +374,12 @@ describe('composeContext reference chunks', () => {
       const { text } = composeContext({
         ...base,
         project: project({
-          writingStyle: { serialComma: 'with', quotePunctuation: 'default', custom: '' },
+          writingStyle: {
+            serialComma: 'with',
+            quotePunctuation: 'default',
+            italics: 'default',
+            custom: '',
+          },
         }),
       })
       expect(text.indexOf('Writing style')).toBeLessThan(text.indexOf('Translation choices'))

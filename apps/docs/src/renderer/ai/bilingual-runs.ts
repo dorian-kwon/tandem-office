@@ -5,6 +5,13 @@ import { TableMap } from '@tiptap/pm/tables'
 import { TRACK_IGNORE } from '../editor/revisions'
 import { PARA_FORMAT_ATTRS, paraFormatIsDefault } from '../editor/caret-marks'
 import { isTrackedDeleted } from './doc-utils'
+import {
+  parseItalicSegment,
+  placeSpans,
+  sliceSpans,
+  textNodes,
+  type SpanOffsets,
+} from './italic-spans'
 import type { AiTrack } from './protocol'
 import {
   COPIED_CELL_ATTRS,
@@ -18,7 +25,7 @@ import {
 import {
   STARTS_WITH_CLOSING,
   edgesOf,
-  fitSegments,
+  fitParsed,
   gapsOf,
   blocksShifted,
   groupsOf,
@@ -143,6 +150,8 @@ const addedBodyTwins = new WeakMap<object, number>()
 interface Piece {
   text: string
   marks: readonly Mark[]
+  /** italic spans (offsets in `text`) added on top of `marks` */
+  italics?: SpanOffsets
 }
 
 function twinMarks(marks: readonly Mark[], schema: Schema, track?: AiTrack, date?: string): Mark[] {
@@ -160,10 +169,21 @@ function twinMarks(marks: readonly Mark[], schema: Schema, track?: AiTrack, date
 }
 
 /** the translated text as marked pieces: groups joined by the separator the original had between them */
-function composePieces(block: PmNode, pos: number, groups: Group[], settled: string[]): Piece[] {
+function composePieces(
+  block: PmNode,
+  pos: number,
+  groups: Group[],
+  settled: string[],
+  spans: SpanOffsets[] = [],
+): Piece[] {
   const pieces: Piece[] = []
   groups.forEach((group, i) => {
-    if (settled[i] !== '') pieces.push({ text: settled[i], marks: group.marks })
+    if (settled[i] !== '')
+      pieces.push({
+        text: settled[i],
+        marks: group.marks,
+        ...(spans[i]?.length ? { italics: spans[i] } : {}),
+      })
     const next = groups[i + 1]
     if (!next) return
     const between = block.textBetween(group.to - pos - 1, next.from - pos - 1, '', '￼')
@@ -178,9 +198,19 @@ function composePieces(block: PmNode, pos: number, groups: Group[], settled: str
   })
   const live = pieces.filter((p) => p.text !== '')
   if (live.length > 0) {
-    live[0] = { ...live[0], text: live[0].text.replace(/^\s+/, '') }
+    // a span starts and ends on a visible character, so trimming only shifts it
+    const trimmed = (p: Piece, text: string, shift: number): Piece => {
+      const { italics: _italics, ...rest } = p
+      const italics = p.italics ? sliceSpans(p.italics, shift, shift + text.length) : []
+      return { ...rest, text, ...(italics.length > 0 ? { italics } : {}) }
+    }
+    const first = live[0]
+    const lead = /^\s*/.exec(first.text)![0].length
+    live[0] = trimmed(first, first.text.slice(lead), lead)
     const last = live.length - 1
-    live[last] = { ...live[last], text: live[last].text.replace(/\s+$/, '') }
+    const tail = live[last]
+    const body = tail.text.replace(/\s+$/, '')
+    live[last] = trimmed(tail, body, 0)
   }
   return live.filter((p) => p.text !== '')
 }
@@ -207,7 +237,9 @@ function twinNode(
     attrs.indentFirstLineChars = null
   }
   const type = kind === 'docHeading' ? schema.nodes.docHeading : schema.nodes.docParagraph
-  const content = pieces.map((p) => schema.text(p.text, twinMarks(p.marks, schema, track, date)))
+  const content = pieces.flatMap((p) =>
+    textNodes(schema, p.text, twinMarks(p.marks, schema, track, date), p.italics),
+  )
   return type.create(attrs, Fragment.fromArray(content))
 }
 
@@ -243,10 +275,13 @@ function prepare(
       stale: true,
       error: `${where} changed since read_runs (fingerprint mismatch); read it again`,
     }
-  if (item.segments.length > 0 && item.segments.every((s) => s.trim() === ''))
+  // italic spans ride along as ranges; everything below works on the plain text
+  const parsed = item.segments.map(parseItalicSegment)
+  if (parsed.length > 0 && parsed.every((p) => p.plain.trim() === ''))
     return { ok: false, error: `${where}: every segment is empty; give the translation` }
   const report: { extra?: number; incomplete?: { groups: number; given: number } } = {}
-  const segments = fitSegments(groups.length, item.segments, report)
+  const fitted = fitParsed(groups.length, parsed, report)
+  const segments = fitted.map((p) => p.plain)
   if (report.incomplete)
     return {
       ok: false,
@@ -258,7 +293,13 @@ function prepare(
     gapsOf(groups),
     edgesOf(groups),
   )
-  const pieces = composePieces(block.node, block.pos, groups, settled)
+  const pieces = composePieces(
+    block.node,
+    block.pos,
+    groups,
+    settled,
+    settled.map((text, i) => placeSpans(text, fitted[i])),
+  )
   if (pieces.length === 0)
     return { ok: false, error: `${where}: the translation is empty; give the translation` }
   const node = twinNode(schema, block.node, pieces, track, date)

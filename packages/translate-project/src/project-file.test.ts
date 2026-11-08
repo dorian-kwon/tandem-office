@@ -69,6 +69,7 @@ describe('project file', () => {
       expect(defaultProjectFile('x', 'ko', 'en').writingStyle).toEqual({
         serialComma: 'with',
         quotePunctuation: 'inside',
+        italics: 'apply',
         custom: '',
       })
     })
@@ -78,6 +79,7 @@ describe('project file', () => {
       expect(parseProjectFile(JSON.stringify(old)).writingStyle).toEqual({
         serialComma: 'default',
         quotePunctuation: 'default',
+        italics: 'default',
         custom: '',
       })
     })
@@ -85,7 +87,12 @@ describe('project file', () => {
     it('roundtrips chosen values', () => {
       const p = {
         ...defaultProjectFile('x', 'ko', 'en'),
-        writingStyle: { serialComma: 'with', quotePunctuation: 'inside', custom: 'Use "colour".' },
+        writingStyle: {
+          serialComma: 'with',
+          quotePunctuation: 'inside',
+          italics: 'off',
+          custom: 'Use "colour".',
+        },
       }
       expect(parseProjectFile(serializeProjectFile(p as never))).toEqual(p)
     })
@@ -95,6 +102,8 @@ describe('project file', () => {
         JSON.stringify({ ...defaultProjectFile('x', 'ko', 'en'), writingStyle: ws })
       expect(() => parseProjectFile(bad({ serialComma: 'maybe' }))).toThrow(ProjectFileError)
       expect(() => parseProjectFile(bad({ quotePunctuation: 'around' }))).toThrow(ProjectFileError)
+      expect(() => parseProjectFile(bad({ italics: 'always' }))).toThrow(ProjectFileError)
+      expect(() => parseProjectFile(bad({ italics: true }))).toThrow(ProjectFileError)
       expect(() => parseProjectFile(bad({ custom: 3 }))).toThrow(ProjectFileError)
       expect(() => parseProjectFile(bad('x'))).toThrow(ProjectFileError)
     })
@@ -107,8 +116,22 @@ describe('project file', () => {
       expect(parseProjectFile(raw).writingStyle).toEqual({
         serialComma: 'without',
         quotePunctuation: 'default',
+        italics: 'default',
         custom: '',
       })
+    })
+
+    it('reads an older writingStyle without italics as no rule and keeps a stored value', () => {
+      const old = JSON.stringify({
+        ...defaultProjectFile('x', 'ko', 'en'),
+        writingStyle: { serialComma: 'with', quotePunctuation: 'inside', custom: '' },
+      })
+      expect(parseProjectFile(old).writingStyle.italics).toBe('default')
+      const apply = JSON.stringify({
+        ...defaultProjectFile('x', 'ko', 'en'),
+        writingStyle: { italics: 'apply' },
+      })
+      expect(parseProjectFile(apply).writingStyle.italics).toBe('apply')
     })
   })
 

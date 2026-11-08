@@ -307,6 +307,15 @@ export const ms = {
   exQuoteOutside: '"epal", "lobak merah"',
   exQuoteInside: '"epal," "lobak merah,"',
   exFollow: 'Tiada peraturan dihantar. AI mengikut konvensyen biasa bahasa sasaran.',
+  italicsLabel: 'Huruf condong',
+  italicsApply: 'Guna secara automatik (tajuk karya, istilah asing, nama saintifik)',
+  italicsOff: 'Jangan tambah huruf condong',
+  italicsFollow: 'Ikut sumber (tiada peraturan)',
+  exItalicsApply:
+    'Hamlet, hanbok, Homo sapiens dalam huruf condong. Tidak pernah untuk penekanan biasa; dilangkau dalam bahasa yang tidak menggunakan huruf condong begini.',
+  exItalicsOff: 'AI tidak menambah huruf condong dengan sendirinya.',
+  exItalicsFollow:
+    'Tiada peraturan dihantar. Huruf condong kekal hanya di tempat sumber sudah memilikinya.',
   styleCustomLabel: 'Arahan khas',
   styleCustomPlaceholder: 'cth. Guna ejaan British',
   choicesTitle: 'Pilihan terjemahan',
