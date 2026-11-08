@@ -1,5 +1,5 @@
 /**
- * The one table of the web AIs the "AI compare" popup asks (Copilot and Grok; Gemini and Claude
+ * The one table of the web AIs the "AI compare" popup asks (Copilot and ChatGPT; Gemini and Claude
  * were taken out). Every engine of the feature (switches, status chips, candidate cards,
  * prompts, retry, the driver) is derived from COMPARE_SITES, so a site is added or removed by
  * editing this list only.
@@ -44,6 +44,10 @@ export interface CompareSite {
    * (a guest session) are NOT a signal.
    */
   loginHint: string
+  /** Reject an explicit login button even when the site offers a guest composer. */
+  requiresLogin?: boolean
+  /** A visible signed-in account control must exist before using a login-only site. */
+  sessionSelector?: string
   /** how long to wait for the input to show up after the page opens */
   loadTimeoutMs: number
   /** the longest the site may take to finish its answer */
@@ -79,26 +83,25 @@ export const COMPARE_SITES: readonly CompareSite[] = [
     verified: true,
   },
   {
-    id: 'grok',
-    name: 'Grok',
-    url: 'https://grok.com/',
-    inputSelector: 'div.tiptap.ProseMirror',
+    id: 'chatgpt',
+    name: 'ChatGPT',
+    url: 'https://chatgpt.com/',
+    inputSelector: '#prompt-textarea',
     inputMode: 'insertText',
     submit: 'button',
-    submitSelector: 'button[type="submit"]',
-    // the stop button's label is "모델 응답 중지" (Korean UI); it has no test id
-    busySelector: 'button[aria-label*="중지"], button[aria-label*="Stop"]',
-    answerSelector: 'div[data-testid="assistant-message"] .response-content-markdown',
-    loggedOutUrl: 'accounts\\.x\\.ai|/sign-in|/sign-up|/login',
-    loginHint: 'sign in|log in|로그인',
+    submitSelector: 'button[data-testid="send-button"]',
+    busySelector: 'button[data-testid="stop-button"]',
+    answerSelector: '[data-message-author-role="assistant"] .markdown',
+    loggedOutUrl: 'auth\\.openai\\.com|auth\\.chatgpt\\.com|/auth/|/login|/sign-in|/sign-up',
+    loginHint: '^(log in|sign in|로그인)$',
+    requiresLogin: true,
+    sessionSelector: '[data-testid="accounts-profile-button"]',
     loadTimeoutMs: 30_000,
     answerTimeoutMs: 120_000,
     settleMs: 3_000,
-    // checked 2026-11-08 on the real site: page, input (the visible ProseMirror, not the plain
-    // textarea), Enter, stop button, answer element. Not checked: the send button (Enter is used).
-    // A cookie notice may show on the first visit; it is only a problem when it covers the prompt
-    // box, and then it is never clicked for the person (the run reports needs-user)
-    verified: true,
+    // Checked 2026-11-09: the guest page has a usable mobile composer and explicit login
+    // buttons. An existing signed-in session is required; signed-in selectors await a check.
+    verified: false,
   },
 ]
 

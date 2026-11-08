@@ -60,6 +60,22 @@ const BLOCKED = JOB.codes.blocked;
 const WALL_URL = /google\.com\/sorry|\/captcha|\/challenge|recaptcha|hcaptcha|turnstile/i;
 // This callback is serialized into the page; every binding it uses must be page-local.
 const wallText = () => /unusual traffic|automated quer|captcha|verify you are (a )?human|are you a robot|자동화된 쿼리|비정상적인 트래픽|로봇이 아닙니다|사람인지 확인/i.test(String(document.body ? document.body.innerText : '').slice(0, 4000));
+// ChatGPT offers guest chats too. This feature uses only the person's existing login.
+// Inspect visible login controls, never conversation text or account storage.
+const loginControl = (hint) => {
+  const pattern = new RegExp(hint, 'i');
+  return [...document.querySelectorAll('button, a')].some((el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && pattern.test(String(el.innerText || '').trim());
+  });
+};
+const hasSession = (selector) => {
+  if (!selector) return false;
+  const el = document.querySelector(selector);
+  if (!el) return false;
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0;
+};
 const inputState = (selector) => {
   const el = document.querySelector(selector);
   if (!el) return 'none';
@@ -111,10 +127,12 @@ async function main() {
     if (WALL_URL.test(here)) return { ok: false, reason: BLOCKED };
     if (loggedOutUrl && loggedOutUrl.test(here)) return { ok: false, reason: LOGIN_WALL };
     if (await page.evaluate(wallText)) return { ok: false, reason: BLOCKED };
+    if (SITE.requiresLogin && await page.evaluate(loginControl, SITE.loginHint)) return { ok: false, reason: LOGIN_WALL };
     boxState = await page.evaluate(inputState, SITE.inputSelector);
-    if (boxState === 'ok') break;
+    if (boxState === 'ok' && (!SITE.requiresLogin || await page.evaluate(hasSession, SITE.sessionSelector))) break;
     await sleep(500);
   }
+  if (SITE.requiresLogin && !(await page.evaluate(hasSession, SITE.sessionSelector))) return { ok: false, reason: LOGIN_WALL };
   // a cookie or consent notice is the person's choice, never clicked for them
   if (boxState === 'consent') return { ok: false, reason: NEEDS_USER };
   if (boxState !== 'ok' && (await page.evaluate(wallText))) return { ok: false, reason: BLOCKED };
@@ -150,6 +168,8 @@ async function main() {
     const here = String(await page.url());
     if (WALL_URL.test(here) || await page.evaluate(wallText)) return { ok: false, reason: BLOCKED };
     if (loggedOutUrl && loggedOutUrl.test(here)) return { ok: false, reason: LOGIN_WALL };
+    if (SITE.requiresLogin && await page.evaluate(loginControl, SITE.loginHint)) return { ok: false, reason: LOGIN_WALL };
+    if (SITE.requiresLogin && !(await page.evaluate(hasSession, SITE.sessionSelector))) return { ok: false, reason: LOGIN_WALL };
     inputReady = await page.evaluate(inputMatches, { selector: SITE.inputSelector, prompt: JOB.prompt });
     if (inputReady) {
       if (SITE.submit === 'enter') break;

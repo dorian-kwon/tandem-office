@@ -97,9 +97,9 @@ describe('ego script generator', () => {
   })
 
   it.each([
-    ['https://grok.com/challenge', '', 'blocked'],
-    ['https://grok.com/', 'Verify you are human', 'blocked'],
-    ['https://grok.com/sign-in', '', 'login-wall'],
+    ['https://chatgpt.com/challenge', '', 'blocked'],
+    ['https://chatgpt.com/', 'Verify you are human', 'blocked'],
+    ['https://chatgpt.com/sign-in', '', 'login-wall'],
   ])('blocks before entering any text at %s (%s)', async (url, bodyText, reason) => {
     let typed = false
     let output = ''
@@ -479,6 +479,16 @@ describe('consent and source copy', () => {
     expect(await readCompareConsent(fs)).toBe(false)
   })
 
+  it('does not inherit Grok consent or engine switches for ChatGPT', async () => {
+    let stored = JSON.stringify({ consentVersion: 2, engines: { copilot: false, grok: true } })
+    const fs = { read: async () => stored, write: async (text: string) => void (stored = text) }
+    expect(await readCompareConsent(fs)).toBe(false)
+    expect(await readComparePrefs(fs)).toEqual({ engines: { copilot: false } })
+    await writeCompareConsent(fs)
+    expect(JSON.parse(stored).consentVersion).toBe(3)
+    expect(COMPARE_SITES.map((site) => site.id)).toEqual(['copilot', 'chatgpt'])
+  })
+
   it('the re-translation switch is on by default, remembered, and independent of the consent', async () => {
     let stored: string | null = null
     const fs = { read: async () => stored, write: async (t: string) => void (stored = t) }
@@ -506,11 +516,11 @@ describe('consent and source copy', () => {
     }
     await Promise.all([
       writeComparePrefs(fs, { engines: { copilot: false } }),
-      writeComparePrefs(fs, { engines: { grok: false }, autoIntegrate: false }),
+      writeComparePrefs(fs, { engines: { chatgpt: false }, autoIntegrate: false }),
       writeCompareConsent(fs),
     ])
     expect(await readComparePrefs(fs)).toEqual({
-      engines: { copilot: false, grok: false },
+      engines: { copilot: false, chatgpt: false },
       autoIntegrate: false,
     })
     expect(await readCompareConsent(fs)).toBe(true)
