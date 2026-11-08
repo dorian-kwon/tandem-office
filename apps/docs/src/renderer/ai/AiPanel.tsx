@@ -300,6 +300,9 @@ function storedEntryOf(m: StoredEntry): ChatEntry {
   }
 }
 
+/** streamed assistant text reaches the chat state at most this often */
+const STREAM_TEXT_INTERVAL_MS = 120
+
 /** longest selection excerpt echoed on a user bubble */
 const SCOPE_TEXT_MAX = 200
 
@@ -1064,7 +1067,7 @@ export function AiPanel({
     })
   }
 
-  const patchLastAssistant = (
+  const applyLastAssistantPatch = (
     patch: Partial<ChatEntry> | ((last: ChatEntry) => Partial<ChatEntry>),
   ) => {
     setChat((prev) => {
@@ -1076,6 +1079,32 @@ export function AiPanel({
       return boundChatHistory(next)
     })
   }
+
+  // Streamed text arrives every few milliseconds; each patch copies the chat and re-renders
+  // the whole panel beside the editor. Text is coalesced to one patch per interval, and any
+  // other patch (tool chip, end of the reply) first applies the text still waiting so the
+  // order of events is unchanged.
+  const pendingTextRef = useRef<string | null>(null)
+  const pendingTextTimerRef = useRef(0)
+  const flushPendingText = () => {
+    window.clearTimeout(pendingTextTimerRef.current)
+    pendingTextTimerRef.current = 0
+    const text = pendingTextRef.current
+    pendingTextRef.current = null
+    if (text !== null) applyLastAssistantPatch({ text })
+  }
+  const queueAssistantText = (text: string) => {
+    pendingTextRef.current = text
+    if (pendingTextTimerRef.current) return
+    pendingTextTimerRef.current = window.setTimeout(flushPendingText, STREAM_TEXT_INTERVAL_MS)
+  }
+  const patchLastAssistant = (
+    patch: Partial<ChatEntry> | ((last: ChatEntry) => Partial<ChatEntry>),
+  ) => {
+    flushPendingText()
+    applyLastAssistantPatch(patch)
+  }
+  useEffect(() => () => window.clearTimeout(pendingTextTimerRef.current), [])
 
   /**
    * The project folder (spec 5): the chip under the input, the chat menu, the
@@ -1258,7 +1287,7 @@ export function AiPanel({
       ]),
       captureSnapshot: () => captureRollbackSnapshot(editorRef.current),
       events: runStatus.wrap({
-        onText: (text) => patchLastAssistant({ text }),
+        onText: (text) => queueAssistantText(text),
         onToolStart: (call) => {
           // Live "running" chip: replaced in place by onToolExecuted
           patchLastAssistant((last) => ({

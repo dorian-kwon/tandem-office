@@ -2397,6 +2397,8 @@ body.vib .slide-list {
 
 .ai-typing-dot-grow,
 .ai-typing-dot-shrink {
+  width: 12px;
+  height: 12px;
   background: var(--color-brand-secondary);
   border-radius: 50%;
 }
@@ -2412,13 +2414,11 @@ body.vib .slide-list {
 @keyframes ai-dot-grow {
   0%,
   100% {
-    width: 4px;
-    height: 4px;
+    transform: scale(0.333);
     opacity: 0.45;
   }
   50% {
-    width: 12px;
-    height: 12px;
+    transform: scale(1);
     opacity: 1;
   }
 }
@@ -2426,13 +2426,11 @@ body.vib .slide-list {
 @keyframes ai-dot-shrink {
   0%,
   100% {
-    width: 12px;
-    height: 12px;
+    transform: scale(1);
     opacity: 1;
   }
   50% {
-    width: 4px;
-    height: 4px;
+    transform: scale(0.333);
     opacity: 0.45;
   }
 }
