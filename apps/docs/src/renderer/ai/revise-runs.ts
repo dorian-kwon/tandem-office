@@ -186,7 +186,9 @@ interface ReviseEdit {
   marks: readonly Mark[]
 }
 
-type Plan = { ok: true; edits: ReviseEdit[]; report: ReviseReport } | { ok: false; error: string }
+type Plan =
+  | { ok: true; edits: ReviseEdit[]; report: ReviseReport }
+  | { ok: false; error: string; stale?: true }
 
 export interface ReviseOptions {
   /** the document's source language script test (sourceScriptOf): a paragraph mostly in it is not revised */
@@ -255,6 +257,7 @@ function planParagraph(
   if (item.fp !== fp)
     return {
       ok: false,
+      stale: true,
       error: `${where} changed since read_runs (fingerprint mismatch); read it again`,
     }
   // the original of a bilingual pair is never edited
@@ -350,7 +353,8 @@ function currentFingerprint(doc: ProseMirrorNode, index: number, paragraph: numb
 }
 
 export type ReviseOutcome =
-  { ok: true; reports: ReviseReport[]; author: string } | { ok: false; errors: string[] }
+  | { ok: true; reports: ReviseReport[]; author: string; stale: string[] }
+  | { ok: false; errors: string[] }
 
 /**
  * revise_blocks: every item is checked first and one bad item refuses the
@@ -365,6 +369,7 @@ export function applyRevisions(
 ): ReviseOutcome {
   const doc = editor.state.doc
   const errors: string[] = []
+  const stale: string[] = []
   const reports: ReviseReport[] = []
   const edits: ReviseEdit[] = []
   const seen = new Set<string>()
@@ -378,13 +383,14 @@ export function applyRevisions(
     }
     seen.add(key)
     const plan = planParagraph(editor, doc, item, options)
-    if (!plan.ok) errors.push(plan.error)
+    if (!plan.ok) (plan.stale ? stale : errors).push(plan.error)
     else {
       reports.push(plan.report)
       edits.push(...plan.edits)
     }
   }
   if (errors.length > 0) return { ok: false, errors }
+  if (stale.length > 0 && reports.length === 0) return { ok: false, errors: stale }
   const author = reviewAuthor(track)
   if (edits.length > 0) editor.view.dispatch(applyRevisionEdits(editor, edits, author))
   for (const report of reports) {
@@ -392,5 +398,5 @@ export function applyRevisions(
     const fp = currentFingerprint(editor.state.doc, report.index, report.paragraph ?? 0)
     if (fp) report.fp = fp
   }
-  return { ok: true, reports, author }
+  return { ok: true, reports, author, stale }
 }

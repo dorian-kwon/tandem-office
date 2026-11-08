@@ -123,6 +123,8 @@ export type BilingualOutcome =
       tables: BilingualTableReport[]
       /** translations written at an explicit target */
       placed: BilingualPlacedReport[]
+      /** items skipped because their paragraph (or destination) changed since read_runs; the rest was applied */
+      stale: string[]
       /** items left alone because the original already has its twin */
       alreadyDone: string[]
       /** fingerprints of the originals and of their twins (completion tracking) */
@@ -219,7 +221,7 @@ interface Prepared {
   extra?: number
 }
 
-type PrepareResult = { ok: true; prepared: Prepared } | { ok: false; error: string }
+type PrepareResult = { ok: true; prepared: Prepared } | { ok: false; error: string; stale?: true }
 
 function prepare(
   schema: Schema,
@@ -238,6 +240,7 @@ function prepare(
   if (item.fp !== fp)
     return {
       ok: false,
+      stale: true,
       error: `${where} changed since read_runs (fingerprint mismatch); read it again`,
     }
   if (item.segments.length > 0 && item.segments.every((s) => s.trim() === ''))
@@ -606,7 +609,8 @@ function withDestinationFormat(node: PmNode, destination: PmNode | undefined): P
 }
 
 type CellPlan =
-  { ok: true; op: CellOp; reports: BilingualPlacedReport[] } | { ok: false; error: string }
+  | { ok: true; op: CellOp; reports: BilingualPlacedReport[] }
+  | { ok: false; error: string; stale?: true }
 
 /** check one destination cell and build its new content */
 function planCell(
@@ -692,6 +696,7 @@ function planCell(
     if (target.fp !== destFp)
       return {
         ok: false,
+        ...(target.fp ? { stale: true as const } : {}),
         error: `${at}: overwrite needs the destination's own "fp" as target.fp (read_runs lists it for the cell's paragraph)${target.fp ? '; the given one no longer matches, read it again' : ''}`,
       }
     const blocks = textblocksOf(top.node, top.pos) ?? []
@@ -740,6 +745,7 @@ export function applyBilingual(
   const schema = editor.schema
   const date = track ? revisionDate() : undefined
   const errors: string[] = []
+  const stale: string[] = []
   const alreadyDone: string[] = []
   const seen = new Set<string>()
   const bodyOps: BodyOp[] = []
@@ -765,7 +771,9 @@ export function applyBilingual(
     seen.add(key)
     const top = topLevel(doc, index)
     if (!top) {
-      errors.push(`${where}: no such block (the document has ${doc.childCount} blocks)`)
+      stale.push(
+        `${where}: no such block (the document has ${doc.childCount} blocks); read it again`,
+      )
       continue
     }
     if (isTrackedDeleted(top.node)) {
@@ -833,7 +841,7 @@ export function applyBilingual(
       }
       const made = prepare(schema, block, item, where, track, date)
       if (!made.ok) {
-        errors.push(made.error)
+        ;(made.stale ? stale : errors).push(made.error)
         continue
       }
       const { prepared } = made
@@ -912,7 +920,7 @@ export function applyBilingual(
     }
     const made = prepare(schema, top, item, where, track, date)
     if (!made.ok) {
-      errors.push(made.error)
+      ;(made.stale ? stale : errors).push(made.error)
       continue
     }
     const { prepared } = made
@@ -961,6 +969,7 @@ export function applyBilingual(
     }
     const prepared = new Map<number, Prepared>()
     const tableErrors: string[] = []
+    const tableStale: string[] = []
     const extra: string[] = []
     for (const { item } of list) {
       const n = item.paragraph as number
@@ -974,7 +983,7 @@ export function applyBilingual(
       }
       if (fps[n] === null) continue
       const made = prepare(schema, block, item, where, track, date)
-      if (!made.ok) tableErrors.push(made.error)
+      if (!made.ok) (made.stale ? tableStale : tableErrors).push(made.error)
       else {
         prepared.set(n, made.prepared)
         if (made.prepared.extra) extra.push(`paragraph ${n} (+${made.prepared.extra})`)
@@ -982,6 +991,11 @@ export function applyBilingual(
     }
     if (tableErrors.length > 0) {
       errors.push(...tableErrors)
+      continue
+    }
+    if (tableStale.length > 0) {
+      // a table's cells must all be current: the whole table is skipped
+      stale.push(`${tableStale.join('; ')} (table block ${index} skipped whole)`)
       continue
     }
     const numberAt = new Map<number, number>()
@@ -1013,7 +1027,7 @@ export function applyBilingual(
   for (const dest of cellDests.values()) {
     const plan = planCell(editor, doc, dest, originals, track)
     if (!plan.ok) {
-      errors.push(plan.error)
+      ;(plan.stale ? stale : errors).push(plan.error)
       continue
     }
     const tablePos = topLevel(doc, dest.target.index)!.pos
@@ -1028,6 +1042,12 @@ export function applyBilingual(
   }
 
   if (errors.length > 0) return { ok: false, errors }
+  if (
+    stale.length > 0 &&
+    bodyOps.length + tableOps.length + placeOps.length + cellOps.length === 0 &&
+    alreadyDone.length === 0
+  )
+    return { ok: false, errors: stale }
 
   const tr = editor.state.tr
   // last position first, so an edit never shifts the ones still ahead; a table starts where the
@@ -1062,6 +1082,7 @@ export function applyBilingual(
     added: bodyOps.map((o) => o.report),
     tables: tableReports,
     placed: placedReports,
+    stale,
     alreadyDone,
     handled: [...pairs, ...placedPairsList].flat(),
     lastShift: inserted,

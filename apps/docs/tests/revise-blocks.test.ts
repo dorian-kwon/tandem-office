@@ -197,14 +197,27 @@ describe('revise_blocks', () => {
     expect(editor.state.doc.eq(before)).toBe(true)
   })
 
-  it('one bad item refuses the whole call', async () => {
+  it('an item with a stale fp is skipped and reported while the others are applied', async () => {
     const editor = await createEditor([mixed(), mixed()])
-    const before = editor.state.doc
     const result = await revise(editor, [
       { index: 0, fp: FP, segments: ['The quick red fox ', 'jumps over it.'] },
       { index: 1, fp: 'stale', segments: [...MIXED] },
     ])
-    expect(result.isError).toBe(true)
+    expect(result.isError).toBeFalsy()
+    expect(result.output).toMatch(/SKIPPED 1 item.*block 1/)
+    expect(result.mutated).toBe(true)
+  })
+
+  it('every item stale refuses the call; invalid input refuses the whole call', async () => {
+    const editor = await createEditor([mixed(), mixed()])
+    const before = editor.state.doc
+    const allStale = await revise(editor, [{ index: 1, fp: 'stale', segments: [...MIXED] }])
+    expect(allStale.isError).toBe(true)
+    const bad = await revise(editor, [
+      { index: 0, fp: FP, segments: ['The quick red fox ', 'jumps over it.'] },
+      { index: 1, fp: FP, segments: ['one only'] },
+    ])
+    expect(bad.isError).toBe(true)
     expect(editor.state.doc.eq(before)).toBe(true)
   })
 

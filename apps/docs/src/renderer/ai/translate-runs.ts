@@ -713,7 +713,8 @@ export function fitSegments(
 }
 
 type PlanResult =
-  { ok: true; edits: Edit[]; report: RunTranslationReport } | { ok: false; error: string }
+  | { ok: true; edits: Edit[]; report: RunTranslationReport }
+  | { ok: false; error: string; stale?: true }
 
 function planParagraph(doc: ProseMirrorNode, item: RunTranslationItem): PlanResult {
   const where =
@@ -753,6 +754,7 @@ function planParagraph(doc: ProseMirrorNode, item: RunTranslationItem): PlanResu
   if (item.fp !== undefined && item.fp !== runFingerprint(groups.map((g) => g.text)))
     return {
       ok: false,
+      stale: true,
       error: `${where} changed since read_runs (fingerprint mismatch); read it again`,
     }
   // one empty segment is a piece with no counterpart; all of them would delete the paragraph's text
@@ -836,11 +838,18 @@ function currentFingerprint(doc: ProseMirrorNode, index: number, paragraph: numb
 }
 
 export type RunTranslationOutcome =
-  { ok: true; reports: RunTranslationReport[] } | { ok: false; errors: string[] }
+  | {
+      ok: true
+      reports: RunTranslationReport[]
+      /** items skipped because their paragraph changed since read_runs (the rest was applied) */
+      stale: string[]
+    }
+  | { ok: false; errors: string[] }
 
 /**
- * translate_blocks: every item checked first; one bad item refuses the whole
- * call with nothing changed. The edits of all items land in one transaction
+ * translate_blocks: every item checked first; an invalid item refuses the whole
+ * call with nothing changed, while an item whose fingerprint no longer matches
+ * is skipped and reported (all stale: refused). The edits of all items land in one transaction
  * (one undo step).
  */
 export function applyRunTranslations(
@@ -850,6 +859,7 @@ export function applyRunTranslations(
 ): RunTranslationOutcome {
   const doc = editor.state.doc
   const errors: string[] = []
+  const stale: string[] = []
   const reports: RunTranslationReport[] = []
   const edits: Edit[] = []
   const seen = new Set<string>()
@@ -863,20 +873,21 @@ export function applyRunTranslations(
     }
     seen.add(key)
     const plan = planParagraph(doc, item)
-    if (!plan.ok) errors.push(plan.error)
+    if (!plan.ok) (plan.stale ? stale : errors).push(plan.error)
     else {
       reports.push(plan.report)
       edits.push(...plan.edits)
     }
   }
   if (errors.length > 0) return { ok: false, errors }
+  if (stale.length > 0 && reports.length === 0) return { ok: false, errors: stale }
   if (edits.length > 0) editor.view.dispatch(applyEdits(editor, edits, track))
   for (const report of reports) {
     if (report.empty) continue
     const fp = currentFingerprint(editor.state.doc, report.index, report.paragraph ?? 0)
     if (fp) report.fp = fp
   }
-  return { ok: true, reports }
+  return { ok: true, reports, stale }
 }
 
 export interface RunTranslationResult extends Partial<Omit<RunTranslationReport, 'index'>> {

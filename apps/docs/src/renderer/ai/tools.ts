@@ -238,7 +238,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     name: 'translate_blocks',
     description:
       'The way to translate existing document text (never use replace_blocks or write_document to translate). Read the paragraphs with read_runs first, then pass for each paragraph its "fp" from read_runs unchanged and the translations of its segments, in the same order and the same number: segments[i] replaces the text of segment i, which keeps its own formatting (font, italics, color, raw run properties); footnote references, tabs, breaks, paragraph styles and empty paragraphs stay exactly as they are. ' +
-      'Word order may move text between segments of one paragraph, but give every segment a translation; use an empty string only for a piece with no counterpart in the translation. Segments are plain text: no line breaks, no HTML. Fewer segments leave the remaining segments untranslated (reported); extra segments are appended to the last one. A table block needs its "paragraph" number. An item whose fp no longer matches (the paragraph changed since read_runs) is refused. Block indexes do not change. Footnotes and endnotes go in the same call: an entry with "note" (footnote or endnote) and "id" from read_runs notes:true instead of "index", with the same fp and segments; their run formatting is kept too.',
+      'Word order may move text between segments of one paragraph, but give every segment a translation; use an empty string only for a piece with no counterpart in the translation. Segments are plain text: no line breaks, no HTML. Fewer segments leave the remaining segments untranslated (reported); extra segments are appended to the last one. A table block needs its "paragraph" number. An item whose fp no longer matches (the paragraph changed since read_runs) is skipped and reported, the other items are applied; read_runs the skipped blocks again. Block indexes do not change. Footnotes and endnotes go in the same call: an entry with "note" (footnote or endnote) and "id" from read_runs notes:true instead of "index", with the same fp and segments; their run formatting is kept too.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -282,7 +282,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     description:
       'Translation REVIEW (감수/검수/proofreading) of text that is already translated: correct mistakes in place, every correction recorded as a TRACKED CHANGE (always, whatever the track-changes switch says) under the author "<AI author> (review)", so the person accepts or rejects each one. Never use translate_blocks, replace_blocks or write_document for a review. ' +
       'Same input as translate_blocks: read_runs first, then per paragraph its "fp" unchanged and the REVISED text of every segment, in the same order and exactly the same number (repeat a correct segment as it is). The tool diffs each segment against its current text word by word and marks only the changed words, inside their own run, so run formatting is kept; a segment you return unchanged makes no change at all. Revise only what is wrong (mistranslation, omission, added content, wrong number/name/date, glossary or style-rule inconsistency, phrasing that is awkward in the target language); do not restyle a correct translation. ' +
-      'Empty paragraphs, footnote references, tabs and breaks stay as they are. Footnotes and endnotes cannot carry tracked changes: do not revise them, mention a doubt about one in the summary. An item whose fp no longer matches is refused, and the original of a bilingual pair is never edited. With sourceLanguage, a paragraph that is still mostly in that language is not revised (translate it with translate_blocks first). ' +
+      'Empty paragraphs, footnote references, tabs and breaks stay as they are. Footnotes and endnotes cannot carry tracked changes: do not revise them, mention a doubt about one in the summary. An item whose fp no longer matches is skipped and reported (the others are applied), and the original of a bilingual pair is never edited. With sourceLanguage, a paragraph that is still mostly in that language is not revised (translate it with translate_blocks first). ' +
       'After a non-trivial correction or a doubt, attach a short reason with add_comment (blockIndex of that paragraph); no comment for trivial fixes, never the same comment twice. Block indexes do not change.',
     inputSchema: {
       type: 'object',
@@ -327,7 +327,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       'layout "after" (body paragraphs, headings, list items): a new paragraph right after the original with the same paragraph style and run formatting; footnote references, pictures and empty paragraphs are not copied. ' +
       'Table cells: layout "right" puts the translation in a NEW column directly right of each text column (original left, translation right), layout "below" in a NEW row directly below each text row (original top, translation bottom); ask the person which, every time. Pass the WHOLE table (every cell paragraph read_runs lists, with its "paragraph" number) in one call. A table with merged cells cannot take a column: it falls back to "below" and the result says so, tell the person. ' +
       'ANYWHERE ELSE: an item may carry "target" (instead of the call layout) to put its translation exactly where the person wants. {kind:"cell", index:<table block>, row, column}: an EXISTING table cell, 0-based visual grid, the "cell":"r<row>c<column>" read_runs lists (a merged cell by its top-left anchor; read_runs marks wholly empty cells "empty":true); it must be empty, or add overwrite:true plus target.fp (that cell\'s own fp, one text paragraph, not while changes are tracked) to replace its text; several items for one cell become its paragraphs in order. {kind:"after"|"before", index} a new paragraph after/before ANY block, {kind:"end"} at the end of the document. Items with a target need no layout and no whole-table pass; the destination keeps its own paragraph formatting, else the original\'s. ' +
-      'Added paragraphs shift later block indexes: read_runs again before the next call (the added translations are listed as skipped and are never flagged as untranslated). A paragraph that already has its translation is skipped. Footnotes and endnotes are not duplicated. Segments are plain text: no line breaks, no HTML.',
+      'An entry whose fp no longer matches (the person edited it) is skipped and reported, the rest is applied; a table is skipped whole if any of its cells changed. Added paragraphs shift later block indexes: read_runs again before the next call (the added translations are listed as skipped and are never flagged as untranslated). A paragraph that already has its translation is skipped. Footnotes and endnotes are not duplicated. Segments are plain text: no line breaks, no HTML.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1059,14 +1059,15 @@ function editedExternally(editor: Editor): boolean {
   return seen !== undefined && seen !== editor.state.doc
 }
 
-/** tools addressing the document by block index: refused after an external edit until the model re-reads */
+/**
+ * Tools addressing the document by block index alone: refused after an external edit until the
+ * model re-reads. translate_blocks, add_bilingual and revise_blocks are not listed: every item
+ * carries the paragraph fingerprint, so a changed paragraph is skipped and reported instead.
+ */
 const INDEX_WRITE_SUMMARIES: Record<string, () => string> = {
   insert_content: () => t('aiSumInsertContent'),
   write_document: () => t('aiSumWriteDocument'),
   replace_blocks: () => t('aiSumReplaceContent'),
-  translate_blocks: () => t('aiSumTranslateBlocks'),
-  add_bilingual: () => t('aiSumAddBilingual'),
-  revise_blocks: () => t('aiSumReviseBlocks'),
   replace_selection: () => t('aiSumReplaceSelection'),
   apply_ops: () => t('aiSumApplyCommands'),
   insert_chart: () => t('aiSumInsertChart'),
@@ -1090,6 +1091,12 @@ function staleSummaryOf(call: AgentToolCall): (() => string) | undefined {
       : () => t('aiSumSetPageSetup')
   }
   return INDEX_WRITE_SUMMARIES[call.name]
+}
+
+/** the result line for items skipped because their paragraph changed since read_runs */
+function staleLine(stale: readonly string[], applied: number): string {
+  if (stale.length === 0) return ''
+  return `Applied ${applied}; SKIPPED ${stale.length} item(s) whose paragraph changed since read_runs (the person edited it, or block indexes moved): ${stale.slice(0, 30).join('; ')}${stale.length > 30 ? ' …' : ''}. Everything else was applied: continue with the rest, and call read_runs for the skipped blocks again to redo just those.`
 }
 
 const STALE_DOC_ERROR =
@@ -2110,6 +2117,15 @@ function executeSyncTool(
             `Extra segments were appended to the last segment of: ${extras.map((p) => `block ${p.index} (+${p.extra})`).join(', ')}.`,
           )
       }
+      if (outcome.stale.length > 0)
+        lines.push(
+          staleLine(
+            outcome.stale,
+            outcome.added.length +
+              outcome.placed.length +
+              outcome.tables.reduce((n, x) => n + x.paragraphs, 0),
+          ),
+        )
       if (outcome.alreadyDone.length > 0)
         lines.push(
           `Skipped (already has its bilingual translation, nothing added twice): ${outcome.alreadyDone.join(', ')}.`,
@@ -2210,6 +2226,8 @@ function executeSyncTool(
       const empty = outcome.reports.filter((r) => r.empty).map(label)
       if (empty.length > 0)
         lines.push(`Ignored (empty paragraphs, left as they are): ${empty.join(', ')}.`)
+      if (outcome.stale.length > 0)
+        lines.push(staleLine(outcome.stale, outcome.reports.filter((r) => !r.empty).length))
       return {
         output: lines.join('\n'),
         mutated: changes > 0,
@@ -2336,6 +2354,9 @@ function executeSyncTool(
         output: [
           `Translated ${translated.length} paragraph(s)${noteCount > 0 ? ` and ${noteCount} note paragraph(s)` : ''} in place; run formatting, footnote references, paragraph styles and empty paragraphs were kept. Block indexes are unchanged.`,
           ...remarks,
+          ...(outcome.stale.length > 0
+            ? [staleLine(outcome.stale, outcome.reports.filter((r) => !r.empty).length)]
+            : []),
           remainingLine(editor, notes),
         ].join('\n'),
         mutated: translated.length > 0 || noteCount > 0,
