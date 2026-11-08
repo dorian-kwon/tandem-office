@@ -132,7 +132,7 @@ export function writingStyleRule(style: WritingStyle | undefined): string {
     )
   if (style.italics === 'apply')
     lines.push(
-      `- Italics: wrap titles of standalone works (books, periodicals, films, plays, albums, artworks), foreign or not-yet-naturalised terms, scientific names, ship and aircraft names, and words mentioned as words in <i>…</i> inside the segment (only <i>, no nesting, never for plain emphasis; parts and articles take quotation marks); ${SCOPE}, e.g. nothing for Korean, Chinese or Japanese.`,
+      `- Italics: wrap titles of standalone works (books, periodicals, films, plays, albums, artworks), foreign or not-yet-naturalised terms, scientific names, ship and aircraft names, and words mentioned as words in <i>…</i> inside the segment (only <i>, no nesting, never for plain emphasis; parts and articles take quotation marks) without changing the source's line breaks or other formatting; ${SCOPE}, e.g. nothing for Korean, Chinese or Japanese.`,
     )
   else if (style.italics === 'off') lines.push('- Do not add italics of your own (no <i> tags).')
   const custom = oneLine(style.custom ?? '')

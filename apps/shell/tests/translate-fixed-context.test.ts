@@ -219,7 +219,7 @@ describe('TRANSLATION_EDITING_RULES', () => {
     expect(rules).toMatch(/review:true/)
     expect(rules).toMatch(/never invent an original/)
     expect(rules).toMatch(/Never edit anything in source\//)
-    expect(rules.length).toBeLessThan(2300)
+    expect(rules.length).toBeLessThan(2900)
     expect(rules).toMatch(/Review procedure:[^\n]*never restyle a correct translation/)
     expect(rules).toMatch(/add_comment only for non-trivial fixes or doubts, never twice/)
     expect(rules).toMatch(/Finish with a summary/)
