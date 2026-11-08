@@ -75,8 +75,8 @@ const api: DesktopApi = {
   compareReadSource: () => ipcRenderer.invoke(COMPARE_CHANNELS.readSource),
   compareGetConsent: () => ipcRenderer.invoke(COMPARE_CHANNELS.getConsent),
   compareSetConsent: () => ipcRenderer.invoke(COMPARE_CHANNELS.setConsent),
-  compareGetRetranslate: () => ipcRenderer.invoke(COMPARE_CHANNELS.getRetranslate),
-  compareSetRetranslate: (on) => ipcRenderer.invoke(COMPARE_CHANNELS.setRetranslate, on),
+  compareGetPrefs: () => ipcRenderer.invoke(COMPARE_CHANNELS.getPrefs),
+  compareSetPrefs: (patch) => ipcRenderer.invoke(COMPARE_CHANNELS.setPrefs, patch),
   onAutoSaveDefaultChanged: (handler) => {
     const listener = (_event: IpcRendererEvent, value: AutoSaveDefault) => handler(value)
     ipcRenderer.on('app:auto-save-default-changed', listener)

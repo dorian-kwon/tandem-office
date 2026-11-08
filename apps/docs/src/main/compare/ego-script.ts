@@ -14,9 +14,9 @@
  *
  * Flow (a failing step ends in a `{ok:false, reason}` result line):
  *  1. resume or create this site's Task Space ("tandem compare <id>"), page p1, goto the site
- *  2. wait for a usable prompt box, watching the address: a redirect to a login page, a wall
- *     covering the box, or no box (with sign-in text: login wall, else no prompt box) ends the
- *     run as a skipped engine. A guest session with a working box proceeds
+ *  2. wait for a usable prompt box, watching the address: a redirect to a login page, a CAPTCHA
+ *     or "unusual traffic" page, a wall covering the box, or no box ends the run as a blocked
+ *     engine (nothing is clicked to get past a wall). A guest session with a working box proceeds
  *  3. count the assistant messages, click the input, insert the prompt
  *  4. submit (Enter in the input, or click the send button)
  *  5. wait until a new assistant message exists and the stop button is gone
@@ -24,7 +24,12 @@
  *  7. read the last message's text with page.evaluate, print one marker line,
  *     `task.finish({ keep: [] })` (not on failure: the space stays for the person to look at)
  */
-import { COMPARE_LOGIN_WALL, COMPARE_NEEDS_USER, COMPARE_NO_PROMPT_BOX } from '../../shared/compare'
+import {
+  COMPARE_BLOCKED,
+  COMPARE_LOGIN_WALL,
+  COMPARE_NEEDS_USER,
+  COMPARE_NO_PROMPT_BOX,
+} from '../../shared/compare'
 import type { CompareSite } from '../../shared/compare-sites'
 
 export interface EgoJob {
@@ -50,6 +55,11 @@ const report = (result) => console.log(JOB.marker + ' ' + JSON.stringify(result)
 const LOGIN_WALL = JOB.codes.loginWall;
 const NO_PROMPT_BOX = JOB.codes.noPromptBox;
 const NEEDS_USER = JOB.codes.needsUser;
+const BLOCKED = JOB.codes.blocked;
+// CAPTCHA and "unusual traffic" pages: the engine is blocked, nothing is clicked to get past them
+const WALL_URL = /google\.com\/sorry|\/captcha|\/challenge|recaptcha|hcaptcha|turnstile/i;
+const WALL_TEXT = /unusual traffic|automated quer|captcha|verify you are (a )?human|are you a robot|자동화된 쿼리|비정상적인 트래픽|로봇이 아닙니다|사람인지 확인/i;
+const wallText = () => WALL_TEXT.test(String(document.body ? document.body.innerText : '').slice(0, 4000));
 const inputState = (selector) => {
   const el = document.querySelector(selector);
   if (!el) return 'none';
@@ -63,20 +73,6 @@ const inputState = (selector) => {
   const words = String((layer || top || document.body).innerText || '').slice(0, 600);
   return /cookie|쿠키|consent|동의|privacy|개인정보/i.test(words) ? 'consent' : 'covered';
 };
-const firstLink = (selector) => {
-  const link = document.querySelector(selector);
-  return link ? { href: link.getAttribute('href') || '', text: String(link.innerText || link.textContent || '') } : null;
-};
-const clickMatching = (arg) => {
-  const match = new RegExp(arg.match, 'i');
-  const exclude = arg.exclude ? new RegExp(arg.exclude, 'i') : null;
-  for (const item of document.querySelectorAll(arg.items)) {
-    const text = String(item.innerText || item.textContent || '');
-    if (match.test(text) && !(exclude && exclude.test(text))) { item.click(); return true; }
-  }
-  return false;
-};
-const norm = (text) => String(text).toLowerCase().replace(/\s+/g, ' ').trim();
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // the text still sitting in the (visible) prompt box: empty after a message was sent
 const boxText = (selector) => {
@@ -107,13 +103,16 @@ async function main() {
   const start = Date.now();
   let boxState = 'none';
   while (Date.now() - start < SITE.loadTimeoutMs) {
-    if (loggedOutUrl && loggedOutUrl.test(String(await page.url()))) return { ok: false, reason: LOGIN_WALL };
+    const here = String(await page.url());
+    if (WALL_URL.test(here)) return { ok: false, reason: BLOCKED };
+    if (loggedOutUrl && loggedOutUrl.test(here)) return { ok: false, reason: LOGIN_WALL };
     boxState = await page.evaluate(inputState, SITE.inputSelector);
     if (boxState === 'ok') break;
     await sleep(500);
   }
   // a cookie or consent notice is the person's choice, never clicked for them
   if (boxState === 'consent') return { ok: false, reason: NEEDS_USER };
+  if (boxState !== 'ok' && (await page.evaluate(wallText))) return { ok: false, reason: BLOCKED };
   if (boxState === 'covered') return { ok: false, reason: LOGIN_WALL };
   if (boxState !== 'ok') {
     const shot = await page.snapshot();
@@ -121,18 +120,7 @@ async function main() {
     const wall = SITE.loginHint && new RegExp(SITE.loginHint, 'i').test(text);
     return { ok: false, reason: wall ? LOGIN_WALL : NO_PROMPT_BOX };
   }
-  // a preparation (a faster model mode) never fails a run: without it the site's default is used
-  for (const step of SITE.prepare || []) {
-    try {
-      await page.click(step.open);
-      await page.waitForSelector(step.items, { state: 'visible', timeout: 5000 });
-      await page.evaluate(clickMatching, step);
-      await sleep(500);
-    } catch (e) { /* continue with the default mode */ }
-  }
   const arg = { answer: SITE.answerSelector, busy: SITE.busySelector };
-  const reopen = SITE.readStrategy === 'reopen' && SITE.reopenLinkSelector;
-  const beforeLink = reopen ? await page.evaluate(firstLink, SITE.reopenLinkSelector) : null;
   const before = (await page.evaluate(pageState, arg)).count;
   // Input goes in the way a person does it, in the agent space: a real mouse click into the box,
   // the box emptied (a site may restore an old draft), the text, then a real click on the send
@@ -164,34 +152,6 @@ async function main() {
     if (SITE.submit === 'enter') await sendByButton();
     else await page.press(SITE.inputSelector, 'Enter');
   }
-  if (reopen) {
-    // the live view does not show the answer: read it from the saved conversation, which is the
-    // newest link in the sidebar (and not the one that was there before sending)
-    const promptStart = norm(JOB.prompt).slice(0, 20);
-    await sleep(4000);
-    const reopenEnd = Date.now() + SITE.answerTimeoutMs;
-    let conversation = '';
-    let previous = '';
-    while (Date.now() < reopenEnd) {
-      if (!conversation) {
-        const link = await page.evaluate(firstLink, SITE.reopenLinkSelector);
-        const isNew = link && link.href && ((!beforeLink || link.href !== beforeLink.href) || norm(link.text).includes(promptStart));
-        if (isNew) conversation = new URL(link.href, SITE.url).href;
-      }
-      if (conversation) {
-        await page.goto(conversation);
-        try { await page.waitForSelector(SITE.answerSelector, { state: 'visible', timeout: 8000 }); } catch (e) { /* not rendered yet */ }
-        const now = await page.evaluate(pageState, arg);
-        if (!now.busy && now.text.trim() !== '' && now.text === previous) {
-          await task.finish({ keep: [] });
-          return { ok: true, text: now.text };
-        }
-        previous = now.text;
-      }
-      await sleep(5000);
-    }
-    return { ok: false, reason: 'timeout' };
-  }
   // poll (a page that is still navigating after the send answers evaluate with an error for a moment)
   const waitEnd = Date.now() + SITE.answerTimeoutMs;
   let lastError = '';
@@ -200,12 +160,17 @@ async function main() {
     try {
       const now = await page.evaluate(pageState, arg);
       if (now.count > before && !now.busy) { answered = true; break; }
+      if (WALL_URL.test(String(await page.url()))) return { ok: false, reason: BLOCKED };
     } catch (error) {
       lastError = String((error && error.message) || error).slice(0, 160);
     }
     await sleep(1000);
   }
-  if (!answered) return { ok: false, reason: lastError || 'timeout' };
+  if (!answered) {
+    let wall = false;
+    try { wall = await page.evaluate(wallText); } catch (error) { /* keep the timeout */ }
+    return { ok: false, reason: wall ? BLOCKED : lastError || 'timeout' };
+  }
   const end = Date.now() + SITE.answerTimeoutMs;
   let state = await page.evaluate(pageState, arg);
   while (Date.now() < end) {
@@ -241,6 +206,7 @@ export function buildEgoScript(job: EgoJob): string {
       loginWall: COMPARE_LOGIN_WALL,
       noPromptBox: COMPARE_NO_PROMPT_BOX,
       needsUser: COMPARE_NEEDS_USER,
+      blocked: COMPARE_BLOCKED,
     },
   }
   return `const JOB = JSON.parse(${jsonStringLiteral(data)});\n${BODY}`

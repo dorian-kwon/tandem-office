@@ -20,9 +20,9 @@ import { detectEgo } from './ego-detect'
 import { createEgoDriver, egoChildEnv, type EgoChild } from './ego-driver'
 import {
   readCompareConsent,
-  readCompareRetranslate,
+  readComparePrefs,
   writeCompareConsent,
-  writeCompareRetranslate,
+  writeComparePrefs,
 } from './consent-store'
 import { COMPARE_SOURCE_MAX_BYTES, translationSourceCopy } from './source-path'
 
@@ -170,9 +170,9 @@ export function registerCompareIpc(deps: CompareIpcDeps): void {
     await writeCompareConsent(consentFs)
     return true
   })
-  ipcMain.handle(COMPARE_CHANNELS.getRetranslate, () => readCompareRetranslate(consentFs))
-  ipcMain.handle(COMPARE_CHANNELS.setRetranslate, async (_event, on: unknown) => {
-    await writeCompareRetranslate(consentFs, on !== false)
+  ipcMain.handle(COMPARE_CHANNELS.getPrefs, () => readComparePrefs(consentFs))
+  ipcMain.handle(COMPARE_CHANNELS.setPrefs, async (_event, patch: unknown) => {
+    await writeComparePrefs(consentFs, patch)
     return true
   })
 }

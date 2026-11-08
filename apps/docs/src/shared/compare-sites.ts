@@ -1,32 +1,15 @@
 /**
- * The one table of the web AIs the "AI compare" popup asks. Every engine of the
- * feature (status rows, candidate cards, prompts, retry, the driver) is derived
- * from COMPARE_SITES, so a site is added or removed by editing this list only.
+ * The one table of the web AIs the "AI compare" popup asks (Copilot and Grok; Gemini and Claude
+ * were taken out). Every engine of the feature (switches, status chips, candidate cards,
+ * prompts, retry, the driver) is derived from COMPARE_SITES, so a site is added or removed by
+ * editing this list only.
  *
- * The page details (how to find the input, how to submit, when the answer is
- * complete) could not be tried against the real sites when they were written:
- * every entry is `verified: false` until someone runs `tools/ego-probe.mjs` on a
- * machine with ego lite installed and corrects the values here.
+ * Page details were checked on the real sites with `tools/ego-probe.mjs`; correct them there
+ * when a site changes its page.
  *
  * Plain data only (strings, numbers): the entry is embedded as
  * JSON into the script that runs inside ego lite.
  */
-/**
- * One small preparation before the prompt is typed: open a menu, then click the item whose text
- * matches. Used for choosing a faster model mode. When anything is missing the run simply
- * continues with the site's default (a preparation never fails a run).
- */
-export interface PrepareStep {
-  /** selector of the button that opens the menu (a comma list may name several UI languages) */
-  open: string
-  /** selector of the menu items */
-  items: string
-  /** regex source (case-insensitive) the wanted item's text must match */
-  match: string
-  /** regex source (case-insensitive) that disqualifies an item */
-  exclude: string
-}
-
 export interface CompareSite {
   /** stable id used in IPC and state */
   id: string
@@ -51,16 +34,6 @@ export interface CompareSite {
   /** selector matching every assistant message; the last match is the answer */
   answerSelector: string
   /**
-   * `live`: read the answer from the page that sent the prompt. `reopen`: that page does not render
-   * the streamed answer, so after sending, the newest conversation in the sidebar
-   * (`reopenLinkSelector`) is opened again and again and the answer is read from there.
-   */
-  readStrategy: 'live' | 'reopen'
-  /** `reopen` only: selector of the sidebar conversation links; the first one is the newest */
-  reopenLinkSelector?: string
-  /** steps run once the prompt box is usable and before the prompt is typed */
-  prepare?: PrepareStep[]
-  /**
    * regex source (case-insensitive) matched against the page URL: a match means the site
    * sent us to a login or sign-up page, so chatting is impossible (checked before anything is sent)
    */
@@ -83,57 +56,6 @@ export interface CompareSite {
 
 export const COMPARE_SITES: readonly CompareSite[] = [
   {
-    id: 'gemini',
-    name: 'Gemini',
-    url: 'https://gemini.google.com/app',
-    inputSelector: "div.ql-editor[contenteditable='true']",
-    inputMode: 'insertText',
-    // only a real mouse click on the send button starts Gemini's request (Enter alone left it
-    // spinning forever in the automated page); the live view then shows the answer
-    submit: 'button',
-    submitSelector: 'button[aria-label="메시지 보내기"], button[aria-label="Send message"]',
-    busySelector: 'button[aria-label*="Stop"], button[aria-label*="중지"]',
-    answerSelector: 'model-response message-content',
-    readStrategy: 'live',
-    reopenLinkSelector: 'a[href^="/app/"]',
-    // a new /app starts in the thinking mode, which answered with nothing or with an error text on
-    // the owner's account, as did Flash; only the Pro mode answered, so it is chosen every time
-    prepare: [
-      {
-        open: 'button[aria-label^="모드 선택"], button[aria-label^="Select mode"], button[aria-label^="Open mode"]',
-        items: 'gem-menu-item[role="menuitemradio"]',
-        match: '\\bPro\\b',
-        exclude: 'Lite',
-      },
-    ],
-    loggedOutUrl: 'accounts\\.google\\.com',
-    loginHint: 'sign in|로그인',
-    loadTimeoutMs: 30_000,
-    answerTimeoutMs: 180_000,
-    settleMs: 3_000,
-    // checked 2026-11-08 on the real site: page, input, send by mouse click, mode menu, live answer
-    verified: true,
-  },
-  {
-    id: 'claude',
-    name: 'Claude',
-    url: 'https://claude.ai/new',
-    inputSelector: 'div[data-testid="chat-input"]',
-    inputMode: 'insertText',
-    submit: 'button',
-    submitSelector: 'button[data-testid="chat-input-send"]',
-    busySelector: 'button[data-testid="chat-input-stop"]',
-    answerSelector: '.standard-markdown',
-    readStrategy: 'live',
-    loggedOutUrl: 'claude\\.ai/(login|signup)',
-    loginHint: 'log in|sign in|continue with|로그인',
-    loadTimeoutMs: 30_000,
-    answerTimeoutMs: 120_000,
-    settleMs: 3_000,
-    // checked 2026-11-08 on the real site: input, Enter, stop/send buttons, answer element
-    verified: true,
-  },
-  {
     id: 'copilot',
     name: 'Copilot',
     url: 'https://copilot.com/chat',
@@ -146,7 +68,6 @@ export const COMPARE_SITES: readonly CompareSite[] = [
     // no stop button was seen while it wrote: completion is the answer text staying unchanged
     busySelector: '',
     answerSelector: '[data-testid="markdown-reply"]',
-    readStrategy: 'live',
     // logged out, /chat lands on a locale page (/ko-kr) with a login button, or on a Microsoft sign-in
     loggedOutUrl:
       '^https://(www\\.)?copilot\\.com/[a-z]{2}-[a-z]{2}\\b|login\\.microsoftonline\\.com|login\\.live\\.com',
@@ -168,7 +89,6 @@ export const COMPARE_SITES: readonly CompareSite[] = [
     // the stop button's label is "모델 응답 중지" (Korean UI); it has no test id
     busySelector: 'button[aria-label*="중지"], button[aria-label*="Stop"]',
     answerSelector: 'div[data-testid="assistant-message"] .response-content-markdown',
-    readStrategy: 'live',
     loggedOutUrl: 'accounts\\.x\\.ai|/sign-in|/sign-up|/login',
     loginHint: 'sign in|log in|로그인',
     loadTimeoutMs: 30_000,

@@ -1,4 +1,4 @@
-import type { CompareAnswer, CompareSourceBytes, EgoDetection } from './compare'
+import type { CompareAnswer, ComparePrefs, CompareSourceBytes, EgoDetection } from './compare'
 
 export interface OpenFileResult {
   path: string
@@ -458,9 +458,9 @@ export interface DesktopApi {
   compareReadSource?(): Promise<CompareSourceBytes>
   compareGetConsent?(): Promise<boolean>
   compareSetConsent?(): Promise<boolean>
-  /** whether the sites also re-translate the Korean original (default on) */
-  compareGetRetranslate?(): Promise<boolean>
-  compareSetRetranslate?(on: boolean): Promise<boolean>
+  /** the popup's remembered choices (engine switches, re-translation, auto integrate) */
+  compareGetPrefs?(): Promise<ComparePrefs>
+  compareSetPrefs?(patch: ComparePrefs): Promise<boolean>
   onAutoSaveDefaultChanged(handler: (value: AutoSaveDefault) => void): () => void
   /** author of comments and tracked changes (Settings → General, falling back to the OS account) */
   getAuthorName(): Promise<string>

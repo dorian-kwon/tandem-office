@@ -85,21 +85,29 @@ export function sourceTextFor(
   return textAt(sourceDoc, positions)
 }
 
-/** the Korean original of the selection, read from the project's source copy; null falls back to manual entry */
-export async function readKoreanSource(
+/** the project's source copy as a document of the same schema; null when there is none or it cannot be read */
+export async function loadSourceDoc(
   editor: Editor,
-  range: { from: number; to: number },
   readSource: (() => Promise<CompareSourceBytes>) | undefined,
-): Promise<string | null> {
+): Promise<PmNodeType | null> {
   if (!readSource) return null
   try {
     const result = await readSource()
     if (!result.ok) return null
     const parsed = await parseDocxOffThread(result.bytes, { owned: true })
     const json = blocksToPmDoc(parsed.blocks, readSections(parsed), pmDocOptions(parsed))
-    const sourceDoc = editor.schema.nodeFromJSON(json)
-    return sourceTextFor(editor.state.doc, sourceDoc, range.from, range.to)
+    return editor.schema.nodeFromJSON(json)
   } catch {
     return null
   }
+}
+
+/** the Korean original of the selection, read from the project's source copy; null falls back to manual entry */
+export async function readKoreanSource(
+  editor: Editor,
+  range: { from: number; to: number },
+  readSource: (() => Promise<CompareSourceBytes>) | undefined,
+): Promise<string | null> {
+  const sourceDoc = await loadSourceDoc(editor, readSource)
+  return sourceDoc ? sourceTextFor(editor.state.doc, sourceDoc, range.from, range.to) : null
 }

@@ -13,7 +13,7 @@
  */
 import type { CompareSite } from '../../shared/compare-sites'
 import type { CompareAnswer, CompareDriver, EgoDetection } from '../../shared/compare'
-import { COMPARE_NEEDS_USER, isSkipReason } from '../../shared/compare'
+import { COMPARE_NEEDS_USER, isBlockReason } from '../../shared/compare'
 import { buildEgoScript, parseEgoOutput } from './ego-script'
 
 /** the part of a child process the driver uses (a fake in tests) */
@@ -164,8 +164,8 @@ export function createEgoDriver(deps: EgoDriverDeps): CompareDriver {
             )
             return
           }
-          // a code reason is passed on untouched: the popup treats it as "skipped" or "needs you"
-          if (isSkipReason(outcome.reason) || outcome.reason === COMPARE_NEEDS_USER) {
+          // a code reason is passed on untouched: the popup treats it as "blocked"
+          if (isBlockReason(outcome.reason)) {
             finish({ ok: false, reason: outcome.reason })
             return
           }
