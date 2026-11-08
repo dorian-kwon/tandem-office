@@ -246,6 +246,24 @@ describe('firstChangedTopLevelIndex', () => {
     expect(firstChangedTopLevelIndex(tr)).toBe(2)
   })
 
+  it('a translate-like change over many paragraphs reports the first changed one', () => {
+    const editor = createEditor(
+      Array.from({ length: 12 }, (_, i) => para(`paragraph number ${i}`)),
+    )
+    const { doc, schema } = editor.state
+    const starts: number[] = []
+    let pos = 0
+    doc.forEach((node) => {
+      starts.push(pos)
+      pos += node.nodeSize
+    })
+    const tr = editor.state.tr
+    // blocks 4, 7 and 9, edited back to front like applyEdits does
+    for (const i of [9, 7, 4]) tr.replaceWith(starts[i] + 1, starts[i] + 10, schema.text('Z'))
+    expect(tr.docChanged).toBe(true)
+    expect(firstChangedTopLevelIndex(tr)).toBe(4)
+  })
+
   it('a document attribute change is unknown', () => {
     const editor = three()
     const tr = editor.state.tr.setDocAttribute?.('x', 1) ?? editor.state.tr

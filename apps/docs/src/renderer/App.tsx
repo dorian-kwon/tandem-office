@@ -450,6 +450,12 @@ const MAX_FOLLOW_UP_PASSES = 6
 const RECOVERY_BACKOFF_TICKS = 10
 import { runHeadlessDocumentExport } from './headless-export'
 import { installMcpBridge } from './mcp-bridge'
+import {
+  createPassGovernor,
+  mergeDirty,
+  needsFontsReadyPass,
+  sameNumbers,
+} from './pagination-schedule'
 import { odtOffProps, refuseInOdt, useOdtSession } from './odt-gate'
 import { cleanOdtPaste } from './editor/odt-guard'
 import {
@@ -3445,7 +3451,7 @@ export function App() {
   )
 
   // single-section header/footer push-down: body top = max(marginTop, headerDist + header height)
-  const singleHfPx = useMemo((): SectionHfHeights => {
+  const singleHfPxRaw = useMemo((): SectionHfHeights => {
     if (!section) return { headerPx: 0, footerPx: 0 }
     const contentW = twipsToPx(section.pageWidth - section.marginLeft - section.marginRight)
     const h = hfLayoutResolved('header', hfResolveAt(0, 'header', 'default'), hfPhantom)
@@ -3473,6 +3479,11 @@ export function App() {
     // hfMeasureEpoch: re-measure once the doc-scoped styles have committed
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [section, hfResolveAt, hfPhantom, titlePg, hfMeasureEpoch])
+  // a re-probe that measures the same heights keeps the identity: the pagination
+  // effect depends on it, and a re-run costs a state-less whole-document pass
+  const singleHfPxRef = useRef(singleHfPxRaw)
+  if (!sameNumbers(singleHfPxRef.current, singleHfPxRaw)) singleHfPxRef.current = singleHfPxRaw
+  const singleHfPx = singleHfPxRef.current
   const effTopSingle = section ? effectiveTopPx(section, singleHfPx.headerPx) : 0
   const effBottomSingle = section ? effectiveBottomPx(section, singleHfPx.footerPx) : 0
   const canvasSection = sections[0]?.settings ?? section
@@ -3543,6 +3554,12 @@ export function App() {
     [hfState, hfPhantom, titlePg, hfMeasureEpoch],
   )
 
+  // what the pagination effect depends on instead of the hfHeightsOf identity,
+  // which changes with every strip re-probe even when no height moved
+  const hfHeightsSig = useMemo(
+    () => JSON.stringify(hfHeightsOf(hfSections)),
+    [hfHeightsOf, hfSections],
+  )
   // paragraphs without w:pStyle take the default paragraph style's constraints (widowControl off in Normal)
   const defaultParaStyle = useMemo(
     () =>
@@ -3821,6 +3838,8 @@ export function App() {
     colGeomsFor,
   ])
 
+  // loop guard of self-scheduled passes; lives across pagination-effect re-runs
+  const passGovernorRef = useRef(createPassGovernor())
   // status-bar page number: real page slicing (same algorithm as the pagination preview). Edits remeasure with debounce; scrolling only relocates
   useEffect(() => {
     if (!doc || !section) {
@@ -3833,6 +3852,7 @@ export function App() {
     const scroller = document.querySelector('.editor-scroll')
     if (!scroller) return
     const factor = zoom / 100
+    const passGovernor = passGovernorRef.current
     const mTopPx = canvasTop
     // shared paper = the widest section's page; narrower pages are centered on it
     const paperWPx = paperWidthPx(sections, sections[0]?.settings ?? section)
@@ -3855,6 +3875,9 @@ export function App() {
     const followUpAt = (why: string, dirtyIndex: number | null) => {
       retrigger.push(why)
       if (followUps >= MAX_FOLLOW_UP_PASSES) return
+      // the per-run counter restarts with every effect run: the window guard
+      // bounds cycles that go through a re-run
+      if (!passGovernor.allowFollowUp(performance.now())) return
       selfScheduled = true
       onUpdate(null, dirtyIndex, true)
     }
@@ -4062,7 +4085,7 @@ export function App() {
           locate()
           return
         }
-        if (!edited) fastReject = 'trigger'
+        if (!edited) fastReject = 'multi-or-trigger'
         else if (edited.size === 0) fastReject = 'none'
         remeasurePass(dirty)
       } finally {
@@ -4139,6 +4162,7 @@ export function App() {
               .map((s) => `${s.firstBlockIndex}:${s.lastBlockIndex}:${s.startType ?? ''}`)
               .join('|')
           : ''
+        resumeReject = ''
         const resume = resumeFor(blocks, secSig, dirty)
         if (resume) resumePasses++
         const t1 = performance.now()
@@ -5244,7 +5268,7 @@ export function App() {
     ) => {
       if (fastIndex === null) fastEdits = null
       else fastEdits?.add(fastIndex)
-      dirtyFrom = dirtyIndex === null || dirtyFrom === null ? null : Math.min(dirtyFrom, dirtyIndex)
+      dirtyFrom = mergeDirty(dirtyFrom, dirtyIndex)
       // while the tail streams, chunks land every few frames: a plain debounce
       // would either never fire (dense chunks) or pay a whole-document pass
       // per chunk (sparse ones); keep the pass already due and pace new ones
@@ -5283,18 +5307,19 @@ export function App() {
     // header/footer strips probed under a fallback face re-measure too
     // (debounced: loadingdone fires per face, thousands of times on CJK documents)
     let hfTimer: number | undefined
+    // strut metrics measured under a fallback face before a bundled font loaded
+    const applySettledMetrics = (): boolean => {
+      if (!takeSettledMetricFaces()) return false
+      const parsed = fileCtxRef.current.doc?.parsed
+      const live = liveStylesRef.current
+      if (parsed) {
+        setDocCss(docStyleCss(live?.parsed === parsed ? { ...parsed, styles: live.styles } : parsed))
+      }
+      return true
+    }
     const onFontsChanged = (reprobeHf: boolean) => {
       bumpLineSampleFontEpoch()
-      // strut metrics measured under a fallback face before a bundled font loaded
-      if (takeSettledMetricFaces()) {
-        const parsed = fileCtxRef.current.doc?.parsed
-        const live = liveStylesRef.current
-        if (parsed) {
-          setDocCss(
-            docStyleCss(live?.parsed === parsed ? { ...parsed, styles: live.styles } : parsed),
-          )
-        }
-      }
+      applySettledMetrics()
       if (reprobeHf) {
         bumpHfProbeFontEpoch()
         if (hfTimer) window.clearTimeout(hfTimer)
@@ -5304,12 +5329,28 @@ export function App() {
     }
     // the epoch bump re-runs this effect; an already-settled ready promise must not re-probe
     const fontsLoading = document.fonts.status === 'loading'
-    document.fonts.ready.then(() => onFontsChanged(fontsLoading)).catch(() => {})
+    document.fonts.ready
+      .then(() => {
+        // an effect run that starts with settled fonts has just measured with
+        // them: only the strut-metric settle (when it flips) needs a new pass
+        if (needsFontsReadyPass({ fontsLoading, measuredBlocks: lastBlocks.length })) {
+          onFontsChanged(fontsLoading)
+          return
+        }
+        if (applySettledMetrics()) {
+          bumpLineSampleFontEpoch()
+          onUpdate()
+        }
+      })
+      .catch(() => {})
     const onLoadingDone = () => onFontsChanged(true)
     document.fonts.addEventListener('loadingdone', onLoadingDone)
     scroller.addEventListener('scroll', locate, { passive: true })
     const onDocUpdate = ({ transaction }: { transaction: Transaction }) => {
       resetWidthPassHistory(colWidthPass)
+      passGovernor.reset()
+      // a many-block change (translate_blocks) has no single edited block, so the
+      // fast path is skipped, but its first changed block still bounds the resume
       onUpdate(singleInlineEditIndex(transaction), firstChangedTopLevelIndex(transaction))
     }
     editor?.on('update', onDocUpdate)
@@ -5367,7 +5408,8 @@ export function App() {
     effBottomSingle,
     singleFirstContentH,
     singleHfPx,
-    hfHeightsOf,
+    // hfHeightsOf is read at pass time; its identity alone must not re-run the effect
+    hfHeightsSig,
     measureSingleFlow,
     colGeomsFor,
     header,
