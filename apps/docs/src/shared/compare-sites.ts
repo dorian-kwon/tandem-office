@@ -88,20 +88,21 @@ export const COMPARE_SITES: readonly CompareSite[] = [
     url: 'https://gemini.google.com/app',
     inputSelector: "div.ql-editor[contenteditable='true']",
     inputMode: 'insertText',
-    submit: 'enter',
-    submitSelector: 'button[aria-label*="Send"], button[aria-label*="보내기"]',
-    // the stop button's label was not checked; the answer is complete when its text stays unchanged
+    // only a real mouse click on the send button starts Gemini's request (Enter alone left it
+    // spinning forever in the automated page); the live view then shows the answer
+    submit: 'button',
+    submitSelector: 'button[aria-label="메시지 보내기"], button[aria-label="Send message"]',
     busySelector: 'button[aria-label*="Stop"], button[aria-label*="중지"]',
-    // the live view of an automated page never shows the streamed answer: the saved conversation does
     answerSelector: 'model-response message-content',
-    readStrategy: 'reopen',
+    readStrategy: 'live',
     reopenLinkSelector: 'a[href^="/app/"]',
-    // a new /app starts in the slow thinking mode; the faster Flash mode is chosen every time
+    // a new /app starts in the thinking mode, which answered with nothing or with an error text on
+    // the owner's account, as did Flash; only the Pro mode answered, so it is chosen every time
     prepare: [
       {
         open: 'button[aria-label^="모드 선택"], button[aria-label^="Select mode"], button[aria-label^="Open mode"]',
         items: 'gem-menu-item[role="menuitemradio"]',
-        match: '\\bFlash\\b',
+        match: '\\bPro\\b',
         exclude: 'Lite',
       },
     ],
@@ -110,8 +111,7 @@ export const COMPARE_SITES: readonly CompareSite[] = [
     loadTimeoutMs: 30_000,
     answerTimeoutMs: 180_000,
     settleMs: 3_000,
-    // checked 2026-11-08 on the real site: page, input, Enter, mode menu, reopening the saved
-    // conversation. Not checked: the stop button
+    // checked 2026-11-08 on the real site: page, input, send by mouse click, mode menu, live answer
     verified: true,
   },
   {
@@ -120,7 +120,7 @@ export const COMPARE_SITES: readonly CompareSite[] = [
     url: 'https://claude.ai/new',
     inputSelector: 'div[data-testid="chat-input"]',
     inputMode: 'insertText',
-    submit: 'enter',
+    submit: 'button',
     submitSelector: 'button[data-testid="chat-input-send"]',
     busySelector: 'button[data-testid="chat-input-stop"]',
     answerSelector: '.standard-markdown',
@@ -139,8 +139,10 @@ export const COMPARE_SITES: readonly CompareSite[] = [
     url: 'https://copilot.com/chat',
     inputSelector: '#m365-chat-editor-target-element',
     inputMode: 'insertText',
-    submit: 'enter',
-    submitSelector: 'button[data-testid="submit-button"]',
+    submit: 'button',
+    // the send button is named by its label ("보내기" in the Korean UI); only used when Enter did not send
+    submitSelector:
+      'button[aria-label="보내기"], button[aria-label="Send"], button[aria-label="Submit"]',
     // no stop button was seen while it wrote: completion is the answer text staying unchanged
     busySelector: '',
     answerSelector: '[data-testid="markdown-reply"]',
@@ -161,7 +163,7 @@ export const COMPARE_SITES: readonly CompareSite[] = [
     url: 'https://grok.com/',
     inputSelector: 'div.tiptap.ProseMirror',
     inputMode: 'insertText',
-    submit: 'enter',
+    submit: 'button',
     submitSelector: 'button[type="submit"]',
     // the stop button's label is "모델 응답 중지" (Korean UI); it has no test id
     busySelector: 'button[aria-label*="중지"], button[aria-label*="Stop"]',

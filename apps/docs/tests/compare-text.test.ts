@@ -223,15 +223,16 @@ describe('site table', () => {
       }
     }
     const gemini = COMPARE_SITES.find((s) => s.id === 'gemini')!
-    expect(gemini.readStrategy).toBe('reopen')
-    // the Flash step picks Flash but not Flash-Lite
+    // a real mouse click on the send button makes the live view show the answer
+    expect(gemini.readStrategy).toBe('live')
+    // the mode step picks Pro (the only mode that answered on the owner's account), not Lite
     const step = gemini.prepare![0]!
     const wanted = (text: string) =>
       new RegExp(step.match, 'i').test(text) && !new RegExp(step.exclude, 'i').test(text)
-    expect(wanted('3.6 Flash')).toBe(true)
-    expect(wanted('3.6 Flash-Lite')).toBe(false)
+    expect(wanted('3.1 Pro')).toBe(true)
+    expect(wanted('3.6 Flash')).toBe(false)
     expect(wanted('3.8 사고 모델')).toBe(false)
-    expect(COMPARE_SITES.filter((s) => s.readStrategy === 'live').length).toBe(3)
+    expect(COMPARE_SITES.filter((s) => s.readStrategy === 'live').length).toBe(4)
   })
 
   it('lists Gemini, Claude, Copilot and Grok symmetrically; all four are verified on the real sites', () => {

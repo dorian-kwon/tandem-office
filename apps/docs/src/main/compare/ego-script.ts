@@ -78,6 +78,18 @@ const clickMatching = (arg) => {
 };
 const norm = (text) => String(text).toLowerCase().replace(/\s+/g, ' ').trim();
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// the text still sitting in the (visible) prompt box: empty after a message was sent
+const boxText = (selector) => {
+  const box = [...document.querySelectorAll(selector)].find((n) => { const r = n.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
+  return box ? String(box.innerText || box.textContent || '').trim() : '';
+};
+// the centre of the first visible, enabled match of a selector (list): where a real mouse click goes
+const rectOf = (selector) => {
+  const el = [...document.querySelectorAll(selector)].find((n) => { const r = n.getBoundingClientRect(); return r.width > 0 && r.height > 0 && !n.disabled && n.getAttribute('aria-disabled') !== 'true'; });
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+};
 const pageState = (arg) => {
   const answers = document.querySelectorAll(arg.answer);
   const last = answers.length > 0 ? answers[answers.length - 1] : null;
@@ -122,15 +134,36 @@ async function main() {
   const reopen = SITE.readStrategy === 'reopen' && SITE.reopenLinkSelector;
   const beforeLink = reopen ? await page.evaluate(firstLink, SITE.reopenLinkSelector) : null;
   const before = (await page.evaluate(pageState, arg)).count;
+  // Input goes in the way a person does it, in the agent space: a real mouse click into the box,
+  // the box emptied (a site may restore an old draft), the text, then a real click on the send
+  // button. Several sites only start the request for a real click, not for a key press alone.
   if (SITE.inputMode === 'fill') {
     await page.fill(SITE.inputSelector, JOB.prompt);
   } else {
-    await page.click(SITE.inputSelector);
+    const boxAt = await page.evaluate(rectOf, SITE.inputSelector);
+    if (boxAt) await page.mouse.click(boxAt.x, boxAt.y, { label: 'focus prompt box' });
+    else await page.click(SITE.inputSelector);
+    await page.keyboard.press('ControlOrMeta+a');
+    await page.keyboard.press('Backspace');
     if (SITE.inputMode === 'paste') await page.keyboard.paste({ text: JOB.prompt });
     else await page.keyboard.insertText(JOB.prompt);
   }
-  if (SITE.submit === 'button') await page.click(SITE.submitSelector);
-  else await page.press(SITE.inputSelector, 'Enter');
+  // an editor needs a moment to take the typed text into its state before it can send it
+  await sleep(700);
+  const sendByButton = async () => {
+    const at = SITE.submitSelector ? await page.evaluate(rectOf, SITE.submitSelector) : null;
+    if (!at) return false;
+    await page.mouse.click(at.x, at.y, { label: 'send message' });
+    return true;
+  };
+  if (SITE.submit === 'enter') await page.press(SITE.inputSelector, 'Enter');
+  else if (!(await sendByButton())) await page.press(SITE.inputSelector, 'Enter');
+  // the text is still in the box: it was not sent, so try the other way
+  await sleep(1500);
+  if ((await page.evaluate(boxText, SITE.inputSelector)) !== '') {
+    if (SITE.submit === 'enter') await sendByButton();
+    else await page.press(SITE.inputSelector, 'Enter');
+  }
   if (reopen) {
     // the live view does not show the answer: read it from the saved conversation, which is the
     // newest link in the sidebar (and not the one that was there before sending)
@@ -159,24 +192,26 @@ async function main() {
     }
     return { ok: false, reason: 'timeout' };
   }
-  try {
-    await page.waitForFunction(
-      (a) => {
-        const answers = document.querySelectorAll(a.answer);
-        const busy = a.busy ? document.querySelector(a.busy) !== null : false;
-        return answers.length > a.before && !busy;
-      },
-      { answer: SITE.answerSelector, busy: SITE.busySelector, before },
-      { timeout: SITE.answerTimeoutMs },
-    );
-  } catch (error) {
-    return { ok: false, reason: 'timeout' };
+  // poll (a page that is still navigating after the send answers evaluate with an error for a moment)
+  const waitEnd = Date.now() + SITE.answerTimeoutMs;
+  let lastError = '';
+  let answered = false;
+  while (Date.now() < waitEnd) {
+    try {
+      const now = await page.evaluate(pageState, arg);
+      if (now.count > before && !now.busy) { answered = true; break; }
+    } catch (error) {
+      lastError = String((error && error.message) || error).slice(0, 160);
+    }
+    await sleep(1000);
   }
+  if (!answered) return { ok: false, reason: lastError || 'timeout' };
   const end = Date.now() + SITE.answerTimeoutMs;
   let state = await page.evaluate(pageState, arg);
   while (Date.now() < end) {
     await sleep(SITE.settleMs);
-    const next = await page.evaluate(pageState, arg);
+    let next;
+    try { next = await page.evaluate(pageState, arg); } catch (error) { continue; }
     const settled = !next.busy && next.text === state.text && next.text.trim() !== '';
     state = next;
     if (settled) {

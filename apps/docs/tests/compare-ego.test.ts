@@ -49,11 +49,14 @@ describe('ego script generator', () => {
       "task.page('p1')",
       'page.goto(',
       'page.url()',
-      'page.waitForFunction(',
       'page.evaluate(',
       'page.keyboard.insertText(',
       "page.press(SITE.inputSelector, 'Enter')",
       'task.finish({ keep: [] })',
+      // input like a person: a real click into the box, the box emptied, a real click on send
+      'page.mouse.click(boxAt.x, boxAt.y',
+      "page.keyboard.press('ControlOrMeta+a')",
+      "page.mouse.click(at.x, at.y, { label: 'send message' })",
     ])
       expect(script).toContain(call)
     expect(script).not.toMatch(
@@ -101,7 +104,7 @@ describe('ego script generator', () => {
     const job = JSON.parse(new Script(literal).runInNewContext({}) as string) as {
       site: typeof gemini
     }
-    expect(job.site.prepare?.[0]?.match).toBe('\\bFlash\\b')
+    expect(job.site.prepare?.[0]?.match).toBe('\\bPro\\b')
     const body = withPrepare.slice(withPrepare.indexOf('SITE.prepare'))
     // the whole step sits in a try/catch that continues with the default mode, and runs before typing
     expect(body.slice(0, 400)).toContain('try {')
