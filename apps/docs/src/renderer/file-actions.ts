@@ -98,6 +98,7 @@ import {
 import { t, getLang } from './i18n/locale'
 import { isBlankDocument, parseHtmlFragment, replaceBlockRange } from './ai/protocol'
 import { carryDocSeen } from './ai/tools'
+import { applyAnchorOnlyReload } from './save-reload'
 import { isDocDirty, resetCrossDocEditState } from './doc-dirty'
 import { pruneUnreferencedNumbering } from './numbering-actions'
 import { applySectPrRewrites, type SectPrRewrite } from './sectpr-rewrite'
@@ -1458,17 +1459,15 @@ async function saveOnce(
     editor.storage.listNumbering.defs = reparsed.numbering
     applyDocLayoutSettings(editor, reparsed)
     const rebasedPm = blocksToPmDoc(reparsed.blocks, readSections(reparsed), pmDocOptions(reparsed))
-    let unchanged = false
-    try {
-      unchanged = editor.state.doc.eq(editor.schema.nodeFromJSON(rebasedPm))
-    } catch {
-      /* unrepresentable → rewrite */
-    }
+    const docBeforeReload = editor.state.doc
+    // Same document apart from file anchors (docxIndex): refresh the anchors with attribute-only
+    // steps outside the undo history, so undo, caret and scroll survive an autosave.
+    const reloadMode = applyAnchorOnlyReload(editor, rebasedPm)
     // an ODT document's docxIndex anchors now point into the saved docx too
     rebaseOdtSession(reparsed)
-    // Equal doc: skip the rewrite so undo history, caret and scroll survive.
-    if (!unchanged) {
-      // Rebase saved anchors without recording the reload as a user edit.
+    if (reloadMode === null) {
+      // The reparsed document really differs: rebase saved anchors without recording the
+      // reload as a user edit.
       editor
         .chain()
         .setMeta(TRACK_IGNORE, true)
@@ -1482,6 +1481,8 @@ async function saveOnce(
       chain.run()
       restoreMarksAfterDocRewrite(editor, caretMarks)
     }
+    // the reload is not a user edit: the AI freshness baseline follows the new doc object
+    carryDocSeen(editor, docBeforeReload)
     ctx.setDocCss(docStyleCss(reparsed))
     ctx.setDoc((prev) =>
       prev
