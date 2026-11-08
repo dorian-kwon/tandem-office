@@ -411,9 +411,12 @@ export function AiComparePopover({
         width: Math.min(WIDTH, editorBounds().width - 2 * MARGIN),
         maxHeight: editorBounds().height - 2 * MARGIN,
       }}
-      // clicking the popup must not move the document selection (text fields excepted)
+      // clicking the popup must not move the document selection; text fields and the result texts
+      // are excepted so their text can be selected and copied (the range to replace was stored
+      // when the popup opened, so a moved selection does not matter)
       onMouseDown={(e) => {
-        if (!(e.target as HTMLElement).closest('textarea, input')) e.preventDefault()
+        if (!(e.target as HTMLElement).closest('textarea, input, .cmp-card-body, .cmp-text'))
+          e.preventDefault()
       }}
     >
       <div

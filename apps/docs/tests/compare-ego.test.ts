@@ -299,6 +299,28 @@ describe('ego driver', () => {
     expect(await pending).toEqual({ ok: true, text: 'The final text' })
   })
 
+  it('reads the result line from stderr: ego lite logs a script there when it is not run from a terminal', async () => {
+    const f = fakeChild()
+    const p = createEgoDriver(base(f)).ask(site, 'p', new AbortController().signal)
+    await Promise.resolve()
+    await Promise.resolve()
+    f.err.emit('data', 'some notice\n')
+    f.err.emit('data', `${marker} ${JSON.stringify({ ok: true, text: 'From stderr' })}\n`)
+    f.child.emit('close', 0)
+    expect(await p).toEqual({ ok: true, text: 'From stderr' })
+  })
+
+  it('keeps a long answer: the result line is not cut off by a small stderr cap', async () => {
+    const f = fakeChild()
+    const p = createEgoDriver(base(f)).ask(site, 'p', new AbortController().signal)
+    await Promise.resolve()
+    await Promise.resolve()
+    const long = 'x'.repeat(50_000)
+    f.err.emit('data', `${marker} ${JSON.stringify({ ok: true, text: long })}\n`)
+    f.child.emit('close', 0)
+    expect(await p).toEqual({ ok: true, text: long })
+  })
+
   it('reports failures with a reason: script failure, no result, spawn error', async () => {
     const f1 = fakeChild()
     const d1 = createEgoDriver(base(f1))

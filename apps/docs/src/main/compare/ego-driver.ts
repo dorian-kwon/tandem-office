@@ -46,7 +46,9 @@ export interface EgoDriverDeps {
 
 /** captured stdout is capped: the result line is at the end, so the tail is what stays */
 export const EGO_OUTPUT_CAP = 2 * 1024 * 1024
-const STDERR_CAP = 8 * 1024
+// ego lite prints what a script logs on stderr (not stdout) when it is not run from a terminal,
+// so the result line can arrive there and answers can be long: both streams get the full cap
+const STDERR_CAP = EGO_OUTPUT_CAP
 
 const ENV_ALLOW = [
   'PATH',
@@ -148,7 +150,8 @@ export function createEgoDriver(deps: EgoDriverDeps): CompareDriver {
           }),
         )
         child.on('close', (code) => {
-          const outcome = parseEgoOutput(stdout, marker)
+          // the result line is read from both streams: where ego prints it depends on how it runs
+          const outcome = parseEgoOutput(`${stdout}\n${stderr}`, marker)
           // ego lite prints this when a newer version exists; it is passed on, never acted on
           const update = stdout.includes('[ego-browser:notice]')
             ? ' (an ego lite update is available)'

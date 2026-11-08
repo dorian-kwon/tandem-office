@@ -9046,6 +9046,7 @@ body.docs-crop-active
 .cmp-text {
   resize: vertical;
   min-height: 54px;
+  user-select: text;
 }
 
 .cmp-missing {
@@ -9127,6 +9128,8 @@ body.docs-crop-active
   line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  user-select: text;
+  cursor: text;
 }
 
 .cmp-card-body:empty {
