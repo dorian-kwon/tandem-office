@@ -1,6 +1,6 @@
 # 진행 현황
 
-Tandem Office 기준 버전: **0.14.2 (2026-11-09)**. `dorian-kwon/tandem-office`의 `ec6a9acd4`를 Windows 전용 정식 릴리스로 공개했다. 설치 파일·블록맵·`latest.yml` 세 파일을 첨부했고, Windows build의 설치본 검사와 창 없는 내보내기 검사가 통과했다. 내려받은 세 파일의 SHA-256을 GitHub 메타데이터와 비교하고, 설치 파일의 SHA-512·크기·이름을 `latest.yml`과 대조해 모두 일치함을 확인했다. 공개한 본문은 `docs/releases/0.14.2.md`, 상세 검증은 `verification-2026-11-09.md`에 있다. 일반 CI의 전체 단위·Electron e2e 검사는 확인 시 진행 중이며, Windows PC에서의 설치·제자리 업데이트 확인은 남았다. AI 비교는 별도 `compare-ai` 브랜치의 로컬 시험 빌드로만 제공하며 이번 릴리스에는 포함하지 않았다.
+Tandem Office 기준 버전: **0.14.2 (2026-11-09)**. `dorian-kwon/tandem-office`의 `ec6a9acd4`를 Windows 전용 정식 릴리스로 공개했다. 설치 파일·블록맵·`latest.yml` 세 파일을 첨부했고, Windows build의 설치본 검사와 창 없는 내보내기 검사가 통과했다. 내려받은 세 파일의 SHA-256을 GitHub 메타데이터와 비교하고, 설치 파일의 SHA-512·크기·이름을 `latest.yml`과 대조해 모두 일치함을 확인했다. 공개한 본문은 `docs/releases/0.14.2.md`, 상세 검증은 `verification-2026-11-09.md`에 있다. 일반 CI는 단위 검사 45분·Electron e2e 60분 제한에 걸려 중단됐으며, Windows PC에서의 설치·제자리 업데이트 확인은 남았다. AI 비교는 별도 `compare-ai` 브랜치의 로컬 시험 빌드로만 제공하며 이번 릴리스에는 포함하지 않았다.
 
 아래는 이음오피스에서 이어받은 이전 진행 기록이다.
 
