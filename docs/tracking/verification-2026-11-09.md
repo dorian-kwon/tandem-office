@@ -37,7 +37,21 @@
 - 독립 코드 리뷰에서 Critical·Important 결함은 발견되지 않았다. 실제 Electron 화면·실제 AI 응답 시간·패키징은 리뷰 범위 밖이다.
 - 실제 AI 구독 요청, 앱 빌드·실행·재시작, 릴리스 게시·푸시는 하지 않았다.
 
-## 출시 전에 남은 것
+## 출시 결과
+
+소유자의 출시 승인 뒤 `apps/shell/package.json`과 잠금 파일의 버전을 0.14.2로 올리고 `ec6a9acd4`를 push했다. 변경된 셸 진입점에 원래 남아 있던 두 서식 구간도 정리해, 출시 커밋에 포함된 모든 파일의 Prettier 검사를 통과시켰다. 원래 제공된 미추적 `HANDOFF.md`는 바꾸지 않았다.
+
+- 정식 릴리스: https://github.com/dorian-kwon/tandem-office/releases/tag/v0.14.2
+- Windows build 및 attach 성공: https://github.com/dorian-kwon/tandem-office/actions/runs/42497905982
+- `tandem-office-Setup-0.14.2.exe`(191,422,888바이트), `.exe.blockmap`, `latest.yml` 세 파일 첨부.
+- 세 파일을 내려받아 GitHub의 SHA-256 메타데이터와 대조했고, 설치 파일의 SHA-512·크기·이름이 `latest.yml`과 모두 같았다. 실행 파일의 Windows 헤더도 확인했다.
+- 게시 본문이 승인한 로컬 파일과 일치하며, 앱의 업데이트 본문 변환에서도 모든 항목이 잘리지 않는 것을 확인했다.
+- 저장소가 비공개이므로 출처 증명 단계는 예정대로 생략됐다. macOS·Linux 배포 빌드는 실행하지 않았다.
+- 일반 CI `42497888982`의 서식·lint·전체 타입 검사는 통과했고, 전체 단위 테스트와 Electron e2e는 확인 시 진행 중이다. Windows PC의 설치·제자리 업데이트 시험은 하지 않았다.
+
+AI 비교는 `/Users/dorian/Projects/tandem2/compare-ai-worktree`에서 11개 작업 공간을 모두 로컬 빌드했다. HWP studio와 mac arm64 네이티브 처리 프로그램은 현재 소스·stamp·해시가 같은 기존 파일을 재사용했다. 사용자 요청으로 별도 시험 프로필에서 실행했다. 브랜치는 main에 합치거나 push하지 않았고, 배포 릴리스에 들어 있지 않다. 사용자가 이어 보고한 Copilot 입력 실패는 이 시험 브랜치에서 별도로 조사한다.
+
+## 승인 전 준비 기록
 
 `docs/releases/0.14.2.md`가 게시할 본문 초안이다. 버전은 아직 0.14.1이다. 약관 동의 확인, v0.14.2 번호와 최종 본문 확인 뒤 버전 두 곳을 올리고 커밋·푸시한다. 이어 정식 릴리스와 Windows build만 실행하고 설치 파일·blockmap·`latest.yml` 및 CI 결과를 확인한다. 현재 main의 기존 GitHub CI 실행 `42492620652`는 확인 시 진행 중이었다.
 
