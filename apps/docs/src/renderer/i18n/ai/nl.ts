@@ -42,7 +42,7 @@ export const nl = {
   cmpFlatNote:
     'Kies één antwoord per eenheid. Vervangingen gebruiken platte tekst en kunnen afzonderlijk ongedaan worden gemaakt.',
   cmpLeaves:
-    'De gekozen tekst en een beschikbaar Koreaans origineel worden via uw ego-browser naar {sites} gestuurd. Hun voorwaarden gelden. Delen kunnen niet worden verborgen. Kies het bereik en de engines en druk op Vergelijken om te verzenden.',
+    'De gekozen tekst en een beschikbaar Koreaans origineel worden via uw ego-browser naar {sites} gestuurd. Hun voorwaarden gelden. Delen kunnen niet worden verborgen. Kies het bereik en de engines en druk op Vergelijken om te verzenden. ChatGPT gebruikt alleen een websessie die al is aangemeld in de ego-browser.',
   cmpBtn: 'AI-vergelijking',
   cmpTitle: 'Vergelijken met andere AI’s',
   cmpConsentAgree: 'Begrepen, doorgaan',

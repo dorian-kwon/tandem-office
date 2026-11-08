@@ -42,7 +42,7 @@ export const fr = {
   cmpFlatNote:
     'Choisissez une réponse par unité. Chaque remplacement en texte brut peut être annulé séparément.',
   cmpLeaves:
-    'Le texte choisi et l’original coréen disponible sont envoyés à {sites} via votre navigateur ego. Leurs conditions s’appliquent. Aucun passage ne peut être masqué. Choisissez la portée et les moteurs, puis appuyez sur Comparer pour envoyer.',
+    'Le texte choisi et l’original coréen disponible sont envoyés à {sites} via votre navigateur ego. Leurs conditions s’appliquent. Aucun passage ne peut être masqué. Choisissez la portée et les moteurs, puis appuyez sur Comparer pour envoyer. ChatGPT utilise uniquement une session web déjà connectée dans le navigateur ego.',
   cmpBtn: 'Comparaison IA',
   cmpTitle: 'Comparer avec d’autres IA',
   cmpConsentAgree: 'J’ai compris, continuer',

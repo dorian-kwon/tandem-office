@@ -41,7 +41,7 @@ export const id = {
   cmpFlatNote:
     'Pilih satu jawaban per unit. Penggantian memakai teks biasa dan dapat dibatalkan satu per satu.',
   cmpLeaves:
-    'Teks yang dipilih dan sumber bahasa Korea jika ada dikirim ke {sites} melalui peramban ego. Ketentuan situs berlaku. Bagian teks tidak dapat disembunyikan. Pilih cakupan dan mesin, lalu tekan Bandingkan untuk mengirim.',
+    'Teks yang dipilih dan sumber bahasa Korea jika ada dikirim ke {sites} melalui peramban ego. Ketentuan situs berlaku. Bagian teks tidak dapat disembunyikan. Pilih cakupan dan mesin, lalu tekan Bandingkan untuk mengirim. ChatGPT hanya memakai sesi web yang sudah masuk di peramban ego.',
   cmpBtn: 'Bandingkan AI',
   cmpTitle: 'Bandingkan dengan AI lain',
   cmpConsentAgree: 'Saya mengerti, lanjutkan',

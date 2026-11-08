@@ -204,7 +204,7 @@ app's own features:
 
 ## Comparing with other AIs on the web (Word editor)
 
-The **AI compare** window in the Word editor asks Copilot and Grok through
+The **AI compare** window in the Word editor asks Copilot and ChatGPT through
 their web pages. You choose the engines and either a selection or the whole
 document, then press **Compare**. Accepting the first-use notice alone sends
 nothing. Enabled engines process the same paragraph concurrently. Their results
@@ -226,8 +226,10 @@ at a time.
 - **Where it goes.** The app starts the **ego lite** browser's command-line
   program on your PC, which opens each site's page and types the prompt there,
   signed in with the logins you made inside ego lite. The text therefore goes
-  to **Microsoft** (Copilot) and **xAI** (Grok),
-  under your own accounts, and the terms of those sites apply. Automating a
+  to **Microsoft** (Copilot) and **OpenAI** (ChatGPT),
+  under your own accounts, and the terms of those sites apply. ChatGPT uses
+  only a web session already signed in within ego lite. This engine does not
+  use Codex or Claude login files or copy browser cookies. Automating a
   site may be restricted by its terms; that is your decision when you press the
   button.
 - **What the app never does.** It never reads, copies or stores a cookie, token

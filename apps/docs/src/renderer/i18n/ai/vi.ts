@@ -40,7 +40,7 @@ export const vi = {
   cmpFlatNote:
     'Chọn một câu trả lời cho mỗi đơn vị. Nội dung thay thế là văn bản thuần và có thể hoàn tác riêng từng lần.',
   cmpLeaves:
-    'Văn bản đã chọn và bản gốc tiếng Hàn nếu có được gửi tới {sites} qua trình duyệt ego. Điều khoản của các trang web được áp dụng. Không thể ẩn một phần văn bản. Chọn phạm vi và công cụ rồi nhấn So sánh để gửi.',
+    'Văn bản đã chọn và bản gốc tiếng Hàn nếu có được gửi tới {sites} qua trình duyệt ego. Điều khoản của các trang web được áp dụng. Không thể ẩn một phần văn bản. Chọn phạm vi và công cụ rồi nhấn So sánh để gửi. ChatGPT chỉ dùng phiên web đã đăng nhập sẵn trong trình duyệt ego.',
   cmpBtn: 'So sánh AI',
   cmpTitle: 'So sánh với AI khác',
   cmpConsentAgree: 'Tôi hiểu, tiếp tục',

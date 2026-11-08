@@ -41,7 +41,7 @@ export const en = {
   cmpFlatNote:
     'Choose one answer per unit. Replacements use plain text and each has its own undo step.',
   cmpLeaves:
-    'The chosen text and any Korean original are sent to {sites} through your ego browser. Their terms apply. Parts cannot be hidden. Choose the scope and engines, then press Compare to send.',
+    'The chosen text and any Korean original are sent to {sites} through your ego browser. Their terms apply. Parts cannot be hidden. Choose the scope and engines, then press Compare to send. ChatGPT uses only a web session already signed in within the ego browser.',
   cmpBtn: 'AI compare',
   cmpTitle: 'Compare with other AIs',
   cmpConsentAgree: 'I understand, continue',

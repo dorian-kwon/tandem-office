@@ -1,5 +1,5 @@
 /**
- * The "AI compare" popup: asks the web AIs of the site table (Copilot, Grok; their web pages,
+ * The "AI compare" popup: asks the web AIs of the site table (Copilot, ChatGPT; their web pages,
  * driven through ego lite in the main process) about the selected text or about the whole
  * document, one unit (paragraph) at a time with its enabled AIs in parallel, and lists every answer as a card
  * the person can apply to the document.

@@ -41,7 +41,7 @@ export const ms = {
   cmpFlatNote:
     'Pilih satu jawapan bagi setiap unit. Penggantian menggunakan teks biasa dan boleh dibuat asal secara berasingan.',
   cmpLeaves:
-    'Teks yang dipilih dan asal bahasa Korea jika ada dihantar ke {sites} melalui pelayar ego. Syarat laman berkenaan terpakai. Bahagian teks tidak boleh disembunyikan. Pilih skop dan enjin, kemudian tekan Bandingkan untuk menghantar.',
+    'Teks yang dipilih dan asal bahasa Korea jika ada dihantar ke {sites} melalui pelayar ego. Syarat laman berkenaan terpakai. Bahagian teks tidak boleh disembunyikan. Pilih skop dan enjin, kemudian tekan Bandingkan untuk menghantar. ChatGPT hanya menggunakan sesi web yang sudah dilog masuk dalam pelayar ego.',
   cmpBtn: 'Bandingkan AI',
   cmpTitle: 'Bandingkan dengan AI lain',
   cmpConsentAgree: 'Saya faham, teruskan',

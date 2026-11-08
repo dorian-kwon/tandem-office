@@ -92,7 +92,7 @@ const button = (c: HTMLElement, label: string): HTMLButtonElement | undefined =>
 const ready = (extra: Record<string, unknown> = {}) => ({
   compareDetect: async () => ({ installed: true, path: '/fake/ego' }),
   compareGetConsent: async () => true,
-  compareGetPrefs: async () => ({ autoIntegrate: false, engines: { grok: false } }),
+  compareGetPrefs: async () => ({ autoIntegrate: false, engines: { chatgpt: false } }),
   compareSetPrefs: async () => true,
   compareCancel: async () => {},
   ...extra,
@@ -135,7 +135,7 @@ describe('AI compare popup', () => {
       }),
     )
     await flush()
-    expect(container.textContent).toContain('Copilot, Grok')
+    expect(container.textContent).toContain('Copilot, ChatGPT')
     expect(asks).toEqual([])
     act(() => button(container, 'I understand, continue')!.click())
     await flush()
@@ -144,6 +144,33 @@ describe('AI compare popup', () => {
     expect(asks).toHaveLength(1)
     expect(asks[0]?.siteId).toBe('copilot')
     expect(asks[0]?.prompt).toContain('eight percent')
+  })
+
+  it('requires fresh consent for the current engines and never reuses a retired Grok preference', async () => {
+    const engines: string[] = []
+    const { container } = setup(
+      ready({
+        compareGetConsent: async () => false,
+        compareSetConsent: async () => true,
+        compareGetPrefs: async () => ({
+          engines: { copilot: false, grok: false },
+          autoIntegrate: false,
+        }),
+        compareAsk: async (request: { siteId: string }) => {
+          engines.push(request.siteId)
+          return { ok: true, text: 'Web answer' }
+        },
+      }),
+    )
+    await flush()
+    expect(engines).toEqual([])
+    expect(container.textContent).toContain('Copilot, ChatGPT')
+    expect(container.textContent).not.toContain('Grok')
+    act(() => button(container, 'I understand, continue')!.click())
+    await flush()
+    expect(engines).toEqual([])
+    await start(container)
+    expect(engines).toEqual(['chatgpt'])
   })
 
   it('lets the person select one answer and keeps the popup available for other units', async () => {
@@ -311,7 +338,7 @@ describe('AI compare popup', () => {
     }
     const { container } = setup(
       ready({
-        compareGetPrefs: async () => ({ engines: { grok: false } }),
+        compareGetPrefs: async () => ({ engines: { chatgpt: false } }),
         compareSetPrefs: async (patch: unknown) => {
           preferences.push(patch)
           return true
@@ -361,7 +388,7 @@ describe('AI compare popup', () => {
     }
     const { container } = setup(
       ready({
-        compareGetPrefs: async () => ({ autoIntegrate: true, engines: { grok: false } }),
+        compareGetPrefs: async () => ({ autoIntegrate: true, engines: { chatgpt: false } }),
         compareAsk: async () => ({ ok: true, text: 'Candidate' }),
         onAiStream: (fn: typeof listener) => {
           listener = fn

@@ -45,7 +45,7 @@ export const it = {
   cmpFlatNote:
     'Scegli una risposta per unità. Le sostituzioni usano testo semplice e si possono annullare singolarmente.',
   cmpLeaves:
-    'Il testo scelto e l’eventuale originale coreano vengono inviati a {sites} tramite il browser ego. Si applicano i loro termini. Non si possono nascondere parti. Scegli ambito e motori, poi premi Confronta per inviare.',
+    'Il testo scelto e l’eventuale originale coreano vengono inviati a {sites} tramite il browser ego. Si applicano i loro termini. Non si possono nascondere parti. Scegli ambito e motori, poi premi Confronta per inviare. ChatGPT usa solo una sessione web già connessa nel browser ego.',
   cmpBtn: 'Confronto IA',
   cmpTitle: 'Confronta con altre IA',
   cmpConsentAgree: 'Ho capito, continua',

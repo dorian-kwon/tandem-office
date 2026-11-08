@@ -44,7 +44,7 @@ export const de = {
   cmpFlatNote:
     'Wählen Sie pro Einheit eine Antwort. Ersetzungen verwenden Klartext und lassen sich einzeln rückgängig machen.',
   cmpLeaves:
-    'Der gewählte Text und ein vorhandenes koreanisches Original werden über Ihren ego-Browser an {sites} gesendet. Es gelten deren Bedingungen. Teile können nicht verborgen werden. Wählen Sie Umfang und Engines und drücken Sie zum Senden auf Vergleichen.',
+    'Der gewählte Text und ein vorhandenes koreanisches Original werden über Ihren ego-Browser an {sites} gesendet. Es gelten deren Bedingungen. Teile können nicht verborgen werden. Wählen Sie Umfang und Engines und drücken Sie zum Senden auf Vergleichen. ChatGPT nutzt nur eine im ego-Browser bereits angemeldete Websitzung.',
   cmpBtn: 'KI-Vergleich',
   cmpTitle: 'Mit anderen KIs vergleichen',
   cmpConsentAgree: 'Verstanden, weiter',

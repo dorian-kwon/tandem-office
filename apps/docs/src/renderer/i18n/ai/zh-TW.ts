@@ -39,7 +39,7 @@ export const zhTW = {
   cmpAllBlocked: '所有引擎均遭封鎖。請停止並自行處理網站。',
   cmpFlatNote: '每個單元選一個回答。替換使用純文字，每次套用皆可單獨復原。',
   cmpLeaves:
-    '選取的文字及可用的韓語原文會透過 ego 瀏覽器傳送至 {sites}，適用各網站條款，無法隱藏部分內容。選好範圍與引擎後，按比較才會傳送。',
+    '選取的文字及可用的韓語原文會透過 ego 瀏覽器傳送至 {sites}，適用各網站條款，無法隱藏部分內容。選好範圍與引擎後，按比較才會傳送。 ChatGPT 僅使用 ego 瀏覽器中已登入的網頁工作階段。',
   cmpBtn: 'AI 比較',
   cmpTitle: '與其他 AI 比較',
   cmpConsentAgree: '我了解,繼續',

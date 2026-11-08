@@ -49,23 +49,23 @@ describe('comparison scheduler', () => {
         },
       },
     })
-    runner.start(units.slice(0, 2), ['copilot', 'grok'], false)
+    runner.start(units.slice(0, 2), ['copilot', 'chatgpt'], false)
     await settle()
-    expect(asks).toEqual(['copilot:Paragraph 0', 'grok:Paragraph 0'])
+    expect(asks).toEqual(['copilot:Paragraph 0', 'chatgpt:Paragraph 0'])
     first.resolve({ ok: true, text: 'First answer' })
     await settle()
     expect(asks).toEqual([
       'copilot:Paragraph 0',
-      'grok:Paragraph 0',
+      'chatgpt:Paragraph 0',
       'copilot:Paragraph 1',
-      'grok:Paragraph 1',
+      'chatgpt:Paragraph 1',
     ])
     expect(runner.getState().phase).toBe('done')
     expect(runner.getState().units[0]?.engines.copilot?.text).toBe('First answer')
-    expect(runner.getState().units[1]?.engines.grok?.text).toBe('grokParagraph 1')
+    expect(runner.getState().units[1]?.engines.chatgpt?.text).toBe('chatgptParagraph 1')
   })
 
-  it.each(['copilot', 'grok'])(
+  it.each(['copilot', 'chatgpt'])(
     'waits for both answers when %s finishes first and integrates each unit once',
     async (first) => {
       const replies = new Map<string, ReturnType<typeof deferred<CompareAnswer>>>()
@@ -94,29 +94,29 @@ describe('comparison scheduler', () => {
           return { ok: true, text: `Integrated ${unit.id}` }
         },
       })
-      runner.start(units.slice(0, 2), ['copilot', 'grok'], true)
+      runner.start(units.slice(0, 2), ['copilot', 'chatgpt'], true)
       await settle()
-      expect(calls).toEqual(['copilot:Paragraph 0', 'grok:Paragraph 0'])
+      expect(calls).toEqual(['copilot:Paragraph 0', 'chatgpt:Paragraph 0'])
       replies.get(`${first}:Paragraph 0`)!.resolve({ ok: true, text: `${first} first` })
       await settle()
       expect(calls).toHaveLength(2)
       expect(integrations).toEqual([])
-      const second = first === 'copilot' ? 'grok' : 'copilot'
+      const second = first === 'copilot' ? 'chatgpt' : 'copilot'
       replies.get(`${second}:Paragraph 0`)!.resolve({ ok: true, text: `${second} second` })
       await settle()
       expect(calls).toEqual([
         'copilot:Paragraph 0',
-        'grok:Paragraph 0',
+        'chatgpt:Paragraph 0',
         'copilot:Paragraph 1',
-        'grok:Paragraph 1',
+        'chatgpt:Paragraph 1',
       ])
-      expect(integrations).toEqual([{ unit: 'u0', engines: ['copilot', 'grok'] }])
+      expect(integrations).toEqual([{ unit: 'u0', engines: ['copilot', 'chatgpt'] }])
       replies.get(`${second}:Paragraph 1`)!.resolve({ ok: true, text: 'Second unit answer' })
       replies.get(`${first}:Paragraph 1`)!.resolve({ ok: true, text: 'Second unit answer' })
       await settle()
       expect(integrations).toEqual([
-        { unit: 'u0', engines: ['copilot', 'grok'] },
-        { unit: 'u1', engines: ['copilot', 'grok'] },
+        { unit: 'u0', engines: ['copilot', 'chatgpt'] },
+        { unit: 'u1', engines: ['copilot', 'chatgpt'] },
       ])
       expect(runner.getState().phase).toBe('done')
     },
@@ -124,37 +124,37 @@ describe('comparison scheduler', () => {
 
   it('keeps the other engine running after one is blocked and never retries the blocked engine', async () => {
     const copilot = deferred<CompareAnswer>()
-    const grok = deferred<CompareAnswer>()
+    const chatgpt = deferred<CompareAnswer>()
     const calls: string[] = []
-    let grokSignal: AbortSignal | undefined
+    let chatgptSignal: AbortSignal | undefined
     const { runner } = setup({
       driver: {
         detect: async () => ({ installed: true }),
         ask: (engine, _prompt, signal) => {
           calls.push(engine)
-          if (engine === 'grok') grokSignal = signal
-          return engine === 'copilot' ? copilot.promise : grok.promise
+          if (engine === 'chatgpt') chatgptSignal = signal
+          return engine === 'copilot' ? copilot.promise : chatgpt.promise
         },
       },
     })
-    runner.start(units.slice(0, 1), ['copilot', 'grok'], false)
+    runner.start(units.slice(0, 1), ['copilot', 'chatgpt'], false)
     await settle()
     copilot.resolve({ ok: false, reason: 'blocked' })
     await settle()
-    expect(runner.getState().units[0]?.engines.grok?.status).toBe('running')
-    expect(grokSignal?.aborted).toBe(false)
-    grok.resolve({ ok: true, text: 'Grok result' })
+    expect(runner.getState().units[0]?.engines.chatgpt?.status).toBe('running')
+    expect(chatgptSignal?.aborted).toBe(false)
+    chatgpt.resolve({ ok: true, text: 'ChatGPT result' })
     await settle()
     runner.retry('u0', 'copilot')
     await settle()
-    expect(calls).toEqual(['copilot', 'grok'])
-    expect(runner.getState().units[0]?.engines.grok?.text).toBe('Grok result')
+    expect(calls).toEqual(['copilot', 'chatgpt'])
+    expect(runner.getState().units[0]?.engines.chatgpt?.text).toBe('ChatGPT result')
     expect(runner.getState().phase).toBe('done')
   })
 
   it('collects both in-flight answers while paused and waits before the next unit', async () => {
     const copilot = deferred<CompareAnswer>()
-    const grok = deferred<CompareAnswer>()
+    const chatgpt = deferred<CompareAnswer>()
     const calls: string[] = []
     const { runner } = setup({
       driver: {
@@ -164,24 +164,24 @@ describe('comparison scheduler', () => {
           return calls.length <= 2
             ? engine === 'copilot'
               ? copilot.promise
-              : grok.promise
+              : chatgpt.promise
             : Promise.resolve({ ok: true, text: 'Next answer' })
         },
       },
     })
-    runner.start(units.slice(0, 2), ['copilot', 'grok'], false)
+    runner.start(units.slice(0, 2), ['copilot', 'chatgpt'], false)
     await settle()
     runner.pause()
     copilot.resolve({ ok: true, text: 'Copilot result' })
-    grok.resolve({ ok: true, text: 'Grok result' })
+    chatgpt.resolve({ ok: true, text: 'ChatGPT result' })
     await settle()
     expect(runner.getState().phase).toBe('paused')
     expect(runner.getState().units[0]?.engines.copilot?.text).toBe('Copilot result')
-    expect(runner.getState().units[0]?.engines.grok?.text).toBe('Grok result')
-    expect(calls).toEqual(['copilot', 'grok'])
+    expect(runner.getState().units[0]?.engines.chatgpt?.text).toBe('ChatGPT result')
+    expect(calls).toEqual(['copilot', 'chatgpt'])
     runner.resume()
     await settle()
-    expect(calls).toEqual(['copilot', 'grok', 'copilot', 'grok'])
+    expect(calls).toEqual(['copilot', 'chatgpt', 'copilot', 'chatgpt'])
     expect(runner.getState().phase).toBe('done')
   })
 
@@ -200,29 +200,29 @@ describe('comparison scheduler', () => {
         },
       },
     })
-    runner.start(units.slice(0, 1), ['copilot', 'grok'], false)
+    runner.start(units.slice(0, 1), ['copilot', 'chatgpt'], false)
     await settle()
     runner.stop()
     expect(signals).toHaveLength(2)
     expect(signals.every((s) => s.aborted)).toBe(true)
-    runner.start([{ id: 'new', text: 'New paragraph', korean: '' }], ['copilot', 'grok'], false)
+    runner.start([{ id: 'new', text: 'New paragraph', korean: '' }], ['copilot', 'chatgpt'], false)
     await settle()
     oldReplies[1]!.resolve({ ok: false, reason: 'blocked' })
     oldReplies[0]!.resolve({ ok: true, text: 'Old answer' })
     await settle()
     expect(runner.getState().units.map((u) => u.id)).toEqual(['new'])
     expect(runner.getState().units[0]?.engines.copilot?.text).toBe('New answer')
-    expect(runner.getState().units[0]?.engines.grok?.text).toBe('New answer')
+    expect(runner.getState().units[0]?.engines.chatgpt?.text).toBe('New answer')
     expect(runner.getState().blocked).toEqual({})
     expect(runner.getState().phase).toBe('done')
   })
 
   it('deduplicates enabled engine ids so one engine cannot be started twice for a unit', async () => {
     const { runner, calls } = setup()
-    runner.start(units.slice(0, 1), ['copilot', 'copilot', 'grok'], false)
+    runner.start(units.slice(0, 1), ['copilot', 'copilot', 'chatgpt'], false)
     await settle()
-    expect(calls).toEqual(['copilot:Paragraph 0', 'grok:Paragraph 0'])
-    expect(runner.getState().engines).toEqual(['copilot', 'grok'])
+    expect(calls).toEqual(['copilot:Paragraph 0', 'chatgpt:Paragraph 0'])
+    expect(runner.getState().engines).toEqual(['copilot', 'chatgpt'])
   })
 
   it('marks blocked engines once and skips them in later units and manual retries', async () => {
@@ -234,15 +234,15 @@ describe('comparison scheduler', () => {
           asks.push(engine)
           return engine === 'copilot'
             ? { ok: false, reason: 'blocked' }
-            : { ok: true, text: 'Grok answer' }
+            : { ok: true, text: 'ChatGPT answer' }
         },
       },
     })
-    runner.start(units, ['copilot', 'grok'], false)
+    runner.start(units, ['copilot', 'chatgpt'], false)
     await settle()
     runner.retry('u0', 'copilot')
     await settle()
-    expect(asks).toEqual(['copilot', 'grok', 'grok', 'grok'])
+    expect(asks).toEqual(['copilot', 'chatgpt', 'chatgpt', 'chatgpt'])
     expect(runner.getState().units[2]?.engines.copilot).toEqual({
       status: 'blocked',
       reason: 'blocked',
@@ -257,7 +257,7 @@ describe('comparison scheduler', () => {
         ask: async () => ({ ok: false, reason: 'needs-user' }),
       },
     })
-    runner.start(units, ['copilot', 'grok'], false)
+    runner.start(units, ['copilot', 'chatgpt'], false)
     await settle()
     expect(runner.getState().phase).toBe('allBlocked')
     expect(runner.getState().units[1]?.visited).toBe(false)
@@ -268,7 +268,7 @@ describe('comparison scheduler', () => {
     const { runner, calls } = setup()
     runner.start(
       Array.from({ length: 21 }, (_, i) => ({ id: String(i), text: String(i), korean: '' })),
-      ['grok'],
+      ['chatgpt'],
       false,
     )
     for (let i = 0; i < 10; i++) await settle()
@@ -308,14 +308,14 @@ describe('comparison scheduler', () => {
         },
       },
     })
-    runner.start(units, ['grok'], false)
+    runner.start(units, ['chatgpt'], false)
     await settle()
     runner.stop()
     expect(signal?.aborted).toBe(true)
     pending.resolve({ ok: true, text: 'Too late' })
     await settle()
     expect(runner.getState().phase).toBe('stopped')
-    expect(runner.getState().units[0]?.engines.grok).toEqual({ status: 'stopped' })
+    expect(runner.getState().units[0]?.engines.chatgpt).toEqual({ status: 'stopped' })
   })
 
   it('does not run a manual retry while a paused call is still in flight', async () => {
@@ -330,12 +330,12 @@ describe('comparison scheduler', () => {
         },
       },
     })
-    runner.start(units.slice(0, 1), ['copilot', 'grok'], false)
+    runner.start(units.slice(0, 1), ['copilot', 'chatgpt'], false)
     await settle()
     runner.pause()
     runner.retry('u0', 'copilot')
     await settle()
-    expect(asks).toEqual(['copilot', 'grok'])
+    expect(asks).toEqual(['copilot', 'chatgpt'])
     runner.stop()
     second.resolve({ ok: true, text: 'late' })
   })

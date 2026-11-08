@@ -38,7 +38,7 @@ export const zh = {
   cmpAllBlocked: '所有引擎均被阻止。请停止并自行处理网站。',
   cmpFlatNote: '每个单元选择一个回答。替换使用纯文本，每次应用都可单独撤销。',
   cmpLeaves:
-    '所选文本及可用的韩语原文将通过 ego 浏览器发送至 {sites}，适用各网站条款，无法隐藏部分内容。选择范围和引擎后，按比较才会发送。',
+    '所选文本及可用的韩语原文将通过 ego 浏览器发送至 {sites}，适用各网站条款，无法隐藏部分内容。选择范围和引擎后，按比较才会发送。 ChatGPT 仅使用 ego 浏览器中已登录的网页会话。',
   cmpBtn: 'AI 对比',
   cmpTitle: '与其他 AI 对比',
   cmpConsentAgree: '我已了解,继续',

@@ -27,6 +27,14 @@ describe('AI compare strings', () => {
     }
   })
 
+  it('discloses the signed-in ChatGPT web session in every locale', () => {
+    for (const path of Object.keys(shards)) {
+      const dict = Object.values(shards[path]!)[0]!
+      expect(dict.cmpLeaves, path).toContain('ChatGPT')
+      expect(dict.cmpLeaves, path).toContain('{sites}')
+    }
+  })
+
   it('the Korean install question and buttons are the owner-specified wording', () => {
     expect(ko.cmpEgoMissing).toBe('ego 브라우저가 설치되어 있지 않습니다. 설치할까요?')
     expect(ko.cmpInstall).toBe('설치')

@@ -41,7 +41,7 @@ export const cs = {
   cmpFlatNote:
     'Pro každou jednotku vyberte jednu odpověď. Náhrady používají prostý text a lze je vrátit jednotlivě.',
   cmpLeaves:
-    'Vybraný text a dostupný korejský originál se přes prohlížeč ego odešlou na {sites}. Platí podmínky těchto webů. Části nelze skrýt. Vyberte rozsah a moduly a odešlete tlačítkem Porovnat.',
+    'Vybraný text a dostupný korejský originál se přes prohlížeč ego odešlou na {sites}. Platí podmínky těchto webů. Části nelze skrýt. Vyberte rozsah a moduly a odešlete tlačítkem Porovnat. ChatGPT používá pouze webovou relaci, ve které jste již přihlášeni v prohlížeči ego.',
   cmpBtn: 'Porovnání AI',
   cmpTitle: 'Porovnat s jinými AI',
   cmpConsentAgree: 'Rozumím, pokračovat',
