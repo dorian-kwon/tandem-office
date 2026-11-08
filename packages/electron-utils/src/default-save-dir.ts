@@ -6,7 +6,7 @@
 /// setting.
 import { accessSync, constants, mkdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
-import { PRODUCT_NAME } from '@genoffice/i18n'
+import { PRODUCT_MACHINE_NAME } from '@genoffice/i18n'
 
 /** the subset of Electron's `app` needed here (kept structural: this package has no Electron dependency) */
 export interface PathProvider {
@@ -147,11 +147,11 @@ export function defaultSaveDirFallback(): { blocked: string; using: string } | n
 export function configuredDefaultSaveDir(app: PathProvider): string {
   const settingsPath = join(app.getPath('userData'), 'app-settings.json')
   const fallbacks = [
-    join(app.getPath('documents'), PRODUCT_NAME),
+    join(app.getPath('documents'), PRODUCT_MACHINE_NAME),
     // outside the folders Controlled Folder Access protects by default
-    join(app.getPath('home'), PRODUCT_NAME),
+    join(app.getPath('home'), PRODUCT_MACHINE_NAME),
     // always writable for the app itself
-    join(app.getPath('userData'), PRODUCT_NAME),
+    join(app.getPath('userData'), PRODUCT_MACHINE_NAME),
   ]
   return resolveDefaultSaveDir(readDefaultSaveDirSetting(settingsPath), fallbacks)
 }

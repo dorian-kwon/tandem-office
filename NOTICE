@@ -38,7 +38,7 @@ and development tooling and are not shipped in the application.
 Brand artwork
 
 The app icon, the logo lockup's mark and the AI button mark were drawn for
-IeumOffice, the project tandem office is forked from, and tandem office keeps
+IeumOffice, the project Tandem Office is forked from, and Tandem Office keeps
 using them: the sources in apps/shell/build/brand, the icon
 and logo files tools/gen-brand-assets.mjs derives from them, and
 packages/ui/src/AiMark.tsx. Their geometry is adapted from the Lucide icon set
@@ -153,7 +153,7 @@ and license. Only the files listed for each skill were taken.
   (SKILL.md), read at commit a80e4c9d12d607631249d4d7d059f835d4b2f13a. MIT
   License, Copyright (c) 2026 Vercel, Inc.; the repository's LICENSE is copied
   as find-skills/LICENSE. Modified: IeumOffice appended a section for the
-  app (now "In tandem office") at the end of SKILL.md.
+  app (now "In Tandem Office") at the end of SKILL.md.
 
 IeumOffice modifications
 
@@ -168,12 +168,12 @@ IeumOffice is not affiliated with, sponsored by or endorsed by Mainfunc, Inc.
 The names GenOffice and Genspark and their logos belong to their owners and
 are used here only to identify the original work.
 
-tandem office modifications
+Tandem Office modifications
 
-tandem office is a modified version of IeumOffice, forked from
+Tandem Office is a modified version of IeumOffice, forked from
 https://github.com/pblsketch/openoffice. Its further changes are recorded in
 its repository history and are licensed under the Apache License, Version
-2.0, like the work they modify. tandem office is not affiliated with,
+2.0, like the work they modify. Tandem Office is not affiliated with,
 sponsored by or endorsed by Mainfunc, Inc.
 
 Hangul (HWP) document format
@@ -223,18 +223,18 @@ POSSIBILITY OF SUCH DAMAGE.
 
 Trademarks
 
-tandem office is not affiliated with, sponsored by or endorsed by Microsoft
+Tandem Office is not affiliated with, sponsored by or endorsed by Microsoft
 Corporation, Hancom Inc., Adobe Inc., XMind Ltd., Google LLC, Anthropic or
 OpenAI. "Microsoft", "Windows", "Word", "Excel" and "PowerPoint" are
 trademarks of Microsoft Corporation. "한글" (Hangul), "한컴" (Hancom), "HWP"
 and "HWPX" are registered trademarks of Hancom Inc. "XMind" is a trademark of
 XMind Ltd. "Google Drive" is a trademark of Google LLC. "Claude" is a
 trademark of Anthropic; "Codex" and "ChatGPT" are trademarks of OpenAI. These
-and other product names are used only to say which files tandem office opens and
+and other product names are used only to say which files Tandem Office opens and
 what it works with. The file-type icons and the AI provider marks in the app
 are original drawings, not those companies' logos.
 
-The Apache License 2.0 grants no rights to the names or logos "tandem office",
+The Apache License 2.0 grants no rights to the names or logos "Tandem Office",
 "IeumOffice", "이음오피스" or "GenOffice" (section 6).
 
 Contact

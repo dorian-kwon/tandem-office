@@ -613,7 +613,7 @@ describe('what the CLI prints and tells agents to run', () => {
     expect((await run(['--version'])).stdout).toMatch(/^ieumoffice \d+\.\d+\.\d+/)
     const help = (await run(['help'])).stdout
     expect(help).toContain('Usage: ieumoffice <command> [options]')
-    expect(help).toMatch(/^ieumoffice \S+ — tandem office command line/)
+    expect(help).toMatch(/^ieumoffice \S+ — Tandem Office command line/)
     expect(help).not.toMatch(OLD_NAME)
 
     const unknown = await run(['no-such-command'])
@@ -649,7 +649,7 @@ describe('what the CLI prints and tells agents to run', () => {
 
   it('names it in what the MCP server tells a client', () => {
     expect(INSTRUCTIONS).not.toMatch(OLD_NAME)
-    expect(INSTRUCTIONS).toContain('tandem office')
+    expect(INSTRUCTIONS).toContain('Tandem Office')
     expect(remoteInstructions('http://h:1')).not.toMatch(OLD_NAME)
     for (const tool of resolveTools(defaultRegistry())) {
       expect(tool.description, tool.name).not.toMatch(OLD_NAME)

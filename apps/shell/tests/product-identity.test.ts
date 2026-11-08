@@ -10,6 +10,7 @@ import {
   LANGS,
   PRODUCT_FILE_NAME,
   PRODUCT_ID_NAME,
+  PRODUCT_MACHINE_NAME,
   PRODUCT_NAME,
   UPSTREAM_NAME_LITERAL,
   UPSTREAM_PRODUCT_NAME,
@@ -55,13 +56,34 @@ const UPSTREAM = {
 
 describe('one product name', () => {
   it('is what the installer, the Electron app name and the UI agree on', () => {
-    // Electron names the app (and its userData folder) after package.json
-    // "productName"; electron-builder names the installer and the executable
-    // after its own. Both have to be the name the UI shows.
-    expect(config.productName).toBe(PRODUCT_NAME)
-    expect(shellPackage.productName).toBe(PRODUCT_NAME)
-    expect(productName('en')).toBe(PRODUCT_NAME)
+    // The UI shows PRODUCT_NAME. The machine-level name (electron-builder
+    // productName: install folder, executable, app bundle; package.json
+    // "productName": Electron's default userData folder) is the spelling every
+    // existing install registered, and differs from it only in letter case.
+    expect(config.productName).toBe(PRODUCT_MACHINE_NAME)
+    expect(shellPackage.productName).toBe(PRODUCT_MACHINE_NAME)
     expect(USER_DATA_DIR_NAME).toBe(shellPackage.productName)
+    expect(productName('en')).toBe(PRODUCT_NAME)
+    expect(PRODUCT_MACHINE_NAME).toBe('tandem office')
+    expect(PRODUCT_MACHINE_NAME.toLowerCase()).toBe(PRODUCT_NAME.toLowerCase())
+  })
+
+  it('shows the display name on shortcuts, the bundle and the desktop entry only', () => {
+    // names people read: capitalised; everything that locates the install keeps productName
+    expect((config.nsis as { shortcutName: string }).shortcutName).toBe(PRODUCT_NAME)
+    expect((config.mac as { extendInfo: Record<string, string> }).extendInfo).toEqual({
+      CFBundleName: PRODUCT_NAME,
+      CFBundleDisplayName: PRODUCT_NAME,
+    })
+    expect((config.linux as { desktop: { entry: { Name: string } } }).desktop.entry.Name).toBe(
+      PRODUCT_NAME,
+    )
+    expect(config.productName).not.toBe(PRODUCT_NAME)
+  })
+
+  it('pins the packaged app userData folder to the machine name', () => {
+    const main = readFileSync(join(SHELL, 'src/main/index.ts'), 'utf8')
+    expect(main).toContain("app.setPath('userData', join(app.getPath('appData'), USER_DATA_DIR_NAME))")
   })
 
   it('names the installer process with the product name', () => {
@@ -90,7 +112,7 @@ describe('one product name', () => {
   })
 
   it('shows the same name in every UI language', () => {
-    expect(PRODUCT_NAME).toBe('tandem office')
+    expect(PRODUCT_NAME).toBe('Tandem Office')
     for (const lang of LANGS) expect(productName(lang), lang).toBe(PRODUCT_NAME)
   })
 
@@ -126,13 +148,13 @@ describe('the name in the shell UI', () => {
         expect(t(lang, key), `${lang}.${key}`).not.toContain(UPSTREAM_PRODUCT_NAME)
       }
     }
-    expect(t('ko', 'onbTitle1')).toContain('tandem office')
-    expect(t('en', 'onbTitle1')).toContain('tandem office')
+    expect(t('ko', 'onbTitle1')).toContain('Tandem Office')
+    expect(t('en', 'onbTitle1')).toContain('Tandem Office')
   })
 
   it('names the product in the manual: titles and bodies', async () => {
-    expect(topicTitle('install', 'en')).toBe('Installing tandem office')
-    expect(topicTitle('install', 'ko')).toBe('tandem office 설치')
+    expect(topicTitle('install', 'en')).toBe('Installing Tandem Office')
+    expect(topicTitle('install', 'ko')).toBe('Tandem Office 설치')
     for (const lang of ['en', 'ko', 'ja'] as const) {
       for (const topic of HELP_TOPICS) {
         expect(topicTitle(topic.id, lang)).not.toContain(UPSTREAM_PRODUCT_NAME)
@@ -142,7 +164,7 @@ describe('the name in the shell UI', () => {
     }
     // file names keep the Latin name whatever the language
     expect(await helpBody('install', 'ko')).toContain('tandem-office-Setup-<version>.exe')
-    expect(await helpBody('getting-started', 'ko')).toContain('tandem office')
+    expect(await helpBody('getting-started', 'ko')).toContain('Tandem Office')
   })
 })
 

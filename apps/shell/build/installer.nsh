@@ -123,10 +123,15 @@
 ; are the product-own Open-With ones defined above; the rest are the ProgIds
 ; electron-builder writes for the Windows file associations.
 !define GENOFFICE_CAPABILITIES_KEY "Software\TandemOffice\Capabilities"
+; ${PRODUCT_NAME} below is electron-builder's productName, the machine-level
+; spelling existing installs registered (the RegisteredApplications value name
+; must stay what the installed version wrote, or an update orphans it). The
+; name Windows shows on the Default apps page is the display name.
+!define GENOFFICE_DISPLAY_NAME "Tandem Office"
 
 !macro GenOfficeRegisterApplicationCapabilities
   WriteRegStr SHELL_CONTEXT "Software\RegisteredApplications" "${PRODUCT_NAME}" "${GENOFFICE_CAPABILITIES_KEY}"
-  WriteRegStr SHELL_CONTEXT "${GENOFFICE_CAPABILITIES_KEY}" "ApplicationName" "${PRODUCT_NAME}"
+  WriteRegStr SHELL_CONTEXT "${GENOFFICE_CAPABILITIES_KEY}" "ApplicationName" "${GENOFFICE_DISPLAY_NAME}"
   WriteRegStr SHELL_CONTEXT "${GENOFFICE_CAPABILITIES_KEY}" "ApplicationIcon" "$appExe,0"
   WriteRegStr SHELL_CONTEXT "${GENOFFICE_CAPABILITIES_KEY}\FileAssociations" ".docx" "TandemOffice.WordDocument"
   WriteRegStr SHELL_CONTEXT "${GENOFFICE_CAPABILITIES_KEY}\FileAssociations" ".xlsx" "TandemOffice.ExcelWorkbook"

@@ -27,6 +27,7 @@
 - `brandText`가 바꾸지 않는 것을 유지한다. 더 긴 식별자 안의 이름(`GenOfficeFormField`), 소문자 `genoffice`(패키지 이름, 환경 변수, 스킴)는 손대지 않는다. 파일·폴더 이름 안의 이름(`GenOffice.exe`, `Documents/GenOffice`)은 언어와 무관하게 `PRODUCT_NAME`이 되고, `-`나 `_`로 이어 붙은 이름(`GenOffice-Setup-<version>.exe`)은 `PRODUCT_FILE_NAME`이 된다. 지금은 언어별 표시 이름이 없어 모든 언어의 화면 이름이 `PRODUCT_NAME`이다.
 - 치환은 템플릿에만 한다. `createI18n`은 단축키 변환 → 제품 이름 치환 → 자리 표시 채우기 순으로 처리한다. 매개변수 값은 맨 마지막에 들어가므로 치환되지 않는다(사용자 파일 이름이 실제로 `GenOffice`일 수 있다). 이 순서를 바꾸지 않는다.
 - `PRODUCT_NAME`은 PC에 등록되는 이름의 원천이다. 설치 프로그램의 제품 이름, userData 폴더, 기본 저장 폴더가 여기서 나오고 UI 언어와 무관하게 같아야 한다. 이 값을 바꾸면 기존 사용자의 설정 폴더가 달라진다. 언어별 표시 이름은 `LOCALIZED_PRODUCT_NAMES`에만 추가한다.
+- 이름은 둘이다. `PRODUCT_NAME`(`Tandem Office`)은 화면에 보이는 이름이고, `PRODUCT_MACHINE_NAME`(`tandem office`)은 PC에 등록된 이름(폴더·실행 파일·설치 이름)이라 대소문자까지 바꾸지 않는다(Linux는 대소문자를 구분한다). `brandText`는 파일·폴더 이름 자리의 이름을 `PRODUCT_MACHINE_NAME`으로 바꾼다.
 - 원본 앱의 폴더를 물려받지 않는다. userData 이름은 설치본 `tandem office`, 개발 실행 `tandem office-Dev`이며 둘 다 이 제품의 것이다. 원본(GenOffice)이나 이 제품이 갈라져 나온 이음오피스가 쓰던 폴더 이름(`IeumOffice`, `IeumOffice-Dev`)으로 되돌리거나 그것을 찾아 읽는 코드를 넣지 않는다.
 - `LANGS` 선언의 모양을 유지한다. `tools/check-help-langs.mjs`가 이 파일을 import하지 않고 글자로 읽어 `export const LANGS`의 `= [` 와 `]` 사이에서 언어 코드를 뽑는다. 배열을 다른 식으로 조립하면 그 검사가 실패한다.
 

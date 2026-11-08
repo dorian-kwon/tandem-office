@@ -192,7 +192,7 @@ describe('the tandem office Default-apps registration', () => {
     )
     expect(nsh).toContain(`!define GENOFFICE_CAPABILITIES_KEY "${CAPABILITIES}"`)
     expect(body).toContain(
-      `WriteRegStr SHELL_CONTEXT "\${GENOFFICE_CAPABILITIES_KEY}" "ApplicationName" "\${PRODUCT_NAME}"`,
+      `WriteRegStr SHELL_CONTEXT "\${GENOFFICE_CAPABILITIES_KEY}" "ApplicationName" "\${GENOFFICE_DISPLAY_NAME}"`,
     )
     expect(body).toContain(
       `WriteRegStr SHELL_CONTEXT "\${GENOFFICE_CAPABILITIES_KEY}" "ApplicationIcon" "$appExe,0"`,

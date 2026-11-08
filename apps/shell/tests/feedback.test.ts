@@ -41,7 +41,7 @@ describe('feedback strings', () => {
   })
 
   it('never types the product name', () => {
-    expect(JSON.stringify(FEEDBACK_STRINGS)).not.toMatch(/tandem office|tandem office|GenOffice/)
+    expect(JSON.stringify(FEEDBACK_STRINGS)).not.toMatch(/tandem office|GenOffice/i)
   })
 })
 

@@ -39,10 +39,10 @@ describe('doc-picker strings', () => {
   it('writes the product name as the GenOffice token, localized at output', () => {
     for (const lang of LANGS) {
       const dict = docPickerStrings[lang] as Record<string, string>
-      for (const value of Object.values(dict)) expect(value, lang).not.toMatch(/tandem office/)
+      for (const value of Object.values(dict)) expect(value, lang).not.toMatch(/tandem office/i)
     }
-    expect(docPickerText('ko', 'docPickTitle')).toContain('tandem office')
-    expect(docPickerText('en', 'docPickTitle')).toContain('tandem office')
+    expect(docPickerText('ko', 'docPickTitle')).toContain('Tandem Office')
+    expect(docPickerText('en', 'docPickTitle')).toContain('Tandem Office')
   })
 })
 

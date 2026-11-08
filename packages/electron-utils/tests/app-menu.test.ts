@@ -267,17 +267,17 @@ describe('checkUpdatesMenuItem / manual update check wiring', () => {
   it('About dialog copy button still copies name + version', async () => {
     electronMock.showMessageBox.mockResolvedValue({ response: 1 })
     await (aboutMenuItem(en) as { click: () => Promise<void> }).click()
-    expect(electronMock.writeText).toHaveBeenCalledWith('tandem office 1.2.3')
+    expect(electronMock.writeText).toHaveBeenCalledWith('Tandem Office 1.2.3')
   })
 
   it('names the product in the About entry of every language', () => {
-    expect(en.about).toBe('About tandem office')
-    expect(appMenuLabels('ko').about).toBe('tandem office 정보')
-    expect(appMenuLabels('ja').about).toBe('tandem office について')
+    expect(en.about).toBe('About Tandem Office')
+    expect(appMenuLabels('ko').about).toBe('Tandem Office 정보')
+    expect(appMenuLabels('ja').about).toBe('Tandem Office について')
     for (const lang of [...LANGS, 'vi']) {
       const about = appMenuLabels(lang).about
       expect(about, lang).not.toContain('GenOffice')
-      expect(about, lang).toContain(lang === 'ko' ? 'tandem office' : 'tandem office')
+      expect(about, lang).toContain('Tandem Office')
     }
   })
 
@@ -288,14 +288,14 @@ describe('checkUpdatesMenuItem / manual update check wiring', () => {
       setUiLang('en')
       await about.click()
       expect(electronMock.showMessageBox.mock.calls.at(-1)![0]).toMatchObject({
-        title: 'tandem office',
-        message: 'tandem office',
+        title: 'Tandem Office',
+        message: 'Tandem Office',
       })
       setUiLang('ko')
       await about.click()
       expect(electronMock.showMessageBox.mock.calls.at(-1)![0]).toMatchObject({
-        title: 'tandem office',
-        message: 'tandem office',
+        title: 'Tandem Office',
+        message: 'Tandem Office',
       })
     } finally {
       setUiLang('zh')

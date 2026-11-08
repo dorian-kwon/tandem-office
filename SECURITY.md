@@ -4,10 +4,10 @@
 
 Please report suspected vulnerabilities privately via GitHub's
 [private vulnerability reporting](https://github.com/pblsketch/openoffice/security/advisories/new)
-on this repository. Do not open public issues for security reports. tandem office
+on this repository. Do not open public issues for security reports. Tandem Office
 is maintained by volunteers, so reports are handled on a best-effort basis.
 
-tandem office is a fork of IeumOffice, a modified version of GenOffice (see
+Tandem Office is a fork of IeumOffice, a modified version of GenOffice (see
 [License and acknowledgement](README.en.md#license-and-acknowledgement)). If a
 problem is in code the projects share (the document engines, for example),
 please consider reporting it to the upstream projects as well.

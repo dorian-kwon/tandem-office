@@ -51,7 +51,7 @@ import { tmpdir } from 'node:os'
 import { delimiter, join, resolve } from 'node:path'
 
 import { HOME_DIR_NAME } from '../packages/cli/src/names'
-import { PRODUCT_NAME } from '../packages/i18n/src/product'
+import { PRODUCT_MACHINE_NAME, PRODUCT_NAME } from '../packages/i18n/src/product'
 import { buildBlankDocx } from '../packages/docx-engine/src/blank'
 import { createBlankPptx } from '../packages/pptx-engine/src/blank'
 import { buildSheetsFixture } from '../apps/sheets/tests/fixture-builder'
@@ -115,7 +115,7 @@ async function makeScratch(): Promise<Scratch> {
   // /var/folders/<xx>/<per-user-hash>/T, so it differs per machine. This has to
   // be absolute and creatable, which is all resolveDefaultSaveDir asks of a
   // configured dir.
-  const saveDir = process.platform === 'win32' ? `C:\\${PRODUCT_NAME}` : `/tmp/${PRODUCT_NAME}`
+  const saveDir = process.platform === 'win32' ? `C:\\${PRODUCT_MACHINE_NAME}` : `/tmp/${PRODUCT_MACHINE_NAME}`
   for (const dir of [home, userData, samples, saveDir]) mkdirSync(dir, { recursive: true })
 
   // the file list the Home figure shows; types only — the figures are about

@@ -1,4 +1,4 @@
-# Contributing to tandem office
+# Contributing to Tandem Office
 
 Thanks for your interest in contributing. This document covers the local
 setup, the checks a change must pass, and the conventions used in this
@@ -10,7 +10,7 @@ Development happens in this repository,
 [dorian-kwon/tandem-office](https://github.com/dorian-kwon/tandem-office). Pull requests,
 issues and feature requests are all handled here.
 
-tandem office is a fork of IeumOffice, a modified version of GenOffice (see
+Tandem Office is a fork of IeumOffice, a modified version of GenOffice (see
 [License and acknowledgement](README.en.md#license-and-acknowledgement)) and
 keeps taking engine fixes from it, which shapes two rules:
 

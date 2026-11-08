@@ -1,4 +1,4 @@
-import { brandText, PRODUCT_NAME } from '@genoffice/i18n'
+import { brandText, PRODUCT_MACHINE_NAME } from '@genoffice/i18n'
 
 /**
  * The names this product registers on a user's machine. The upstream GenOffice
@@ -24,7 +24,7 @@ export const SKILL_NAME = CLI_COMMAND
 export const HOME_DIR_NAME = `.${CLI_COMMAND}`
 
 /** the installed app binary (`<name>.exe` on Windows, `<name>.app/Contents/MacOS/<name>` on macOS) */
-export const APP_BINARY_NAME = PRODUCT_NAME
+export const APP_BINARY_NAME = PRODUCT_MACHINE_NAME
 
 /** the launcher file for a platform */
 export function launcherFileName(platform: string): string {
@@ -35,7 +35,7 @@ export function launcherFileName(platform: string): string {
  * The product name in static CLI / MCP text (command summaries, option and tool
  * descriptions), which keeps saying "GenOffice" in source like every other
  * dictionary. Never for a message that carries a path: a folder that really is
- * called GenOffice must be printed as it is, so those name PRODUCT_NAME directly.
+ * called GenOffice must be printed as it is, so those name PRODUCT_MACHINE_NAME directly.
  */
 export function branded(text: string): string {
   return brandText(text, 'en')

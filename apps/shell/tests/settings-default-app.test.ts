@@ -94,7 +94,7 @@ describe('Settings default-app row', () => {
 
     await click(button)
     expect(set).toHaveBeenCalledTimes(1)
-    expect(row()?.textContent).toContain('tandem office is already the default.')
+    expect(row()?.textContent).toContain('Tandem Office is already the default.')
     expect(row()!.querySelector<HTMLButtonElement>('button')!.disabled).toBe(true)
   })
 
@@ -103,7 +103,7 @@ describe('Settings default-app row', () => {
       getDefaultAppStatus: async () => ({ state: 'other', others: [], manualOnly: false }),
     })
     const field = row()!
-    expect(field.textContent).toContain('Open .docx, .xlsx and .pptx files in tandem office')
+    expect(field.textContent).toContain('Open .docx, .xlsx and .pptx files in Tandem Office')
     expect(field.querySelector<HTMLButtonElement>('button')!.disabled).toBe(false)
   })
 

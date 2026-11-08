@@ -19,16 +19,32 @@ export const UPSTREAM_PRODUCT_NAME = 'GenOffice'
 export const UPSTREAM_NAME_LITERAL = `{{${UPSTREAM_PRODUCT_NAME}}}`
 
 /**
- * The product name, the same in every UI language (no language has a
- * localized one). Also the name everything registered on the user's machine
- * derives from (the installer's productName, the app bundle and executable,
- * the userData folder, the default save folder), which must stay the same
- * whatever the UI language is.
+ * The product name as people read it, the same in every UI language (no
+ * language has a localized one): window titles, menus, dialogs, About, help
+ * text, document authors. It is DISPLAY text only. Nothing registered on the
+ * user's machine derives from it: those names use PRODUCT_MACHINE_NAME.
  */
-export const PRODUCT_NAME = 'tandem office'
+export const PRODUCT_NAME = 'Tandem Office'
 
 /**
- * PRODUCT_NAME as a file name without spaces: the installer files people
+ * The product name as the machine knows it: the name every existing install
+ * already registered. Used for the userData folder, the default save folder,
+ * the packaged app's package.json productName and the electron-builder
+ * productName (install folder, app bundle and executable names, the NSIS
+ * registry value), and everything that locates those (the terminal command's
+ * discovery of the app and its userData).
+ *
+ * MUST NOT CHANGE, not even in letter case. Linux file systems are case
+ * sensitive: "Tandem Office" would be a new, empty userData folder beside the
+ * old "tandem office" one, silently dropping every user's settings, recent
+ * files and sign-ins, and the terminal command would stop finding the running
+ * app. Windows and macOS only ignore the difference by default. Anything
+ * people read uses PRODUCT_NAME.
+ */
+export const PRODUCT_MACHINE_NAME = 'tandem office'
+
+/**
+ * The product name as a file name without spaces: the installer files people
  * download (GitHub Releases rewrites spaces in asset names, and the update
  * feed must name the file exactly as it is downloaded), the Linux executable
  * and package, and the name of the packaged app's package.json. Also what a
@@ -38,7 +54,7 @@ export const PRODUCT_NAME = 'tandem office'
 export const PRODUCT_FILE_NAME = 'tandem-office'
 
 /**
- * PRODUCT_NAME as a Windows registry identifier: the prefix of this product's
+ * The product name as a Windows registry identifier: the prefix of this product's
  * own ProgIds ("TandemOffice.WordDocument") and its registry key. Letters
  * and digits only, as a ProgId's parts must be.
  */
@@ -56,10 +72,10 @@ export function productName(lang: string | null | undefined): string {
 }
 
 /** Electron userData folder name of the installed app (under the per-user app-data root). */
-export const USER_DATA_DIR_NAME = PRODUCT_NAME
+export const USER_DATA_DIR_NAME = PRODUCT_MACHINE_NAME
 
 /** userData folder name of an unpacked (development) run, kept apart from the installed app's. */
-export const DEV_USER_DATA_DIR_NAME = `${PRODUCT_NAME}-Dev`
+export const DEV_USER_DATA_DIR_NAME = `${PRODUCT_MACHINE_NAME}-Dev`
 
 /** The product's public GitHub repository: issues, releases and update checks all point here. */
 export const PRODUCT_REPO_OWNER = 'dorian-kwon'
@@ -93,7 +109,7 @@ function joinedFileName(after: string): boolean {
 /**
  * Rewrite the product name in a UI string for a language: "GenOffice" becomes
  * productName(lang), except inside file and folder names, which carry
- * PRODUCT_NAME in every language (PRODUCT_FILE_NAME where the name is joined
+ * PRODUCT_MACHINE_NAME in every language (PRODUCT_FILE_NAME where the name is joined
  * to the rest with `-` or `_`). `{{GenOffice}}` prints the literal upstream
  * name. Text that does not mention the name is returned as is.
  */
@@ -106,6 +122,6 @@ export function brandText(text: string, lang: string | null | undefined): string
     const after = text.slice(offset + match.length, offset + match.length + 2)
     if (insideIdentifier(before, after)) return match
     if (!insideFileName(before, after)) return localized
-    return joinedFileName(after) ? PRODUCT_FILE_NAME : PRODUCT_NAME
+    return joinedFileName(after) ? PRODUCT_FILE_NAME : PRODUCT_MACHINE_NAME
   })
 }

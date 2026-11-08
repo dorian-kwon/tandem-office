@@ -19,7 +19,7 @@
 
 ## 제품 이름
 
-- 제품 이름은 `packages/i18n/src/product.ts` 한 곳에서 정한다. 다른 곳에 "tandem office"를 직접 적지 않는다. 띄어 쓴 이름을 쓸 수 없는 자리(설치 파일 이름, Linux 실행 파일·패키지, User-Agent)는 `PRODUCT_FILE_NAME`(`tandem-office`), Windows 등록 이름(ProgId, 레지스트리 키)은 `PRODUCT_ID_NAME`(`TandemOffice`)을 쓴다.
+- 제품 이름은 `packages/i18n/src/product.ts` 한 곳에서 정한다. 다른 곳에 "Tandem Office"를 직접 적지 않는다. 이름은 둘로 나뉜다. 사람이 읽는 이름 `PRODUCT_NAME`(`Tandem Office`, 창 제목·메뉴·대화상자·설명 글·문서 작성자)과, PC에 등록되는 이름 `PRODUCT_MACHINE_NAME`(`tandem office`, userData 폴더, 기본 저장 폴더, 설치 폴더·실행 파일·앱 번들 이름, electron-builder `productName`, package.json `productName`, 터미널 명령어가 앱과 userData를 찾는 경로). 기계 쪽 이름은 대소문자도 바꾸지 않는다. Linux는 대소문자를 구분해서, 바꾸면 기존 사용자의 설정과 최근 파일이 든 userData가 비어 있는 새 폴더로 갈아타 버리고 터미널 명령어가 실행 중인 앱을 못 찾는다. 경로나 폴더 이름에는 `PRODUCT_MACHINE_NAME`(또는 `USER_DATA_DIR_NAME`)을, 사람이 읽는 글에는 `PRODUCT_NAME`을 쓴다. 설치본은 userData를 `USER_DATA_DIR_NAME`으로 직접 고정한다(`apps/shell/src/main/index.ts`). 단축 아이콘 이름(NSIS `shortcutName`), Mac 앱 표시 이름(`CFBundleDisplayName`), Linux 바로가기 이름(`.desktop`의 `Name`)만 `Tandem Office`이고 파일·폴더 이름은 그대로다. 띄어 쓴 이름을 쓸 수 없는 자리(설치 파일 이름, Linux 실행 파일·패키지, User-Agent)는 `PRODUCT_FILE_NAME`(`tandem-office`), Windows 등록 이름(ProgId, 레지스트리 키)은 `PRODUCT_ID_NAME`(`TandemOffice`)을 쓴다.
 - 문구 파일과 도움말에는 제품을 `GenOffice`라고 적는다. 화면에 나갈 때 제품 이름으로 바뀐다(`brandText`, `createI18n`이 자동 적용). 번역 파일의 `GenOffice`를 한꺼번에 바꾸지 않는다.
 - 번역 사전을 거치지 않고 화면에 나가는 글(창 제목, 메뉴, 사용자에게 보이는 AI 지시문, 뒷단의 오류 글)은 `brandText(글, 언어)`를 거친다.
 - 원본의 이름을 글자 그대로 보여야 하는 곳(출처 표시)은 `{{GenOffice}}`라고 적는다. 도움말 본문에는 이 표기를 쓰지 않는다. 화면에 나간 도움말에 원본 이름이 보이면 검사(`apps/shell/tests/product-identity.test.ts`)가 실패한다.

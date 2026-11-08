@@ -1,6 +1,6 @@
 # @genoffice/cli
 
-`ieumoffice` is the tandem office command line. It exposes the suite's document engines
+`ieumoffice` is the Tandem Office command line. It exposes the suite's document engines
 to scripts and AI agents without opening a window: the packaged app runs the
 bundled CLI on its own Node runtime (`ELECTRON_RUN_AS_NODE`), so nothing extra
 has to be installed.
@@ -154,7 +154,7 @@ refuses the output rather than claiming the nested placeholders are resolved.
 `ieumoffice mcp` serves the same commands as Model Context Protocol tools on
 stdio, for clients that cannot run a shell or should not (Claude Desktop,
 Cursor, sandboxed agents). Nothing else is needed on the machine: the process
-runs on the app's Node runtime like every other command, and tandem office itself
+runs on the app's Node runtime like every other command, and Tandem Office itself
 only starts, hidden, for the conversions that need its renderer.
 
 ```bash
@@ -257,7 +257,7 @@ Independently of the PATH, every launch of the packaged app writes the launcher 
   unrestricted.
 - `apply --out` onto another existing file needs `--force`, like `create` / `convert`;
   editing in place never does. Unknown options are rejected instead of ignored.
-- A file the running tandem office shell has open in a tab is not rewritten in place
+- A file the running Tandem Office shell has open in a tab is not rewritten in place
   (exit 2, `detail.gui_pid`): the shell publishes its open tabs to
   `userData/open-documents.json` and ieumoffice reads it (`GENOFFICE_USER_DATA`
   overrides the location). `--force` writes anyway; the editor then warns about
@@ -319,7 +319,7 @@ AI provider). `detail` carries `url` (the final address after redirects),
 continues, `nextOffset` — pass it as `--offset` to read on. A page is cut at
 50,000 characters per call. GitHub blob addresses are read as raw text; a
 private file uses the read-only GitHub token set under Settings → AI in
-tandem office. The command uses no provider, subscription or automatic-call
+Tandem Office. The command uses no provider, subscription or automatic-call
 ledger.
 
 A page that is not text (a PDF, image or Office file) is refused: download and
@@ -442,7 +442,7 @@ packages/cli/bin/ieumoffice info file.docx  # falls back to the system node
 ```
 
 Conversions that need an app renderer (Word/PowerPoint/Excel/HTML/Markdown → PDF,
-Word → HTML, HTML → Word, `create --type pdf`) run inside the tandem office binary
+Word → HTML, HTML → Word, `create --type pdf`) run inside the Tandem Office binary
 through its hidden `--headless-export` mode: ieumoffice spawns it (Dock hidden, no
 window), reads the JSON envelope it prints and maps its exit code. Set
 `GENOFFICE_APP_BIN` to point at a specific executable; in a checkout the dev Electron

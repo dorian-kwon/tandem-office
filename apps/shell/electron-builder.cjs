@@ -11,19 +11,26 @@ const { execFileSync } = require('node:child_process')
 const { existsSync, readFileSync, readdirSync, rmSync } = require('node:fs')
 const { join } = require('node:path')
 
-// Product identity of the installed app. PRODUCT_NAME must equal PRODUCT_NAME
-// in packages/i18n/src/product.ts and "productName" in ./package.json, and the
-// repository must equal the coordinates defined there
+// Product identity of the installed app. PRODUCT_MACHINE_NAME must equal
+// PRODUCT_MACHINE_NAME in packages/i18n/src/product.ts and "productName" in
+// ./package.json, and PRODUCT_NAME must equal PRODUCT_NAME there (the
+// display name); the repository must equal the coordinates defined there
 // (tests/product-identity.test.ts keeps them in step). Everything registered
-// on the machine derives from these: the installer's product id and install
-// folder, the executable name, the userData folder and the Windows ProgIds.
+// on the machine derives from the machine name: the installer's install
+// folder, the executable and app bundle names, the userData folder and the
+// Windows registry value. It is the spelling every existing install already
+// uses, so it must not change (not even in letter case: Linux tells
+// "tandem office" and "Tandem Office" apart, and an update would then leave
+// the old install folder and userData behind). What people read (shortcut
+// names, the bundle display name, the desktop entry name) uses PRODUCT_NAME.
 // None of them may coincide with the upstream GenOffice app, so both can be
 // installed on one machine without touching each other's registration (nor
 // with IeumOffice, the fork this product comes from: it registers
 // io.github.pblsketch.ieumoffice, IeumOffice and ieumoffice).
 const APP_ID = 'io.github.dorian-kwon.tandemoffice'
-const PRODUCT_NAME = 'tandem office'
-// PRODUCT_NAME without spaces (PRODUCT_FILE_NAME in product.ts): the
+const PRODUCT_NAME = 'Tandem Office'
+const PRODUCT_MACHINE_NAME = 'tandem office'
+// The product name without spaces (PRODUCT_FILE_NAME in product.ts): the
 // installer files people download, the Linux executable and packages.
 // package.json "name" of the packaged app is this name as well (the workspace
 // keeps upstream's "@genoffice/shell"): electron-builder and electron-updater
@@ -31,7 +38,7 @@ const PRODUCT_NAME = 'tandem office'
 // after it (<local app data>/<name>-updater), so a shared name is a shared folder.
 const PRODUCT_FILE_NAME = 'tandem-office'
 const PACKAGED_APP_NAME = PRODUCT_FILE_NAME
-// PRODUCT_NAME as a registry identifier (PRODUCT_ID_NAME in product.ts): the
+// The product name as a registry identifier (PRODUCT_ID_NAME in product.ts): the
 // prefix of the Windows ProgIds, which take no spaces.
 const PRODUCT_ID_NAME = 'TandemOffice'
 const REPO_OWNER = 'dorian-kwon'
@@ -503,7 +510,7 @@ const FILE_ASSOCIATIONS = [
 
 const config = {
   appId: APP_ID,
-  productName: PRODUCT_NAME,
+  productName: PRODUCT_MACHINE_NAME,
   // Resolved from the installed electron package so dependency bumps can
   // never leave a stale hard-coded pin behind (packaging would silently ship
   // the old runtime).
@@ -684,6 +691,9 @@ const config = {
       { target: 'zip', arch: includeMacX64 ? ['arm64', 'x64'] : ['arm64'] },
     ],
     category: 'public.app-category.productivity',
+    // the bundle file stays "<machine name>.app" (productName); only the name
+    // Finder, the Dock and the menu bar show is the display name
+    extendInfo: { CFBundleName: PRODUCT_NAME, CFBundleDisplayName: PRODUCT_NAME },
     fileAssociations: FILE_ASSOCIATIONS,
     hardenedRuntime: true,
     gatekeeperAssess: false,
@@ -775,10 +785,12 @@ const config = {
     // Electron takes its X11 app_id from package.json "desktopName"
     // (tandem-office.desktop); syncDesktopName makes electron-builder name the
     // .desktop file and its StartupWMClass from the same value. Without it
-    // StartupWMClass falls back to productName ("tandem office"), which does not
+    // StartupWMClass falls back to productName (PRODUCT_MACHINE_NAME), which does not
     // match the "tandem-office" WM_CLASS the window actually reports — and X11
     // compares case-sensitively, so the taskbar shows an unlinked window.
     syncDesktopName: true,
+    // launcher name people see; the executable and install folder keep productName
+    desktop: { entry: { Name: PRODUCT_NAME } },
     extraResources: [
       {
         from: '../sheets/native/xlsx-engine/target/release/xlsx-sidecar',
@@ -848,6 +860,10 @@ const config = {
   nsis: {
     oneClick: false,
     allowToChangeInstallationDirectory: true,
+    // Start Menu and Desktop shortcut display name. The install folder, the
+    // executable and the uninstall entry keep productName, so an update still
+    // finds and replaces the existing install.
+    shortcutName: PRODUCT_NAME,
     // no spaces: GitHub Releases rewrites them in asset names, and the update
     // feed must name the file exactly as it is downloaded
     artifactName: winArm64

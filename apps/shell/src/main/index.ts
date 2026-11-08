@@ -69,8 +69,9 @@ import { createI18n, isLang, normalizeLang, setUiLang, type Lang } from '@genoff
 import {
   DEV_USER_DATA_DIR_NAME,
   PRODUCT_CONTACT_EMAIL,
-  PRODUCT_NAME,
+  PRODUCT_MACHINE_NAME,
   productName,
+  USER_DATA_DIR_NAME,
 } from '@genoffice/i18n'
 import {
   DEFAULT_SAVE_DIR_KEY,
@@ -670,6 +671,13 @@ if (!app.isPackaged) {
     // are this product's own: a profile of the upstream app is never adopted.
     app.setPath('userData', join(app.getPath('appData'), DEV_USER_DATA_DIR_NAME))
   }
+} else {
+  // The installed app's profile is <appData>/<USER_DATA_DIR_NAME> ("tandem office"),
+  // the folder every earlier version used. Electron derives that same path from
+  // package.json "productName" by default; pinning it here keeps the folder
+  // fixed even if that metadata (or the display name) ever changes, which on a
+  // case-sensitive file system (Linux) would otherwise start an empty profile.
+  app.setPath('userData', join(app.getPath('appData'), USER_DATA_DIR_NAME))
 }
 
 /**
@@ -9869,7 +9877,7 @@ app.whenReady().then(async () => {
         withProject ? enabled : enabled.filter((skill) => skill.source !== 'project'),
         // not under userData: that folder is protected from sessions, and the
         // copied skills' scripts must be readable to run
-        join(process.env.LOCALAPPDATA ?? tmpdir(), PRODUCT_NAME, 'agent-skills'),
+        join(process.env.LOCALAPPDATA ?? tmpdir(), PRODUCT_MACHINE_NAME, 'agent-skills'),
       )
     },
     projectSkills: {

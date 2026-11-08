@@ -261,7 +261,7 @@ describe('Quick Look 21-language dictionary', () => {
         expect(text, `${lang}.${key}`).not.toContain(UPSTREAM_PRODUCT_NAME)
       }
     }
-    expect(quickLookText('ko', 'openInEditor')).toContain('tandem office')
+    expect(quickLookText('ko', 'openInEditor')).toContain('Tandem Office')
     expect(quickLookText('en', 'openInEditor')).toContain(PRODUCT_NAME)
   })
 })
