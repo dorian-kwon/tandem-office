@@ -18,6 +18,7 @@ export const ar = {
   aiScopeSelectionTip: 'تعليمات إعادة الصياغة تُطبق افتراضيًا على التحديد فقط؛ انقر للمعاينة',
   aiScopeClearTitle: 'إلغاء نطاق التحديد',
   aiAskBtn: 'اسأل الذكاء الاصطناعي',
+  aiAskWebSearch: 'البحث على الويب',
   aiAskTitle: 'طلب تعديل على التحديد',
   aiAskEditTitle: 'تعديل هذه التعليمات في قائمة الانتظار',
   aiAskPlaceholder: 'صف التعديل المطلوب…',

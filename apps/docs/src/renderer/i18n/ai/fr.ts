@@ -20,6 +20,7 @@ export const fr = {
     "Les instructions de réécriture s'appliquent par défaut à la sélection ; cliquez pour prévisualiser",
   aiScopeClearTitle: 'Effacer la portée de la sélection',
   aiAskBtn: "Demander à l'IA",
+  aiAskWebSearch: 'Rechercher sur le Web',
   aiAskTitle: 'Demander une modification de la sélection',
   aiAskEditTitle: 'Modifier cette instruction en attente',
   aiAskPlaceholder: 'Décrivez la modification…',

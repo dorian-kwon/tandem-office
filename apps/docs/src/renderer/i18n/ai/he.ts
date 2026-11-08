@@ -18,6 +18,7 @@ export const he = {
   aiScopeSelectionTip: 'הוראות שכתוב חלות כברירת מחדל על הבחירה בלבד; לחץ לתצוגה מקדימה',
   aiScopeClearTitle: 'ביטול טווח הבחירה',
   aiAskBtn: 'שאל את ה-AI',
+  aiAskWebSearch: 'חיפוש באינטרנט',
   aiAskTitle: 'בקש שינוי בקטע שנבחר',
   aiAskEditTitle: 'ערוך הוראה זו בתור',
   aiAskPlaceholder: 'תאר את השינוי הרצוי…',

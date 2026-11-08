@@ -18,6 +18,7 @@ export const vi = {
   aiScopeSelectionTip: 'Các yêu cầu viết lại mặc định áp dụng cho phần đã chọn; nhấp để xem trước',
   aiScopeClearTitle: 'Xóa phạm vi đã chọn',
   aiAskBtn: 'Hỏi AI',
+  aiAskWebSearch: 'Tìm trên web',
   aiAskTitle: 'Hỏi AI về phần đã chọn',
   aiAskEditTitle: 'Chỉnh sửa yêu cầu đang chờ này',
   aiAskPlaceholder: 'Mô tả thay đổi…',

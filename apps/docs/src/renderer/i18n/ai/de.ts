@@ -20,6 +20,7 @@ export const de = {
     'Umschreib-Anweisungen wirken standardmäßig nur auf die Auswahl; zum Vorschauen klicken',
   aiScopeClearTitle: 'Auswahlbereich aufheben',
   aiAskBtn: 'KI fragen',
+  aiAskWebSearch: 'Im Web suchen',
   aiAskTitle: 'Änderung an der Auswahl anfragen',
   aiAskEditTitle: 'Diese Anweisung bearbeiten',
   aiAskPlaceholder: 'Beschreibe die gewünschte Änderung…',

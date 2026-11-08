@@ -19,6 +19,7 @@ export const en = {
   aiScopeSelectionTip: 'Rewrite-style requests apply to the selection by default; click to preview',
   aiScopeClearTitle: 'Clear the selection scope',
   aiAskBtn: 'Ask AI',
+  aiAskWebSearch: 'Search the web',
   aiAskTitle: 'Ask AI about the selection',
   aiAskEditTitle: 'Edit this queued instruction',
   aiAskPlaceholder: 'Describe the change…',

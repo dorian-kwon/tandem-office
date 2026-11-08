@@ -20,6 +20,7 @@ export const nl = {
     'Herschrijfopdrachten gelden standaard alleen voor de selectie; klik voor een voorbeeld',
   aiScopeClearTitle: 'Selectiebereik wissen',
   aiAskBtn: 'Vraag AI',
+  aiAskWebSearch: 'Zoeken op het web',
   aiAskTitle: 'Vraag een wijziging van de selectie',
   aiAskEditTitle: 'Bewerk deze instructie in de wachtrij',
   aiAskPlaceholder: 'Beschrijf de wijziging…',

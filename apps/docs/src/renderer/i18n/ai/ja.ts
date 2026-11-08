@@ -18,6 +18,7 @@ export const ja = {
   aiScopeSelectionTip: '書き換え系の指示は既定で選択範囲にのみ適用されます。クリックでプレビュー',
   aiScopeClearTitle: '選択範囲を解除',
   aiAskBtn: 'AI に修正依頼',
+  aiAskWebSearch: 'ウェブ検索',
   aiAskTitle: '選択範囲への修正を依頼',
   aiAskEditTitle: 'この修正指示を編集',
   aiAskPlaceholder: '希望する修正を入力…',

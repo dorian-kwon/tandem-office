@@ -18,6 +18,7 @@ export const ko = {
   aiScopeSelectionTip: '다시 쓰기류 지시는 기본적으로 선택 영역에만 적용됩니다. 클릭하여 미리 보기',
   aiScopeClearTitle: '선택 범위 해제',
   aiAskBtn: 'AI 수정 요청',
+  aiAskWebSearch: '웹 검색하기',
   aiAskTitle: '선택 영역에 대한 수정 요청',
   aiAskEditTitle: '이 수정 지시 편집',
   aiAskPlaceholder: '원하는 수정을 설명하세요…',

@@ -76,6 +76,21 @@ function selectionKind(editor: Editor): SelectionKind {
   return 'text'
 }
 
+/** the selected text as one search phrase: whitespace collapsed, capped; '' when there is none */
+const SEARCH_QUERY_MAX = 200
+function searchQuery(editor: Editor): string {
+  const { from, to, empty } = editor.state.selection
+  if (empty) return ''
+  const text = editor.state.doc.textBetween(from, to, ' ', ' ').replace(/\s+/g, ' ').trim()
+  return text.length > SEARCH_QUERY_MAX ? text.slice(0, SEARCH_QUERY_MAX).trim() : text
+}
+
+/** Google results for the selection, in the system browser (window.open goes through the main process's URL check) */
+function searchTheWeb(editor: Editor): void {
+  const query = searchQuery(editor)
+  if (query) window.open(`https://www.google.com/search?q=${encodeURIComponent(query)}`)
+}
+
 /** viewport rect of a PM position range */
 function rangeRect(editor: Editor, from: number, to: number): AnchorRect | null {
   try {
@@ -395,22 +410,41 @@ export function AiAskPopover({
   return (
     <>
       {trigger && !open && (
-        <button
-          ref={triggerRef}
-          className="ai-ask-trigger"
-          style={{ left: trigger.left, top: trigger.top }}
-          // keep the editor focused and the selection alive
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={openFromSelection}
-        >
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" aria-hidden>
-            <path
-              d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3zM19 15l.85 2.3L22 18.15l-2.15.85L19 21.3l-.85-2.3-2.15-.85 2.15-.85L19 15z"
-              fill="currentColor"
-            />
-          </svg>
-          {t('aiAskBtn')}
-        </button>
+        <div className="ai-ask-triggers" style={{ left: trigger.left, top: trigger.top }}>
+          <button
+            ref={triggerRef}
+            className="ai-ask-trigger"
+            // keep the editor focused and the selection alive
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={openFromSelection}
+          >
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" aria-hidden>
+              <path
+                d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3zM19 15l.85 2.3L22 18.15l-2.15.85L19 21.3l-.85-2.3-2.15-.85 2.15-.85L19 15z"
+                fill="currentColor"
+              />
+            </svg>
+            {t('aiAskBtn')}
+          </button>
+          {searchQuery(editor) && (
+            <button
+              className="ai-ask-trigger ai-ask-search"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => searchTheWeb(editor)}
+            >
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" aria-hidden>
+                <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="2" />
+                <path
+                  d="M16 16l4.5 4.5"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              </svg>
+              {t('aiAskWebSearch')}
+            </button>
+          )}
+        </div>
       )}
       {box}
     </>

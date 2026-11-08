@@ -19,6 +19,7 @@ export const pl = {
     'Polecenia przepisania domyślnie dotyczą tylko zaznaczenia; kliknij, aby zobaczyć podgląd',
   aiScopeClearTitle: 'Usuń zakres zaznaczenia',
   aiAskBtn: 'Zapytaj AI',
+  aiAskWebSearch: 'Szukaj w sieci',
   aiAskTitle: 'Poproś o zmianę zaznaczenia',
   aiAskEditTitle: 'Edytuj tę instrukcję w kolejce',
   aiAskPlaceholder: 'Opisz żądaną zmianę…',

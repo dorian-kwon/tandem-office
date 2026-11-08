@@ -19,6 +19,7 @@ export const id = {
     'Instruksi penulisan ulang secara default hanya berlaku pada teks terpilih; klik untuk pratinjau',
   aiScopeClearTitle: 'Hapus cakupan pilihan',
   aiAskBtn: 'Tanya AI',
+  aiAskWebSearch: 'Cari di web',
   aiAskTitle: 'Minta perubahan pada teks terpilih',
   aiAskEditTitle: 'Edit instruksi antrean ini',
   aiAskPlaceholder: 'Jelaskan perubahan yang diinginkan…',

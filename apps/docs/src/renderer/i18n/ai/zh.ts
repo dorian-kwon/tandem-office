@@ -17,6 +17,7 @@ export const zh = {
   aiScopeSelectionTip: '改写类指令默认只作用于选中内容;点击预览',
   aiScopeClearTitle: '取消选中范围',
   aiAskBtn: 'AI 修改',
+  aiAskWebSearch: '网络搜索',
   aiAskTitle: '对选中内容提出修改',
   aiAskEditTitle: '编辑这条修改意见',
   aiAskPlaceholder: '描述想要的修改…',

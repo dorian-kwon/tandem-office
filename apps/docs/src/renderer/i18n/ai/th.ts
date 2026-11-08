@@ -18,6 +18,7 @@ export const th = {
   aiScopeSelectionTip: 'คำสั่งเขียนใหม่จะมีผลกับส่วนที่เลือกโดยค่าเริ่มต้น คลิกเพื่อดูตัวอย่าง',
   aiScopeClearTitle: 'ยกเลิกขอบเขตที่เลือก',
   aiAskBtn: 'ถาม AI',
+  aiAskWebSearch: 'ค้นหาบนเว็บ',
   aiAskTitle: 'ขอแก้ไขส่วนที่เลือก',
   aiAskEditTitle: 'แก้ไขคำสั่งที่อยู่ในคิว',
   aiAskPlaceholder: 'อธิบายการแก้ไขที่ต้องการ…',

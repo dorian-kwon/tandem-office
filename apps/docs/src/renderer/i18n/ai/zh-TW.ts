@@ -18,6 +18,7 @@ export const zhTW = {
   aiScopeSelectionTip: '改寫類指令預設只作用於選中內容;點擊預覽',
   aiScopeClearTitle: '取消選中範圍',
   aiAskBtn: 'AI 修改',
+  aiAskWebSearch: '網路搜尋',
   aiAskTitle: '對選中內容提出修改',
   aiAskEditTitle: '編輯這條修改意見',
   aiAskPlaceholder: '描述想要的修改…',

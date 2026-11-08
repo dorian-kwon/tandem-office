@@ -19,6 +19,7 @@ export const cs = {
     'Požadavky na přepsání se ve výchozím nastavení vztahují na výběr; klepnutím zobrazíte náhled',
   aiScopeClearTitle: 'Zrušit rozsah výběru',
   aiAskBtn: 'Zeptat se AI',
+  aiAskWebSearch: 'Hledat na webu',
   aiAskTitle: 'Zeptat se AI na výběr',
   aiAskEditTitle: 'Upravit tuto zařazenou instrukci',
   aiAskPlaceholder: 'Popište změnu…',

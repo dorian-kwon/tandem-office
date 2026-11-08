@@ -8815,6 +8815,22 @@ body.docs-crop-active
   background: var(--hover);
 }
 
+/* the Ask-AI and web-search entries sit side by side at the selection */
+.ai-ask-triggers {
+  position: fixed;
+  z-index: 59;
+  display: flex;
+  gap: 6px;
+}
+
+.ai-ask-triggers .ai-ask-trigger {
+  position: static;
+}
+
+.ai-ask-search {
+  color: var(--text-primary);
+}
+
 /* anchored ask popover (shared look with the slides one, docs tokens) */
 .ai-ask-pop {
   position: fixed;

@@ -20,6 +20,7 @@ export const es = {
     'Las instrucciones de reescritura se aplican por defecto a la selección; haz clic para previsualizar',
   aiScopeClearTitle: 'Quitar el ámbito de selección',
   aiAskBtn: 'Pedir a la IA',
+  aiAskWebSearch: 'Buscar en la web',
   aiAskTitle: 'Pedir un cambio sobre la selección',
   aiAskEditTitle: 'Editar esta instrucción en cola',
   aiAskPlaceholder: 'Describe el cambio…',

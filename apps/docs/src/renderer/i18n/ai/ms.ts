@@ -19,6 +19,7 @@ export const ms = {
     'Arahan tulis semula secara lalai hanya terpakai pada pilihan; klik untuk pratonton',
   aiScopeClearTitle: 'Buang skop pilihan',
   aiAskBtn: 'Tanya AI',
+  aiAskWebSearch: 'Cari di web',
   aiAskTitle: 'Minta perubahan pada pilihan',
   aiAskEditTitle: 'Edit arahan dalam baris gilir ini',
   aiAskPlaceholder: 'Terangkan perubahan yang diingini…',
