@@ -9509,7 +9509,11 @@ app.whenReady().then(async () => {
   }
 
   void installMainProcessProxy()
-  app.setAccessibilitySupportEnabled(true)
+  // Chromium turns accessibility on by itself when a screen reader or another assistive tool
+  // is detected. Forcing it on for everyone made every document update also rebuild the
+  // accessibility tree (about 40 % of the busy time in a translation run, long tasks of
+  // 100+ ms), so it is left to that detection. GENOFFICE_FORCE_ACCESSIBILITY=1 restores it.
+  if (process.env.GENOFFICE_FORCE_ACCESSIBILITY === '1') app.setAccessibilitySupportEnabled(true)
   // Settle the shared uiLang from saved settings BEFORE any tab renderer can
   // ask 'app:get-language': the editor handlers return the i18n module's
   // mutable lang, whose 'zh' default otherwise wins the race for whichever

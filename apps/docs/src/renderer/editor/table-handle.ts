@@ -100,11 +100,17 @@ function tableHandlePlugin(): Plugin {
         handle.style.left = `${(tableRect.left - containerRect.left) / scale - 18}px`
       }
 
+      // posAtCoords forces a layout: outside a table it runs at most every 60 ms
+      let lastCoordProbe = 0
       const onMouseMove = (event: MouseEvent) => {
         if (!view.editable) return
-        const pos =
-          tablePosFromTarget(view, event.target) ??
-          tablePosAt(view, { left: event.clientX, top: event.clientY })
+        let pos = tablePosFromTarget(view, event.target)
+        if (pos === null) {
+          const now = performance.now()
+          if (now - lastCoordProbe < 60) return
+          lastCoordProbe = now
+          pos = tablePosAt(view, { left: event.clientX, top: event.clientY })
+        }
         if (pos === null) {
           // moving toward the handle itself must not hide it (it sits outside the table box)
           if (tablePos !== null) scheduleHide()
