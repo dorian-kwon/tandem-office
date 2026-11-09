@@ -15,7 +15,7 @@ export {
 } from './attachable'
 export { docToText } from './doc'
 export { docxToText } from './docx'
-export { checkedHwpBytes, hwpMemosOf, hwpToText, type HwpMemo } from './hwp'
+export { checkedHwpBytes, hwpMemosOf, hwpToText, rhwpWasmPath, type HwpMemo } from './hwp'
 export { odtToText } from './odt'
 export { pptToText } from './ppt'
 export { pptxToText } from './pptx'
