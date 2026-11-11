@@ -108,6 +108,23 @@ describe('panelProjectSkill context (spec 5.4)', () => {
     expect(prompt).not.toContain('<!-- header -->')
   })
 
+  it('keeps AI terminology notes distinct from a glossary the person approved', async () => {
+    const { skill, run } = setup({
+      context: contextBundle({
+        instructions: null,
+        translation: { prompts: 'Translate Korean into English.', material: '' },
+        memory: { text: '- 이응노 용어: 이응노=Lee Ungno (2026-11-08)', chars: 48 },
+      }),
+    })
+    await run.prepare()
+    const prompt = skill.systemPrompt
+    expect(prompt).toContain('이응노=Lee Ungno')
+    expect(prompt).not.toContain('<translation-glossary>')
+    expect(prompt).toMatch(/never describe.*memory.*(?:approved|confirmed).*glossary/i)
+    expect(prompt).toMatch(/AI.*(?:suggested|proposed).*unconfirmed/i)
+    expect(prompt).toMatch(/do not infer.*(?:approval|confirmation)/i)
+  })
+
   it('tells how to write memory only when project_remember is offered', async () => {
     const on = setup()
     await on.run.prepare()

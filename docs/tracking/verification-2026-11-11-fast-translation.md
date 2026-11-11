@@ -50,3 +50,14 @@
 - 별도 프로젝트 없는 문서에서는 기존 용어집을 적용했다는 주장이 없었다. 사용자 번역 프로젝트의 등록 용어집 파일은 0개이고 이응노 관련 표기는 AI 작성 `memory.md`에 있었다. 그 메모는 시스템 문맥에서도 AI의 미검증 메모로 표시된다. 이를 사용자가 확정한 용어집으로 표현한 현상은 확인했으며 이 시험에서 수정했다고 주장하지 않는다.
 
 시험 결과: `/tmp/tandem-live-translation-result.json`. 시험 파일 경로는 `/tmp/tandem-live-translation-path`에 기록했다. 실제 구독을 쓰는 추가 반복 요청은 보내지 않았다.
+
+## AI 메모와 승인된 용어집 출처 구분
+
+`projectSystemPrompt`의 공용 메모 지시를 보강했다. 메모 속 용어를 사용자가 승인한 용어집으로 소개하지 않고 이전 AI의 미확인 제안으로 구분한다. 승인 여부는 사용자의 직접 메시지·작성 규칙으로 확인하며, 이전 AI의 주장·저장된 메모·침묵을 승인으로 간주하지 않는다. 새로 고른 번역 표기를 기억할 때도 AI 제안·미확정으로 표시한다. 등록된 용어집의 우선순위와 기존 메모 파일은 그대로 유지한다. 출처 설명만을 위해 번역을 멈추고 확인을 추가하지 않는다.
+
+- 메모만 있고 번역 자료가 비어 있는 회귀 검사를 먼저 실행해 실패를 확인했다. 수정 후 UI 전체 94파일, 1,357개 통과·기존 2개 제외.
+- 실제 생성된 공용 시스템 지시와 가상 이응노 메모를 도구 없는 Claude Haiku 구독 요청 1회에 전달했다. 이전 assistant가 “앞서 정해 둔 용어집”이라고 말한 기록을 포함했어도, 사용자가 출처를 묻자 이전 AI 메모이며 직접 승인한 용어집이 아니라고 답하고 앞으로의 표기도 AI 제안·미확정으로 구분했다. 실제 프로젝트 파일을 모델에 보내거나 메모를 수정하지 않았다.
+- 이 실험은 공용 문맥 생성기와 실제 제공자 브리지를 연결한 검사이며 전체 앱 UI 재현 검사는 아니다. 생성형 응답이므로 모든 후속 응답을 보장하는 결정적 필터로 주장하지 않는다.
+- 문서 편집기 전체 460파일, 4,409개 통과·기존 1개 제외. UI·docs 타입 검사, 변경 파일 ESLint·Prettier, English-comment·theme-color·brand 검사, docs·shell 빌드 통과. 독립 검토 추가 지적 없음.
+
+로그: `/tmp/translation-memory-red.log`, `/tmp/translation-memory-ui-tests.log`, `/tmp/translation-memory-docs-tests.log`, `/tmp/translation-memory-live.log`, `/tmp/translation-memory-ui-tsc.log`, `/tmp/translation-memory-docs-tsc.log`, `/tmp/translation-memory-build-docs.log`, `/tmp/translation-memory-build-shell.log`.
