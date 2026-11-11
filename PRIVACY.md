@@ -202,6 +202,34 @@ app's own features:
   in the editors. Searches are not asked about: a search query goes only to
   the search service.
 
+## Batched translation in Word chat
+
+When the chat AI invokes `translate_document` for in-place translation, the app
+collects supported body paragraphs locally instead of asking the model to read
+successive ranges. It sends their allowed text segments, transient IDs, target
+language and translation instructions to the same selected AI connection. The
+prepared project rules, glossary/reference material and selected skills retain
+their usual trust boundaries. No new provider is chosen or enabled.
+
+At most two independent translation requests run together. Batches target 6,000
+serialized source characters and at most 12 paragraphs. A longer paragraph stays
+whole; a unit above 24,000 serialized source characters is reported rather than
+silently shortened. Validated results are applied in document order through the
+existing formatting-preserving editor tools. Whole-document requests can include
+footnotes/endnotes when rollback is available. Partial-block selections,
+original-preserving bilingual output and review retain their existing paths;
+headers and footers are not included by this executor.
+
+Transient paragraph IDs, compatibility signatures, complete translated results
+and post-apply receipts remain in editor memory only. Compatibility signatures
+may represent fixed local content, and are never sent to the model. Reuse is
+bounded to 512 cache entries and 2 million serialized characters; older entries
+may be evicted. Exact source, scope, instructions/context and provider/model
+selection must still match. The cache is not a disk store or part of the saved
+document. Closing the editor removes it. Stop aborts active requests and rejects
+late replies; completed edits remain available to undo or roll back. Translation
+rollback restores the captured note lists together with the body.
+
 ## Comparing AI answers (Word editor)
 
 The **AI compare** window lists the app’s connected AIs and an optional Copilot

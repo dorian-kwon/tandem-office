@@ -61,6 +61,14 @@ Word 문서(.docx)와 ODT(.odt) 에디터다. 그리고 배포되는 앱 전체�
 - 문서 바이트는 IPC 응답이 아니라 미디어 프로토콜의 일회용 주소로 렌더러에 건넨다(`byte-handoff.ts`). IPC 직렬화가 버퍼를 통째로 복사해 1GB 파일에서 메인 프로세스가 죽었기 때문이다.
 - 디자인 템플릿 글꼴은 설치 파일에 한 번만 들어 있고(`resources/template-fonts`) 렌더러 빌드 자산으로 import하지 않는다. 같은 미디어 프로토콜의 `template-fonts` 호스트가 목록에 있는 파일만 내주고(`main/lazy-media.ts`가 `@genoffice/electron-utils/template-font-response`로 답한다. 면 목록과 주소는 `@genoffice/ui/template-fonts`에 있다), 렌더러가 시작할 때 실제 패밀리 이름으로 등록한다(`renderer/template-fonts.ts`). 인쇄와 PDF 내보내기(창 없는 내보내기 포함)는 같은 렌더러에서 돌므로 따로 등록하지 않는다.
 
+## 채팅 묶음 번역
+
+- `translate_document`는 언어·출력 방식이 정해진 본문/완전한 block 범위의 덮어쓰기 번역 도구다. `translation-chat.ts`가 실제 캡처한 범위와 준비된 문맥을 검증하고 `AiPanel`이 메인 제공자·모델을 고정한 독립 transport를 준다. 병기·감수·부분 문단 선택은 기존 도구를 유지한다.
+- `translation-units.ts`는 메모리 ID·버전과 불변 문단 캐시를 갖는다. 표 안 한 문단 변경은 그 문단만 추출하고, 노트 서명은 문단별이다. 원문·shape·ID는 적용 직전에 정확히 확인하며 shape는 모델에 보내지 않는다. 저장 문서의 속성은 추가하지 않는다.
+- `document-translator.ts`가 길이 묶음·동시 두 요청·원래 순서의 적용을 관리한다. 적용은 기존 `translate_blocks`를 동기 호출하고 적용 후 receipt를 받아 재사용한다. 오래된 fingerprint나 텍스트 중복으로 위치를 추측하지 않는다. 문맥 변경은 캐시를 분리하며 캐시는 편집기 세션 내에서 제한한다.
+- `translation-rollback.ts`의 노트 snapshot은 PM 본문 snapshot과 별도로 chat entry에 둔다. 같은 본문 노드에서도 노트는 바뀔 수 있다. `AiNotesAccess.restoreSnapshot`은 실제 App의 목록·dirty mirror를 복원하며, 이를 제공하지 않는 접근자에서는 노트 번역을 시작하지 않는다. 취소된 장기 도구의 반환을 기다려 부분 변경과 되돌리기를 기록하지 않는다.
+- 범위·제공자·취소 규칙을 바꾸면 `docs/security.md`의 "Word 채팅의 묶음 번역"과 `PRIVACY.md`를 함께 갱신한다. 검증에는 실제 editor+가짜 transport를 쓰며 사용자 구독을 호출하지 않는다.
+
 ## AI 비교
 
 - `components/AiComparePopover.tsx`는 연결된 내부 AI 목록과 후보별 스위치를 표시한다. 준비된 비종량 구독 연결과 명시적으로 선택한 실행 가능한 메인 AI를 중복 없이 후보로 쓰고 저장만 한 키·선택하지 않은 종량 연결은 추가하지 않는다. Copilot은 별도 웹 후보이며 `compare-sites.ts`의 항목 하나다. 내부 AI는 웹 driver로 보내지 않고 `compare/connected-ai.ts`의 공용 제공자 판정·send gate와 독립 transport를 쓴다.
