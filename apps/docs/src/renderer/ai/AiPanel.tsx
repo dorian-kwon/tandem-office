@@ -96,10 +96,11 @@ import {
 import type { AiPageSetupAccess } from './page-setup'
 import type { AiNotesAccess, NoteRollbackSnapshot } from './note-ops'
 import { captureNoteRollback, restoreNoteRollback } from './translation-rollback'
-import { createTranslationUnitIndex } from './translation-units'
+import { createTranslationUnitIndex, isVerifiedTranslationReload } from './translation-units'
 import type { AiDocumentTranslator, DocumentTranslationResult } from './document-translator'
 import {
   createChatDocumentTranslator,
+  mapTranslationScope,
   translationCounts,
   pinTranslationSettings,
   requestDocumentTranslation,
@@ -974,6 +975,7 @@ export function AiPanel({
     settings: AiSettings
     context: string
     frozen: FrozenSelection
+    candidate: FrozenSelection | null
   } | null>(null)
   const translationIncludesNotesRef = useRef(false)
 
@@ -1249,6 +1251,24 @@ export function AiPanel({
 
   useEffect(() => {
     const index = createTranslationUnitIndex(editor, () => notesAccessRef.current)
+    const trackScope = ({
+      transaction,
+    }: {
+      transaction: import('@tiptap/pm/state').Transaction
+    }) => {
+      const prepared = translationPreparedRef.current
+      if (transaction.docChanged && prepared?.candidate) {
+        if (
+          prepared.candidate.doc === transaction.before &&
+          isVerifiedTranslationReload(transaction)
+        ) {
+          prepared.candidate = { ...prepared.candidate, doc: transaction.doc }
+          prepared.frozen = prepared.candidate
+          lastTranslationFrozenRef.current = prepared.frozen
+        } else prepared.candidate = mapTranslationScope(prepared.candidate, transaction)
+      }
+    }
+    editor.on('transaction', trackScope)
     const translator = createChatDocumentTranslator({
       index,
       request: (request) => {
@@ -1271,7 +1291,6 @@ export function AiPanel({
         )
       },
       apply: (blocks) => {
-        const before = editor.state.doc
         editor.view.dispatch(closeHistory(editor.state.tr))
         const execution = executeTool(
           editor,
@@ -1295,15 +1314,8 @@ export function AiPanel({
         if (execution instanceof Promise) throw new Error('Translation commit must be synchronous.')
         if (execution.mutated && !trackChangesRef.current) clearAiHighlights(true)
         const prepared = translationPreparedRef.current
-        if (execution.mutated && prepared?.frozen.doc === before) {
-          const scope = { ...prepared.frozen.scope }
-          if (scope.isRange)
-            editor.state.doc.forEach((node, offset, index) => {
-              if (index === scope.startIndex) scope.from = offset + (node.isTextblock ? 1 : 0)
-              if (index === scope.endIndex)
-                scope.to = offset + node.nodeSize - (node.isTextblock ? 1 : 0)
-            })
-          prepared.frozen = { doc: editor.state.doc, scope }
+        if (execution.mutated && prepared?.candidate?.doc === editor.state.doc) {
+          prepared.frozen = prepared.candidate
           lastTranslationFrozenRef.current = prepared.frozen
         }
         return execution
@@ -1317,7 +1329,7 @@ export function AiPanel({
         translationProgressRef.current = result
         patchLastAssistant((last) => ({
           tools: last.tools?.map((tool) =>
-            tool.name === 'translate_document'
+            tool.name === 'translate_document' && tool.running
               ? { ...tool, summary: tModule('aiTranslationProgress', translationCounts(result)) }
               : tool,
           ),
@@ -1328,6 +1340,7 @@ export function AiPanel({
     return () => {
       translator.dispose()
       index.dispose()
+      editor.off('transaction', trackScope)
       if (translatorRef.current === translator) translatorRef.current = null
     }
     // The index belongs to this editor; current mutable accessors are refs.
@@ -1336,6 +1349,20 @@ export function AiPanel({
   const translationAccess: AiDocumentTranslationAccess = {
     get frozen() {
       return translationPreparedRef.current?.frozen
+    },
+    scopeRefused: (reason) => {
+      if (translationPreparedRef.current?.candidate?.doc === editorRef.current.state.doc) return
+      translationFailureRef.current = { message: reason }
+      translatorRef.current?.stop()
+      msgQueueRef.current.hold()
+      loopRef.current?.cancel()
+    },
+    refreshScope: () => {
+      const prepared = translationPreparedRef.current
+      if (prepared?.candidate?.doc === editorRef.current.state.doc) {
+        prepared.frozen = prepared.candidate
+        lastTranslationFrozenRef.current = prepared.frozen
+      }
     },
     run: (input, signal) => {
       const prepared = translationPreparedRef.current
@@ -1377,7 +1404,7 @@ export function AiPanel({
   translationAccessRef.current = translationAccess
   const settledTranslationTools = (tools: ToolActivity[] | undefined): ToolActivity[] | undefined =>
     tools?.flatMap((tool) => {
-      if (tool.name === 'translate_document' && translationProgressRef.current)
+      if (tool.name === 'translate_document' && tool.running && translationProgressRef.current)
         return [
           {
             ...tool,
@@ -1471,6 +1498,7 @@ export function AiPanel({
       events: runStatus.wrap({
         onText: (text) => queueAssistantText(text),
         onToolStart: (call) => {
+          if (call.name === 'translate_document') translationProgressRef.current = null
           // Live "running" chip: replaced in place by onToolExecuted
           patchLastAssistant((last) => ({
             tools: [
@@ -1912,6 +1940,7 @@ export function AiPanel({
                 .join('\n\n'),
             ),
             frozen: translationFrozen,
+            candidate: translationFrozen,
           }
         }
         return loop.run(instruction + skillUse.text, images)

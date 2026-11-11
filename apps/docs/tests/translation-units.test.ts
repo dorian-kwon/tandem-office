@@ -9,7 +9,14 @@ import {
   planNoteTranslations,
   recordTwins,
 } from '../src/renderer/ai/translate-runs'
-import { createTranslationUnitIndex } from '../src/renderer/ai/translation-units'
+import { createChatDocumentTranslator } from '../src/renderer/ai/translation-chat'
+import { carryDocSeen, executeTool, markDocSeen } from '../src/renderer/ai/tools'
+import { applyAnchorOnlyReload, SAVED_DOCUMENT_RELOAD_META } from '../src/renderer/save-reload'
+import { TRACK_IGNORE } from '../src/renderer/editor/revisions'
+import {
+  createTranslationUnitIndex,
+  isVerifiedTranslationReload,
+} from '../src/renderer/ai/translation-units'
 
 const editors: Editor[] = []
 afterEach(() => {
@@ -35,6 +42,194 @@ async function setup(blocks: PmNode[]) {
 }
 
 describe('editor memory translation units', () => {
+  it.each([
+    ['cleanup', false],
+    ['anchors', false],
+    ['saved-content', false],
+    ['cleanup', true],
+    ['anchors', true],
+    ['saved-content', true],
+  ] as const)(
+    'keeps 70 mixed units current across %s after two batches (tracked: %s)',
+    async (reload, tracked) => {
+      const body = Array.from({ length: 39 }, (_, i) => {
+        const block = p(`Body source ${i}.`)
+        if (i < 29)
+          block.content!.push({
+            type: 'docNoteRef',
+            attrs: { kind: 'footnote', id: String(i + 1), num: i + 1 },
+          })
+        return block
+      })
+      body.push({
+        type: 'docTable',
+        content: [
+          {
+            type: 'docTableRow',
+            content: [{ type: 'docTableCell', content: [p('Table first'), p('Table second')] }],
+          },
+        ],
+      })
+      const editor = await setup(body)
+      let notes: NoteInfo[] = Array.from({ length: 29 }, (_, i) => ({
+        id: String(i + 1),
+        text: `Note source ${i}.`,
+        richParas: [[{ text: `Note source ${i}.` }]],
+      }))
+      const access: AiNotesAccess = {
+        list: (kind) => (kind === 'footnote' ? notes : []),
+        add: () => '',
+        remove: () => false,
+        replace: (_kind, id, next) => {
+          notes = notes.map((note) => (note.id === id ? next : note))
+          return true
+        },
+      }
+      markDocSeen(editor)
+      const index = createTranslationUnitIndex(editor, () => access)
+      expect(index.snapshot(undefined, true)).toHaveLength(70)
+      let reloaded = false
+      let requests = 0
+      const translator = createChatDocumentTranslator({
+        index,
+        request: async ({ units }) => {
+          requests++
+          return JSON.stringify({
+            translations: units.map((unit) => ({
+              id: unit.id,
+              segments: unit.segments.map((text) => `A longer translated version of ${text}`),
+            })),
+          })
+        },
+        apply: (blocks) => {
+          const outcome = executeTool(
+            editor,
+            { id: 'apply', name: 'translate_blocks', input: { blocks } },
+            { bullet: null, ordered: null },
+            tracked ? { author: 'AI Assistant' } : undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            access,
+          )
+          if (outcome instanceof Promise)
+            throw new Error('Unexpected asynchronous translation apply')
+          return outcome
+        },
+        onBeforeCommit: () => {},
+        onProgress: (result) => {
+          if (reloaded || result.completed !== 24) return
+          reloaded = true
+          const before = editor.state.doc
+          if (reload === 'cleanup') {
+            let tr = editor.state.tr
+            before.forEach((node, pos) => {
+              if (node.attrs.aiChanged)
+                tr = tr.setNodeMarkup(pos, undefined, { ...node.attrs, aiChanged: false })
+            })
+            editor.view.dispatch(tr)
+          } else {
+            const rebased = editor.getJSON() as PmNode
+            rebased.content!.forEach((node, i) => {
+              node.attrs = {
+                ...node.attrs,
+                docxIndex: i + 100,
+                ...(reload === 'saved-content' && node.type === 'docParagraph'
+                  ? { styleId: 'Normal' }
+                  : {}),
+              }
+            })
+            const mode = applyAnchorOnlyReload(editor, rebased)
+            expect(mode).toBe(reload === 'anchors' ? 'anchors' : null)
+            if (mode === null)
+              editor
+                .chain()
+                .setMeta(TRACK_IGNORE, true)
+                .setMeta(SAVED_DOCUMENT_RELOAD_META, before)
+                .setContent(rebased as never)
+                .run()
+          }
+          carryDocSeen(editor, before)
+        },
+      })
+      const result = await translator.run({
+        provider: 'codex',
+        model: '',
+        targetLanguage: 'Korean',
+        includeNotes: true,
+      })
+      expect(reloaded).toBe(true)
+      expect({ completed: result.completed, stale: result.stale, failed: result.failed }).toEqual({
+        completed: 70,
+        stale: 0,
+        failed: 0,
+      })
+      const requestCount = requests
+      const resumed = await translator.run({
+        provider: 'codex',
+        model: '',
+        targetLanguage: 'Korean',
+        includeNotes: true,
+      })
+      expect({
+        completed: resumed.completed,
+        reused: resumed.reused,
+        stale: resumed.stale,
+        failed: resumed.failed,
+      }).toEqual({ completed: 0, reused: 70, stale: 0, failed: 0 })
+      expect(requests).toBe(requestCount)
+      translator.dispose()
+      index.dispose()
+    },
+  )
+
+  it.each(['source', 'segments', 'fixed', 'topology', 'provenance', 'unmarked'] as const)(
+    'refuses saved reload preservation after a %s change',
+    async (change) => {
+      const editor = await setup([
+        {
+          type: 'docParagraph',
+          content: [
+            { type: 'text', text: 'Alpha' },
+            { type: 'docNoteRef', attrs: { kind: 'footnote', id: '1', num: 1 } },
+          ],
+        },
+        p('Beta'),
+      ])
+      const index = createTranslationUnitIndex(editor)
+      const [before] = index.snapshot()
+      const oldDoc = editor.state.doc
+      const next = editor.getJSON() as PmNode
+      if (change === 'source') next.content![0].content![0].text = 'Changed'
+      if (change === 'segments')
+        next.content![0].content = [
+          { type: 'text', text: 'Al', marks: [{ type: 'italic' }] },
+          { type: 'text', text: 'pha' },
+          next.content![0].content![1],
+        ]
+      if (change === 'fixed') next.content![0].content![1].attrs!.id = '2'
+      if (change === 'topology') next.content!.push({ type: 'docParagraph' })
+      const chain = editor.chain().setMeta(TRACK_IGNORE, true)
+      if (change !== 'unmarked')
+        chain.setMeta(
+          SAVED_DOCUMENT_RELOAD_META,
+          change === 'provenance' ? editor.schema.nodeFromJSON(oldDoc.toJSON()) : oldDoc,
+        )
+      let verified = true
+      editor.on('transaction', ({ transaction }) => {
+        if (transaction.docChanged) verified = isVerifiedTranslationReload(transaction)
+      })
+      chain.setContent(next as never).run()
+      expect(verified).toBe(false)
+      expect(index.resolve(before)).toBeNull()
+      index.dispose()
+    },
+  )
+
   it('extracts each immutable block once and extracts only one block after a local edit', async () => {
     const editor = await setup([p('Alpha'), p('Beta'), p('Gamma')])
     const extract = vi.spyOn(runGroups, 'groupsOf')

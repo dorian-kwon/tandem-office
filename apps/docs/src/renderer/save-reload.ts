@@ -1,3 +1,4 @@
+import type { Transaction } from '@tiptap/pm/state'
 import type { Editor } from '@tiptap/core'
 import { Mark, type Node as PmNodeType } from '@tiptap/pm/model'
 import { TRACK_IGNORE } from './editor/revisions'
@@ -9,7 +10,7 @@ import { TRACK_IGNORE } from './editor/revisions'
  * legitimately changes them without the document changing, so they are refreshed in place.
  * `aiChanged` marks AI highlighting and keeps its live value.
  */
-const ANCHOR_ATTRS = [
+export const ANCHOR_ATTRS = [
   'docxIndex',
   'originalStructure',
   'originalFormatting',
@@ -18,6 +19,11 @@ const ANCHOR_ATTRS = [
   'rawTcPr',
 ] as const
 const IGNORED_ATTRS = new Set<string>([...ANCHOR_ATTRS, 'aiChanged'])
+
+/** Explicit provenance of the save pipeline's reparse, never inferred from Track Changes metadata. */
+export const SAVED_DOCUMENT_RELOAD_META = 'savedDocumentReload'
+export const isSavedDocumentReload = (transaction: Transaction): boolean =>
+  transaction.getMeta(SAVED_DOCUMENT_RELOAD_META) === transaction.before
 
 type AnchorUpdate = { pos: number; attr: string; value: unknown }
 

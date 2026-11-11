@@ -1,6 +1,7 @@
 import type { Editor } from '@tiptap/core'
 import type { Node as PmNode } from '@tiptap/pm/model'
 import type { Transaction } from '@tiptap/pm/state'
+import { ANCHOR_ATTRS, isSavedDocumentReload } from '../save-reload'
 import type { AiNotesAccess } from './note-ops'
 import { isTrackedDeleted } from './doc-utils'
 import {
@@ -57,6 +58,70 @@ const sameSource = (
   a.segments.length === b.segments.length &&
   a.segments.every((s, i) => s === b.segments[i])
 
+const sourceAttrs = (attrs: PmNode['attrs']): Record<string, unknown> =>
+  Object.fromEntries(
+    Object.entries(attrs).filter(
+      ([key]) => key !== 'aiChanged' && !(ANCHOR_ATTRS as readonly string[]).includes(key),
+    ),
+  )
+
+function paragraphSource(node: PmNode): Pick<Extracted, 'segments' | 'fp' | 'shape'> {
+  const groups = groupsOf(node, 0)
+  const segments = Object.freeze(groups.map((g) => g.text))
+  // Mask only text the executor may replace. Fixed text, whitespace, tabs and atoms stay exact.
+  const children: unknown[] = []
+  node.forEach((child, offset) => {
+    const own = groups.filter((g) => g.from >= 1 + offset && g.to <= 1 + offset + child.nodeSize)
+    if (!child.isText || own.length === 0) children.push(child.toJSON())
+    else {
+      let at = 0
+      const parts: unknown[] = []
+      for (const group of own) {
+        const start = group.from - 1 - offset
+        parts.push((child.text ?? '').slice(at, start), { prose: true })
+        at = group.to - 1 - offset
+      }
+      parts.push((child.text ?? '').slice(at))
+      children.push(parts)
+    }
+  })
+  return {
+    segments,
+    fp: runFingerprint(segments),
+    shape: JSON.stringify([node.type.name, children]),
+  }
+}
+
+/** Same source and fixed structure at the same addresses across a trusted save reparse. */
+function isCompatibleSavedDocumentReload(transaction: Transaction, current: PmNode): boolean {
+  if (!isSavedDocumentReload(transaction)) return false
+  const signature = (node: PmNode): unknown => {
+    if (node.isTextblock && !isTrackedDeleted(node)) {
+      const source = paragraphSource(node)
+      return [node.type.name, source.segments, source.shape]
+    }
+    const children: unknown[] = []
+    node.forEach((child) => children.push(signature(child)))
+    return [
+      node.type.name,
+      sourceAttrs(node.attrs),
+      node.marks.map((mark) => mark.toJSON()),
+      node.text,
+      children,
+    ]
+  }
+  const before = JSON.stringify(signature(transaction.before))
+  return (
+    before === JSON.stringify(signature(transaction.doc)) &&
+    (current === transaction.doc || before === JSON.stringify(signature(current)))
+  )
+}
+
+const verifiedSavedReloads = new WeakSet<Transaction>()
+/** Register the editor's unit index before scope listeners so this proof is available to them. */
+export const isVerifiedTranslationReload = (transaction: Transaction): boolean =>
+  verifiedSavedReloads.has(transaction)
+
 let indexSerial = 0
 
 /** Session-only provenance. Neither signatures nor identities are saved in the document. */
@@ -94,32 +159,7 @@ export function createTranslationUnitIndex(
     const out = blocks.map(({ node, pos }) => {
       let local = paragraphCache.get(node)
       if (!local) {
-        const groups = groupsOf(node, 0)
-        const segments = Object.freeze(groups.map((g) => g.text))
-        // Mask only text the executor may replace. Fixed text, whitespace, tabs and atoms stay exact.
-        const children: unknown[] = []
-        node.forEach((child, offset) => {
-          const own = groups.filter(
-            (g) => g.from >= 1 + offset && g.to <= 1 + offset + child.nodeSize,
-          )
-          if (!child.isText || own.length === 0) children.push(child.toJSON())
-          else {
-            let at = 0
-            const parts: unknown[] = []
-            for (const group of own) {
-              const start = group.from - 1 - offset
-              parts.push((child.text ?? '').slice(at, start), { prose: true })
-              at = group.to - 1 - offset
-            }
-            parts.push((child.text ?? '').slice(at))
-            children.push(parts)
-          }
-        })
-        local = {
-          segments,
-          fp: runFingerprint(segments),
-          shape: JSON.stringify([node.type.name, children]),
-        }
+        local = paragraphSource(node)
         paragraphCache.set(node, local)
       }
       const path: unknown[] = []
@@ -127,7 +167,7 @@ export function createTranslationUnitIndex(
         const resolved = top.resolve(pos + 1)
         for (let depth = 0; depth < resolved.depth; depth++) {
           const ancestor = resolved.node(depth)
-          path.push([ancestor.type.name, ancestor.attrs])
+          path.push([ancestor.type.name, sourceAttrs(ancestor.attrs)])
         }
       }
       return {
@@ -150,7 +190,7 @@ export function createTranslationUnitIndex(
         if (from === 0 && to === transaction.docs[i].content.size) reset = true
       }),
     )
-    if (reset) notes.clear()
+    const savedReload = reset && transaction && isCompatibleSavedDocumentReload(transaction, doc)
     const old = reset ? [] : entries
     const oldByNode = new Map<PmNode, Entry[]>()
     for (const e of old) oldByNode.set(e.node, [...(oldByNode.get(e.node) ?? []), e])
@@ -208,6 +248,29 @@ export function createTranslationUnitIndex(
         }),
       )
     })
+    if (
+      savedReload &&
+      pending.length === entries.length &&
+      pending.every((entry, i) => {
+        const previous = entries[i].unit
+        const address = previous.address
+        return (
+          address.kind === 'body' &&
+          address.index === entry.index &&
+          address.paragraph ===
+            (entry.top.type.name === 'docTable' ? entry.paragraph : undefined) &&
+          sameSource(previous, entry)
+        )
+      })
+    ) {
+      verifiedSavedReloads.add(transaction!)
+      entries = pending.map((entry, i) => ({
+        ...entry,
+        unit: make(entry, entries[i].unit.address, entries[i].unit),
+      }))
+      return
+    }
+    if (reset) notes.clear()
     const newCounts = new Map<PmNode, number>()
     for (const e of pending) newCounts.set(e.node, (newCounts.get(e.node) ?? 0) + 1)
     const used = new Set<string>()

@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import JSZip from 'jszip'
 import { Editor } from '@tiptap/core'
 import { parseDocx, readSections } from '@genoffice/docx-engine'
@@ -12,12 +12,16 @@ import { collectRevisions } from '../src/renderer/editor/revisions'
 import { executeTool } from '../src/renderer/ai/tools'
 import { noteDocumentSwapped, save, type FileActionContext } from '../src/renderer/file-actions'
 import { EMPTY_HF_VARIANTS } from '../src/renderer/doc-state'
+import * as savedReload from '../src/renderer/save-reload'
+import type { AiNotesAccess } from '../src/renderer/ai/note-ops'
+import { createTranslationUnitIndex } from '../src/renderer/ai/translation-units'
 
 ;(globalThis as { CSS?: unknown }).CSS ??= { escape: (s: string) => s }
 
 const dirs: string[] = []
 const editors: Editor[] = []
 afterEach(async () => {
+  vi.restoreAllMocks()
   for (const editor of editors.splice(0)) editor.destroy()
   for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true })
 })
@@ -27,9 +31,28 @@ const first = paragraph('Unchanged opening paragraph.')
 const last = paragraph('Unchanged closing paragraph.')
 const bodyXml = first + TABLE_XML + paragraph('Respond within forty-eight (48) hours.') + last
 
-async function fixture(tracking: boolean) {
+async function fixture(tracking: boolean, withNotes = false) {
   noteDocumentSwapped()
-  const bytes = await buildDocx({ bodyXml })
+  const bytes = await buildDocx({
+    bodyXml: withNotes
+      ? bodyXml +
+        '<w:p><w:r><w:t>Note anchor.</w:t></w:r><w:r><w:footnoteReference w:id="1"/></w:r></w:p>'
+      : bodyXml,
+    ...(withNotes
+      ? {
+          extraRels:
+            '<Relationship Id="rIdNotes" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes" Target="footnotes.xml"/>',
+          extraParts: [
+            {
+              path: 'word/footnotes.xml',
+              contentType:
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml',
+              xml: '<w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:footnote w:id="1"><w:p><w:r><w:t>Pending note source.</w:t></w:r></w:p></w:footnote></w:footnotes>',
+            },
+          ],
+        }
+      : {}),
+  })
   const parsed = await parseDocx(bytes)
   const dir = await mkdtemp(join(tmpdir(), 'genoffice-save-tracked-'))
   dirs.push(dir)
@@ -46,6 +69,8 @@ async function fixture(tracking: boolean) {
   const state = {
     editor,
     doc: { parsed, filePath: path, fileName: 'fixture.docx', hash: 'fixture' },
+    footnotes: parsed.footnotes,
+    endnotes: parsed.endnotes,
     dirtyRef: { current: false },
     saveInFlightRef: { current: false },
     saveIncompleteRef: { current: false },
@@ -63,6 +88,14 @@ async function fixture(tracking: boolean) {
   const noop = () => {}
   const ctx = new Proxy(state, {
     get(target, prop) {
+      if (prop === 'setFootnotes')
+        return (value: typeof state.footnotes) => {
+          target.footnotes = value
+        }
+      if (prop === 'setEndnotes')
+        return (value: typeof state.endnotes) => {
+          target.endnotes = value
+        }
       if (prop === 'setDoc')
         return (updater: (prev: typeof state.doc) => typeof state.doc) => {
           target.doc = updater(target.doc)
@@ -181,5 +214,29 @@ describe('production save reload with track changes enabled', () => {
     expect(await save(ctx, false, true)).toBe(true)
     expect(editor.state.doc.childCount).toBe(4)
     expect(collectRevisions(editor.state.doc)).toHaveLength(0)
+  })
+
+  it('keeps pending translation provenance through the production save fallback', async () => {
+    const { editor, ctx } = await fixture(false, true)
+    const notes: AiNotesAccess = {
+      list: (kind) => (kind === 'footnote' ? ctx.footnotes : ctx.endnotes),
+      add: () => '',
+      remove: () => false,
+      replace: () => false,
+    }
+    const originalNotes = ctx.footnotes
+    expect(originalNotes).toHaveLength(1)
+    const index = createTranslationUnitIndex(editor, () => notes)
+    const pending = index.snapshot(undefined, true)
+    expect(pending[0].segments).toEqual(['Unchanged opening paragraph.'])
+    // The shape-normalizing save branch is covered by the 70-unit regression;
+    // force it here to exercise the production writer/reparse/dispatch seam.
+    vi.spyOn(savedReload, 'applyAnchorOnlyReload').mockReturnValue(null)
+    expect(await save(ctx, false, true)).toBe(true)
+    expect(ctx.footnotes).not.toBe(originalNotes)
+    expect(pending.some((unit) => unit.segments.includes('Pending note source.'))).toBe(true)
+    expect(pending.every((unit) => index.resolve(unit) !== null)).toBe(true)
+    expect(index.resolve(pending[0])?.segments).toEqual(['Unchanged opening paragraph.'])
+    index.dispose()
   })
 })

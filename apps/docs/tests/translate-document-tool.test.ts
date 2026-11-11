@@ -322,3 +322,43 @@ it('preserves literal document keys and passwords through an actual adapter self
   translator.dispose()
   index.dispose()
 })
+
+describe('translation scope provenance', () => {
+  it('maps formatting changes and inserted preceding blocks without including them', async () => {
+    const { mapTranslationScope } = await import('../src/renderer/ai/translation-chat')
+    const editor = make()
+    const frozen = { doc: editor.state.doc, scope: { startIndex: 0, endIndex: 1, isRange: false } }
+    const styled = editor.state.tr.setNodeMarkup(0, undefined, {
+      ...editor.state.doc.child(0).attrs,
+      aiChanged: true,
+    })
+    const mapped = mapTranslationScope(frozen, styled)
+    expect(mapped?.doc).toBe(styled.doc)
+    const inserted = editor.state.tr.insert(
+      0,
+      editor.schema.nodes.docParagraph.create({}, editor.schema.text('Outside original scope')),
+    )
+    const narrowed = mapTranslationScope(frozen, inserted)
+    expect(narrowed?.scope.isRange).toBe(true)
+    expect(narrowed?.scope.startIndex).toBe(1)
+    expect(narrowed?.scope.endIndex).toBe(2)
+  })
+
+  it('refuses recreated blocks, split paragraphs and an inserted gap within the original scope', async () => {
+    const { mapTranslationScope } = await import('../src/renderer/ai/translation-chat')
+    const editor = make()
+    const frozen = { doc: editor.state.doc, scope: { startIndex: 0, endIndex: 1, isRange: false } }
+    const recreated = editor.state.tr.replaceWith(
+      0,
+      editor.state.doc.content.size,
+      editor.schema.nodeFromJSON(editor.state.doc.toJSON()).content,
+    )
+    expect(mapTranslationScope(frozen, recreated)).toBeNull()
+    expect(mapTranslationScope(frozen, editor.state.tr.split(4))).toBeNull()
+    const inserted = editor.state.tr.insert(
+      editor.state.doc.child(0).nodeSize,
+      editor.schema.nodes.docParagraph.create({}, editor.schema.text('New gap')),
+    )
+    expect(mapTranslationScope(frozen, inserted)).toBeNull()
+  })
+})

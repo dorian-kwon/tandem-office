@@ -1686,6 +1686,8 @@ function executeToolUnguarded(
       call.name === 'read_blocks' ||
       call.name === 'read_runs'
     if (exec.mutated || (readsDoc && !exec.isError)) markDocSeen(editor)
+    if (!exec.isError && (call.name === 'get_document_context' || call.name === 'read_runs'))
+      translator?.refreshScope?.()
     return exec
   }
   // Async tools take a separate Promise branch; the other sync tools keep returning
@@ -1712,7 +1714,11 @@ function executeToolUnguarded(
     const summary = t('aiSumTranslateDocument')
     if (!translator) return fail(summary, 'Document translation is unavailable in this editor.')
     const validation = validateDocumentTranslation(editor, call.input, translator.frozen ?? frozen)
-    if (typeof validation === 'string') return fail(summary, validation)
+    if (typeof validation === 'string') {
+      if (validation.startsWith('The captured document scope changed.'))
+        translator.scopeRefused?.(validation)
+      return fail(summary, validation)
+    }
     return translator.run(validation, signal, frozen).then((result) => ({
       output: JSON.stringify({
         ...result,

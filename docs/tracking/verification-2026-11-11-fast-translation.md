@@ -24,3 +24,17 @@
 원문 병기·감수·부분 문단 선택은 기존 경로를 유지한다. 새 실행기는 머리글/바닥글을 처리했다고 주장하지 않는다. 메모리 캐시는 편집기를 닫으면 사라지고 제한을 넘으면 오래된 항목을 제거한다. 실제 AI 호출·실제 속도·품질 시험은 하지 않았으며 개선 배수나 소요 시간은 주장하지 않는다.
 
 로그: `/tmp/translation-fast-final-full-tests.log`, `/tmp/translation-fast-final-tsc.log`, `/tmp/translation-fast-final-lint.log`, `/tmp/translation-fast-final-format.log`, `/tmp/translation-fast-final-build-docs.log`, `/tmp/translation-fast-final-build-shell.log`.
+
+## 저장 중 번역 무효화 수정
+
+사용자 보고의 `완료 24 / 변경됨 46 / 실패 0`을 본문·표 41개와 각주 29개로 재현했다. 24개 적용 후 저장된 문서를 다시 읽으면 원문이 같아도 전체 교체 트랜잭션이 메모리 ID와 노트 식별을 초기화했다. 표의 저장 기준 속성 갱신도 두 구간을 무효화했다.
+
+- 실제 저장 경로에 이전 문서 참조를 붙이고, 원문·고정 구조·순서·주소가 모두 같은 저장 재읽기만 ID와 범위를 유지한다. 일반 전체 교체, 실제 원문 변경, 분할·병합·이동은 계속 거절한다.
+- 같은 요청의 문서 재읽기는 입증된 원래 범위를 갱신한다. 복구할 수 없는 범위는 반복 호출을 멈춘다. 개별 도구의 부분 범위가 원래 허용 범위를 축소하지 않으며 이전 완료 카드의 수치도 보존한다.
+- 변경 내용 추적 켜짐/꺼짐 각각에서 정리·속성 갱신·전체 저장 재읽기 모두 **완료 70 / 변경됨 0 / 실패 0**, 반복 실행은 70개 재사용·추가 요청 0으로 확인했다.
+- 실제 DOCX 쓰기·재파싱·각주 배열 교체를 거치는 저장 회귀 검사 통과. 저장 표시를 제거한 대조 실행은 pending provenance 검사에서 실패했고, 복원 후 6개 저장 검사 모두 통과했다.
+- 실제 패널의 가짜 IPC에서 같은 대화 재읽기, 연속 부분 범위, 원래 전체 범위 재시도, 완료 카드별 독립 수치를 검증했다. 독립 검토의 두 지적을 회귀 검사와 함께 수정했다.
+- 최종 전체 **460파일 / 4,409개 통과 / 기존 1개 제외**, exit 0. 타입 검사, 변경 파일 ESLint·Prettier, English-comment·theme-color·brand 검사와 docs·shell 빌드 통과.
+- 저장 완료·실행 종료를 확인한 뒤 기존 프로세스의 정상 종료 기록과 종료를 확인했다. 같은 프로필로 수정 빌드를 실행했고 새 renderer가 로컬 읽기 요청에 답했다. 실제 AI 요청은 직접 보내지 않았다.
+
+로그: `/tmp/translation-reload-final-full-tests.log`, `/tmp/translation-reload-final-tsc.log`, `/tmp/translation-reload-final-lint.log`, `/tmp/translation-reload-final-format.log`, `/tmp/translation-reload-build-docs.log`, `/tmp/translation-reload-build-shell.log`, `/tmp/translation-save-production-red.log`, `/tmp/translation-save-production-green.log`.

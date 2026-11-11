@@ -990,3 +990,374 @@ describe('AI panel: translation outgoing payload sanitation', () => {
     }
   })
 })
+
+describe('AI panel: translation scope refresh after a document read', () => {
+  it('can retry the original scope after compatible external formatting and own translation commits', async () => {
+    const editor = createEditor()
+    let finishBatch!: () => void
+    let turn = 0
+    harness = await mountPanel({
+      editor,
+      settings: settingsWith('gemini'),
+      answer: (request, emit) => {
+        if (request.tools?.length) {
+          const name = turn === 1 ? 'get_document_context' : 'translate_document'
+          if (turn < 3)
+            emit({
+              type: 'tool-call',
+              toolCall: {
+                id: `refresh-${turn}`,
+                name,
+                input: name === 'translate_document' ? { targetLanguage: 'Korean' } : {},
+              },
+            })
+          else emit({ type: 'delta', text: 'Done' })
+          turn++
+          emit({ type: 'done' })
+        } else {
+          const data = JSON.parse((request.messages[0] as { text: string }).text)
+          finishBatch = () => {
+            emit({
+              type: 'delta',
+              text: JSON.stringify({
+                translations: data.units.map((unit: { id: string; segments: string[] }) => ({
+                  id: unit.id,
+                  segments: unit.segments.map((text) => `Translated ${text}`),
+                })),
+              }),
+            })
+            emit({ type: 'done' })
+          }
+        }
+      },
+    })
+    await harness.send('Translate the whole body in place')
+    const node = editor.state.doc.child(0)
+    editor.view.dispatch(
+      editor.state.tr.setNodeMarkup(0, undefined, { ...node.attrs, aiChanged: true }),
+    )
+    await act(async () => finishBatch())
+    await settle()
+    const replies = harness.requests.flatMap((request) =>
+      request.messages.filter((message) => message.role === 'tool'),
+    )
+    expect(JSON.stringify(replies)).not.toContain('The captured document scope changed')
+    expect(editor.state.doc.textContent).toBe('Translated EVs market research')
+    expect(turn).toBe(4)
+  })
+})
+
+describe('AI panel: explicit reads reestablish only the original translation scope', () => {
+  it.each(['get_document_context', 'read_runs'])(
+    'refreshes after %s without following a moved DOM selection',
+    async (readTool) => {
+      const editor = createEditor()
+      editor.commands.setContent({
+        type: 'doc',
+        content: ['First', 'Second'].map((text) => ({
+          type: 'docParagraph',
+          content: [{ type: 'text', text }],
+        })),
+      })
+      editor.commands.setTextSelection({ from: 1, to: 6 })
+      let turn = 0
+      let batches = 0
+      harness = await mountPanel({
+        editor,
+        settings: settingsWith('gemini'),
+        answer: (request, emit) => {
+          if (request.tools?.length) {
+            if (turn === 1) {
+              const first = editor.state.doc.child(0)
+              editor.view.dispatch(
+                editor.state.tr.setNodeMarkup(0, undefined, { ...first.attrs, aiChanged: true }),
+              )
+              editor.commands.setTextSelection(editor.state.doc.child(0).nodeSize + 2)
+            }
+            const name = turn === 1 ? readTool : 'translate_document'
+            if (turn < 3)
+              emit({
+                type: 'tool-call',
+                toolCall: {
+                  id: `read-${turn}`,
+                  name,
+                  input:
+                    name === 'translate_document'
+                      ? { targetLanguage: 'Korean' }
+                      : name === 'read_runs'
+                        ? { startBlockIndex: 0, endBlockIndex: 0 }
+                        : {},
+                },
+              })
+            else emit({ type: 'delta', text: 'Done' })
+            turn++
+          } else {
+            batches++
+            const data = JSON.parse((request.messages[0] as { text: string }).text)
+            expect(data.units).toHaveLength(1)
+            emit({
+              type: 'delta',
+              text: JSON.stringify({
+                translations: data.units.map((unit: { id: string; segments: string[] }) => ({
+                  id: unit.id,
+                  segments: unit.segments.map((text) => `Translated ${text}`),
+                })),
+              }),
+            })
+          }
+          emit({ type: 'done' })
+        },
+      })
+      await harness.send('Translate selected block')
+      expect(batches).toBe(1)
+      expect(turn).toBe(4)
+      expect(editor.state.doc.textContent).toBe('Translated FirstSecond')
+      const outputs = harness.requests.flatMap((request) =>
+        request.messages.filter((message) => message.role === 'tool'),
+      )
+      expect(JSON.stringify(outputs)).not.toContain('The captured document scope changed')
+    },
+  )
+
+  it('stops repeated tool attempts when a full replacement destroyed original scope provenance', async () => {
+    const editor = createEditor()
+    let finishBatch!: () => void
+    let turn = 0
+    harness = await mountPanel({
+      editor,
+      settings: settingsWith('gemini'),
+      answer: (request, emit) => {
+        if (request.tools?.length) {
+          if (turn === 1)
+            editor.commands.setContent({
+              type: 'doc',
+              content: [
+                {
+                  type: 'docParagraph',
+                  content: [{ type: 'text', text: 'User replaced document' }],
+                },
+              ],
+            })
+          const name = turn === 1 ? 'get_document_context' : 'translate_document'
+          emit({
+            type: 'tool-call',
+            toolCall: {
+              id: `blocked-${turn}`,
+              name,
+              input: name === 'translate_document' ? { targetLanguage: 'Korean' } : {},
+            },
+          })
+          turn++
+          emit({ type: 'done' })
+        } else {
+          const data = JSON.parse((request.messages[0] as { text: string }).text)
+          finishBatch = () => {
+            emit({
+              type: 'delta',
+              text: JSON.stringify({
+                translations: data.units.map((unit: { id: string; segments: string[] }) => ({
+                  id: unit.id,
+                  segments: unit.segments.map((text) => `Translated ${text}`),
+                })),
+              }),
+            })
+            emit({ type: 'done' })
+          }
+        }
+      },
+    })
+    await harness.send('Translate body')
+    await act(async () => finishBatch())
+    await settle()
+    expect(turn).toBe(3)
+    expect(harness.container.textContent).toContain('new message')
+    expect(editor.state.doc.textContent).toBe('User replaced document')
+    expect(harness.requests.filter((request) => !request.tools?.length)).toHaveLength(1)
+  })
+})
+
+describe('AI panel: verified save reload during translation', () => {
+  it('keeps the captured range and avoids retry loops after save baseline anchors are refreshed', async () => {
+    const { SAVED_DOCUMENT_RELOAD_META } = await import('../src/renderer/save-reload')
+    const editor = createEditor()
+    editor.commands.setContent({
+      type: 'doc',
+      content: ['First', 'Second'].map((text) => ({
+        type: 'docParagraph',
+        content: [{ type: 'text', text }],
+      })),
+    })
+    editor.commands.setTextSelection({ from: 1, to: 6 })
+    let finishBatch!: () => void
+    let turn = 0
+    let batches = 0
+    harness = await mountPanel({
+      editor,
+      settings: settingsWith('gemini'),
+      answer: (request, emit) => {
+        if (request.tools?.length) {
+          if (turn < 2)
+            emit({
+              type: 'tool-call',
+              toolCall: {
+                id: `save-${turn}`,
+                name: 'translate_document',
+                input: { targetLanguage: 'Korean' },
+              },
+            })
+          else emit({ type: 'delta', text: 'Done' })
+          turn++
+          emit({ type: 'done' })
+        } else {
+          batches++
+          const data = JSON.parse((request.messages[0] as { text: string }).text)
+          expect(data.units).toHaveLength(1)
+          finishBatch = () => {
+            emit({
+              type: 'delta',
+              text: JSON.stringify({
+                translations: data.units.map((unit: { id: string; segments: string[] }) => ({
+                  id: unit.id,
+                  segments: unit.segments.map((text) => `Translated ${text}`),
+                })),
+              }),
+            })
+            emit({ type: 'done' })
+          }
+        }
+      },
+    })
+    await harness.send('Translate the selected paragraph')
+    const before = editor.state.doc
+    const normalized = before.toJSON()
+    normalized.content.forEach((node: { attrs: Record<string, unknown> }, index: number) => {
+      node.attrs = { ...node.attrs, docxIndex: index }
+    })
+    editor.view.dispatch(
+      editor.state.tr
+        .replaceWith(0, before.content.size, editor.schema.nodeFromJSON(normalized).content)
+        .setMeta(SAVED_DOCUMENT_RELOAD_META, before),
+    )
+    editor.commands.setTextSelection(editor.state.doc.child(0).nodeSize + 2)
+    await act(async () => finishBatch())
+    await settle()
+    expect(turn).toBe(3)
+    expect(batches).toBe(1)
+    expect(editor.state.doc.textContent).toBe('Translated FirstSecond')
+    const outputs = harness.requests.flatMap((request) =>
+      request.messages.filter((message) => message.role === 'tool'),
+    )
+    expect(JSON.stringify(outputs)).not.toContain('The captured document scope changed')
+    expect(harness.container.querySelector('.ai-msg-error')).toBeNull()
+  })
+})
+
+describe('AI panel: successive translation subranges', () => {
+  it.each(['whole body', 'selected blocks'])(
+    'keeps the original %s boundary and each completed chip count',
+    async (authorization) => {
+      const editor = createEditor()
+      const texts =
+        authorization === 'whole body'
+          ? ['First', 'Second', 'Third']
+          : ['First', 'Second', 'Third', 'Outside']
+      editor.commands.setContent({
+        type: 'doc',
+        content: texts.map((text) => ({ type: 'docParagraph', content: [{ type: 'text', text }] })),
+      })
+      if (authorization === 'selected blocks')
+        editor.commands.setTextSelection({
+          from: 1,
+          to:
+            editor.state.doc.child(0).nodeSize +
+            editor.state.doc.child(1).nodeSize +
+            editor.state.doc.child(2).nodeSize -
+            1,
+        })
+      let turn = 0
+      const batchSizes: number[] = []
+      harness = await mountPanel({
+        editor,
+        settings: settingsWith('gemini'),
+        answer: (request, emit) => {
+          if (request.tools?.length) {
+            if (turn === 0) {
+              for (const [id, startBlockIndex, endBlockIndex] of [
+                ['first', 0, 0],
+                ['second', 1, 2],
+              ] as const)
+                emit({
+                  type: 'tool-call',
+                  toolCall: {
+                    id,
+                    name: 'translate_document',
+                    input: { targetLanguage: 'Korean', startBlockIndex, endBlockIndex },
+                  },
+                })
+            } else if (turn === 1)
+              emit({
+                type: 'tool-call',
+                toolCall: {
+                  id: 'original-scope',
+                  name: 'translate_document',
+                  input: { targetLanguage: 'Korean' },
+                },
+              })
+            else emit({ type: 'delta', text: 'Done' })
+            turn++
+          } else {
+            const data = JSON.parse((request.messages[0] as { text: string }).text)
+            batchSizes.push(data.units.length)
+            emit({
+              type: 'delta',
+              text: JSON.stringify({
+                translations: data.units.map((unit: { id: string; segments: string[] }) => ({
+                  id: unit.id,
+                  segments: unit.segments.map((text) => `Translated ${text}`),
+                })),
+              }),
+            })
+          }
+          emit({ type: 'done' })
+        },
+      })
+      await harness.send(`Translate ${authorization}`)
+      expect(batchSizes).toEqual([1, 2])
+      expect(turn).toBe(3)
+      expect(editor.state.doc.textContent).toBe(
+        'Translated FirstTranslated SecondTranslated Third' +
+          (authorization === 'selected blocks' ? 'Outside' : ''),
+      )
+      const { t } = await import('../src/renderer/i18n/locale')
+      const summaries = Array.from(
+        harness.container.querySelectorAll('.ai-step-title[data-tip="translate_document"]'),
+      ).map((element) => element.textContent)
+      expect(summaries).toEqual([
+        t('aiTranslationProgress', {
+          completed: 1,
+          reused: 0,
+          failed: 0,
+          stale: 0,
+          skipped: 0,
+          pending: 0,
+        }),
+        t('aiTranslationProgress', {
+          completed: 2,
+          reused: 0,
+          failed: 0,
+          stale: 0,
+          skipped: 0,
+          pending: 0,
+        }),
+        t('aiTranslationProgress', {
+          completed: 0,
+          reused: 3,
+          failed: 0,
+          stale: 0,
+          skipped: 0,
+          pending: 0,
+        }),
+      ])
+    },
+  )
+})

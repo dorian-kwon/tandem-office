@@ -98,7 +98,7 @@ import {
 import { t, getLang } from './i18n/locale'
 import { isBlankDocument, parseHtmlFragment, replaceBlockRange } from './ai/protocol'
 import { carryDocSeen } from './ai/tools'
-import { applyAnchorOnlyReload } from './save-reload'
+import { applyAnchorOnlyReload, SAVED_DOCUMENT_RELOAD_META } from './save-reload'
 import { isDocDirty, resetCrossDocEditState } from './doc-dirty'
 import { pruneUnreferencedNumbering } from './numbering-actions'
 import { applySectPrRewrites, type SectPrRewrite } from './sectpr-rewrite'
@@ -1470,6 +1470,7 @@ async function saveOnce(
       // reload as a user edit.
       editor
         .chain()
+        .setMeta(SAVED_DOCUMENT_RELOAD_META, docBeforeReload)
         .setMeta(TRACK_IGNORE, true)
         .setContent(rebasedPm as never)
         .run()

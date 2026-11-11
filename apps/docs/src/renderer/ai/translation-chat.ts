@@ -1,3 +1,4 @@
+import type { Transaction } from '@tiptap/pm/state'
 import type { Editor } from '@tiptap/core'
 import { sanitizeAgentPayload, streamText, type AgentTransport } from '@genoffice/agent-core'
 import type { AiSendGate } from '@genoffice/ui'
@@ -17,6 +18,8 @@ export type DocumentTranslationInput = Pick<
 >
 export interface AiDocumentTranslationAccess {
   readonly frozen?: FrozenSelection
+  refreshScope?(): void
+  scopeRefused?(reason: string): void
 
   run(
     input: DocumentTranslationInput,
@@ -36,6 +39,88 @@ export function translationCounts(result: DocumentTranslationResult): Record<str
   }
 }
 
+/** Follow the original complete blocks, refusing split/merge/recreation or inserted gaps. */
+export function mapTranslationScope(
+  frozen: FrozenSelection,
+  tr: Transaction,
+): FrozenSelection | null {
+  if (frozen.doc !== tr.before) return null
+  const first = frozen.scope.isRange ? frozen.scope.startIndex : 0
+  const last = frozen.scope.isRange ? frozen.scope.endIndex : frozen.doc.childCount - 1
+  const tracked: Array<{ from: number; to: number }> = []
+  frozen.doc.forEach((node, pos, index) => {
+    if (index >= first && index <= last) tracked.push({ from: pos, to: pos + node.nodeSize })
+  })
+  for (let i = 0; i < tr.mapping.maps.length; i++) {
+    const map = tr.mapping.maps[i]
+    const before = tr.docs[i]
+    const after = tr.docs[i + 1] ?? tr.doc
+    for (const span of tracked) {
+      const originalNode = before.nodeAt(span.from)
+      const start = map.mapResult(span.from, 1)
+      const end = map.mapResult(span.to, -1)
+      if (!start.deleted && !end.deleted) {
+        span.from = start.pos
+        span.to = end.pos
+      } else {
+        const insideStart = map.mapResult(span.from + 1, 1)
+        const insideEnd = map.mapResult(span.to - 1, -1)
+        const oldNode = before.nodeAt(span.from)
+        const nextPos = insideStart.pos - 1
+        const nextNode = nextPos >= 0 ? after.nodeAt(nextPos) : null
+        if (
+          insideStart.deleted ||
+          insideEnd.deleted ||
+          !oldNode ||
+          !nextNode ||
+          oldNode.type !== nextNode.type ||
+          oldNode.content !== nextNode.content ||
+          nextPos + nextNode.nodeSize !== insideEnd.pos + 1
+        )
+          return null
+        span.from = nextPos
+        span.to = insideEnd.pos + 1
+      }
+      const next = after.nodeAt(span.from)
+      if (!next || next.nodeSize + span.from !== span.to || next.type !== originalNode?.type)
+        return null
+    }
+  }
+  const indices: number[] = []
+  const ends = new Map(tracked.map((span) => [span.from, span.to]))
+  tr.doc.forEach((node, pos, index) => {
+    if (ends.get(pos) === pos + node.nodeSize) indices.push(index)
+  })
+  if (indices.length !== tracked.length || indices.some((index, i) => index !== indices[0] + i))
+    return null
+  const scope = { ...frozen.scope, startIndex: indices[0], endIndex: indices.at(-1)! }
+  if (!scope.isRange && (scope.startIndex !== 0 || scope.endIndex !== tr.doc.childCount - 1))
+    scope.isRange = true
+  if (scope.isRange) {
+    let oldFrom = 0,
+      oldTo = 0,
+      nextFrom = 0,
+      nextTo = 0
+    frozen.doc.forEach((node, pos, index) => {
+      if (index === first) oldFrom = pos + (node.isTextblock ? 1 : 0)
+      if (index === last) oldTo = pos + node.nodeSize - (node.isTextblock ? 1 : 0)
+    })
+    tr.doc.forEach((node, pos, index) => {
+      if (index === scope.startIndex) nextFrom = pos + (node.isTextblock ? 1 : 0)
+      if (index === scope.endIndex) nextTo = pos + node.nodeSize - (node.isTextblock ? 1 : 0)
+    })
+    const complete =
+      !frozen.scope.isRange ||
+      (scope.from !== undefined &&
+        scope.to !== undefined &&
+        scope.from <= oldFrom &&
+        scope.to >= oldTo)
+    scope.from = complete ? nextFrom : tr.mapping.map(scope.from ?? oldFrom, 1)
+    scope.to = complete ? nextTo : tr.mapping.map(scope.to ?? oldTo, -1)
+  }
+  return { doc: tr.doc, scope }
+}
+
 /** Validate the captured request, never the current DOM selection. */
 export function validateDocumentTranslation(
   editor: Editor,
@@ -53,7 +138,7 @@ export function validateDocumentTranslation(
   if (input.mode !== undefined || input.outputMode !== undefined)
     return 'This tool supports in-place translation only.'
   if (!frozen || frozen.doc !== editor.state.doc)
-    return 'The captured document scope changed. Reestablish the request scope before translating.'
+    return 'The captured document scope changed. Read get_document_context or read_runs once, then retry the same original scope. If it still fails, stop: ask the person to resend the intended scope in a new message; do not keep retrying or widen the range.'
   const { scope, doc } = frozen
   let start = 0
   let end = 0
