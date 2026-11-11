@@ -1,3 +1,8 @@
+import {
+  translationCounts,
+  validateDocumentTranslation,
+  type AiDocumentTranslationAccess,
+} from './translation-chat'
 import type { Editor } from '@tiptap/core'
 import type { Mark, Node as ProseMirrorNode } from '@tiptap/pm/model'
 import type { ChartDisplay, CommentInfo, NewChart, NoteInfo } from '@genoffice/docx-engine'
@@ -232,6 +237,27 @@ export const AGENT_TOOLS: AgentToolDef[] = [
         },
       },
       required: [],
+    },
+  },
+  {
+    name: 'translate_document',
+    description:
+      'Translate an existing whole document or complete block range IN PLACE using locally collected formatted segments and bounded parallel requests. Use once after the existing target-language and output-mode ask_choice questions are answered. No read_runs calls are needed. Never use for bilingual output, translation review, or a partial paragraph selection: retain add_bilingual, revise_blocks, or replace_selection for those paths. Headers and footers are not included. Include notes only for whole-document scope. Existing formatting, fixed objects and redaction remain protected. Reports processed, reused, failed, stale, skipped and pending counts; never claim omitted stories are translated.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        targetLanguage: { type: 'string' },
+        sourceLanguage: { type: 'string' },
+        startBlockIndex: { type: 'integer' },
+        endBlockIndex: { type: 'integer' },
+        includeNotes: { type: 'boolean' },
+        instructions: {
+          type: 'string',
+          description:
+            'Detailed translation terminology and style instructions, consistent with the user request and project context.',
+        },
+      },
+      required: ['targetLanguage'],
     },
   },
   {
@@ -1605,6 +1631,7 @@ export function executeTool(
   extras?: AiDocExtras,
   notes?: AiNotesAccess,
   attachments?: AiAttachmentAccess,
+  translator?: AiDocumentTranslationAccess,
 ): ToolExecution | Promise<ToolExecution> {
   // an ODT document: switched-off features are refused, and so are edits the
   // editor guard turned away (protected cells, locked placeholders)
@@ -1625,6 +1652,7 @@ export function executeTool(
     extras,
     notes,
     attachments,
+    translator,
   )
   const settleOdt = (exec: ToolExecution): ToolExecution => {
     const refused = odtGuardRefusalText()
@@ -1647,6 +1675,7 @@ function executeToolUnguarded(
   extras?: AiDocExtras,
   notes?: AiNotesAccess,
   attachments?: AiAttachmentAccess,
+  translator?: AiDocumentTranslationAccess,
 ): ToolExecution | Promise<ToolExecution> {
   const scope = frozen && frozen.doc === editor.state.doc ? frozen.scope : null
   const staleSummary = staleSummaryOf(call)
@@ -1679,6 +1708,23 @@ function executeToolUnguarded(
     return writeDocument(editor, call, numIds, track, signal, writer)
   if (call.name === 'set_watermark' && typeof call.input.image === 'string')
     return setPictureWatermark(call, signal, extras)
+  if (call.name === 'translate_document') {
+    const summary = t('aiSumTranslateDocument')
+    if (!translator) return fail(summary, 'Document translation is unavailable in this editor.')
+    const validation = validateDocumentTranslation(editor, call.input, translator.frozen ?? frozen)
+    if (typeof validation === 'string') return fail(summary, validation)
+    return translator.run(validation, signal, frozen).then((result) => ({
+      output: JSON.stringify({
+        ...result,
+        scope: validation.range ?? 'body',
+        notes: validation.includeNotes === true,
+        headersFooters: 'excluded',
+      }),
+      mutated: result.completed > 0,
+      isError: result.failed + result.stale > 0 || result.stopped,
+      summary: t('aiTranslationProgress', translationCounts(result)),
+    }))
+  }
   return settle(
     executeSyncTool(editor, call, numIds, track, scope, comments, hf, pageSetup, extras, notes),
   )

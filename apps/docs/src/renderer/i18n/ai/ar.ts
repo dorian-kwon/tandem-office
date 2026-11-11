@@ -1,6 +1,9 @@
 import type { zh } from './zh'
 
 export const ar = {
+  aiSumTranslateDocument: 'ترجمة المستند',
+  aiTranslationProgress:
+    'تمت ترجمة {completed}؛ أعيد استخدام {reused}؛ فشل {failed}؛ تغير {stale}؛ تم تخطي {skipped}؛ معلق {pending}',
   aiEmptyDraftTitle: 'دع الذكاء الاصطناعي يكتب مسودة هذا المستند لك',
   aiEmptyDraftBody1: 'صف الموضوع والنقاط الرئيسية أو الصق مادة مرجعية؛',
   aiEmptyDraftBody2: 'يكتب الذكاء الاصطناعي المسودة الأولى مباشرة على الصفحة.',

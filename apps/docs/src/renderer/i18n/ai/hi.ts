@@ -1,6 +1,9 @@
 import type { zh } from './zh'
 
 export const hi = {
+  aiSumTranslateDocument: 'दस्तावेज़ का अनुवाद',
+  aiTranslationProgress:
+    'अनुवादित {completed}; पुनः उपयोग {reused}; विफल {failed}; बदले {stale}; छोड़े {skipped}; लंबित {pending}',
   aiEmptyDraftTitle: 'AI को यह दस्तावेज़ ड्राफ़्ट करने दें',
   aiEmptyDraftBody1: 'विषय और मुख्य बिंदु बताएँ, या संदर्भ सामग्री पेस्ट करें;',
   aiEmptyDraftBody2: 'AI सीधे पेज पर पहला ड्राफ़्ट लिख देता है।',

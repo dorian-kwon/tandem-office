@@ -6,6 +6,11 @@ import { posAfterText } from './after-text'
 
 export type NoteKind = 'footnote' | 'endnote'
 
+export interface NoteRollbackSnapshot {
+  footnotes: NoteInfo[]
+  endnotes: NoteInfo[]
+}
+
 /**
  * The App-owned footnote / endnote lists, handed to the tool executor. The
  * lists live outside the ProseMirror document (like comments); the executor
@@ -19,6 +24,8 @@ export interface AiNotesAccess {
   remove(kind: NoteKind, id: string): boolean
   /** swaps the note with that id for `next` (same id); false when no note has that id */
   replace(kind: NoteKind, id: string, next: NoteInfo): boolean
+  /** Restore the complete lists together with the body's rollback point. */
+  restoreSnapshot?(snapshot: NoteRollbackSnapshot): void
   /** block index of a protected block whose XML still holds the reference mark (nothing here can remove it) */
   protectedMarkBlock?(kind: NoteKind, id: string): number | null
 }

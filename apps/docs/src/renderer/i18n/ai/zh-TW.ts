@@ -1,6 +1,9 @@
 import type { zh } from './zh'
 
 export const zhTW = {
+  aiSumTranslateDocument: '翻譯文件',
+  aiTranslationProgress:
+    '已翻譯 {completed}；重用 {reused}；失敗 {failed}；已變更 {stale}；略過 {skipped}；待處理 {pending}',
   aiEmptyDraftTitle: '讓 AI 幫你從零起草',
   aiEmptyDraftBody1: '描述主題、要點或貼上參考素材,',
   aiEmptyDraftBody2: 'AI 直接為你寫出初稿。',

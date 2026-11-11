@@ -19,10 +19,11 @@ import {
 
 const sha = (text: string): string => createHash('sha256').update(text).digest('hex')
 
-/** Fingerprints of the prompt and tool list as they were before profiles existed. */
-const PRE_PROFILE_PROMPT_SHA = '02b4feecd02268794937d822caf71ea189b4cec097f337fd25fdd594e34a943a'
-const PRE_PROFILE_PROMPT_LENGTH = 25100
-const PRE_PROFILE_TOOLS_SHA = '7bbf1657e5287c31f3be284389e644661bd5994ef7a789d8338886d515a4662b'
+/** Approved normal-profile baseline, including the batched translation tool. */
+const NORMAL_BASELINE_PROMPT_SHA =
+  '13cd8a44445d28fb63f42ff3686b042c636db6753560b29000d9905b0373314e'
+const NORMAL_BASELINE_PROMPT_LENGTH = 24564
+const NORMAL_BASELINE_TOOLS_SHA = 'caf524399dfc9b6fd6643a2e3f02039ccc11b8fd804bebfe903e67a8d66cb672'
 
 /** Tools a translation workflow can need: none of them may ever be dropped. */
 const MUST_KEEP = [
@@ -30,6 +31,7 @@ const MUST_KEEP = [
   'read_blocks',
   'read_runs',
   'translate_blocks',
+  'translate_document',
   'add_bilingual',
   'revise_blocks',
   'replace_blocks',
@@ -100,17 +102,17 @@ const skillFor = (profile: AiProfile | undefined) => {
   return docsSkill(() => editor, profile ? () => profile : undefined)
 }
 
-describe('normal profile is unchanged', () => {
-  it('the system prompt is byte-identical to the one before profiles', () => {
+describe('normal profile baseline', () => {
+  it('the normal system prompt matches its approved baseline', () => {
     expect(AGENT_SYSTEM_PROMPT).toBe(buildAgentSystemPrompt('normal'))
     expect(AGENT_SYSTEM_PROMPT).toBe(buildAgentSystemPrompt())
-    expect(AGENT_SYSTEM_PROMPT.length).toBe(PRE_PROFILE_PROMPT_LENGTH)
-    expect(sha(AGENT_SYSTEM_PROMPT)).toBe(PRE_PROFILE_PROMPT_SHA)
+    expect(AGENT_SYSTEM_PROMPT.length).toBe(NORMAL_BASELINE_PROMPT_LENGTH)
+    expect(sha(AGENT_SYSTEM_PROMPT)).toBe(NORMAL_BASELINE_PROMPT_SHA)
   })
 
   it('the tool list is the same array, byte-identical', () => {
     expect(toolsForProfile(AGENT_TOOLS, 'normal')).toBe(AGENT_TOOLS)
-    expect(sha(JSON.stringify(AGENT_TOOLS))).toBe(PRE_PROFILE_TOOLS_SHA)
+    expect(sha(JSON.stringify(AGENT_TOOLS))).toBe(NORMAL_BASELINE_TOOLS_SHA)
   })
 
   it('a docs skill without a profile, or with the normal one, offers everything', () => {

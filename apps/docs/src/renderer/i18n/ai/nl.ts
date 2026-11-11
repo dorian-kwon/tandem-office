@@ -1,6 +1,9 @@
 import type { zh } from './zh'
 
 export const nl = {
+  aiSumTranslateDocument: 'Document vertalen',
+  aiTranslationProgress:
+    'Vertaald {completed}; hergebruikt {reused}; mislukt {failed}; gewijzigd {stale}; overgeslagen {skipped}; wachtend {pending}',
   aiEmptyDraftTitle: 'Laat AI dit document voor je opstellen',
   aiEmptyDraftBody1: 'Beschrijf het onderwerp en de kernpunten, of plak referentiemateriaal;',
   aiEmptyDraftBody2: 'AI schrijft de eerste versie direct op de pagina.',

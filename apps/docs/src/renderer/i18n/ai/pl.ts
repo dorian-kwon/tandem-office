@@ -1,6 +1,9 @@
 import type { zh } from './zh'
 
 export const pl = {
+  aiSumTranslateDocument: 'Przetłumacz dokument',
+  aiTranslationProgress:
+    'Przetłumaczono {completed}; ponownie użyto {reused}; błędy {failed}; zmieniono {stale}; pominięto {skipped}; oczekuje {pending}',
   aiEmptyDraftTitle: 'Pozwól AI napisać szkic tego dokumentu',
   aiEmptyDraftBody1: 'Opisz temat i kluczowe punkty albo wklej materiały;',
   aiEmptyDraftBody2: 'AI napisze pierwszy szkic prosto na stronie.',

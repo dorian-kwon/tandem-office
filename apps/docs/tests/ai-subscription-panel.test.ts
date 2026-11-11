@@ -86,6 +86,8 @@ interface Harness {
   setStatuses(next: SubscriptionStatusMap): Promise<void>
   /** the app hands the panel newly read settings */
   setSettings(next: AiSettings): Promise<void>
+  editor: Editor
+  cancelRequests: ReturnType<typeof vi.fn>
   cleanup(): void
 }
 
@@ -103,6 +105,8 @@ function watchScrollIntoView(): Element[] {
  * each request: it gets the request and a function to emit chunks with.
  */
 async function mountPanel(options: {
+  editor?: Editor
+  notesAccess?: import('../src/renderer/ai/note-ops').AiNotesAccess
   settings: AiSettings
   subscription?: SubscriptionStatusMap
   /** what the settings file holds, when it differs from the panel's copy */
@@ -112,28 +116,31 @@ async function mountPanel(options: {
     emit: (chunk: Omit<AiStreamChunk, 'requestId'>) => void,
   ) => void
 }): Promise<Harness> {
-  const editor = createEditor()
-  let listener: ChunkListener | null = null
+  const editor = options.editor ?? createEditor()
+  const listeners = new Set<ChunkListener>()
   const requests: AiStreamRequest[] = []
   const setAiSettings = vi.fn(async () => {})
   let currentStatuses = options.subscription
   let statusListener: ((next: SubscriptionStatusMap) => void) | null = null
   const recheck = vi.fn(async () => currentStatuses)
   const win = window as unknown as Record<string, unknown>
+  const cancelRequests = vi.fn(async () => {})
   win.desktop = {
     onAiStream: (l: ChunkListener) => {
-      listener = l
+      listeners.add(l)
       return () => {
-        listener = null
+        listeners.delete(l)
       }
     },
     aiStream: vi.fn(async (request: AiStreamRequest) => {
       requests.push(request)
       options.answer(request, (chunk) =>
-        listener?.({ ...chunk, requestId: request.requestId } as AiStreamChunk),
+        listeners.forEach((listener) =>
+          listener({ ...chunk, requestId: request.requestId } as AiStreamChunk),
+        ),
       )
     }),
-    aiStreamCancel: vi.fn(async () => {}),
+    aiStreamCancel: cancelRequests,
     setAiSettings,
     ...(options.fileSettings ? { getAiSettings: async () => options.fileSettings } : {}),
     openAiModelSettings: vi.fn(async () => {}),
@@ -161,6 +168,7 @@ async function mountPanel(options: {
       root.render(
         createElement(AiPanel, {
           editor,
+          notesAccess: options.notesAccess,
           blocks: [],
           settings,
           open: true,
@@ -183,6 +191,8 @@ async function mountPanel(options: {
   return {
     container,
     requests,
+    editor,
+    cancelRequests,
     setAiSettings,
     recheck,
     send: async (text) => {
@@ -657,5 +667,326 @@ describe('AI panel: usage and cut input', () => {
     await harness.send('summarize this')
     expect(harness.container.querySelector('.ai-subscription-usage')).toBeNull()
     expect(harness.container.querySelector('.ai-sub-truncated')).toBeNull()
+  })
+})
+
+describe('AI panel: document translation integration', () => {
+  it('pins independent batch requests and keeps partial counts and rollback after Stop', async () => {
+    const editor = createEditor()
+    editor.commands.setContent({
+      type: 'doc',
+      content: Array.from({ length: 25 }, (_, i) => ({
+        type: 'docParagraph',
+        content: [{ type: 'text', text: `Source ${i}` }],
+      })),
+    })
+    const original = editor.state.doc.textContent
+    const batchReplies: Array<() => void> = []
+    let asked = false
+    harness = await mountPanel({
+      editor,
+      settings: settingsWith('gemini'),
+      answer: (request, emit) => {
+        if (request.tools?.length) {
+          if (!asked) {
+            asked = true
+            emit({
+              type: 'tool-call',
+              toolCall: {
+                id: 'fast',
+                name: 'translate_document',
+                input: { targetLanguage: 'Korean' },
+              },
+            })
+          } else emit({ type: 'delta', text: 'Complete' })
+          emit({ type: 'done' })
+        } else {
+          const data = JSON.parse((request.messages[0] as { text: string }).text)
+          batchReplies.push(() => {
+            emit({
+              type: 'delta',
+              text: JSON.stringify({
+                translations: data.units.map((u: { id: string; segments: string[] }) => ({
+                  id: u.id,
+                  segments: u.segments.map((s) => `Translated ${s}`),
+                })),
+              }),
+            })
+            emit({ type: 'done' })
+          })
+        }
+      },
+    })
+    await harness.send('Translate in place. Keep Acme terminology.')
+    expect(harness.requests).toHaveLength(3)
+    const batches = harness.requests.slice(1)
+    expect(new Set(harness.requests.map((r) => r.requestId)).size).toBe(3)
+    expect(batches.every((r) => r.tools?.length === 0 && r.settings?.provider === 'gemini')).toBe(
+      true,
+    )
+    expect(batches.every((r) => r.system.includes('Keep Acme terminology.'))).toBe(true)
+    await act(async () => {
+      batchReplies[0]()
+    })
+    await settle()
+    expect(editor.state.doc.textContent).toContain('Translated Source 0')
+    act(() => harness!.container.querySelector<HTMLButtonElement>('.ai-send-btn')!.click())
+    await settle()
+    const { t: translate } = await import('../src/renderer/i18n/locale')
+    expect(harness.container.textContent).toContain(
+      translate('aiTranslationProgress', {
+        completed: 12,
+        reused: 0,
+        failed: 0,
+        stale: 0,
+        skipped: 0,
+        pending: 13,
+      }),
+    )
+    const rollback = harness.container.querySelector<HTMLButtonElement>('.ai-rollback-btn')
+    expect(rollback).not.toBeNull()
+    const stopped = editor.state.doc.textContent
+    await act(async () => {
+      batchReplies.slice(1).forEach((reply) => reply())
+    })
+    await settle()
+    expect(editor.state.doc.textContent).toBe(stopped)
+    for (const pending of harness.requests.slice(2)) {
+      expect(harness.cancelRequests).toHaveBeenCalledWith(pending.requestId)
+    }
+    act(() => rollback!.click())
+    expect(editor.state.doc.textContent).toBe(original)
+    expect(harness.setAiSettings).not.toHaveBeenCalled()
+  })
+})
+
+describe('AI panel: translation scope and blocked batches', () => {
+  it('keeps a partial selection captured while the connection gate is checking', async () => {
+    const editor = createEditor()
+    editor.commands.setTextSelection({ from: 3, to: 7 })
+    let asked = false
+    harness = await mountPanel({
+      editor,
+      settings: settingsWith('auto', { subscriptionNoticeSeen: true }),
+      subscription: statuses('checking', 'signed-out'),
+      answer: (request, emit) => {
+        if (!asked) {
+          asked = true
+          emit({
+            type: 'tool-call',
+            toolCall: {
+              id: 'fast',
+              name: 'translate_document',
+              input: { targetLanguage: 'Korean' },
+            },
+          })
+        } else emit({ type: 'delta', text: 'Use selection translation.' })
+        emit({ type: 'done' })
+      },
+    })
+    await harness.send('Translate this selection in place')
+    expect(harness.requests).toHaveLength(0)
+    editor.commands.setTextSelection(1)
+    await harness.setStatuses(statuses('ready', 'signed-out'))
+    expect(harness.requests.length).toBeGreaterThan(0)
+    expect(harness.requests.every((request) => !!request.tools?.length)).toBe(true)
+    expect(editor.state.doc.textContent).toBe('EVs market research')
+  })
+
+  it('stops the parent and both children on a typed blocked batch error', async () => {
+    const editor = createEditor()
+    editor.commands.setContent({
+      type: 'doc',
+      content: Array.from({ length: 25 }, (_, i) => ({
+        type: 'docParagraph',
+        content: [{ type: 'text', text: `Source ${i}` }],
+      })),
+    })
+    const replies: Array<(chunk: Omit<AiStreamChunk, 'requestId'>) => void> = []
+    harness = await mountPanel({
+      editor,
+      settings: settingsWith('auto', { subscriptionNoticeSeen: true }),
+      subscription: statuses('ready', 'signed-out'),
+      answer: (request, emit) => {
+        if (request.tools?.length) {
+          emit({
+            type: 'tool-call',
+            toolCall: {
+              id: 'fast',
+              name: 'translate_document',
+              input: { targetLanguage: 'Korean' },
+            },
+          })
+          emit({ type: 'done' })
+        } else replies.push(emit)
+      },
+    })
+    await harness.send('Translate in place')
+    expect(harness.requests).toHaveLength(3)
+    await act(async () => {
+      replies[0]({
+        type: 'error',
+        error: 'Quota exhausted',
+        errorCode: 'rate-limit',
+        errorProvider: 'claude-code',
+        errorResetsAt: 12345,
+      })
+    })
+    await settle()
+    expect(harness.requests).toHaveLength(3)
+    expect(harness.container.querySelector('.ai-sub-blocked')).not.toBeNull()
+    expect(
+      harness.container.querySelector('.ai-message.assistant > div[dir="auto"]')?.textContent ?? '',
+    ).not.toBe('已停止')
+    expect(
+      harness.requests.slice(1).every((request) => request.settings?.provider === 'claude-code'),
+    ).toBe(true)
+    for (const request of harness.requests.slice(1))
+      expect(harness.cancelRequests).toHaveBeenCalledWith(request.requestId)
+    expect(harness.setAiSettings).not.toHaveBeenCalled()
+  })
+})
+
+describe('AI panel: translated note rollback', () => {
+  it('restores external note state together with the body rollback snapshot', async () => {
+    let notes: import('@genoffice/docx-engine').NoteInfo[] = [
+      { id: '1', text: 'Note source', richParas: [[{ text: 'Note source' }]] },
+    ]
+    const access: import('../src/renderer/ai/note-ops').AiNotesAccess = {
+      list: (kind) => (kind === 'footnote' ? notes : []),
+      add: () => '',
+      remove: () => false,
+      replace: (_kind, id, next) => {
+        notes = notes.map((note) => (note.id === id ? next : note))
+        return true
+      },
+      restoreSnapshot: (snapshot) => {
+        notes = snapshot.footnotes
+      },
+    }
+    let asked = false
+    harness = await mountPanel({
+      settings: settingsWith('gemini'),
+      notesAccess: access,
+      answer: (request, emit) => {
+        if (request.tools?.length) {
+          if (!asked) {
+            asked = true
+            emit({
+              type: 'tool-call',
+              toolCall: {
+                id: 'fast',
+                name: 'translate_document',
+                input: { targetLanguage: 'Korean', includeNotes: true },
+              },
+            })
+          } else emit({ type: 'delta', text: 'Translated body and notes.' })
+        } else {
+          const data = JSON.parse((request.messages[0] as { text: string }).text)
+          emit({
+            type: 'delta',
+            text: JSON.stringify({
+              translations: data.units.map((unit: { id: string; segments: string[] }) => ({
+                id: unit.id,
+                segments: unit.segments.map((text) => `Translated ${text}`),
+              })),
+            }),
+          })
+        }
+        emit({ type: 'done' })
+      },
+    })
+    await harness.send('Translate document and notes in place')
+    expect(notes[0].text).toBe('Translated Note source')
+    expect(harness.editor.state.doc.textContent).toContain('Translated EVs')
+    const rollback = harness.container.querySelector<HTMLButtonElement>('.ai-rollback-btn')
+    expect(rollback).not.toBeNull()
+    act(() => rollback!.click())
+    expect(notes[0].text).toBe('Note source')
+    expect(harness.editor.state.doc.textContent).toBe('EVs market research')
+  })
+})
+
+describe('AI panel: translation retry scope', () => {
+  it('keeps the original full-block selection after Stop even if the live selection moves', async () => {
+    const editor = createEditor()
+    editor.commands.setContent({
+      type: 'doc',
+      content: ['First', 'Second'].map((text) => ({
+        type: 'docParagraph',
+        content: [{ type: 'text', text }],
+      })),
+    })
+    editor.commands.setTextSelection({ from: 1, to: 6 })
+    const batches: Array<{ units: Array<{ id: string; segments: string[] }> }> = []
+    harness = await mountPanel({
+      editor,
+      settings: settingsWith('gemini'),
+      answer: (request, emit) => {
+        if (request.tools?.length) {
+          emit({
+            type: 'tool-call',
+            toolCall: {
+              id: `fast-${batches.length}`,
+              name: 'translate_document',
+              input: { targetLanguage: 'Korean' },
+            },
+          })
+          emit({ type: 'done' })
+        } else batches.push(JSON.parse((request.messages[0] as { text: string }).text))
+      },
+    })
+    await harness.send('Translate selected block in place')
+    expect(batches[0].units).toHaveLength(1)
+    act(() => harness!.container.querySelector<HTMLButtonElement>('.ai-send-btn')!.click())
+    await settle()
+    editor.commands.setTextSelection(9)
+    const { t } = await import('../src/renderer/i18n/locale')
+    const retry = Array.from(
+      harness.container.querySelectorAll<HTMLButtonElement>('.ai-msg-tool-btn'),
+    ).find((button) => button.getAttribute('aria-label') === t('aiRegenerateTitle'))
+    expect(retry).toBeDefined()
+    act(() => retry!.click())
+    await settle()
+    expect(batches).toHaveLength(2)
+    expect(batches[1].units).toHaveLength(1)
+    expect(batches[1].units[0].segments).toEqual(['First'])
+  })
+})
+
+describe('AI panel: translation outgoing payload sanitation', () => {
+  it('does not send an accidentally pasted API key or password in parent or child messages', async () => {
+    const apiKey = 'sk-abcdef1234567890abcdef'
+    const password = 's3cret-password!'
+    harness = await mountPanel({
+      settings: settingsWith('gemini'),
+      answer: (request, emit) => {
+        if (request.tools?.length) {
+          emit({
+            type: 'tool-call',
+            toolCall: {
+              id: 'fast',
+              name: 'translate_document',
+              input: {
+                targetLanguage: 'Korean',
+                instructions: `password=${password}; keep terminology.`,
+              },
+            },
+          })
+          emit({ type: 'done' })
+        }
+      },
+    })
+    await harness.send(
+      `Translate in place. Accidental key ${apiKey}; password=${password}; use formal style.`,
+    )
+    expect(harness.requests).toHaveLength(2)
+    for (const request of harness.requests) {
+      const content = request.system + JSON.stringify(request.messages)
+      expect(content).not.toContain(apiKey)
+      expect(content).not.toContain(password)
+      expect(content).toContain('[REDACTED_API_KEY]')
+      expect(content).toContain('[REDACTED_SECURE_TOKEN]')
+    }
   })
 })

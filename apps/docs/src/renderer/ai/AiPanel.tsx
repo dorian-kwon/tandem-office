@@ -15,6 +15,7 @@ import {
   TranslationLockBanner,
   choiceBubbleText,
   projectChoiceRemember,
+  projectSystemPrompt,
   useAiChoice,
   useAiRunStatus,
   useTranslationLock,
@@ -57,6 +58,7 @@ import type { Editor } from '@tiptap/core'
 import type { Block } from '@genoffice/docx-engine'
 import {
   AgentLoop,
+  sanitizeAgentPayload,
   createKnowledgeBaseSkill,
   streamText,
   type AgentImage,
@@ -79,17 +81,31 @@ import type {
 import { redactTextBetween, type RedactableNode } from './redact-view'
 import { ATTACHMENT_IMAGE_EXTS } from '../../shared/ipc'
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
+import { closeHistory } from '@tiptap/pm/history'
 import { captureRollbackSnapshot, restoreRollbackSnapshot } from './rollback-snapshot'
-import { countWords, findNumId, type AiProfile, type NumIds } from './protocol'
+import { countWords, findNumId, getSelectionScope, type AiProfile, type NumIds } from './protocol'
 import { DOC_NAV_SCHEME, navigateToBlock, parseDocNavHref } from './doc-nav'
 import {
   markDocSeen,
+  executeTool,
+  type FrozenSelection,
   type AiCommentsAccess,
   type AiDocExtras,
   type AiHeaderFooterAccess,
 } from './tools'
 import type { AiPageSetupAccess } from './page-setup'
-import type { AiNotesAccess } from './note-ops'
+import type { AiNotesAccess, NoteRollbackSnapshot } from './note-ops'
+import { captureNoteRollback, restoreNoteRollback } from './translation-rollback'
+import { createTranslationUnitIndex } from './translation-units'
+import type { AiDocumentTranslator, DocumentTranslationResult } from './document-translator'
+import {
+  createChatDocumentTranslator,
+  translationCounts,
+  pinTranslationSettings,
+  requestDocumentTranslation,
+  validateDocumentTranslation,
+  type AiDocumentTranslationAccess,
+} from './translation-chat'
 import { createDocsSkill } from './docs-skill'
 import { MindMapCard } from './MindMapCard'
 import { insertPictureAtSelection } from '../editor/insert-picture'
@@ -241,6 +257,7 @@ interface ChatEntry {
   mindmap?: MindMapTreeNode
   /** document state before this turn's first edit — rendered as an inline roll-back action */
   snapshot?: ProseMirrorNode
+  snapshotNotes?: NoteRollbackSnapshot
   /** attachments consumed from the composer by this user message (read-only echo chips) */
   attachments?: AttachmentMeta[]
   /** the selection this user message targeted, frozen at send */
@@ -622,6 +639,7 @@ export function AiPanel({
     attachments: AttachmentMeta[]
     scope: AiScopeQuoteData | null
     skillUse: SkillUse
+    translationFrozen: FrozenSelection
   }>({
     busy,
     submit: (text, meta) => {
@@ -630,7 +648,7 @@ export function AiPanel({
       // nothing can run right now: the message stays queued, and in front of "not connected"
       // the queue is paused so it does not start by itself after a sign-in
       if (!sendGateRef.current.admitQueued(() => msgQueueRef.current.setPaused(true))) return false
-      runWith(text, text, meta.attachments, meta.scope, meta.skillUse)
+      runWith(text, text, meta.attachments, meta.scope, meta.skillUse, meta.translationFrozen)
       return true
     },
   })
@@ -836,6 +854,7 @@ export function AiPanel({
     attachments: AttachmentMeta[] | undefined
     retryScope: AiScopeQuoteData | null | undefined
     skillUse: SkillUse
+    translationFrozen: FrozenSelection
   }>({
     settings,
     statuses: subscription.statuses,
@@ -847,6 +866,7 @@ export function AiPanel({
         held.attachments,
         held.retryScope,
         held.skillUse,
+        held.translationFrozen,
       ),
     onSettingsSaved: (next) => {
       // a run started right after ("continue with ...") must already see the change
@@ -896,6 +916,7 @@ export function AiPanel({
   const lastAttachmentsRef = useRef<AttachmentMeta[]>([])
   /** the scope quote of the last send, so a retry reuses it instead of re-reading the live selection */
   const lastScopeRef = useRef<AiScopeQuoteData | undefined>(undefined)
+  const lastTranslationFrozenRef = useRef<FrozenSelection | undefined>(undefined)
   /** the skills of the last send: a retry sends the same skill text */
   const lastSkillUseRef = useRef<SkillUse>(NO_SKILL_USE)
   /** composer attachments plus everything already sent this session (deduped by path) */
@@ -944,6 +965,18 @@ export function AiPanel({
   /** document state before the run's first edit — attached to the turn's final
       segment at run end (mid-turn segments never show the action toolbar) */
   const runSnapshotRef = useRef<ProseMirrorNode | null>(null)
+  const runNotesSnapshotRef = useRef<NoteRollbackSnapshot | undefined>(undefined)
+  const translationFailureRef = useRef<IpcStreamError | null>(null)
+  const translationProgressRef = useRef<DocumentTranslationResult | null>(null)
+  const translatorRef = useRef<AiDocumentTranslator | null>(null)
+  const [translationSessionVersion, setTranslationSessionVersion] = useState(0)
+  const translationPreparedRef = useRef<{
+    settings: AiSettings
+    context: string
+    frozen: FrozenSelection
+  } | null>(null)
+  const translationIncludesNotesRef = useRef(false)
+
   /** last sent instruction, for one-click retry */
   const lastInstructionRef = useRef('')
   /** Tool activity of the whole run (with args/output, accumulated across turns) — for full
@@ -1214,6 +1247,150 @@ export function AiPanel({
     decidePartial(false)
   }
 
+  useEffect(() => {
+    const index = createTranslationUnitIndex(editor, () => notesAccessRef.current)
+    const translator = createChatDocumentTranslator({
+      index,
+      request: (request) => {
+        const prepared = translationPreparedRef.current
+        if (!prepared) return Promise.reject(new Error('Translation context is unavailable.'))
+        const pinned = prepared.settings
+        return requestDocumentTranslation(request, () =>
+          createElectronTransport(() => pinned, {
+            onStreamError: (failure) => {
+              streamErrorRef.current = failure
+              translationFailureRef.current = failure
+              translatorRef.current?.stop()
+              msgQueueRef.current.hold()
+              loopRef.current?.cancel()
+            },
+            onSubscriptionUsage: (usage) =>
+              setSubscriptionUsage((known) => mergeSubscriptionUsage(known, usage)),
+            onInputTruncated: () => setInputTruncated(true),
+          }),
+        )
+      },
+      apply: (blocks) => {
+        const before = editor.state.doc
+        editor.view.dispatch(closeHistory(editor.state.tr))
+        const execution = executeTool(
+          editor,
+          { id: 'document-translation-commit', name: 'translate_blocks', input: { blocks } },
+          {
+            bullet:
+              findNumId(blocksRef.current, 'bullet') ?? numIdFallbackRef.current?.bullet ?? null,
+            ordered:
+              findNumId(blocksRef.current, 'ordered') ?? numIdFallbackRef.current?.ordered ?? null,
+          },
+          trackChangesRef.current ? { author: AI_REVISION_AUTHOR } : undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          notesAccessRef.current,
+        )
+        if (execution instanceof Promise) throw new Error('Translation commit must be synchronous.')
+        if (execution.mutated && !trackChangesRef.current) clearAiHighlights(true)
+        const prepared = translationPreparedRef.current
+        if (execution.mutated && prepared?.frozen.doc === before) {
+          const scope = { ...prepared.frozen.scope }
+          if (scope.isRange)
+            editor.state.doc.forEach((node, offset, index) => {
+              if (index === scope.startIndex) scope.from = offset + (node.isTextblock ? 1 : 0)
+              if (index === scope.endIndex)
+                scope.to = offset + node.nodeSize - (node.isTextblock ? 1 : 0)
+            })
+          prepared.frozen = { doc: editor.state.doc, scope }
+          lastTranslationFrozenRef.current = prepared.frozen
+        }
+        return execution
+      },
+      onBeforeCommit: () => {
+        if (!runSnapshotRef.current) runSnapshotRef.current = captureRollbackSnapshot(editor)
+        if (translationIncludesNotesRef.current && !runNotesSnapshotRef.current)
+          runNotesSnapshotRef.current = captureNoteRollback(notesAccessRef.current)
+      },
+      onProgress: (result) => {
+        translationProgressRef.current = result
+        patchLastAssistant((last) => ({
+          tools: last.tools?.map((tool) =>
+            tool.name === 'translate_document'
+              ? { ...tool, summary: tModule('aiTranslationProgress', translationCounts(result)) }
+              : tool,
+          ),
+        }))
+      },
+    })
+    translatorRef.current = translator
+    return () => {
+      translator.dispose()
+      index.dispose()
+      if (translatorRef.current === translator) translatorRef.current = null
+    }
+    // The index belongs to this editor; current mutable accessors are refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, translationSessionVersion])
+  const translationAccess: AiDocumentTranslationAccess = {
+    get frozen() {
+      return translationPreparedRef.current?.frozen
+    },
+    run: (input, signal) => {
+      const prepared = translationPreparedRef.current
+      const translator = translatorRef.current
+      if (!prepared || !translator)
+        return Promise.reject(new Error('Translation was not prepared.'))
+      const validated = validateDocumentTranslation(
+        editorRef.current,
+        {
+          ...input,
+          ...(input.range
+            ? {
+                startBlockIndex: input.range.startBlockIndex,
+                endBlockIndex: input.range.endBlockIndex,
+              }
+            : {}),
+        },
+        prepared.frozen,
+      )
+      if (typeof validated === 'string') return Promise.reject(new Error(validated))
+      if (validated.includeNotes && !notesAccessRef.current?.restoreSnapshot)
+        return Promise.reject(new Error('Notes cannot be translated without rollback support.'))
+      translationIncludesNotesRef.current = validated.includeNotes === true
+      const provider = prepared.settings.provider
+      if (provider === 'auto')
+        return Promise.reject(new Error('Translation provider must be pinned.'))
+      return translator.run(
+        {
+          ...validated,
+          provider,
+          model: prepared.settings.providers[provider].model,
+          context: prepared.context,
+        },
+        signal,
+      )
+    },
+  }
+  const translationAccessRef = useRef(translationAccess)
+  translationAccessRef.current = translationAccess
+  const settledTranslationTools = (tools: ToolActivity[] | undefined): ToolActivity[] | undefined =>
+    tools?.flatMap((tool) => {
+      if (tool.name === 'translate_document' && translationProgressRef.current)
+        return [
+          {
+            ...tool,
+            running: false,
+            summary: tModule(
+              'aiTranslationProgress',
+              translationCounts(translationProgressRef.current),
+            ),
+          },
+        ]
+      return tool.running ? [] : [tool]
+    })
+
   /** the tool and prompt set of the current run, decided when it starts */
   const aiProfileRef = useRef<AiProfile>('normal')
   const loopRef = useRef<AgentLoop<ProseMirrorNode> | null>(null)
@@ -1267,6 +1444,7 @@ export function AiPanel({
                 .map((attachment) => attachment.name),
           }),
           () => aiProfileRef.current,
+          () => translationAccessRef.current,
         ),
         createFilesSkill(availableAttachments),
         // the person's skills: use_skill, read_skill_file, propose_skill (app-run tools)
@@ -1297,11 +1475,27 @@ export function AiPanel({
           patchLastAssistant((last) => ({
             tools: [
               ...(last.tools ?? []),
-              { name: call.name, summary: toolStepLabel(call.name), running: true },
+              {
+                name: call.name,
+                summary:
+                  call.name === 'translate_document'
+                    ? tModule('aiSumTranslateDocument')
+                    : toolStepLabel(call.name),
+                running: true,
+              },
             ],
           }))
         },
         onToolExecuted: ({ call, execution, snapshotBefore }) => {
+          if (call.name === 'translate_document' && translationProgressRef.current) {
+            const progress = translationProgressRef.current
+            execution = {
+              ...execution,
+              mutated: progress.completed > 0,
+              summary: tModule('aiTranslationProgress', translationCounts(progress)),
+              output: JSON.stringify(progress),
+            }
+          }
           // The run's first pre-edit state wins so one roll-back undoes the whole run
           if (snapshotBefore && !runSnapshotRef.current) runSnapshotRef.current = snapshotBefore
           if (execution.mutated) {
@@ -1355,20 +1549,32 @@ export function AiPanel({
           patchLastAssistant({ usage: runUsageRef.current })
         },
         onDone: ({ text, cancelled, turnLimit, truncated }) => {
+          const translationFailure = translationFailureRef.current
+          const translationCause = translationFailure
+            ? runErrorCauseOf(translationFailure, translationFailure.message)
+            : undefined
+          if (shouldRecheckAfter(translationCause))
+            subscriptionRef.current.refresh(
+              translationCause?.provider ? [translationCause.provider] : undefined,
+            )
           // module-level t: the loop instance is created only once; the component's t goes stale with the first-render closure
           const baseText = turnLimit
             ? [text, tModule('aiTurnLimit')].filter(Boolean).join('\n\n')
-            : text || (cancelled ? tModule('aiStopped') : '')
+            : text || (cancelled && !translationFailure ? tModule('aiStopped') : '')
           const finalText = truncated
             ? [baseText, tModule('aiTruncatedNote')].filter(Boolean).join('\n\n')
             : baseText
           patchLastAssistant((last) => ({
             streaming: false,
             turnLimit,
+            ...(translationFailure
+              ? { error: translationFailure.message, errorCause: translationCause }
+              : {}),
             text: finalText || (last.tools?.length ? last.text : tModule('aiNoReply')),
             // A stop mid-tool can leave a running placeholder behind — drop it
-            tools: last.tools?.filter((tl) => !tl.running),
+            tools: settledTranslationTools(last.tools),
             snapshot: runSnapshotRef.current ?? undefined,
+            snapshotNotes: runNotesSnapshotRef.current,
           }))
           setBusy(false)
           // App listens: a run that generated content into a never-saved document
@@ -1395,8 +1601,9 @@ export function AiPanel({
                 streaming: false,
                 error,
                 ...(errorCause ? { errorCause } : {}),
-                tools: last.tools?.filter((tl) => !tl.running),
+                tools: settledTranslationTools(last.tools),
                 snapshot: runSnapshotRef.current ?? undefined,
+                snapshotNotes: runNotesSnapshotRef.current,
               }
             }
             return boundChatHistory(next)
@@ -1556,9 +1763,14 @@ export function AiPanel({
     retryScope?: AiScopeQuoteData | null,
     /** the chosen skills: their text goes to the model, their chips onto the bubble */
     skillUse: SkillUse = NO_SKILL_USE,
+    capturedTranslation?: FrozenSelection,
   ) => {
     const loop = loopRef.current
     if (!instruction || !loop || loop.busy || pendingSendRef.current) return
+    const translationFrozen = capturedTranslation ?? {
+      scope: getSelectionScope(editorRef.current),
+      doc: editorRef.current.state.doc,
+    }
     // Nothing can run yet: the composer shows the connect prompt or the notice about what
     // leaves the PC instead of an error, and keeps its text. A request made in front of the
     // notice (or while the status check is still running) is held and starts once the way is
@@ -1570,6 +1782,7 @@ export function AiPanel({
         attachments: attachmentsOverride,
         retryScope,
         skillUse,
+        translationFrozen,
       })
     ) {
       return
@@ -1599,12 +1812,17 @@ export function AiPanel({
           ? selectionScopeQuote()
           : undefined
     lastScopeRef.current = scope
+    lastTranslationFrozenRef.current = translationFrozen
     // the popover input / composer own the DOM selection now: keep the targeted range visible until the run ends
     if (scope) setInactiveSelectionShown(editor, true)
     instructionRef.current = instruction
     lastInstructionRef.current = instruction
     runToolsRef.current = []
     runSnapshotRef.current = null
+    runNotesSnapshotRef.current = undefined
+    translationProgressRef.current = null
+    translationFailureRef.current = null
+    translationPreparedRef.current = null
     runUsageRef.current = undefined
     stickToBottomRef.current = true
     setChat((prev) =>
@@ -1666,6 +1884,36 @@ export function AiPanel({
           return
         }
         // the skill text rides with this request only; the bubble and the record keep the chips
+        const gate = sendGateRef.current.peek()
+        if (gate.kind === 'run') {
+          const snapshot = projectRef.current?.chat.run?.snapshot
+          const provider = gate.choice.provider
+          const providerStatus =
+            subscriptionRef.current.statuses?.[provider as AiSubscriptionProviderId]
+          const catalogContext = JSON.stringify({
+            provider,
+            version: providerStatus?.version,
+            models: providerStatus?.models?.map(({ id, resolved, isDefault }) => ({
+              id,
+              resolved,
+              isDefault,
+            })),
+          })
+          translationPreparedRef.current = {
+            settings: pinTranslationSettings(settingsRef.current, gate),
+            context: sanitizeAgentPayload(
+              [
+                snapshot ? projectSystemPrompt(snapshot.context, false) : '',
+                instruction,
+                skillUse.text,
+                catalogContext,
+              ]
+                .filter(Boolean)
+                .join('\n\n'),
+            ),
+            frozen: translationFrozen,
+          }
+        }
         return loop.run(instruction + skillUse.text, images)
       })
   }
@@ -1673,6 +1921,7 @@ export function AiPanel({
   const cancel = () => {
     msgQueue.hold()
     if (pendingSendRef.current) pendingSendRef.current.aborted = true
+    translatorRef.current?.stop()
     loopRef.current?.cancel()
   }
   cancelRef.current = cancel
@@ -1703,6 +1952,7 @@ export function AiPanel({
       lastAttachmentsRef.current,
       lastScopeRef.current ?? null,
       lastSkillUseRef.current,
+      lastTranslationFrozenRef.current,
     )
 
   const continueRun = () => runWith(DOCS_CONTINUE_INSTRUCTION, t('aiContinue'))
@@ -1731,7 +1981,15 @@ export function AiPanel({
       ]
       setAttachments([])
     }
-    msgQueue.enqueue(text, { attachments, scope: selectionScopeQuote() ?? null, skillUse })
+    msgQueue.enqueue(text, {
+      attachments,
+      scope: selectionScopeQuote() ?? null,
+      skillUse,
+      translationFrozen: {
+        scope: getSelectionScope(editorRef.current),
+        doc: editorRef.current.state.doc,
+      },
+    })
     setInput('')
   }
 
@@ -1743,6 +2001,9 @@ export function AiPanel({
       pendingSendRef.current = null
     }
     abandonWriter()
+    translatorRef.current?.stop()
+    setTranslationSessionVersion((version) => version + 1)
+    translationPreparedRef.current = null
     loopRef.current?.reset()
     // servers off in this chat and "always allow in this chat" go too (user MCP spec 7.6)
     windowMcpState()?.newConversation()
@@ -1874,10 +2135,13 @@ export function AiPanel({
 
   const rollback = (entryIdx: number, snapshot: ProseMirrorNode) => {
     restoreRollbackSnapshot(editor, snapshot)
+    restoreNoteRollback(notesAccessRef.current, chat[entryIdx]?.snapshotNotes)
     // The document rewound to before this turn, so this and every later
     // rollback point now describe discarded futures
     setChat((prev) =>
-      prev.map((e, i) => (i >= entryIdx && e.snapshot ? { ...e, snapshot: undefined } : e)),
+      prev.map((e, i) =>
+        i >= entryIdx && e.snapshot ? { ...e, snapshot: undefined, snapshotNotes: undefined } : e,
+      ),
     )
   }
 

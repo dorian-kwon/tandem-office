@@ -1,6 +1,9 @@
 import type { zh } from './zh'
 
 export const vi = {
+  aiSumTranslateDocument: 'Dịch tài liệu',
+  aiTranslationProgress:
+    'Đã dịch {completed}; dùng lại {reused}; lỗi {failed}; đã đổi {stale}; bỏ qua {skipped}; đang chờ {pending}',
   aiEmptyDraftTitle: 'Để AI soạn thảo tài liệu này cho bạn',
   aiEmptyDraftBody1: 'Mô tả chủ đề và các điểm chính, hoặc dán tài liệu tham khảo;',
   aiEmptyDraftBody2: 'AI sẽ viết bản thảo đầu tiên ngay trên trang.',

@@ -1,6 +1,9 @@
 import type { zh } from './zh'
 
 export const ms = {
+  aiSumTranslateDocument: 'Terjemahkan dokumen',
+  aiTranslationProgress:
+    'Diterjemah {completed}; diguna semula {reused}; gagal {failed}; berubah {stale}; dilangkau {skipped}; tertunda {pending}',
   aiEmptyDraftTitle: 'Biarkan AI merangka dokumen ini untuk anda',
   aiEmptyDraftBody1: 'Terangkan topik dan perkara utama, atau tampal bahan rujukan;',
   aiEmptyDraftBody2: 'AI terus menulis draf pertama pada halaman.',

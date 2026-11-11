@@ -1,6 +1,9 @@
 import type { zh } from './zh'
 
 export const ru = {
+  aiSumTranslateDocument: 'Перевести документ',
+  aiTranslationProgress:
+    'Переведено {completed}; использовано повторно {reused}; ошибки {failed}; изменено {stale}; пропущено {skipped}; ожидает {pending}',
   aiEmptyDraftTitle: 'Пусть ИИ набросает этот документ за вас',
   aiEmptyDraftBody1: 'Опишите тему и ключевые пункты или вставьте материалы;',
   aiEmptyDraftBody2: 'ИИ сразу напишет черновик на странице.',

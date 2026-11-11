@@ -1,5 +1,8 @@
 /** ai strings, zh: defines the key set every other locale shard must match. */
 export const zh = {
+  aiSumTranslateDocument: '翻译文档',
+  aiTranslationProgress:
+    '已翻译 {completed}；复用 {reused}；失败 {failed}；已变更 {stale}；跳过 {skipped}；待处理 {pending}',
   aiEmptyDraftTitle: '让 AI 帮你从零起草',
   aiEmptyDraftBody1: '描述主题、要点或粘贴参考素材,',
   aiEmptyDraftBody2: 'AI 直接为你写出初稿。',

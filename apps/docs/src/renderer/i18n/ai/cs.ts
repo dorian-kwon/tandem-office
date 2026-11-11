@@ -1,6 +1,9 @@
 import type { zh } from './zh'
 
 export const cs = {
+  aiSumTranslateDocument: 'Přeložit dokument',
+  aiTranslationProgress:
+    'Přeloženo {completed}; znovu použito {reused}; chyby {failed}; změněno {stale}; přeskočeno {skipped}; čeká {pending}',
   aiEmptyDraftTitle: 'Nechte AI napsat návrh tohoto dokumentu za vás',
   aiEmptyDraftBody1: 'Popište téma a hlavní body nebo vložte referenční materiál;',
   aiEmptyDraftBody2: 'AI napíše první návrh přímo na stránku.',

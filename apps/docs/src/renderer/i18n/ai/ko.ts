@@ -1,6 +1,9 @@
 import type { zh } from './zh'
 
 export const ko = {
+  aiSumTranslateDocument: '문서 번역',
+  aiTranslationProgress:
+    '번역 {completed} · 재사용 {reused} · 실패 {failed} · 변경됨 {stale} · 제외 {skipped} · 대기 {pending}',
   aiEmptyDraftTitle: 'AI에게 초안 작성을 맡기세요',
   aiEmptyDraftBody1: '주제와 요점을 설명하거나 참고 자료를 붙여넣으면',
   aiEmptyDraftBody2: 'AI가 바로 초안을 작성합니다.',

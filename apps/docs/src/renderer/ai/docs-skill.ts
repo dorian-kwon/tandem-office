@@ -1,3 +1,4 @@
+import type { AiDocumentTranslationAccess } from './translation-chat'
 import { placeholderInstruction } from './redact'
 import { redactLabelsOf } from './redact-view'
 import type { Editor } from '@tiptap/core'
@@ -59,6 +60,7 @@ export function createDocsSkill(
   getAttachments?: () => AiAttachmentAccess | undefined,
   /** the tool and prompt set of this run; absent: the whole assistant */
   getProfile?: () => AiProfile,
+  getTranslator?: () => AiDocumentTranslationAccess | undefined,
 ): AgentSkill {
   // Selection frozen per run: tools act on the range the prompt described,
   // not on wherever the user's live selection has wandered mid-run. The doc
@@ -139,6 +141,7 @@ export function createDocsSkill(
         getExtras?.(),
         getNotes?.(),
         getAttachments?.(),
+        getTranslator?.(),
       )
     },
   }

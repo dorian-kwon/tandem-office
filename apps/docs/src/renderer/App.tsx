@@ -6599,6 +6599,10 @@ export function App() {
     }
     return {
       list,
+      restoreSnapshot: (snapshot) => {
+        commit('footnote', structuredClone(snapshot.footnotes))
+        commit('endnote', structuredClone(snapshot.endnotes))
+      },
       add: (kind, text) => {
         const id = nextNoteId(list(kind))
         commit(kind, [...list(kind), { id, text }])

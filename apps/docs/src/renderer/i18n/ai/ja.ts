@@ -1,6 +1,9 @@
 import type { zh } from './zh'
 
 export const ja = {
+  aiSumTranslateDocument: '文書を翻訳',
+  aiTranslationProgress:
+    '翻訳 {completed}・再利用 {reused}・失敗 {failed}・変更済み {stale}・除外 {skipped}・保留 {pending}',
   aiEmptyDraftTitle: 'AI にドキュメントの下書きを任せる',
   aiEmptyDraftBody1: 'テーマや要点を伝えるか、参考資料を貼り付けると',
   aiEmptyDraftBody2: 'AI がそのまま初稿を書き上げます。',
