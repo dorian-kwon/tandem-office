@@ -1005,7 +1005,7 @@ interface NoteParagraphGroups {
 }
 
 /** the translatable groups of every paragraph of a note, and whether they are display runs */
-function noteGroupsOf(note: NoteInfo): { rich: boolean; paragraphs: NoteParagraphGroups[] } {
+export function noteGroupsOf(note: NoteInfo): { rich: boolean; paragraphs: NoteParagraphGroups[] } {
   const texts = note.text.split('\n')
   const rich = note.richParas
   const consistent =
