@@ -38,3 +38,15 @@
 - 저장 완료·실행 종료를 확인한 뒤 기존 프로세스의 정상 종료 기록과 종료를 확인했다. 같은 프로필로 수정 빌드를 실행했고 새 renderer가 로컬 읽기 요청에 답했다. 실제 AI 요청은 직접 보내지 않았다.
 
 로그: `/tmp/translation-reload-final-full-tests.log`, `/tmp/translation-reload-final-tsc.log`, `/tmp/translation-reload-final-lint.log`, `/tmp/translation-reload-final-format.log`, `/tmp/translation-reload-build-docs.log`, `/tmp/translation-reload-build-shell.log`, `/tmp/translation-save-production-red.log`, `/tmp/translation-save-production-green.log`.
+
+## 실제 AI 자가 시험
+
+사용자의 자가 시험 요청에 따라 실행 중인 앱의 선택된 Claude Opus 구독으로 별도 임시 DOCX를 번역했다. 본문은 번호가 다른 한국어 문단 25개, 각주는 2개이며 프로젝트 없이 열었다. 기존 사용자 문서와 프로젝트 메모를 수정하지 않았다.
+
+- 한글 입력의 네이티브 키 입력이 구두점만 전달된 것을 화면에서 확인했다. 카드의 직접 답 입력에 붙여넣어 실제 요청 문장을 확인한 후 번역을 실행했다. 첫 잘못된 입력에는 문서 편집이 없었다.
+- 실제 `translate_document` 결과: **완료 27 / 재사용 0 / 실패 0 / 변경됨 0 / 제외 0 / 대기 0**.
+- 앱에서 저장한 실제 DOCX의 XML을 별도로 검사: 본문 25문단, 번호 1~25 모두 유지, 각주 2개와 본문 참조 2개 유지, 본문·각주 모두 남은 한글 0개. 오전 9시·입구 안내서·다음 달·무료 입장 내용 유지.
+- 이 실행은 저장 전 번역을 완료했으므로 저장 도중 경합에 대한 실제 AI 검증으로 해석하지 않는다. 저장 경합은 위의 자동 재현 검사로 검증했다.
+- 별도 프로젝트 없는 문서에서는 기존 용어집을 적용했다는 주장이 없었다. 사용자 번역 프로젝트의 등록 용어집 파일은 0개이고 이응노 관련 표기는 AI 작성 `memory.md`에 있었다. 그 메모는 시스템 문맥에서도 AI의 미검증 메모로 표시된다. 이를 사용자가 확정한 용어집으로 표현한 현상은 확인했으며 이 시험에서 수정했다고 주장하지 않는다.
+
+시험 결과: `/tmp/tandem-live-translation-result.json`. 시험 파일 경로는 `/tmp/tandem-live-translation-path`에 기록했다. 실제 구독을 쓰는 추가 반복 요청은 보내지 않았다.
