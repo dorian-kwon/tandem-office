@@ -11976,13 +11976,13 @@
   },
   {
     "date": "2026-11-13",
-    "totalDownloads": 64874,
+    "totalDownloads": 64940,
     "installs": {
-      "windows": 46605,
-      "macos": 15634,
-      "linux": 2635
+      "windows": 46652,
+      "macos": 15649,
+      "linux": 2639
     },
-    "updateChecks": 121321,
+    "updateChecks": 122417,
     "releaseCount": 13,
     "stars": 870,
     "forks": 156,
@@ -11990,7 +11990,7 @@
       {
         "tag": "v0.12.12",
         "publishedAt": "2026-11-09T01:48:04Z",
-        "downloads": 11181
+        "downloads": 11247
       },
       {
         "tag": "v0.12.11",
@@ -12057,17 +12057,17 @@
       {
         "release": "v0.12.12",
         "asset": "IeumOffice-0.12.12-arm64-mac.zip",
-        "downloads": 889
+        "downloads": 894
       },
       {
         "release": "v0.12.12",
         "asset": "IeumOffice-0.12.12-arm64.dmg",
-        "downloads": 1631
+        "downloads": 1640
       },
       {
         "release": "v0.12.12",
         "asset": "IeumOffice-0.12.12-mac.zip",
-        "downloads": 111
+        "downloads": 112
       },
       {
         "release": "v0.12.12",
@@ -12077,7 +12077,7 @@
       {
         "release": "v0.12.12",
         "asset": "IeumOffice-0.12.12.AppImage",
-        "downloads": 231
+        "downloads": 235
       },
       {
         "release": "v0.12.12",
@@ -12087,7 +12087,7 @@
       {
         "release": "v0.12.12",
         "asset": "IeumOffice-Setup-0.12.12.exe",
-        "downloads": 8018
+        "downloads": 8065
       },
       {
         "release": "v0.12.12",
@@ -12097,17 +12097,17 @@
       {
         "release": "v0.12.12",
         "asset": "latest-linux.yml",
-        "downloads": 299
+        "downloads": 309
       },
       {
         "release": "v0.12.12",
         "asset": "latest-mac.yml",
-        "downloads": 14659
+        "downloads": 15373
       },
       {
         "release": "v0.12.12",
         "asset": "latest.yml",
-        "downloads": 12866
+        "downloads": 13238
       },
       {
         "release": "v0.12.11",
