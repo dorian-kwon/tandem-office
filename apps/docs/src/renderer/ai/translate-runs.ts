@@ -5,7 +5,7 @@ import { TableMap } from '@tiptap/pm/tables'
 import { TRACK_IGNORE } from '../editor/revisions'
 import { REDACT_MARK } from './redact'
 import { isTrackedDeleted } from './doc-utils'
-import type { NoteInfo, NoteRun } from '@genoffice/docx-engine'
+import type { NoteInfo, NoteRun, Run, TextboxDisplay } from '@genoffice/docx-engine'
 import type { AiTrack } from './protocol'
 import type { AiNotesAccess, NoteKind } from './note-ops'
 import {
@@ -61,6 +61,8 @@ export interface RunParagraph {
   index: number
   /** the n-th paragraph inside a table block (document order); absent for a plain paragraph */
   paragraph?: number
+  /** a text box block: which of its boxes (0-based); `paragraph` is then the paragraph inside that box */
+  box?: number
   segments?: string[]
   /** fingerprint of the paragraph's segment texts; translate_blocks checks it */
   fp?: string
@@ -360,6 +362,55 @@ function cellInfoOf(table: ProseMirrorNode, tablePos: number): Map<number, CellI
   return out
 }
 
+/** the anchored text boxes a `docProtected` block displays (their paragraphs hold the runs), or null */
+function textboxesOf(node: ProseMirrorNode): TextboxDisplay[] | null {
+  if (node.type.name !== 'docProtected') return null
+  const boxes = node.attrs.textboxes as unknown
+  return Array.isArray(boxes) && boxes.length > 0 ? (boxes as TextboxDisplay[]) : null
+}
+
+interface BoxGroup {
+  /** index into the paragraph's runs */
+  run: number
+  text: string
+  /** whitespace-only runs (never groups) are all that lies between this group and the next */
+  gapAfter?: boolean
+}
+
+/** the translatable groups of one text box paragraph: every run that carries more than blanks */
+function boxGroupsOf(runs: readonly Run[]): BoxGroup[] {
+  const groups: BoxGroup[] = []
+  let blanks = false
+  runs.forEach((r, run) => {
+    if (r.text.trim() === '') {
+      if (/^[^\S\t\n]+$/.test(r.text)) blanks = true
+      return
+    }
+    if (blanks && groups.length > 0) groups[groups.length - 1].gapAfter = true
+    blanks = false
+    groups.push({ run, text: r.text })
+  })
+  return groups
+}
+
+/** read_runs lines for the paragraphs of a block's text boxes (a read-only box is listed once, as skipped) */
+function boxRunEntries(index: number, boxes: readonly TextboxDisplay[]): RunParagraph[] {
+  const out: RunParagraph[] = []
+  boxes.forEach((box, boxIndex) => {
+    const listed = box.paras.map((p) => boxGroupsOf(p.runs).map((g) => g.text))
+    if (box.readOnly) {
+      if (listed.some((segments) => segments.length > 0))
+        out.push({ index, box: boxIndex, skip: 'read-only text box' })
+      return
+    }
+    listed.forEach((segments, paragraph) => {
+      if (segments.length === 0) return
+      out.push({ index, box: boxIndex, paragraph, fp: runFingerprint(segments), segments })
+    })
+  })
+  return out
+}
+
 /** read_runs: the run groups of blocks start..end (inclusive), text only */
 export function readRunGroups(
   editor: Editor,
@@ -380,7 +431,9 @@ export function readRunGroups(
     }
     const blocks = textblocksOf(node, pos)
     if (!blocks) {
-      out.push({ index, skip: String(node.attrs.blockType || node.type.name) })
+      const boxes = textboxesOf(node)
+      if (boxes) out.push(...boxRunEntries(index, boxes))
+      else out.push({ index, skip: String(node.attrs.blockType || node.type.name) })
       continue
     }
     const inTable = node.type.name === 'docTable'
@@ -431,6 +484,8 @@ export function readRunGroups(
 /** one paragraph's translation as translate_blocks receives it */
 export interface RunTranslationItem {
   index: number
+  /** a text box paragraph: the box inside the block (`paragraph` is the paragraph inside that box) */
+  box?: number
   paragraph?: number
   /** the fingerprint read_runs gave; when present, a mismatch refuses the item */
   fp?: string
@@ -457,6 +512,8 @@ export const TAG_LIKE = new RegExp(
 
 export interface RunTranslationReport {
   index: number
+  /** a text box paragraph: the box inside the block */
+  box?: number
   paragraph?: number
   /** the paragraph has nothing to translate; the segments were ignored */
   empty?: true
@@ -842,6 +899,110 @@ function planParagraph(doc: ProseMirrorNode, item: RunTranslationItem): PlanResu
   return { ok: true, edits, report }
 }
 
+/** the new runs of one text box paragraph, written back into the block's `textboxes` attribute */
+interface BoxEdit {
+  blockPos: number
+  box: number
+  paragraph: number
+  runs: Run[]
+}
+
+type BoxPlanResult =
+  | { ok: true; edit: BoxEdit | null; report: RunTranslationReport }
+  | { ok: false; error: string; stale?: true }
+
+function planBoxParagraph(doc: ProseMirrorNode, item: RunTranslationItem): BoxPlanResult {
+  const where = `block ${item.index} box ${item.box} paragraph ${item.paragraph}`
+  const bad = segmentsError(where, item.segments)
+  if (bad) return { ok: false, error: bad }
+  const top = topLevel(doc, item.index)
+  if (!top)
+    return {
+      ok: false,
+      error: `${where}: no such block (the document has ${doc.childCount} blocks)`,
+    }
+  const boxes = textboxesOf(top.node)
+  if (!boxes) return { ok: false, error: `${where}: the block has no text box` }
+  const box = boxes[item.box as number]
+  if (!box)
+    return {
+      ok: false,
+      error: `${where}: no such text box (the block has ${boxes.length}); use the box numbers read_runs lists`,
+    }
+  if (box.readOnly)
+    return { ok: false, error: `${where}: this text box is read-only (it holds a table); leave it` }
+  if (!Number.isInteger(item.paragraph))
+    return {
+      ok: false,
+      error: `${where}: a text box entry needs "paragraph" (the number read_runs lists)`,
+    }
+  const para = box.paras[item.paragraph as number]
+  if (!para)
+    return {
+      ok: false,
+      error: `${where}: no such paragraph (the box has ${box.paras.length}); use the numbers read_runs lists`,
+    }
+  const report: RunTranslationReport = {
+    index: item.index,
+    box: item.box,
+    paragraph: item.paragraph,
+    changed: 0,
+  }
+  const groups = boxGroupsOf(para.runs)
+  if (groups.length === 0) return { ok: true, edit: null, report: { ...report, empty: true } }
+  if (item.fp !== undefined && item.fp !== runFingerprint(groups.map((g) => g.text)))
+    return {
+      ok: false,
+      stale: true,
+      error: `${where} changed since read_runs (fingerprint mismatch); read it again`,
+    }
+  // a text box run takes plain text: italic spans cannot ride along here
+  const plain = item.segments.map((segment) => parseItalicSegment(segment).plain)
+  if (plain.length > 0 && plain.every((text) => text.trim() === ''))
+    return {
+      ok: false,
+      error: `${where}: every segment is empty, which would delete the paragraph's text; give the translation`,
+    }
+  const segments = fitSegments(groups.length, plain, report)
+  const settled = settleTexts(
+    groups.map((g) => g.text),
+    segments,
+    groups.map((g) => g.gapAfter === true),
+  )
+  const runs = para.runs.map((r) => ({ ...r }))
+  groups.forEach((group, i) => {
+    const next = settled[i]
+    if (next === group.text) return
+    runs[group.run] = { ...runs[group.run], text: next }
+    report.changed++
+  })
+  report.fp = runFingerprint(boxGroupsOf(runs).map((g) => g.text))
+  return {
+    ok: true,
+    edit:
+      report.changed > 0
+        ? { blockPos: top.pos, box: item.box as number, paragraph: item.paragraph as number, runs }
+        : null,
+    report,
+  }
+}
+
+/** put the new runs into the blocks' `textboxes` attributes; positions are mapped through the edits already in `tr` */
+function applyBoxEdits(tr: Transaction, edits: readonly BoxEdit[]): void {
+  const byBlock = new Map<number, BoxEdit[]>()
+  for (const edit of edits)
+    byBlock.set(edit.blockPos, [...(byBlock.get(edit.blockPos) ?? []), edit])
+  for (const [blockPos, list] of byBlock) {
+    const pos = tr.mapping.map(blockPos)
+    const node = tr.doc.nodeAt(pos)
+    const boxes = node ? textboxesOf(node) : null
+    if (!node || !boxes) continue
+    const next = boxes.map((box) => ({ ...box, paras: box.paras.map((p) => ({ ...p })) }))
+    for (const edit of list) next[edit.box].paras[edit.paragraph].runs = edit.runs
+    tr.setNodeMarkup(pos, undefined, { ...node.attrs, textboxes: next })
+  }
+}
+
 export function revisionDate(): string {
   return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')
 }
@@ -912,16 +1073,33 @@ export function applyRunTranslations(
   const stale: string[] = []
   const reports: RunTranslationReport[] = []
   const edits: Edit[] = []
+  const boxEdits: BoxEdit[] = []
   const seen = new Set<string>()
   for (const item of items) {
-    const key = `${item.index}:${item.paragraph ?? 0}`
+    const isBox = item.box !== undefined
+    const key = `${item.index}:${isBox ? `box${item.box}:` : ''}${item.paragraph ?? 0}`
     if (seen.has(key)) {
       errors.push(
-        `block ${item.index}${item.paragraph === undefined ? '' : ` paragraph ${item.paragraph}`}: listed twice`,
+        `block ${item.index}${isBox ? ` box ${item.box}` : ''}${item.paragraph === undefined ? '' : ` paragraph ${item.paragraph}`}: listed twice`,
       )
       continue
     }
     seen.add(key)
+    if (isBox) {
+      if (track) {
+        errors.push(
+          `block ${item.index} box ${item.box}: a text box cannot carry tracked changes; use translate_blocks without revision tracking`,
+        )
+        continue
+      }
+      const plan = planBoxParagraph(doc, item)
+      if (!plan.ok) (plan.stale ? stale : errors).push(plan.error)
+      else {
+        reports.push(plan.report)
+        if (plan.edit) boxEdits.push(plan.edit)
+      }
+      continue
+    }
     const plan = planParagraph(doc, item)
     if (!plan.ok) (plan.stale ? stale : errors).push(plan.error)
     else {
@@ -931,9 +1109,13 @@ export function applyRunTranslations(
   }
   if (errors.length > 0) return { ok: false, errors }
   if (stale.length > 0 && reports.length === 0) return { ok: false, errors: stale }
-  if (edits.length > 0) editor.view.dispatch(applyEdits(editor, edits, track))
+  if (edits.length > 0 || boxEdits.length > 0) {
+    const tr = edits.length > 0 ? applyEdits(editor, edits, track) : editor.state.tr
+    if (boxEdits.length > 0) applyBoxEdits(tr, boxEdits)
+    editor.view.dispatch(tr)
+  }
   for (const report of reports) {
-    if (report.empty) continue
+    if (report.empty || report.box !== undefined) continue
     const fp = currentFingerprint(editor.state.doc, report.index, report.paragraph ?? 0)
     if (fp) report.fp = fp
   }
@@ -1256,9 +1438,11 @@ export function remainingUntranslated(
     if (!entry.segments || !entry.fp) continue
     if (pending(entry.segments, entry.fp))
       body.push(
-        entry.paragraph === undefined
-          ? `${entry.index}`
-          : `${entry.index} (paragraph ${entry.paragraph})`,
+        entry.box !== undefined
+          ? `${entry.index} (box ${entry.box} paragraph ${entry.paragraph})`
+          : entry.paragraph === undefined
+            ? `${entry.index}`
+            : `${entry.index} (paragraph ${entry.paragraph})`,
       )
   }
   const notes: string[] = []
