@@ -32,20 +32,36 @@
 
 ---
 
-### Task 1: 번역이 텍스트 상자 안의 글을 읽는지 확인하는 관문
+### Task 1: 편집기 번역이 텍스트 상자 안의 글을 읽고 쓴다
 
-이 작업의 결과가 나머지 범위를 정한다. 먼저 하고, 결과가 "아니오"면 **멈추고 사람에게 알린다**(범위가 편집기 번역으로 커진다).
+사용자가 A를 승인했다(2026-11-14). 관문 테스트(`translate-textbox-gate.test.ts`)가 실패했고 원인은 `textblocksOf()`가 텍스트 상자 노드(`docProtected`, `blockType: 'passthrough'`)를 건너뛰는 것이다. 이 작업은 `apps/docs`의 번역 코드만 고친다. `packages/docx-engine`은 고치지 않는다(저장 쪽 `convert.ts`의 `textboxParasPatch`가 상자 문단의 되쓰기를 이미 한다).
 
 **파일:**
-- 테스트: `apps/docs/tests/translate-textbox-gate.test.ts`
+- 고친다: `apps/docs/src/renderer/ai/translate-runs.ts` (`RunParagraph`, `readRunGroups`, `RunTranslationItem`, `applyRunTranslations`, `remainingUntranslated`)
+- 고친다: `apps/docs/src/renderer/ai/tools.ts` (`translate_blocks` 입력의 `box`, `read_runs` 설명, `revise_blocks`·`add_bilingual`에서 `box` 거절)
+- 테스트: `apps/docs/tests/translate-textbox-gate.test.ts`(이미 있고 실패 중), 같은 파일에 케이스를 더한다.
 
 **인터페이스:**
-- 쓰는 것: `@genoffice/docx-engine`의 `buildAnchoredTextboxParagraphXml(opts: AnchoredTextboxOptions): string`, `apps/docs/src/renderer/ai/translate-runs.ts`의 `readRunGroups`, 편집기를 만드는 방식은 `apps/docs/tests/add-bilingual-target.test.ts`를 따른다.
-- 만드는 것: 없음(판정 결과를 `docs/tracking/findings.md`나 작업 보고에 남긴다).
+- 만드는 것:
+  - `RunParagraph.box?: number`와 `RunTranslationItem.box?: number` — `docProtected` 블록의 `attrs.textboxes` 안 위치(0부터). `paragraph`는 그 상자의 `paras` 안 위치.
+  - `readRunGroups`는 `textboxes`가 있는 `docProtected` 블록에서, `readOnly`가 아닌 상자의 글이 있는 문단마다 `{ index, box, paragraph, fp, segments }`를 낸다. 세그먼트는 `text.trim() !== ''`인 `Run`마다 하나이고 `fp`는 기존 `runFingerprint(segments)`다. `readOnly` 상자는 `{ index, box, skip: 'read-only text box' }`, 글이 없는 상자는 아무것도 내지 않는다. 다른 `docProtected`는 지금처럼 `skip`이다.
+  - `applyRunTranslations`는 `box`가 있는 항목을 받아, 새 글을 같은 `Run`에 넣고(서식·`rawRPr`은 그대로) `textboxes`를 담은 노드 속성을 `setNodeMarkup`으로 바꾼다. 지문이 어긋나면 기존처럼 건너뛰고 보고한다. 같은 호출의 다른 항목과 한 트랜잭션(되돌리기 한 번)이다.
+  - 세그먼트 수가 `Run` 수보다 적으면 남은 `Run`은 원문 그대로, 많으면 마지막 `Run`에 이어 붙인다(기존 `incomplete`·`extra` 보고와 같은 뜻).
+  - `remainingUntranslated`가 상자 문단도 센다(기존 지문 기록 `recordHandled`와 같은 규칙).
 
-- [ ] **단계 1: 실패해도 되는 관문 테스트를 쓴다.** 본문 문단 하나와 `buildAnchoredTextboxParagraphXml`로 만든 상자(글 "BOX TEXT")를 가진 docx를 편집기로 연다. `readRunGroups`(또는 같은 모듈에서 번역 대상 글을 모으는 함수)가 돌려준 글에 "BOX TEXT"가 들어 있는지 단언한다. 이름: `translation reads the paragraphs of an anchored text box`.
-- [ ] **단계 2: 실행해서 결과를 기록한다.** `npx vitest run apps/docs/tests/translate-textbox-gate.test.ts`. 통과하면 나머지 작업으로 간다. 실패하면 편집기가 상자 안 글을 번역 대상으로 읽지 않는 것이다. 여기서 멈추고, 어디서 빠지는지(`textblocksOf`가 상자 안을 내려가지 않는지, 적용 쪽 `applyRunTranslations`가 상자에 못 쓰는지)를 한 단락으로 적어 사람에게 보고한다. 사람의 답 없이 `apps/docs`의 번역 코드를 고치지 않는다.
-- [ ] **단계 3: 통과했다면 이 테스트를 남기고 커밋한다.** `test(docs): pin that translation reads anchored text box paragraphs`.
+- [ ] **단계 1: 이미 실패 중인 관문 테스트가 첫 RED다.** `npx vitest run apps/docs/tests/translate-textbox-gate.test.ts` → `expected [ 'Body text' ] to include 'BOX TEXT'`로 실패함을 다시 확인한다. 이어서 같은 파일에 실패하는 테스트를 더한다.
+  - `lists each text box paragraph with box and paragraph numbers and a fingerprint` (여러 문단 상자).
+  - `skips a read-only text box with a reason and lists nothing for an empty box`.
+  - `translate_blocks writes the translation into the box runs and keeps the run formatting` (굵게·글자 크기·`rawRPr`가 그대로).
+  - `skips a text box paragraph whose fingerprint changed` (낡은 지문은 건너뛰고 보고).
+  - `a text box translation is one undo step together with body translations`.
+  - `remainingUntranslated lists untranslated text box paragraphs and drops them once translated`.
+  - `revise_blocks and add_bilingual refuse a box item with a clear message`.
+- [ ] **단계 2: 실패를 본다.** 같은 명령 → 모든 새 테스트가 기능이 없어서 실패(오타·import 오류가 아님).
+- [ ] **단계 3: 구현한다.** 읽기는 `readRunGroups`에서 `textblocksOf`가 null이고 `textboxes`가 있는 노드를 먼저 가려내는 분기, 쓰기는 `planParagraph`와 같은 자리의 `box` 분기다. `tools.ts`의 `translate_blocks` 스키마에 `box`(정수, "read_runs가 준 상자 번호")를 더하고 처리기가 `box`를 그대로 넘긴다.
+- [ ] **단계 4: 통과를 본다.** `npx vitest run apps/docs/tests/translate-textbox-gate.test.ts` → 통과. 이어서 `apps/docs`의 번역 관련 기존 테스트 전체(`npx vitest run apps/docs/tests/add-bilingual-target.test.ts apps/docs/tests/translate*` 등 `translate-runs`를 쓰는 파일)가 그대로 통과하는지 본다.
+- [ ] **단계 5: 저장 확인.** 번역한 상자 글이 저장 계획(`pmDocToSavePlan`)의 상자 문단 패치로 나가는지 `apps/docs/tests`의 기존 도우미로 확인하는 테스트 `a translated text box paragraph reaches the save plan`를 더한다. 기존 도우미로 만들 수 없으면 이유를 원장에 `Ruling:`으로 적고 작업 4의 단계 5(파서 확인)에서 상자 글이 보이는 것까지만 확인한다.
+- [ ] **단계 6: 커밋.** `feat(docs): translate the paragraphs of anchored text boxes`.
 
 ---
 
