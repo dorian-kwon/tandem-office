@@ -32,7 +32,7 @@
 
 ---
 
-### 작업 1: 번역이 텍스트 상자 안의 글을 읽는지 확인하는 관문
+### Task 1: 번역이 텍스트 상자 안의 글을 읽는지 확인하는 관문
 
 이 작업의 결과가 나머지 범위를 정한다. 먼저 하고, 결과가 "아니오"면 **멈추고 사람에게 알린다**(범위가 편집기 번역으로 커진다).
 
@@ -49,7 +49,7 @@
 
 ---
 
-### 작업 2: 박스 읽기의 약속(지시문, 응답 검사, 폰트 환산)
+### Task 2: 박스 읽기의 약속(지시문, 응답 검사, 폰트 환산)
 
 **파일:**
 - 만든다: `apps/shell/src/shared/ocr-boxes.ts`
@@ -84,7 +84,7 @@
 
 ---
 
-### 작업 3: 박스 읽기를 OCR 실행과 메인의 쓰기 검사에 연결
+### Task 3: 박스 읽기를 OCR 실행과 메인의 쓰기 검사에 연결
 
 **파일:**
 - 고친다: `apps/shell/src/shared/translate-ocr.ts` (`OcrItem`, `OcrPlacement`, `RunOcrArgs`, `readOne`)
@@ -113,7 +113,7 @@
 
 ---
 
-### 작업 4: docx에서 그림 위에 박스를 쓰기
+### Task 4: docx에서 그림 위에 박스를 쓰기
 
 **파일:**
 - 만든다: `apps/shell/src/main/translate/ocr-boxes-docx.ts`
@@ -145,7 +145,7 @@
 
 ---
 
-### 작업 5: 배치 화면 — 그림 위 박스 편집기
+### Task 5: 배치 화면 — 그림 위 박스 편집기
 
 **파일:**
 - 만든다: `apps/shell/src/renderer/src/translate/ocr-box-geometry.ts`, `apps/shell/src/renderer/src/translate/OcrBoxEditor.tsx`
@@ -172,7 +172,7 @@
 
 ---
 
-### 작업 6: 문서, 결정 기록, 전체 검사
+### Task 6: 문서, 결정 기록, 전체 검사
 
 **파일:**
 - 만든다: `docs/tracking/decisions/NNNN-ocr-box-placement.md`(다음 빈 번호, 지금은 0104. `index.md`에 한 줄 추가)
