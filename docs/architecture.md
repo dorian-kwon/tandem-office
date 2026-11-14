@@ -270,6 +270,16 @@ PDF 편집기 화면 ── pdfApi.structure.* ──→ 셸 메인(pdf-structur
 - 앱 안에서 저장해 파일 내용이 바뀌면, 화면이 `storeMigrate`를 불러 같은 페이지의 결과와 끝나지 않은 작업의 기록을 새 해시로 옮긴다.
 - 한 문서에 작업 하나는 세 겹으로 지킨다. 탭의 세션, 화면 프로세스 안의 잠금(`documentJobs`), 다른 프로세스가 최근 30초 안에 갱신한 작업 기록.
 
+## 그림 속 글을 박스로 놓는 길 (결정 0104)
+
+번역 프로젝트의 docx 그림 OCR이 글을 그림 위 상자로 놓기까지다.
+
+1. `OcrSelectDialog`가 `runOcr`에 `boxes: true`를 준다(docx 내장 그림이고 AI 채팅 팝업이 아닐 때만). 준비 단계(`ocr.ts`의 `prepare`)가 `embedded-images.ts`로 그림을 나열하며 `inspectBoxableImage`로 상자를 놓을 수 있는 그림에 `boxable`을 붙인다.
+2. `runOcr`는 `boxable` 그림을 `readOcrBoxes`(`src/shared/ocr-boxes.ts`)로, 나머지를 기존 `readAiPage`로 읽는다. 호출 수와 보내는 이미지는 그대로다. 박스 읽기의 결과(`kind: 'boxes'`)는 같은 `OcrPageResult.payload` 자리에 실린다.
+3. 배치 화면(`OcrPlacementDialog`)이 확인한 읽기 결과를 받아 "그림 위" 선택지를 기본으로 보이고, `OcrBoxPicture`·`OcrBoxEditor`가 그림(`translate:ocr-preview-large`) 위에 박스를 겹쳐 고치게 한다. 사람이 저장하면 `docx-image-boxes` 배치가 `ocr-write`로 간다.
+4. 메인의 `write`가 박스 payload와 배치를 다시 검사하고, `placeOcrText`(`ocr-placement.ts`)가 그림마다 `buildImageBoxParagraphsXml`(`ocr-boxes-docx.ts`)의 홀더 문단을 한 번에 끼운다. 상자를 놓을 수 없는 그림은 같은 순서에서 "그림 뒤 문단"으로 쓴다. 결과는 `output/`의 새 docx다.
+5. 그 docx를 번역 화면이 열면 편집기가 상자를 텍스트 상자 블록(`docProtected`의 `textboxes`)으로 들고, `read_runs`/`translate_blocks`(`translate-runs.ts`)가 상자 문단을 읽고 쓰며, 저장은 `textboxParasPatch`가 원래 XML에 되쓴다.
+
 ## 프로세스 경계를 넘는 것과 넘지 않는 것
 
 | 경계                    | 넘어가는 것                                                                                                                                                                                                                                                            | 넘어가지 않는 것                                                                           |

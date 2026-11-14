@@ -496,6 +496,16 @@ metadata:
 
 **이 PC에만 두는 것.** `app-settings.json`의 `translationSystemPrompt`(모든 프로젝트의 시스템 프롬프트)와 `translationProjects`(`{ dir, lastOpened, listed? }`의 목록. `listed`는 프로젝트 폴더 목록에 한 번 올렸다는 표시), 번역 화면에서 최근에 연 문서 `translationRecentDocuments`(`{ dir, file, output, openedAt }`, 최대 10개).
 
+## 그림 OCR의 박스 배치 (결정 0104)
+
+번역 프로젝트의 docx 그림 OCR(`translate:ocr-*`)에만 해당한다. 오류는 다른 `translate:*`와 같이 `[코드]` 접두사 문자열이다.
+
+- **`translate:ocr-prepare`의 항목**: `items[i].boxable`(참일 때만 있음)은 그 그림이 본문 문단 안에서 혼자 있는 왼쪽 정렬 줄 안 그림이라 박스를 놓을 수 있다는 뜻이다.
+- **`translate:ocr-write`의 `pages[i].payload`**: 기존 읽기 형식 또는 `{ "kind": "boxes", "boxes": [{ "x", "y", "w", "h", "fontHeight", "text" }], "text" }`. 좌표와 `fontHeight`는 그림 너비·높이에 대한 0~1 비율이고, `text`는 모든 박스 글을 읽는 순서대로 줄바꿈으로 이은 것이다. 메인이 다시 검사한다(박스 60개 이하, 글 2000자 이하, 그림 안). 박스 읽기는 docx 내장 그림에만 쓰이고, 다른 원본에 오면 `INVALID_ARGUMENT`다.
+- **`translate:ocr-write`의 `placement`**: 기존 목록 배치에 `{ "kind": "docx-image-boxes", "images": [{ "index", "boxes": [...] }] }`가 더해진다. 읽은 그림에서 온 `index`만 받고, 박스는 그림 안이어야 한다. 목록에 없거나 상자를 놓을 수 없는 그림은 "그림 뒤 문단"으로 쓴다.
+- **문서 안의 모양**: 박스마다 그림 문단 바로 뒤에 홀더 문단(정확한 줄 높이 20 twips)과 그 안의 떠 있는 텍스트 상자(`wp:anchor`, 불투명 흰색 `FFFFFF`)가 놓이고, 상자는 그림 위로 올려 놓인다. 그림과 문서의 다른 부분은 바뀌지 않는다.
+- **번역 도구**: `read_runs`는 텍스트 상자 블록을 `{ index, box, paragraph, fp, segments }`로 나열하고, `translate_blocks`는 같은 `box`·`paragraph`를 받아 상자 안 글을 바꾼다. `revise_blocks`와 `add_bilingual`은 `box` 항목을 거절한다.
+
 ## Google 드라이브 (결정 0033, 0085)
 
 같은 데이터 폴더에 둘이 있다. 터미널 명령어와 MCP는 둘 다 읽지도 쓰지도 않는다.
