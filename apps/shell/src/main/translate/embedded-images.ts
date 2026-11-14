@@ -174,6 +174,7 @@ export async function listEmbeddedImages(path: string): Promise<EmbeddedImage[]>
           '',
         )
         const raw = await text(part)
+        const styles = (await text('word/styles.xml')) || undefined
         let paragraph = 0
         for (const m of xml.matchAll(/<(?:\w+:)?(p|blip|imagedata)\b[^>]*>/g)) {
           if (m[1] === 'p') {
@@ -188,7 +189,7 @@ export async function listEmbeddedImages(path: string): Promise<EmbeddedImage[]>
               part,
               id,
               `${basename(part)} · ¶${at}`,
-              m[1] === 'blip' && inspectBoxableImage(part, raw, at, id).ok,
+              m[1] === 'blip' && inspectBoxableImage(part, raw, at, id, styles).ok,
             )
           }
         }

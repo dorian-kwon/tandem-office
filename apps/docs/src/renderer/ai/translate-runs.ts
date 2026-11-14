@@ -1054,6 +1054,8 @@ export type RunTranslationOutcome =
       reports: RunTranslationReport[]
       /** items skipped because their paragraph changed since read_runs (the rest was applied) */
       stale: string[]
+      /** text box items left untouched because revision tracking is on (a box cannot carry revisions) */
+      skippedBoxes: string[]
     }
   | { ok: false; errors: string[] }
 
@@ -1071,6 +1073,7 @@ export function applyRunTranslations(
   const doc = editor.state.doc
   const errors: string[] = []
   const stale: string[] = []
+  const skippedBoxes: string[] = []
   const reports: RunTranslationReport[] = []
   const edits: Edit[] = []
   const boxEdits: BoxEdit[] = []
@@ -1087,8 +1090,8 @@ export function applyRunTranslations(
     seen.add(key)
     if (isBox) {
       if (track) {
-        errors.push(
-          `block ${item.index} box ${item.box}: a text box cannot carry tracked changes; use translate_blocks without revision tracking`,
+        skippedBoxes.push(
+          `block ${item.index} box ${item.box}: a text box cannot carry tracked changes, so it was left as it is; translate it with revision tracking off`,
         )
         continue
       }
@@ -1109,6 +1112,7 @@ export function applyRunTranslations(
   }
   if (errors.length > 0) return { ok: false, errors }
   if (stale.length > 0 && reports.length === 0) return { ok: false, errors: stale }
+  if (skippedBoxes.length > 0 && reports.length === 0) return { ok: false, errors: skippedBoxes }
   if (edits.length > 0 || boxEdits.length > 0) {
     const tr = edits.length > 0 ? applyEdits(editor, edits, track) : editor.state.tr
     if (boxEdits.length > 0) applyBoxEdits(tr, boxEdits)
@@ -1119,7 +1123,7 @@ export function applyRunTranslations(
     const fp = currentFingerprint(editor.state.doc, report.index, report.paragraph ?? 0)
     if (fp) report.fp = fp
   }
-  return { ok: true, reports, stale }
+  return { ok: true, reports, stale, skippedBoxes }
 }
 
 export interface RunTranslationResult extends Partial<Omit<RunTranslationReport, 'index'>> {
@@ -1424,6 +1428,8 @@ export function remainingUntranslated(
   editor: Editor,
   access: AiNotesAccess | undefined,
   language?: string,
+  /** `tracking`: revision tracking is on, so text box paragraphs (which cannot carry revisions) are not counted */
+  options: { tracking?: boolean } = {},
 ): RemainingReport {
   const script = sourceScriptOf(language)
   const handled = handledFingerprints.get(editor)
@@ -1436,6 +1442,7 @@ export function remainingUntranslated(
   const doc = editor.state.doc
   for (const entry of readRunGroups(editor, 0, doc.childCount - 1)) {
     if (!entry.segments || !entry.fp) continue
+    if (options.tracking && entry.box !== undefined) continue
     if (pending(entry.segments, entry.fp))
       body.push(
         entry.box !== undefined

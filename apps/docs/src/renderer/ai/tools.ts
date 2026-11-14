@@ -1582,8 +1582,12 @@ const BILINGUAL_NOTES_NOTE =
   'Bilingual output (add_bilingual) does not duplicate footnotes or endnotes: leave them in the original language and tell the person.'
 
 /** what translate_blocks still leaves open, by its own tracking (short) */
-function remainingLine(editor: Editor, notes: AiNotesAccess | undefined): string {
-  const report = remainingUntranslated(editor, notes)
+function remainingLine(
+  editor: Editor,
+  notes: AiNotesAccess | undefined,
+  tracking: boolean,
+): string {
+  const report = remainingUntranslated(editor, notes, undefined, { tracking })
   if (report.body.length + report.notes.length === 0)
     return "Nothing is left by this tool's own tracking; confirm once with read_runs checkRemaining:true and sourceLanguage."
   const next = [
@@ -1922,6 +1926,7 @@ function executeSyncTool(
           editor,
           notes,
           typeof call.input.sourceLanguage === 'string' ? call.input.sourceLanguage : undefined,
+          { tracking: track !== undefined },
         )
         const total = report.body.length + report.notes.length
         const list = (label: string, items: string[]) =>
@@ -2151,7 +2156,7 @@ function executeSyncTool(
         outcome.added.length +
         outcome.placed.length +
         outcome.tables.reduce((n, x) => n + x.paragraphs, 0)
-      lines.push(remainingLine(editor, notes))
+      lines.push(remainingLine(editor, notes, track !== undefined))
       return {
         output: lines.join('\n'),
         mutated: count > 0,
@@ -2393,7 +2398,12 @@ function executeSyncTool(
           ...(outcome.stale.length > 0
             ? [staleLine(outcome.stale, outcome.reports.filter((r) => !r.empty).length)]
             : []),
-          remainingLine(editor, notes),
+          ...(outcome.skippedBoxes.length > 0
+            ? [
+                `SKIPPED ${outcome.skippedBoxes.length} text box paragraph(s): a text box cannot carry tracked changes, so it was left as it is. Tell the person to turn revision tracking off to translate the text boxes. ${outcome.skippedBoxes.slice(0, 20).join('; ')}`,
+              ]
+            : []),
+          remainingLine(editor, notes, track !== undefined),
         ].join('\n'),
         mutated: translated.length > 0 || noteCount > 0,
         summary: t('aiSumTranslatedBlocks', { count: translated.length + noteCount }),

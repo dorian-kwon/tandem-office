@@ -140,6 +140,7 @@ export async function placeOcrText(
   if (p.kind === 'docx-after-images' || p.kind === 'docx-image-boxes') {
     const documentPart = 'word/document.xml'
     const documentSource = await zip.file(documentPart)?.async('string')
+    const stylesSource = await zip.file('word/styles.xml')?.async('string')
     let docPrId = documentSource ? nextDocPrId(documentSource) : 1
     for (const item of items) {
       const at = item.location?.match(
@@ -153,7 +154,7 @@ export async function placeOcrText(
       const boxes = boxesOf.get(item.index)
       const info =
         boxes && documentSource && item.part === documentPart && item.relId
-          ? inspectBoxableImage(documentPart, documentSource, index, item.relId)
+          ? inspectBoxableImage(documentPart, documentSource, index, item.relId, stylesSource)
           : null
       let insertion: string
       if (boxes && info?.ok) {

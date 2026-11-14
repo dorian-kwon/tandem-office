@@ -237,4 +237,46 @@ describe('translation and anchored text boxes', () => {
     expect(xml).toContain('Hello World')
     expect(xml).not.toContain('Hallo Welt')
   })
+  it('with revision tracking on, a text box paragraph is skipped and reported, not a failure of the batch', () => {
+    const editor = createEditor([body('Hallo'), boxBlock([{ paras: [para({ text: 'Welt' })] }])])
+    const [bodyEntry] = readRunGroups(editor, 0, 0)
+    const [boxEntry] = readRunGroups(editor, 1, 1)
+
+    const outcome = applyRunTranslations(
+      editor,
+      [
+        { index: 0, fp: bodyEntry!.fp, segments: ['Hello'] },
+        { index: 1, box: 0, paragraph: 0, fp: boxEntry!.fp, segments: ['World'] },
+      ],
+      { author: 'AI Assistant' },
+    )
+
+    expect(outcome.ok).toBe(true)
+    if (outcome.ok) {
+      expect(outcome.reports).toHaveLength(1)
+      expect(outcome.skippedBoxes).toHaveLength(1)
+      expect(outcome.skippedBoxes[0]).toMatch(/tracked changes/)
+    }
+    expect(textsOf(boxesOf(editor, 1)[0]!)).toEqual(['Welt'])
+  })
+
+  it('refuses a call that holds only text box items while tracking, saying why', () => {
+    const editor = createEditor([boxBlock([{ paras: [para({ text: 'Welt' })] }])])
+    const [entry] = readRunGroups(editor, 0, 0)
+
+    const outcome = applyRunTranslations(
+      editor,
+      [{ index: 0, box: 0, paragraph: 0, fp: entry!.fp, segments: ['World'] }],
+      { author: 'AI Assistant' },
+    )
+
+    expect(outcome.ok).toBe(false)
+    if (!outcome.ok) expect(outcome.errors.join(' ')).toMatch(/tracked changes/)
+  })
+
+  it('remainingUntranslated leaves text box paragraphs out while tracking, so the check can finish', () => {
+    const editor = createEditor([boxBlock([{ paras: [para({ text: '안녕하세요' })] }])])
+    expect(remainingUntranslated(editor, undefined, 'ko').body).toEqual(['0 (box 0 paragraph 0)'])
+    expect(remainingUntranslated(editor, undefined, 'ko', { tracking: true }).body).toEqual([])
+  })
 })

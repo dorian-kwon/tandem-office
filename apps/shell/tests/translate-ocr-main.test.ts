@@ -510,6 +510,21 @@ it('marks only a picture alone on a left-aligned paragraph as boxable', async ()
   expect(listing.items[0]!.boxable).toBeUndefined()
 })
 
+it('does not mark a picture whose style centers it as boxable', async () => {
+  const stylesXml =
+    '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+    '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/>' +
+    '<w:pPr><w:jc w:val="center"/></w:pPr></w:style></w:styles>'
+  const bytes = await buildDocx({
+    withImage: true,
+    stylesXml,
+    bodyXml: `<w:p>${textRun('Intro')}</w:p><w:p>${DRAWING}</w:p>`,
+  })
+  await project([{ file: 'centered.docx', kind: 'editable', bytes }])
+  const listing = await handlers().ocrPrepare({ dir, files: ['centered.docx'] })
+  expect(listing.items[0]!.boxable).toBeUndefined()
+})
+
 it('writes boxes over a boxable picture from the confirmed reading', async () => {
   const bytes = await buildDocx({
     withImage: true,

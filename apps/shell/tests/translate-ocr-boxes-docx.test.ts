@@ -69,6 +69,82 @@ describe('inspectBoxableImage', () => {
     expect(inspect(body)).toEqual({ ok: false, reason })
   })
 
+  const STYLES_HEAD =
+    '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+  const styled = (defaults: string, styles: string) =>
+    `${STYLES_HEAD}<w:docDefaults><w:pPrDefault>${defaults}</w:pPrDefault></w:docDefaults>` +
+    `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>` +
+    `${styles}</w:styles>`
+  const inspectStyled = (body: string, stylesXml: string) =>
+    inspectBoxableImage('word/document.xml', documentOf(body), 2, 'rId10', stylesXml)
+
+  it('reads the spacing after from the document defaults, a style and the paragraph itself', () => {
+    const doc = para(text('x')) + para(drawing())
+    const defaults = '<w:pPr><w:spacing w:after="160"/></w:pPr>'
+    expect(inspectStyled(doc, styled(defaults, ''))).toMatchObject({ ok: true, afterTwips: 160 })
+    const caption =
+      '<w:style w:type="paragraph" w:styleId="Caption"><w:name w:val="caption"/>' +
+      '<w:basedOn w:val="Normal"/><w:pPr><w:spacing w:after="120"/></w:pPr></w:style>'
+    const withStyle = para(text('x')) + para(drawing(), '<w:pStyle w:val="Caption"/>')
+    expect(inspectStyled(withStyle, styled(defaults, caption))).toMatchObject({
+      ok: true,
+      afterTwips: 120,
+    })
+    const direct =
+      para(text('x')) + para(drawing(), '<w:pStyle w:val="Caption"/><w:spacing w:after="40"/>')
+    expect(inspectStyled(direct, styled(defaults, caption))).toMatchObject({
+      ok: true,
+      afterTwips: 40,
+    })
+  })
+
+  it('accepts a justified picture paragraph, which sits at the left on a one-picture line', () => {
+    const doc = para(text('x')) + para(drawing(), '<w:jc w:val="both"/>')
+    expect(inspect(doc)).toMatchObject({ ok: true })
+  })
+
+  it.each([
+    ['a centered style', '<w:jc w:val="center"/>', ''],
+    ['an indented style', '<w:ind w:left="720"/>', ''],
+    ['a numbered style', '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="3"/></w:numPr>', ''],
+    ['a numbered paragraph', '', '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="3"/></w:numPr>'],
+  ])('refuses a picture paragraph with %s', (_name, styleProps, directProps) => {
+    const style =
+      '<w:style w:type="paragraph" w:styleId="Picture"><w:name w:val="Picture"/>' +
+      `<w:basedOn w:val="Normal"/><w:pPr>${styleProps}</w:pPr></w:style>`
+    const doc = para(text('x')) + para(drawing(), `<w:pStyle w:val="Picture"/>${directProps}`)
+    expect(inspectStyled(doc, styled('<w:pPr/>', style))).toEqual({ ok: false, reason: 'aligned' })
+  })
+
+  it('treats a style loop as unresolved instead of guessing', () => {
+    const loop =
+      '<w:style w:type="paragraph" w:styleId="A"><w:name w:val="A"/><w:basedOn w:val="B"/></w:style>' +
+      '<w:style w:type="paragraph" w:styleId="B"><w:name w:val="B"/><w:basedOn w:val="A"/></w:style>'
+    const doc = para(text('x')) + para(drawing(), '<w:pStyle w:val="A"/>')
+    expect(inspectStyled(doc, styled('<w:pPr/>', loop))).toEqual({ ok: false, reason: 'aligned' })
+  })
+
+  it.each([
+    ['a line break', '<w:r><w:br/></w:r>'],
+    ['a tab', '<w:r><w:tab/></w:r>'],
+    ['a carriage return', '<w:r><w:cr/></w:r>'],
+    ['a symbol', '<w:r><w:sym w:font="Wingdings" w:char="F0FC"/></w:r>'],
+    [
+      'a position tab',
+      '<w:r><w:ptab w:relativeTo="margin" w:alignment="left" w:leader="none"/></w:r>',
+    ],
+    ['blank text', '<w:r><w:t xml:space="preserve">   </w:t></w:r>'],
+  ])('refuses a picture line that also holds %s', (_name, before) => {
+    const doc = para(text('x')) + para(before + drawing())
+    expect(inspect(doc)).toEqual({ ok: false, reason: 'crowded' })
+  })
+
+  it('refuses a picture paragraph that ends a section, so the boxes cannot land in the next one', () => {
+    const doc =
+      para(text('x')) + para(drawing(), '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/></w:sectPr>')
+    expect(inspect(doc)).toEqual({ ok: false, reason: 'section' })
+  })
+
   it('refuses a picture in a header and a relationship the paragraph does not hold', () => {
     const body = para(text('x')) + para(drawing())
     expect(inspect(body, 2, 'rId10', 'word/header1.xml')).toEqual({
@@ -140,13 +216,39 @@ describe('placing boxes over a docx picture', () => {
         /<wp:positionV relativeFrom="paragraph"><wp:posOffset>(-?\d+)<\/wp:posOffset>/g,
       ),
     ].map((m) => Number(m[1]))
-    expect(verticals).toEqual(boxes.map((b, k) => Math.round(b.y * H - H - k * 20 * 635)))
+    expect(verticals).toEqual(boxes.map((b) => Math.round(b.y * H - H)))
     const horizontals = [
       ...xml.matchAll(/<wp:positionH relativeFrom="column"><wp:posOffset>(\d+)</g),
     ].map((m) => Number(m[1]))
     expect(horizontals).toEqual(boxes.map((b) => Math.round(b.x * W)))
     expect(xml.indexOf('r:embed="rId10"')).toBeLessThan(xml.indexOf('<mc:AlternateContent'))
     expect(xml.indexOf('<mc:AlternateContent')).toBeLessThan(xml.indexOf('After text'))
+  })
+
+  it('puts all boxes of a picture in one holder paragraph', async () => {
+    const boxes = [box(), box({ text: 'Date', y: 0.6 }), box({ text: 'Total', y: 0.8 })]
+    const xml = await documentXml(
+      await place(await pictureDoc(), [item({ text: 'x' })], [{ index: 1, boxes }]),
+    )
+    expect(xml.match(/w:lineRule="exact"/g)).toHaveLength(1)
+    expect(xml.match(/<wp:anchor\b/g)).toHaveLength(boxes.length)
+  })
+
+  it('subtracts the spacing after the picture that the styles give it', async () => {
+    const stylesXml =
+      '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+      '<w:docDefaults><w:pPrDefault><w:pPr><w:spacing w:after="160"/></w:pPr></w:pPrDefault>' +
+      '</w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal">' +
+      '<w:name w:val="Normal"/></w:style></w:styles>'
+    const source = await buildDocx({
+      withImage: true,
+      stylesXml,
+      bodyXml: para(text('Intro')) + para(drawing()) + para(text('After text')),
+    })
+    const b = box()
+    const xml = await documentXml(await place(source, [item()], [{ index: 1, boxes: [b] }]))
+    const vertical = /<wp:positionV relativeFrom="paragraph"><wp:posOffset>(-?\d+)</.exec(xml)
+    expect(Number(vertical![1])).toBe(Math.round(b.y * H - (H + 160 * 635)))
   })
 
   it('escapes markup and control characters in box text', async () => {
