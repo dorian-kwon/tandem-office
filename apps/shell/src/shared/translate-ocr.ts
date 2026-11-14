@@ -2,6 +2,7 @@ import type { OcrMode, SourceEntry } from '@genoffice/translate-project'
 import type { AiReadRequest } from '../../../../packages/pdf-structure/src/ai-read/instruction'
 import { readAiPage } from '../../../../packages/pdf-structure/src/ai-read/read-page'
 import { classifyRunError, isJobStopKind } from '../../../../packages/pdf-structure/src/jobs/errors'
+import { readOcrBoxes, type OcrBox } from './ocr-boxes'
 
 /**
  * OCR of a translation project's scanned PDF, standalone or embedded images through the
@@ -43,6 +44,8 @@ export interface OcrItem {
   name: string
   /** document part/paragraph or workbook sheet/cell; absent for standalone images */
   location?: string
+  /** a docx picture whose text can go back over it as boxes (see ocr-boxes-docx); absent = no */
+  boxable?: boolean
 }
 
 /** what `prepare` answers: the items to choose from, under a token main holds */
@@ -78,6 +81,7 @@ export type OcrPlacement =
   | { kind: 'docx-after-images' }
   | { kind: 'docx-end' }
   | { kind: 'docx-table-cell'; table: number; row: number; column: number; overwrite: boolean }
+  | { kind: 'docx-image-boxes'; images: { index: number; boxes: OcrBox[] }[] }
 
 export interface OcrTable {
   index: number
@@ -128,6 +132,11 @@ export interface RunOcrArgs {
   prepared?: OcrPrepared
   signal?: AbortSignal
   onProgress?: (progress: OcrProgress) => void
+  /**
+   * Read the `boxable` pictures of an embedded docx as boxes (text, place and text size in one
+   * call, replacing their plain reading). Off for the chat popup, which only wants the text.
+   */
+  boxes?: boolean
   /** Required for embedded images: review the readings and explicitly choose their destination. */
   choosePlacement?: (pages: OcrPageResult[], error?: unknown) => Promise<OcrPlacement | null>
   /**
@@ -278,7 +287,7 @@ export async function runOcr(args: RunOcrArgs): Promise<RunOcrResult> {
     if (!(await args.confirm(pages.length))) throw new OcrCancelledError()
     if (aborted(signal)) throw new OcrCancelledError()
     await bridge.start(prepared.token, pages)
-    return await readAndWrite(args, prepared.token, provider, pages)
+    return await readAndWrite(args, prepared, provider, pages)
   } finally {
     if (ownLease) await bridge.release(prepared.token).catch(() => undefined)
   }
@@ -286,11 +295,17 @@ export async function runOcr(args: RunOcrArgs): Promise<RunOcrResult> {
 
 async function readAndWrite(
   args: RunOcrArgs,
-  token: string,
+  prepared: OcrPrepared,
   provider: OcrProvider,
   pages: number[],
 ): Promise<RunOcrResult> {
   const { bridge, signal } = args
+  const token = prepared.token
+  const asBoxes = (index: number): boolean =>
+    args.boxes === true &&
+    prepared.kind === 'embedded' &&
+    prepared.format === 'docx' &&
+    prepared.items.find((item) => item.index === index)?.boxable === true
   const inner = new AbortController()
   const onAbort = () => inner.abort(signal?.reason)
   signal?.addEventListener('abort', onAbort, { once: true })
@@ -316,6 +331,19 @@ async function readAndWrite(
     for (let attempt = 0; ; attempt++) {
       try {
         const image = await bridge.pageImage(token, index)
+        if (asBoxes(index)) {
+          results.set(
+            index,
+            await readOcrBoxes({
+              image: image.data,
+              mime: image.mime,
+              ask,
+              signal: inner.signal,
+            }),
+          )
+          failuresInARow = 0
+          return
+        }
         const reading = await readAiPage({
           page: index,
           pageFingerprint: '',

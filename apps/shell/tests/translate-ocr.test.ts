@@ -305,3 +305,74 @@ it('waits for OCR review and an explicit placement before writing an embedded re
     overwrite: false,
   })
 })
+
+describe('runOcr box reading of embedded docx pictures', () => {
+  const BOXES = `<boxes>${JSON.stringify([
+    { x: 100, y: 100, w: 300, h: 100, font: 50, text: 'Name' },
+  ])}</boxes>`
+
+  function embeddedSetup() {
+    const prepared: OcrPrepared = {
+      token: 'tok',
+      kind: 'embedded',
+      format: 'docx',
+      ocr: { kind: 'ai', provider: 'claude' },
+      items: [
+        { index: 1, name: 'a.png', boxable: true },
+        { index: 2, name: 'b.png' },
+      ],
+    }
+    const written: unknown[] = []
+    const bridge = {
+      prepare: vi.fn(async () => prepared),
+      start: vi.fn(async () => undefined),
+      pageImage: vi.fn(async (_token: string, index: number) => ({
+        data: new Uint8Array([index]),
+        mime: 'image/png' as const,
+      })),
+      write: vi.fn(async (_token: string, pages: unknown[]) => {
+        written.push(...pages)
+        return { outputPath: '/p/output/doc (OCR).docx' }
+      }),
+      release: vi.fn(async () => undefined),
+    } satisfies OcrBridge
+    const ask = vi.fn<OcrAsk>(async (_provider, request) =>
+      request.system.includes('<boxes>') ? BOXES : ANSWER,
+    )
+    return { prepared, bridge, ask, written }
+  }
+  const run = (boxes: boolean | undefined) => {
+    const { prepared, bridge, ask, written } = embeddedSetup()
+    const promise = runOcr({
+      dir: '/p',
+      source: { file: 'doc.docx', sha256: 'x', kind: 'editable' },
+      selection: { kind: 'all' },
+      confirm: async () => true,
+      bridge,
+      ask,
+      prepared,
+      ...(boxes === undefined ? {} : { boxes }),
+      choosePlacement: async () => ({ kind: 'docx-after-images' }),
+    })
+    return { promise, ask, written }
+  }
+
+  it('reads boxable items with the box request and the others with the page request', async () => {
+    const { promise, ask, written } = run(true)
+    await promise
+    const systems = ask.mock.calls.map(([, request]) => request.system.includes('<boxes>'))
+    expect(systems.filter(Boolean)).toHaveLength(1)
+    expect(systems.filter((box) => !box)).toHaveLength(1)
+    const byIndex = new Map(
+      (written as { index: number; payload: { kind?: string } }[]).map((p) => [p.index, p.payload]),
+    )
+    expect(byIndex.get(1)).toMatchObject({ kind: 'boxes', text: 'Name' })
+    expect(byIndex.get(2)).not.toHaveProperty('kind', 'boxes')
+  })
+
+  it('does not use the box request when boxes is not set', async () => {
+    const { promise, ask } = run(undefined)
+    await promise
+    expect(ask.mock.calls.every(([, request]) => !request.system.includes('<boxes>'))).toBe(true)
+  })
+})

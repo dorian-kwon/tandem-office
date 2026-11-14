@@ -443,6 +443,47 @@ it('lists embedded images, previews locally and serves only confirmed selections
   expect(await written.file('word/document.xml')!.async('string')).toContain('Menu text')
 })
 
+it('write accepts a boxes payload for the list placement and writes payload.text', async () => {
+  await project([{ file: 'pictures.docx', kind: 'editable', bytes: await embeddedDoc() }])
+  const h = handlers()
+  const listing = await h.ocrPrepare({ dir, files: ['pictures.docx'] })
+  await h.ocrStart({ token: listing.token, pages: [2] })
+  const result = await h.ocrWrite({
+    token: listing.token,
+    pages: [
+      {
+        index: 2,
+        payload: {
+          kind: 'boxes',
+          boxes: [{ x: 0.1, y: 0.1, w: 0.3, h: 0.1, fontHeight: 0.05, text: 'Box one' }],
+          text: 'Box one\nBox two',
+        },
+      },
+    ],
+    placement: { kind: 'docx-after-images' },
+  })
+  const written = await JSZip.loadAsync(readFileSync(result.outputPath))
+  const xml = await written.file('word/document.xml')!.async('string')
+  expect(xml).toContain('Box one')
+  expect(xml).toContain('Box two')
+})
+
+it('write rejects a boxes payload with a wrong shape', async () => {
+  await project([{ file: 'pictures.docx', kind: 'editable', bytes: await embeddedDoc() }])
+  const h = handlers()
+  const listing = await h.ocrPrepare({ dir, files: ['pictures.docx'] })
+  await h.ocrStart({ token: listing.token, pages: [2] })
+  expect(
+    await codeOf(
+      h.ocrWrite({
+        token: listing.token,
+        pages: [{ index: 2, payload: { kind: 'boxes', boxes: 'nope', text: 1 } }],
+        placement: { kind: 'docx-after-images' },
+      }),
+    ),
+  ).toBe('INVALID_ARGUMENT')
+})
+
 it('refuses changed embedded sources before serving images', async () => {
   await project([{ file: 'pictures.docx', kind: 'editable', bytes: await embeddedDoc() }])
   const h = handlers()

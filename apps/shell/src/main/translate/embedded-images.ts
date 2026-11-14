@@ -18,6 +18,10 @@ export interface EmbeddedImage {
   location: string
   entry: ZipEntry
   signature: string
+  /** the package part that holds the reference, for example `word/document.xml` */
+  part: string
+  /** the relationship id of the picture inside that part */
+  relId: string
 }
 
 export const supportsEmbeddedOcr = (file: string): boolean => /\.(docx|xlsx)$/i.test(file)
@@ -141,7 +145,14 @@ export async function listEmbeddedImages(path: string): Promise<EmbeddedImage[]>
       const entry = entries.get(rel.path)
       if (!entry || entry.usize === 0) return
       seen.add(rel.path)
-      images.push({ name: basename(rel.path), location, entry, signature: src.signature })
+      images.push({
+        name: basename(rel.path),
+        location,
+        entry,
+        signature: src.signature,
+        part,
+        relId: id,
+      })
     }
     if (extname(path).toLowerCase() === '.docx') {
       const parts = [...entries.keys()]

@@ -23,6 +23,7 @@ import {
   type OcrPlacement,
 } from '../../shared/translate-ocr'
 import { TranslateIpcError } from '../../shared/translate-api'
+import { checkOcrBoxesPayload, type OcrBoxesPayload } from '../../shared/ocr-boxes'
 import { writeNewFile } from './output-file'
 import {
   listEmbeddedImages,
@@ -407,17 +408,26 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
       if (!Array.isArray(pages) || pages.length === 0 || pages.length > l.selection.size)
         throw invalid('there is no reading to write')
       const seen = new Set<number>()
+      // a box reading (embedded docx pictures) keeps its text and places; it has no document tree
+      const boxReadings = new Map<number, OcrBoxesPayload>()
       const readings = (pages as OcrPageResult[])
         .map((p) => {
           const index = (p as { index?: unknown } | null)?.index
           if (typeof index !== 'number' || !l.selection!.has(index) || seen.has(index))
             throw invalid('a reading is for a page that was not confirmed')
           seen.add(index)
+          const boxes = checkOcrBoxesPayload(p.payload)
+          if (boxes) {
+            if (l.kind !== 'embedded') throw invalid('a box reading is only for embedded pictures')
+            boxReadings.set(index, boxes)
+            return null
+          }
           // the renderer's copy is checked by the engine's own payload reader
           const payload = readAiReadPayload(p.payload)
           if (!payload) throw invalid('a reading is not in the expected form')
           return materializeReading(payload, index, '')
         })
+        .filter((reading): reading is NonNullable<typeof reading> => reading !== null)
         .sort((a, b) => a.page - b.page)
 
       const tree: DocumentTree = {
@@ -448,16 +458,24 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
             'the source changed before placing OCR text',
           )
         const format = extname(l.source!.file).toLowerCase() === '.xlsx' ? 'xlsx' : 'docx'
-        const items = readings.map((r) => ({
-          index: r.page,
-          location: l.embedded![r.page - 1]!.location,
-          text: treeToMarkdown({
-            ...tree,
-            pages: tree.pages.filter((p) => p.page === r.page),
-            blocks: r.blocks,
-            footnotes: r.footnotes,
-          }).markdown,
-        }))
+        const textOf = new Map(
+          readings.map((r) => [
+            r.page,
+            treeToMarkdown({
+              ...tree,
+              pages: tree.pages.filter((p) => p.page === r.page),
+              blocks: r.blocks,
+              footnotes: r.footnotes,
+            }).markdown,
+          ]),
+        )
+        const items = [...seen]
+          .sort((a, b) => a - b)
+          .map((index) => ({
+            index,
+            location: l.embedded![index - 1]!.location,
+            text: boxReadings.get(index)?.text ?? textOf.get(index) ?? '',
+          }))
         const bytes = await placeOcrText(await readFile(path), format, items, placement)
         const outputPath = await writeNewFile(
           join(l.dir, 'output'),
