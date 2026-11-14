@@ -207,6 +207,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     name: 'read_runs',
     description:
       'Read a block range for TRANSLATION: one JSON line per paragraph with its text as numbered segments, one segment per run of equal formatting (footnote references, tabs, breaks and other inline objects sit between segments and are not shown). Table blocks list each cell paragraph with its "paragraph" number and its grid cell "cell":"r<row>c<column>" (0-based; "span":"<cols>x<rows>" for a merged cell); a wholly empty cell is listed once with "empty":true and its "cell" (a free destination for add_bilingual). Empty paragraphs are listed as "empty":true; leave them alone. ' +
+      'A text box block is listed per box paragraph ({"index","box","paragraph","fp","segments"}); translate those with translate_blocks, passing box and paragraph back. ' +
       'Long ranges are paged: a truncated result says which startBlockIndex to continue from. ' +
       'With notes:true it lists every footnote and endnote the same way ({"note","id","fp","segments"}; no block range needed). ' +
       'With checkRemaining:true (and sourceLanguage) it lists the body paragraphs and notes that still look untranslated; translation is finished only when it reports none. ' +
@@ -249,6 +250,11 @@ export const AGENT_TOOLS: AgentToolDef[] = [
             type: 'object',
             properties: {
               index: { type: 'integer', description: 'block index from read_runs' },
+              box: {
+                type: 'integer',
+                description:
+                  'a text box paragraph: the "box" number from read_runs (then "paragraph" is the paragraph inside that box)',
+              },
               note: {
                 type: 'string',
                 enum: ['footnote', 'endnote'],
@@ -1576,8 +1582,12 @@ const BILINGUAL_NOTES_NOTE =
   'Bilingual output (add_bilingual) does not duplicate footnotes or endnotes: leave them in the original language and tell the person.'
 
 /** what translate_blocks still leaves open, by its own tracking (short) */
-function remainingLine(editor: Editor, notes: AiNotesAccess | undefined): string {
-  const report = remainingUntranslated(editor, notes)
+function remainingLine(
+  editor: Editor,
+  notes: AiNotesAccess | undefined,
+  tracking: boolean,
+): string {
+  const report = remainingUntranslated(editor, notes, undefined, { tracking })
   if (report.body.length + report.notes.length === 0)
     return "Nothing is left by this tool's own tracking; confirm once with read_runs checkRemaining:true and sourceLanguage."
   const next = [
@@ -1916,6 +1926,7 @@ function executeSyncTool(
           editor,
           notes,
           typeof call.input.sourceLanguage === 'string' ? call.input.sourceLanguage : undefined,
+          { tracking: track !== undefined },
         )
         const total = report.body.length + report.notes.length
         const list = (label: string, items: string[]) =>
@@ -2027,8 +2038,14 @@ function executeSyncTool(
           fp?: unknown
           segments?: unknown
           target?: unknown
+          box?: unknown
         }
         const name = `block ${String(e.index)}`
+        if (e.box !== undefined && e.box !== null)
+          return fail(
+            summary,
+            `${name}: text box paragraphs can only be translated with translate_blocks (a text box cannot carry tracked changes or a bilingual twin)`,
+          )
         if (!Number.isInteger(e.index))
           return fail(summary, 'every entry needs an integer index from read_runs')
         if (e.paragraph !== undefined && e.paragraph !== null && !Number.isInteger(e.paragraph))
@@ -2139,7 +2156,7 @@ function executeSyncTool(
         outcome.added.length +
         outcome.placed.length +
         outcome.tables.reduce((n, x) => n + x.paragraphs, 0)
-      lines.push(remainingLine(editor, notes))
+      lines.push(remainingLine(editor, notes, track !== undefined))
       return {
         output: lines.join('\n'),
         mutated: count > 0,
@@ -2156,12 +2173,18 @@ function executeSyncTool(
       for (const entry of raw as unknown[]) {
         const e = (entry ?? {}) as {
           index?: unknown
+          box?: unknown
           note?: unknown
           paragraph?: unknown
           fp?: unknown
           segments?: unknown
         }
         const name = `block ${String(e.index)}`
+        if (e.box !== undefined && e.box !== null)
+          return fail(
+            summary,
+            `${name}: text box paragraphs can only be translated with translate_blocks (a text box cannot carry tracked changes or a bilingual twin)`,
+          )
         if (e.note !== undefined && e.note !== null)
           return fail(
             summary,
@@ -2245,6 +2268,7 @@ function executeSyncTool(
       for (const entry of raw as unknown[]) {
         const e = (entry ?? {}) as {
           index?: unknown
+          box?: unknown
           note?: unknown
           id?: unknown
           paragraph?: unknown
@@ -2252,7 +2276,13 @@ function executeSyncTool(
           segments?: unknown
         }
         const isNote = e.note !== undefined && e.note !== null
-        const name = isNote ? `${String(e.note)} ${String(e.id)}` : `block ${String(e.index)}`
+        const isBox = e.box !== undefined && e.box !== null
+        const name = isNote
+          ? `${String(e.note)} ${String(e.id)}`
+          : `block ${String(e.index)}${isBox ? ` box ${String(e.box)}` : ''}`
+        if (isBox && !Number.isInteger(e.box))
+          return fail(summary, `${name}: box must be an integer`)
+        if (isBox && isNote) return fail(summary, `${name}: a note entry cannot name a text box`)
         if (isNote) {
           if (e.note !== 'footnote' && e.note !== 'endnote')
             return fail(summary, 'note must be "footnote" or "endnote"')
@@ -2284,7 +2314,14 @@ function executeSyncTool(
             segments,
             ...paragraph,
           })
-        else items.push({ index: Number(e.index), fp: e.fp, segments, ...paragraph })
+        else
+          items.push({
+            index: Number(e.index),
+            fp: e.fp,
+            segments,
+            ...(isBox ? { box: Number(e.box) } : {}),
+            ...paragraph,
+          })
       }
       // notes are checked first and committed last: a refused item anywhere changes nothing
       const notePlan = notes && noteItems.length > 0 ? planNoteTranslations(notes, noteItems) : null
@@ -2310,7 +2347,11 @@ function executeSyncTool(
         [...outcome.reports, ...noteReports].map((r) => r.fp),
       )
       const label = (r: RunTranslationReport) =>
-        r.paragraph === undefined ? `block ${r.index}` : `block ${r.index} paragraph ${r.paragraph}`
+        r.box !== undefined
+          ? `block ${r.index} box ${r.box} paragraph ${r.paragraph}`
+          : r.paragraph === undefined
+            ? `block ${r.index}`
+            : `block ${r.index} paragraph ${r.paragraph}`
       const noteLabel = (r: (typeof noteReports)[number]) =>
         `${r.note} ${r.id}${r.paragraph === undefined ? '' : ` paragraph ${r.paragraph}`}`
       const translated = outcome.reports.filter((r) => r.changed > 0)
@@ -2357,7 +2398,12 @@ function executeSyncTool(
           ...(outcome.stale.length > 0
             ? [staleLine(outcome.stale, outcome.reports.filter((r) => !r.empty).length)]
             : []),
-          remainingLine(editor, notes),
+          ...(outcome.skippedBoxes.length > 0
+            ? [
+                `SKIPPED ${outcome.skippedBoxes.length} text box paragraph(s): a text box cannot carry tracked changes, so it was left as it is. Tell the person to turn revision tracking off to translate the text boxes. ${outcome.skippedBoxes.slice(0, 20).join('; ')}`,
+              ]
+            : []),
+          remainingLine(editor, notes, track !== undefined),
         ].join('\n'),
         mutated: translated.length > 0 || noteCount > 0,
         summary: t('aiSumTranslatedBlocks', { count: translated.length + noteCount }),

@@ -346,6 +346,10 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
       },
       signal: controller.signal,
       onProgress: (progress) => setStep({ kind: 'running', progress }),
+      // the chat popup only wants text; the translation project places boxes over docx pictures
+      ...(prepared.kind === 'embedded' && prepared.format === 'docx' && !props.selectOnly
+        ? { boxes: true }
+        : {}),
       ...(prepared.kind === 'embedded' && props.selectOnly
         ? {
             choosePlacement: async (done: OcrPageResult[]) => {
@@ -690,6 +694,7 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
             busy={step.busy}
             error={step.error}
             recommendation={step.recommendation}
+            api={api}
             onCancel={close}
             onPlace={(placement) => {
               setStep({ ...step, busy: true })

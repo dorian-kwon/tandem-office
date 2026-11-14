@@ -5,12 +5,17 @@ import {
 import { loadDocxZip } from '../../../../../packages/docx-engine/src/zip-load'
 import type { OcrPlacement } from '../../shared/translate-ocr'
 import { TranslateIpcError } from '../../shared/translate-api'
+import { checkOcrBoxesPayload, type OcrBox } from '../../shared/ocr-boxes'
+import { buildImageBoxParagraphsXml, inspectBoxableImage, nextDocPrId } from './ocr-boxes-docx'
 import { placeInWordTable, wordTables } from './ocr-word-tables'
 import { xlsxStructure } from './ocr-xlsx-structure'
 export interface OcrTextItem {
   index: number
   text: string
   location?: string
+  /** the package part and relationship id of an embedded picture (main process only) */
+  part?: string
+  relId?: string
 }
 function invalid(message: string): never {
   throw new TranslateIpcError('INVALID_ARGUMENT', message)
@@ -101,8 +106,27 @@ export async function placeOcrText(
         : undefined
     return (await applyCellEditsToXlsx(source, edits, [], [], plan)).buffer
   }
-  if (p.kind !== 'docx-end' && p.kind !== 'docx-after-images' && p.kind !== 'docx-table-cell')
+  if (
+    p.kind !== 'docx-end' &&
+    p.kind !== 'docx-after-images' &&
+    p.kind !== 'docx-image-boxes' &&
+    p.kind !== 'docx-table-cell'
+  )
     invalid('choose a Word destination')
+  // boxes per picture, checked again here: only pictures that were read, inside the picture
+  const boxesOf = new Map<number, OcrBox[]>()
+  if (p.kind === 'docx-image-boxes') {
+    if (!Array.isArray(p.images)) invalid('choose the boxes to place')
+    const known = new Set(items.map((item) => item.index))
+    for (const image of p.images) {
+      if (!image || !known.has(image.index) || boxesOf.has(image.index))
+        invalid('a box list is for a picture that was not read')
+      const checked = checkOcrBoxesPayload({ kind: 'boxes', boxes: image.boxes, text: '' })
+      if (!checked || checked.boxes.length === 0)
+        invalid('a picture needs between one and the allowed number of boxes inside it')
+      boxesOf.set(image.index, checked!.boxes)
+    }
+  }
   const zip = await loadDocxZip(bytes)
   const paragraph = (text: string, pPr = '', rPr = '') =>
     text
@@ -113,7 +137,11 @@ export async function placeOcrText(
       )
       .join('')
   const additions = new Map<string, Map<number, string>>()
-  if (p.kind === 'docx-after-images') {
+  if (p.kind === 'docx-after-images' || p.kind === 'docx-image-boxes') {
+    const documentPart = 'word/document.xml'
+    const documentSource = await zip.file(documentPart)?.async('string')
+    const stylesSource = await zip.file('word/styles.xml')?.async('string')
+    let docPrId = documentSource ? nextDocPrId(documentSource) : 1
     for (const item of items) {
       const at = item.location?.match(
         /^((?:document|header\d*|footer\d*|footnotes|endnotes)\.xml) · ¶(\d+)$/,
@@ -122,7 +150,18 @@ export async function placeOcrText(
       const part = 'word/' + at![1]
       const positions = additions.get(part) ?? new Map<number, string>()
       const index = Number(at![2])
-      positions.set(index, (positions.get(index) ?? '') + paragraph(item.text))
+      // boxes only where this picture can take them; every other picture keeps its text paragraph
+      const boxes = boxesOf.get(item.index)
+      const info =
+        boxes && documentSource && item.part === documentPart && item.relId
+          ? inspectBoxableImage(documentPart, documentSource, index, item.relId, stylesSource)
+          : null
+      let insertion: string
+      if (boxes && info?.ok) {
+        insertion = buildImageBoxParagraphsXml(boxes, info, docPrId)
+        docPrId += boxes.length
+      } else insertion = paragraph(item.text)
+      positions.set(index, (positions.get(index) ?? '') + insertion)
       additions.set(part, positions)
     }
     for (const [part, positions] of additions) {

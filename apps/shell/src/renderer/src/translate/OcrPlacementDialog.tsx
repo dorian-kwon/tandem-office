@@ -1,12 +1,15 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import type {
   OcrPageResult,
   OcrPlacement,
   OcrPrepared,
   OcrRecommendation,
 } from '../../../shared/translate-ocr'
+import { checkOcrBoxesPayload, type OcrBox } from '../../../shared/ocr-boxes'
+import type { TranslateApi } from '../../../shared/translate-api'
 import { makeText, translateErrorText } from './shared'
 import { useI18n } from '../locale'
+import { OcrBoxPicture } from './OcrBoxPicture'
 
 function recognisedText(value: unknown): string {
   if (!value || typeof value !== 'object') return ''
@@ -22,6 +25,7 @@ export function OcrPlacementDialog({
   busy,
   error,
   recommendation,
+  api,
   onPlace,
   onCancel,
 }: {
@@ -32,10 +36,28 @@ export function OcrPlacementDialog({
   onPlace: (placement: OcrPlacement) => void
   onCancel: () => void
   recommendation?: OcrRecommendation
+  /** shows the pictures of the on-image boxes; without it the boxes are kept but not shown */
+  api?: TranslateApi
 }) {
   const { lang } = useI18n()
   const s = makeText(lang)
-  const [kind, setKind] = useState('')
+  // the pictures a box reading found places on, and the boxes the person edits
+  const boxed = useMemo(
+    () =>
+      pages.flatMap((page) => {
+        const payload = checkOcrBoxesPayload(page.payload)
+        const item = prepared.items.find((i) => i.index === page.index)
+        return payload && payload.boxes.length > 0 && item?.boxable
+          ? [{ index: page.index, name: item.name, boxes: payload.boxes }]
+          : []
+      }),
+    [pages, prepared],
+  )
+  const canBoxes = prepared.format !== 'xlsx' && boxed.length > 0
+  const [edited, setEdited] = useState<Record<number, OcrBox[]>>(() =>
+    Object.fromEntries(boxed.map((b) => [b.index, b.boxes])),
+  )
+  const [kind, setKind] = useState(canBoxes ? 'docx-image-boxes' : '')
   const [sheet, setSheet] = useState('')
   const [cell, setCell] = useState('')
   const [overwrite, setOverwrite] = useState(false)
@@ -43,7 +65,19 @@ export function OcrPlacementDialog({
   const [row, setRow] = useState('')
   const [column, setColumn] = useState('')
   const xlsx = prepared.format === 'xlsx'
+  // boxes without text are dropped; a picture left with none keeps its text paragraph instead
+  const placedImages = boxed
+    .map((b) => ({
+      index: b.index,
+      boxes: (edited[b.index] ?? []).filter((box) => box.text.trim() !== ''),
+    }))
+    .filter((image) => image.boxes.length > 0)
+  const paragraphNames = prepared.items
+    .filter((item) => pages.some((p) => p.index === item.index))
+    .filter((item) => !placedImages.some((image) => image.index === item.index))
+    .map((item) => item.name)
   const valid =
+    (kind === 'docx-image-boxes' && placedImages.length > 0) ||
     kind === 'docx-after-images' ||
     kind === 'docx-end' ||
     (kind === 'xlsx-new-sheet' && sheet.trim().length > 0) ||
@@ -53,6 +87,7 @@ export function OcrPlacementDialog({
     if (!valid || busy) return
     if (kind === 'xlsx-cells') onPlace({ kind, sheet, cell: cell.toUpperCase(), overwrite })
     else if (kind === 'xlsx-new-sheet') onPlace({ kind, sheet })
+    else if (kind === 'docx-image-boxes') onPlace({ kind, images: placedImages })
     else if (kind === 'docx-after-images' || kind === 'docx-end') onPlace({ kind })
     else if (kind === 'docx-table-cell')
       onPlace({ kind, table: Number(table), row: Number(row), column: Number(column), overwrite })
@@ -137,6 +172,7 @@ export function OcrPlacementDialog({
             </>
           ) : (
             <>
+              {canBoxes && <option value="docx-image-boxes">{s('ocrPlaceBoxes')}</option>}
               <option value="docx-after-images">{s('ocrAfterImages')}</option>
               <option value="docx-end">{s('ocrDocumentEnd')}</option>
               {!!prepared.tables?.length && (
@@ -146,6 +182,27 @@ export function OcrPlacementDialog({
           )}
         </select>
       </label>
+      {kind === 'docx-image-boxes' && (
+        <>
+          <p>{s('ocrBoxesIntro')}</p>
+          {boxed.map((b) => (
+            <section key={b.index}>
+              <strong>{b.name}</strong>
+              <OcrBoxPicture
+                api={api}
+                token={prepared.token}
+                index={b.index}
+                boxes={edited[b.index] ?? []}
+                disabled={busy}
+                onChange={(boxes) => setEdited((prev) => ({ ...prev, [b.index]: boxes }))}
+              />
+            </section>
+          ))}
+          {paragraphNames.length > 0 && (
+            <p>{s('ocrBoxFallbackNote', { items: paragraphNames.join(', ') })}</p>
+          )}
+        </>
+      )}
       {(kind === 'xlsx-cells' || kind === 'xlsx-new-sheet') && (
         <label className="projects-field">
           <span>{s('ocrSheetName')}</span>

@@ -5,6 +5,7 @@ import { crc32, inflateRawSync } from 'node:zlib'
 import { decodeEntities } from '@genoffice/docx-engine'
 import { readZipEntries, type ByteSource, type ZipEntry } from '@genoffice/docx-engine/zip-splice'
 import type { OcrPageImage } from '../../shared/translate-ocr'
+import { inspectBoxableImage } from './ocr-boxes-docx'
 
 const MAX_ARCHIVE = 128 * 1024 * 1024
 const MAX_IMAGE = 20 * 1024 * 1024
@@ -18,6 +19,12 @@ export interface EmbeddedImage {
   location: string
   entry: ZipEntry
   signature: string
+  /** the package part that holds the reference, for example `word/document.xml` */
+  part: string
+  /** the relationship id of the picture inside that part */
+  relId: string
+  /** a docx picture that can take boxes (alone on a left-aligned body paragraph); absent = no */
+  boxable?: boolean
 }
 
 export const supportsEmbeddedOcr = (file: string): boolean => /\.(docx|xlsx)$/i.test(file)
@@ -129,7 +136,7 @@ export async function listEmbeddedImages(path: string): Promise<EmbeddedImage[]>
     }
     const images: EmbeddedImage[] = []
     const seen = new Set<string>()
-    const add = async (part: string, id: string, location: string) => {
+    const add = async (part: string, id: string, location: string, boxable = false) => {
       const rel = (await relationships(part)).get(id)
       if (
         !rel ||
@@ -141,7 +148,15 @@ export async function listEmbeddedImages(path: string): Promise<EmbeddedImage[]>
       const entry = entries.get(rel.path)
       if (!entry || entry.usize === 0) return
       seen.add(rel.path)
-      images.push({ name: basename(rel.path), location, entry, signature: src.signature })
+      images.push({
+        name: basename(rel.path),
+        location,
+        entry,
+        signature: src.signature,
+        part,
+        relId: id,
+        ...(boxable ? { boxable: true } : {}),
+      })
     }
     if (extname(path).toLowerCase() === '.docx') {
       const parts = [...entries.keys()]
@@ -158,6 +173,8 @@ export async function listEmbeddedImages(path: string): Promise<EmbeddedImage[]>
           /<(?:\w+:)?object\b[\s\S]*?<\/(?:\w+:)?object\s*>/g,
           '',
         )
+        const raw = await text(part)
+        const styles = (await text('word/styles.xml')) || undefined
         let paragraph = 0
         for (const m of xml.matchAll(/<(?:\w+:)?(p|blip|imagedata)\b[^>]*>/g)) {
           if (m[1] === 'p') {
@@ -166,7 +183,15 @@ export async function listEmbeddedImages(path: string): Promise<EmbeddedImage[]>
           }
           const a = attrs(m[0])
           const id = a['r:embed'] ?? a['r:id']
-          if (id) await add(part, id, `${basename(part)} · ¶${Math.max(1, paragraph)}`)
+          if (id) {
+            const at = Math.max(1, paragraph)
+            await add(
+              part,
+              id,
+              `${basename(part)} · ¶${at}`,
+              m[1] === 'blip' && inspectBoxableImage(part, raw, at, id, styles).ok,
+            )
+          }
         }
       }
     } else {

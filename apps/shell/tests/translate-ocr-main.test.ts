@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { saveProject, loadProject } from '@genoffice/translate-project'
 import { EventEmitter } from 'node:events'
 import JSZip from 'jszip'
+import { buildDocx } from '../../../packages/docx-engine/tests/helpers/build-docx'
 import {
   createTranslateHandlers,
   registerTranslateIpc,
@@ -441,6 +442,111 @@ it('lists embedded images, previews locally and serves only confirmed selections
   expect(ocrDeps.markdownToDocx).not.toHaveBeenCalled()
   const written = await JSZip.loadAsync(readFileSync(result.outputPath))
   expect(await written.file('word/document.xml')!.async('string')).toContain('Menu text')
+})
+
+it('write accepts a boxes payload for the list placement and writes payload.text', async () => {
+  await project([{ file: 'pictures.docx', kind: 'editable', bytes: await embeddedDoc() }])
+  const h = handlers()
+  const listing = await h.ocrPrepare({ dir, files: ['pictures.docx'] })
+  await h.ocrStart({ token: listing.token, pages: [2] })
+  const result = await h.ocrWrite({
+    token: listing.token,
+    pages: [
+      {
+        index: 2,
+        payload: {
+          kind: 'boxes',
+          boxes: [{ x: 0.1, y: 0.1, w: 0.3, h: 0.1, fontHeight: 0.05, text: 'Box one' }],
+          text: 'Box one\nBox two',
+        },
+      },
+    ],
+    placement: { kind: 'docx-after-images' },
+  })
+  const written = await JSZip.loadAsync(readFileSync(result.outputPath))
+  const xml = await written.file('word/document.xml')!.async('string')
+  expect(xml).toContain('Box one')
+  expect(xml).toContain('Box two')
+})
+
+it('write rejects a boxes payload with a wrong shape', async () => {
+  await project([{ file: 'pictures.docx', kind: 'editable', bytes: await embeddedDoc() }])
+  const h = handlers()
+  const listing = await h.ocrPrepare({ dir, files: ['pictures.docx'] })
+  await h.ocrStart({ token: listing.token, pages: [2] })
+  expect(
+    await codeOf(
+      h.ocrWrite({
+        token: listing.token,
+        pages: [{ index: 2, payload: { kind: 'boxes', boxes: 'nope', text: 1 } }],
+        placement: { kind: 'docx-after-images' },
+      }),
+    ),
+  ).toBe('INVALID_ARGUMENT')
+})
+
+const DRAWING =
+  '<w:r><w:drawing><wp:inline><wp:extent cx="3000000" cy="1500000"/><wp:docPr id="7" name="P"/>' +
+  '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+  '<pic:pic><pic:blipFill><a:blip r:embed="rId10"/></pic:blipFill></pic:pic></a:graphicData>' +
+  '</a:graphic></wp:inline></w:drawing></w:r>'
+const textRun = (t: string) => `<w:r><w:t>${t}</w:t></w:r>`
+
+it('marks only a picture alone on a left-aligned paragraph as boxable', async () => {
+  const bytes = await buildDocx({
+    withImage: true,
+    bodyXml: `<w:p>${textRun('Intro')}</w:p><w:p>${DRAWING}</w:p>`,
+  })
+  await project([{ file: 'alone.docx', kind: 'editable', bytes }])
+  const alone = await handlers().ocrPrepare({ dir, files: ['alone.docx'] })
+  expect(alone.items[0]!.boxable).toBe(true)
+
+  const crowded = await buildDocx({
+    withImage: true,
+    bodyXml: `<w:p>${textRun('Intro')}</w:p><w:p>${textRun('Caption')}${DRAWING}</w:p>`,
+  })
+  await project([{ file: 'crowded.docx', kind: 'editable', bytes: crowded }])
+  const listing = await handlers().ocrPrepare({ dir, files: ['crowded.docx'] })
+  expect(listing.items[0]!.boxable).toBeUndefined()
+})
+
+it('does not mark a picture whose style centers it as boxable', async () => {
+  const stylesXml =
+    '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+    '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/>' +
+    '<w:pPr><w:jc w:val="center"/></w:pPr></w:style></w:styles>'
+  const bytes = await buildDocx({
+    withImage: true,
+    stylesXml,
+    bodyXml: `<w:p>${textRun('Intro')}</w:p><w:p>${DRAWING}</w:p>`,
+  })
+  await project([{ file: 'centered.docx', kind: 'editable', bytes }])
+  const listing = await handlers().ocrPrepare({ dir, files: ['centered.docx'] })
+  expect(listing.items[0]!.boxable).toBeUndefined()
+})
+
+it('writes boxes over a boxable picture from the confirmed reading', async () => {
+  const bytes = await buildDocx({
+    withImage: true,
+    bodyXml: `<w:p>${textRun('Intro')}</w:p><w:p>${DRAWING}</w:p>`,
+  })
+  await project([{ file: 'alone.docx', kind: 'editable', bytes }])
+  const h = handlers()
+  const listing = await h.ocrPrepare({ dir, files: ['alone.docx'] })
+  await h.ocrStart({ token: listing.token, pages: [1] })
+  const box = { x: 0.1, y: 0.2, w: 0.3, h: 0.1, fontHeight: 0.08, text: 'Name' }
+  const result = await h.ocrWrite({
+    token: listing.token,
+    pages: [{ index: 1, payload: { kind: 'boxes', boxes: [box], text: 'Name' } }],
+    placement: { kind: 'docx-image-boxes', images: [{ index: 1, boxes: [box] }] },
+  })
+  const xml = await (
+    await JSZip.loadAsync(readFileSync(result.outputPath))
+  )
+    .file('word/document.xml')!
+    .async('string')
+  expect(xml.match(/<w:txbxContent>/g)).toHaveLength(2)
+  expect(xml).toContain('Name')
 })
 
 it('refuses changed embedded sources before serving images', async () => {

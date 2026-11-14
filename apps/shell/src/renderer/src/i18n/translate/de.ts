@@ -34,10 +34,12 @@ export const de = {
   recentTitle: 'Zuletzt geöffnete Dokumente',
   recentUnavailable: 'Ordner oder Datei fehlt',
   adoptTitle: 'Original fehlt',
-  adoptText: 'Die Originalkopie von {file} fehlt, die Übersetzung ist noch da. Übersetzung als Original verwenden? Sie wird in den Originalordner kopiert und beide werden nebeneinander geöffnet.',
+  adoptText:
+    'Die Originalkopie von {file} fehlt, die Übersetzung ist noch da. Übersetzung als Original verwenden? Sie wird in den Originalordner kopiert und beide werden nebeneinander geöffnet.',
   adoptConfirm: 'Als Original verwenden',
   adoptRemove: 'Dokument löschen',
-  adoptRemoveNote: 'Beim Löschen wird das Dokument aus dem Projekt entfernt. Die Übersetzungsdatei bleibt im Ordner output.',
+  adoptRemoveNote:
+    'Beim Löschen wird das Dokument aus dem Projekt entfernt. Die Übersetzungsdatei bleibt im Ordner output.',
   countSources: 'Dokumente: {n}',
   countReferences: 'Referenzen: {n}',
   backToList: 'Alle Projekte',
@@ -122,6 +124,17 @@ export const de = {
   ocrOverwrite: 'Vorhandene Zellinhalte ersetzen erlauben',
   ocrAfterImages: 'Nach jedem Bild',
   ocrDocumentEnd: 'Dokumentende',
+  ocrPlaceBoxes: 'Auf dem Bild (ein Feld an jeder Textstelle)',
+  ocrBoxesIntro:
+    'Prüfen Sie die Felder auf jedem Bild. Ziehen Sie ein Feld zum Verschieben, ziehen Sie die Ecke zum Ändern der Größe, oder ändern Sie unten den Text.',
+  ocrBoxAdd: 'Feld hinzufügen',
+  ocrBoxDelete: 'Feld löschen',
+  ocrBoxText: 'Text im ausgewählten Feld',
+  ocrBoxLabel: 'Feld {n}: {text}',
+  ocrBoxFallbackNote:
+    'Diese Bilder haben keine Felder, ihr Text steht daher in einem Absatz nach dem Bild: {items}',
+  ocrBoxPictureLoading: 'Bild wird geladen …',
+  ocrBoxPictureMissing: 'Das Bild konnte nicht angezeigt werden. Die Felder bleiben unverändert.',
   ocrPlaceSave: 'Hier speichern',
   ocrReadText: 'Erkannter Text',
   ocrScopePrompt: 'Alle {count} Elemente lesen oder einzelne auswählen?',
