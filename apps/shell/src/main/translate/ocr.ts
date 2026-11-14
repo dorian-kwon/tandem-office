@@ -268,6 +268,7 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
               index: i + 1,
               name: image.name,
               location: image.location,
+              ...(image.boxable ? { boxable: true } : {}),
             }))
           : kind === 'pdf'
             ? Array.from({ length: count }, (_, i) => ({ index: i + 1, name: '' }))
@@ -474,6 +475,8 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
           .map((index) => ({
             index,
             location: l.embedded![index - 1]!.location,
+            part: l.embedded![index - 1]!.part,
+            relId: l.embedded![index - 1]!.relId,
             text: boxReadings.get(index)?.text ?? textOf.get(index) ?? '',
           }))
         const bytes = await placeOcrText(await readFile(path), format, items, placement)
