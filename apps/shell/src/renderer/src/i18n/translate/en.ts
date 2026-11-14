@@ -33,10 +33,12 @@ export const en = {
   recentTitle: 'Recent documents',
   recentUnavailable: 'Folder or file is missing',
   adoptTitle: 'The original is missing',
-  adoptText: 'The original copy of {file} is gone, but its translation is still here. Use the translation as the original? It is copied into the original folder, and both open side by side.',
+  adoptText:
+    'The original copy of {file} is gone, but its translation is still here. Use the translation as the original? It is copied into the original folder, and both open side by side.',
   adoptConfirm: 'Use as original',
   adoptRemove: 'Delete document',
-  adoptRemoveNote: 'Delete removes the document from the project. The translation file stays in the output folder.',
+  adoptRemoveNote:
+    'Delete removes the document from the project. The translation file stays in the output folder.',
   countSources: 'Documents: {n}',
   countReferences: 'References: {n}',
   backToList: 'All projects',
@@ -113,6 +115,17 @@ export const en = {
   ocrOverwrite: 'Allow replacing existing cell contents',
   ocrAfterImages: 'After each image',
   ocrDocumentEnd: 'End of document',
+  ocrPlaceBoxes: 'On the picture (a box where each text is)',
+  ocrBoxesIntro:
+    'Check the boxes on each picture. Drag a box to move it, drag its corner to resize it, or change its text below.',
+  ocrBoxAdd: 'Add box',
+  ocrBoxDelete: 'Delete box',
+  ocrBoxText: 'Text in the selected box',
+  ocrBoxLabel: 'Box {n}: {text}',
+  ocrBoxFallbackNote:
+    'These pictures have no boxes, so their text goes in a paragraph after the image: {items}',
+  ocrBoxPictureLoading: 'Loading the picture…',
+  ocrBoxPictureMissing: 'The picture could not be shown. Its boxes are kept as they are.',
   ocrPlaceSave: 'Save here',
   ocrReadText: 'Recognised text',
   ocrScopePrompt: 'Read all {count} items, or choose which ones to read?',

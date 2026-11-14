@@ -33,10 +33,12 @@ export const pl = {
   recentTitle: 'Ostatnie dokumenty',
   recentUnavailable: 'Brak folderu lub pliku',
   adoptTitle: 'Brak oryginału',
-  adoptText: 'Kopii oryginału {file} nie ma, ale tłumaczenie nadal istnieje. Użyć tłumaczenia jako oryginału? Zostanie skopiowane do folderu oryginałów, a oba otworzą się obok siebie.',
+  adoptText:
+    'Kopii oryginału {file} nie ma, ale tłumaczenie nadal istnieje. Użyć tłumaczenia jako oryginału? Zostanie skopiowane do folderu oryginałów, a oba otworzą się obok siebie.',
   adoptConfirm: 'Użyj jako oryginału',
   adoptRemove: 'Usuń dokument',
-  adoptRemoveNote: 'Usunięcie wyłącza dokument z projektu. Plik tłumaczenia pozostaje w folderze output.',
+  adoptRemoveNote:
+    'Usunięcie wyłącza dokument z projektu. Plik tłumaczenia pozostaje w folderze output.',
   countSources: 'Dokumenty: {n}',
   countReferences: 'Materiały: {n}',
   backToList: 'Wszystkie projekty',
@@ -117,6 +119,17 @@ export const pl = {
   ocrOverwrite: 'Zezwól na zastąpienie zawartości komórek',
   ocrAfterImages: 'Po każdym obrazie',
   ocrDocumentEnd: 'Koniec dokumentu',
+  ocrPlaceBoxes: 'Na obrazie (ramka przy każdym tekście)',
+  ocrBoxesIntro:
+    'Sprawdź ramki na każdym obrazie. Przeciągnij ramkę, aby ją przesunąć, przeciągnij jej róg, aby zmienić rozmiar, lub zmień tekst poniżej.',
+  ocrBoxAdd: 'Dodaj ramkę',
+  ocrBoxDelete: 'Usuń ramkę',
+  ocrBoxText: 'Tekst w zaznaczonej ramce',
+  ocrBoxLabel: 'Ramka {n}: {text}',
+  ocrBoxFallbackNote:
+    'Te obrazy nie mają ramek, więc ich tekst trafi do akapitu po obrazie: {items}',
+  ocrBoxPictureLoading: 'Wczytywanie obrazu…',
+  ocrBoxPictureMissing: 'Nie udało się wyświetlić obrazu. Ramki pozostają bez zmian.',
   ocrPlaceSave: 'Zapisz tutaj',
   ocrReadText: 'Rozpoznany tekst',
   ocrScopePrompt: 'Odczytać wszystkie elementy ({count}) czy wybrać konkretne?',

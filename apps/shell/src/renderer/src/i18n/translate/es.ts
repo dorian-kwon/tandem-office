@@ -33,10 +33,12 @@ export const es = {
   recentTitle: 'Documentos recientes',
   recentUnavailable: 'Falta la carpeta o el archivo',
   adoptTitle: 'Falta el original',
-  adoptText: 'La copia original de {file} ya no está, pero la traducción sí. ¿Usar la traducción como original? Se copia a la carpeta del original y ambos se abren lado a lado.',
+  adoptText:
+    'La copia original de {file} ya no está, pero la traducción sí. ¿Usar la traducción como original? Se copia a la carpeta del original y ambos se abren lado a lado.',
   adoptConfirm: 'Usar como original',
   adoptRemove: 'Eliminar documento',
-  adoptRemoveNote: 'Eliminar quita el documento del proyecto. El archivo de traducción permanece en la carpeta output.',
+  adoptRemoveNote:
+    'Eliminar quita el documento del proyecto. El archivo de traducción permanece en la carpeta output.',
   countSources: 'Documentos: {n}',
   countReferences: 'Referencias: {n}',
   backToList: 'Todos los proyectos',
@@ -117,6 +119,17 @@ export const es = {
   ocrOverwrite: 'Permitir reemplazar el contenido de las celdas',
   ocrAfterImages: 'Después de cada imagen',
   ocrDocumentEnd: 'Final del documento',
+  ocrPlaceBoxes: 'Sobre la imagen (un cuadro en cada texto)',
+  ocrBoxesIntro:
+    'Revise los cuadros de cada imagen. Arrastre un cuadro para moverlo, arrastre su esquina para cambiar el tamaño o modifique su texto abajo.',
+  ocrBoxAdd: 'Añadir cuadro',
+  ocrBoxDelete: 'Eliminar cuadro',
+  ocrBoxText: 'Texto del cuadro seleccionado',
+  ocrBoxLabel: 'Cuadro {n}: {text}',
+  ocrBoxFallbackNote:
+    'Estas imágenes no tienen cuadros, así que su texto irá en un párrafo después de la imagen: {items}',
+  ocrBoxPictureLoading: 'Cargando la imagen…',
+  ocrBoxPictureMissing: 'No se pudo mostrar la imagen. Sus cuadros se conservan tal como están.',
   ocrPlaceSave: 'Guardar aquí',
   ocrReadText: 'Texto reconocido',
   ocrScopePrompt: '¿Leer los {count} elementos o elegir cuáles leer?',

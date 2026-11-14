@@ -33,10 +33,12 @@ export const pt = {
   recentTitle: 'Documentos recentes',
   recentUnavailable: 'Pasta ou arquivo não encontrado',
   adoptTitle: 'Original ausente',
-  adoptText: 'A cópia original de {file} não existe mais, mas a tradução ainda está aqui. Usar a tradução como original? Ela é copiada para a pasta do original e os dois abrem lado a lado.',
+  adoptText:
+    'A cópia original de {file} não existe mais, mas a tradução ainda está aqui. Usar a tradução como original? Ela é copiada para a pasta do original e os dois abrem lado a lado.',
   adoptConfirm: 'Usar como original',
   adoptRemove: 'Excluir documento',
-  adoptRemoveNote: 'Excluir remove o documento do projeto. O arquivo de tradução permanece na pasta output.',
+  adoptRemoveNote:
+    'Excluir remove o documento do projeto. O arquivo de tradução permanece na pasta output.',
   countSources: 'Documentos: {n}',
   countReferences: 'Referências: {n}',
   backToList: 'Todos os projetos',
@@ -118,6 +120,17 @@ export const pt = {
   ocrOverwrite: 'Permitir substituir o conteúdo das células',
   ocrAfterImages: 'Após cada imagem',
   ocrDocumentEnd: 'Fim do documento',
+  ocrPlaceBoxes: 'Sobre a imagem (uma caixa em cada texto)',
+  ocrBoxesIntro:
+    'Verifique as caixas de cada imagem. Arraste uma caixa para movê-la, arraste o canto para redimensionar ou altere o texto abaixo.',
+  ocrBoxAdd: 'Adicionar caixa',
+  ocrBoxDelete: 'Excluir caixa',
+  ocrBoxText: 'Texto da caixa selecionada',
+  ocrBoxLabel: 'Caixa {n}: {text}',
+  ocrBoxFallbackNote:
+    'Estas imagens não têm caixas, então o texto delas vai em um parágrafo depois da imagem: {items}',
+  ocrBoxPictureLoading: 'Carregando a imagem…',
+  ocrBoxPictureMissing: 'Não foi possível mostrar a imagem. As caixas foram mantidas como estão.',
   ocrPlaceSave: 'Guardar aqui',
   ocrReadText: 'Texto reconhecido',
   ocrScopePrompt: 'Ler todos os {count} itens ou escolher quais ler?',

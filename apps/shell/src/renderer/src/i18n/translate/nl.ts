@@ -33,10 +33,12 @@ export const nl = {
   recentTitle: 'Recente documenten',
   recentUnavailable: 'Map of bestand ontbreekt',
   adoptTitle: 'Origineel ontbreekt',
-  adoptText: 'De originele kopie van {file} ontbreekt, maar de vertaling is er nog. De vertaling als origineel gebruiken? Ze wordt naar de map van het origineel gekopieerd en beide openen naast elkaar.',
+  adoptText:
+    'De originele kopie van {file} ontbreekt, maar de vertaling is er nog. De vertaling als origineel gebruiken? Ze wordt naar de map van het origineel gekopieerd en beide openen naast elkaar.',
   adoptConfirm: 'Als origineel gebruiken',
   adoptRemove: 'Document verwijderen',
-  adoptRemoveNote: 'Verwijderen haalt het document uit het project. Het vertaalbestand blijft in de map output.',
+  adoptRemoveNote:
+    'Verwijderen haalt het document uit het project. Het vertaalbestand blijft in de map output.',
   countSources: 'Documenten: {n}',
   countReferences: 'Referenties: {n}',
   backToList: 'Alle projecten',
@@ -118,6 +120,17 @@ export const nl = {
   ocrOverwrite: 'Bestaande celinhoud vervangen toestaan',
   ocrAfterImages: 'Na elke afbeelding',
   ocrDocumentEnd: 'Einde van document',
+  ocrPlaceBoxes: 'Op de afbeelding (een vak bij elke tekst)',
+  ocrBoxesIntro:
+    'Controleer de vakken op elke afbeelding. Sleep een vak om het te verplaatsen, sleep de hoek om het formaat te wijzigen of wijzig hieronder de tekst.',
+  ocrBoxAdd: 'Vak toevoegen',
+  ocrBoxDelete: 'Vak verwijderen',
+  ocrBoxText: 'Tekst in het geselecteerde vak',
+  ocrBoxLabel: 'Vak {n}: {text}',
+  ocrBoxFallbackNote:
+    'Deze afbeeldingen hebben geen vakken, dus hun tekst komt in een alinea na de afbeelding: {items}',
+  ocrBoxPictureLoading: 'Afbeelding laden…',
+  ocrBoxPictureMissing: 'De afbeelding kon niet worden getoond. De vakken blijven ongewijzigd.',
   ocrPlaceSave: 'Hier opslaan',
   ocrReadText: 'Herkende tekst',
   ocrScopePrompt: 'Alle {count} items lezen of kiezen welke je wilt lezen?',

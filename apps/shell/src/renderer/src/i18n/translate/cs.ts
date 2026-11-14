@@ -33,10 +33,12 @@ export const cs = {
   recentTitle: 'Nedávné dokumenty',
   recentUnavailable: 'Složka nebo soubor chybí',
   adoptTitle: 'Originál chybí',
-  adoptText: 'Kopie originálu {file} chybí, překlad ale existuje. Použít překlad jako originál? Zkopíruje se do složky originálů a oba se otevřou vedle sebe.',
+  adoptText:
+    'Kopie originálu {file} chybí, překlad ale existuje. Použít překlad jako originál? Zkopíruje se do složky originálů a oba se otevřou vedle sebe.',
   adoptConfirm: 'Použít jako originál',
   adoptRemove: 'Smazat dokument',
-  adoptRemoveNote: 'Smazáním se dokument odebere z projektu. Soubor překladu zůstane ve složce output.',
+  adoptRemoveNote:
+    'Smazáním se dokument odebere z projektu. Soubor překladu zůstane ve složce output.',
   countSources: 'Dokumenty: {n}',
   countReferences: 'Podklady: {n}',
   backToList: 'Všechny projekty',
@@ -115,6 +117,17 @@ export const cs = {
   ocrOverwrite: 'Povolit přepsání obsahu buněk',
   ocrAfterImages: 'Za každý obrázek',
   ocrDocumentEnd: 'Konec dokumentu',
+  ocrPlaceBoxes: 'Na obrázku (rámeček u každého textu)',
+  ocrBoxesIntro:
+    'Zkontrolujte rámečky na každém obrázku. Rámeček přesunete tažením, velikost změníte tažením rohu a text upravíte níže.',
+  ocrBoxAdd: 'Přidat rámeček',
+  ocrBoxDelete: 'Odstranit rámeček',
+  ocrBoxText: 'Text ve vybraném rámečku',
+  ocrBoxLabel: 'Rámeček {n}: {text}',
+  ocrBoxFallbackNote:
+    'Tyto obrázky nemají rámečky, jejich text proto půjde do odstavce za obrázkem: {items}',
+  ocrBoxPictureLoading: 'Načítání obrázku…',
+  ocrBoxPictureMissing: 'Obrázek se nepodařilo zobrazit. Rámečky zůstanou beze změny.',
   ocrPlaceSave: 'Uložit sem',
   ocrReadText: 'Rozpoznaný text',
   ocrScopePrompt: 'Přečíst všech {count} položek, nebo vybrat konkrétní položky?',

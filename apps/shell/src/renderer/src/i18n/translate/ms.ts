@@ -34,10 +34,12 @@ export const ms = {
   recentTitle: 'Dokumen terkini',
   recentUnavailable: 'Folder atau fail tidak ditemui',
   adoptTitle: 'Dokumen asal tiada',
-  adoptText: 'Salinan asal {file} telah hilang, tetapi terjemahannya masih ada. Guna terjemahan sebagai dokumen asal? Ia disalin ke folder asal dan kedua-duanya dibuka bersebelahan.',
+  adoptText:
+    'Salinan asal {file} telah hilang, tetapi terjemahannya masih ada. Guna terjemahan sebagai dokumen asal? Ia disalin ke folder asal dan kedua-duanya dibuka bersebelahan.',
   adoptConfirm: 'Guna sebagai asal',
   adoptRemove: 'Padam dokumen',
-  adoptRemoveNote: 'Memadam akan mengeluarkan dokumen daripada projek. Fail terjemahan kekal dalam folder output.',
+  adoptRemoveNote:
+    'Memadam akan mengeluarkan dokumen daripada projek. Fail terjemahan kekal dalam folder output.',
   countSources: 'Dokumen: {n}',
   countReferences: 'Rujukan: {n}',
   backToList: 'Semua projek',
@@ -117,6 +119,17 @@ export const ms = {
   ocrOverwrite: 'Benarkan penggantian kandungan sel sedia ada',
   ocrAfterImages: 'Selepas setiap imej',
   ocrDocumentEnd: 'Akhir dokumen',
+  ocrPlaceBoxes: 'Di atas gambar (kotak di setiap teks)',
+  ocrBoxesIntro:
+    'Semak kotak pada setiap gambar. Seret kotak untuk mengalihkannya, seret sudutnya untuk menukar saiz, atau ubah teksnya di bawah.',
+  ocrBoxAdd: 'Tambah kotak',
+  ocrBoxDelete: 'Padam kotak',
+  ocrBoxText: 'Teks dalam kotak yang dipilih',
+  ocrBoxLabel: 'Kotak {n}: {text}',
+  ocrBoxFallbackNote:
+    'Gambar ini tiada kotak, jadi teksnya masuk ke perenggan selepas gambar: {items}',
+  ocrBoxPictureLoading: 'Memuatkan gambar…',
+  ocrBoxPictureMissing: 'Gambar tidak dapat dipaparkan. Kotaknya dikekalkan seperti sedia ada.',
   ocrPlaceSave: 'Simpan di sini',
   ocrReadText: 'Teks yang dikenal pasti',
   ocrScopePrompt: 'Baca semua {count} item atau pilih item untuk dibaca?',
