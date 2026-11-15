@@ -17,6 +17,12 @@ import { useI18n, type StringKey } from '../i18n/locale'
 import { AI_QUEUE_ANCHOR_CLICK, queueAnchorRange } from '../editor/ai-queue-anchors'
 import { setInactiveSelectionShown } from '../editor/inactive-selection'
 import {
+  dropEditorRange,
+  readBoxSelection,
+  withBoxQuote,
+  type BoxSelection,
+} from '../editor/box-selection'
+import {
   EDIT_INSTRUCTION_MAX,
   EDIT_QUEUE_MAX,
   truncate,
@@ -78,16 +84,17 @@ function selectionKind(editor: Editor): SelectionKind {
 
 /** the selected text as one search phrase: whitespace collapsed, capped; '' when there is none */
 const SEARCH_QUERY_MAX = 200
+function clipQuery(text: string): string {
+  const one = text.replace(/\s+/g, ' ').trim()
+  return one.length > SEARCH_QUERY_MAX ? one.slice(0, SEARCH_QUERY_MAX).trim() : one
+}
 function searchQuery(editor: Editor): string {
   const { from, to, empty } = editor.state.selection
-  if (empty) return ''
-  const text = editor.state.doc.textBetween(from, to, ' ', ' ').replace(/\s+/g, ' ').trim()
-  return text.length > SEARCH_QUERY_MAX ? text.slice(0, SEARCH_QUERY_MAX).trim() : text
+  return empty ? '' : clipQuery(editor.state.doc.textBetween(from, to, ' ', ' '))
 }
 
 /** Google results for the selection, in the system browser (window.open goes through the main process's URL check) */
-function searchTheWeb(editor: Editor): void {
-  const query = searchQuery(editor)
+function searchTheWeb(query: string): void {
   if (query) window.open(`https://www.google.com/search?q=${encodeURIComponent(query)}`)
 }
 
@@ -103,8 +110,7 @@ function googleLanguage(code: string): string {
 }
 
 /** The selection in Google Translate: source language detected, target = the project's target */
-function translateOnTheWeb(editor: Editor, targetLang: string): void {
-  const query = searchQuery(editor)
+function translateOnTheWeb(query: string, targetLang: string): void {
   if (!query) return
   const params = new URLSearchParams({
     sl: 'auto',
@@ -155,6 +161,13 @@ export function AiAskPopover({
     }
   }, [])
   const [trigger, setTrigger] = useState<{ left: number; top: number } | null>(null)
+  // words picked with the mouse inside a text box: the editor has no range there (see
+  // box-selection.ts), so the entry follows the browser's selection too
+  const [boxSel, setBoxSel] = useState<BoxSelection | null>(null)
+  // the words the open popover was started on, when they are in a box
+  const [boxQuote, setBoxQuote] = useState<BoxSelection | null>(null)
+  const boxQuoteRef = useRef(boxQuote)
+  boxQuoteRef.current = boxQuote
   const [open, setOpen] = useState<OpenState | null>(null)
   const [kind, setKind] = useState<SelectionKind>('text')
   const [text, setText] = useState('')
@@ -174,6 +187,11 @@ export function AiAskPopover({
   const anchorRect = useCallback((): AnchorRect | null => {
     const state = openRef.current
     if (!state) return null
+    const quote = boxQuoteRef.current
+    if (quote) {
+      const r = quote.range.getBoundingClientRect()
+      return { left: r.left, top: r.top, right: r.right, bottom: r.bottom }
+    }
     if (state.mode === 'edit') {
       const range = queueAnchorRange(editor.state, state.qid)
       return range ? rangeRect(editor, range.from, range.to) : null
@@ -187,8 +205,25 @@ export function AiAskPopover({
     const update = () => {
       if (openRef.current) {
         setTrigger(null)
+        setBoxSel(null)
         return
       }
+      const inBox = readBoxSelection(editor.view.dom, window.getSelection())
+      if (inBox) {
+        setBoxSel((was) =>
+          was &&
+          was.text === inBox.text &&
+          was.rect.left === inBox.rect.left &&
+          was.rect.top === inBox.rect.top &&
+          was.rect.right === inBox.rect.right &&
+          was.rect.bottom === inBox.rect.bottom
+            ? was
+            : inBox,
+        )
+        setTrigger({ left: inBox.rect.right + 6, top: inBox.rect.bottom + 4 })
+        return
+      }
+      setBoxSel(null)
       const { empty, to } = editor.state.selection
       if (empty || !editor.isFocused) {
         setTrigger(null)
@@ -205,6 +240,8 @@ export function AiAskPopover({
     editor.on('selectionUpdate', update)
     editor.on('focus', update)
     editor.on('blur', hide)
+    // a selection inside a box never reaches the editor's own events
+    document.addEventListener('selectionchange', update)
     const scroller = document.querySelector('.editor-scroll')
     scroller?.addEventListener('scroll', update, { passive: true })
     window.addEventListener('resize', update)
@@ -212,6 +249,7 @@ export function AiAskPopover({
       editor.off('selectionUpdate', update)
       editor.off('focus', update)
       editor.off('blur', hide)
+      document.removeEventListener('selectionchange', update)
       scroller?.removeEventListener('scroll', update)
       window.removeEventListener('resize', update)
     }
@@ -263,6 +301,7 @@ export function AiAskPopover({
 
   const close = useCallback(() => {
     setOpen(null)
+    setBoxQuote(null)
     setText('')
     setInactiveSelectionShown(editor, false)
   }, [editor])
@@ -291,10 +330,24 @@ export function AiAskPopover({
   // the input takes the DOM selection with it: keep the targeted range visible while the popover is open
   const openFromSelection = () => {
     setText('')
-    setKind(selectionKind(editor))
+    setBoxQuote(boxSel)
+    setKind(boxSel ? 'text' : selectionKind(editor))
     setOpen({ mode: 'new' })
     setTrigger(null)
-    setInactiveSelectionShown(editor, true)
+    if (!boxSel) setInactiveSelectionShown(editor, true)
+  }
+
+  /** a new instruction: sent with the words of a box, or kept in the queue anchored to the range */
+  const submitNew = (value: string): void => {
+    const quote = boxQuoteRef.current
+    if (quote) {
+      // the words are not in the editor's selection: it is dropped so the run is not scoped to it
+      dropEditorRange(editor)
+      onSendNow(withBoxQuote(value, quote.text))
+    } else if (!queueFullRef.current) {
+      onQueueAdd(value)
+    }
+    close()
   }
 
   const canSubmit = text.trim().length > 0
@@ -302,6 +355,7 @@ export function AiAskPopover({
 
   const excerpt = (() => {
     if (!open) return ''
+    if (boxQuote) return boxQuote.text
     if (open.mode === 'edit') {
       const range = queueAnchorRange(editor.state, open.qid)
       return range
@@ -377,9 +431,8 @@ export function AiAskPopover({
               if (open.mode === 'edit') {
                 onQueueUpdate(open.qid, text.trim())
                 close()
-              } else if (!queueFull) {
-                onQueueAdd(text.trim())
-                close()
+              } else if (boxQuote || !queueFull) {
+                submitNew(text.trim())
               }
             }
           }}
@@ -427,26 +480,30 @@ export function AiAskPopover({
           ) : (
             <>
               <button
-                className="ai-ask-cancel"
+                className={boxQuote ? 'ai-ask-confirm' : 'ai-ask-cancel'}
                 disabled={!canSubmit}
                 onClick={() => {
+                  if (boxQuote) {
+                    submitNew(text.trim())
+                    return
+                  }
                   onSendNow(text.trim())
                   close()
                 }}
               >
                 {t('aiAskSendNow')}
               </button>
-              <button
-                className="ai-ask-confirm"
-                disabled={!canSubmit || queueFull}
-                data-tip={queueFull ? t('aiQueueFullNotice', { max: EDIT_QUEUE_MAX }) : undefined}
-                onClick={() => {
-                  onQueueAdd(text.trim())
-                  close()
-                }}
-              >
-                {t('aiAskQueue')}
-              </button>
+              {/* the queue anchors a range of the document; the words of a box have none */}
+              {!boxQuote && (
+                <button
+                  className="ai-ask-confirm"
+                  disabled={!canSubmit || queueFull}
+                  data-tip={queueFull ? t('aiQueueFullNotice', { max: EDIT_QUEUE_MAX }) : undefined}
+                  onClick={() => submitNew(text.trim())}
+                >
+                  {t('aiAskQueue')}
+                </button>
+              )}
             </>
           )}
         </div>
@@ -454,6 +511,7 @@ export function AiAskPopover({
     )
   }
 
+  const query = boxSel ? clipQuery(boxSel.text) : searchQuery(editor)
   return (
     <>
       {trigger && !open && (
@@ -473,11 +531,11 @@ export function AiAskPopover({
             </svg>
             {t('aiAskBtn')}
           </button>
-          {searchQuery(editor) && (
+          {query && (
             <button
               className="ai-ask-trigger ai-ask-search"
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => searchTheWeb(editor)}
+              onClick={() => searchTheWeb(query)}
             >
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" aria-hidden>
                 <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="2" />
@@ -491,11 +549,11 @@ export function AiAskPopover({
               {t('aiAskWebSearch')}
             </button>
           )}
-          {searchQuery(editor) && (
+          {query && (
             <button
               className="ai-ask-trigger ai-ask-search"
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => translateOnTheWeb(editor, targetLang ?? lang)}
+              onClick={() => translateOnTheWeb(query, targetLang ?? lang)}
             >
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" aria-hidden>
                 <path

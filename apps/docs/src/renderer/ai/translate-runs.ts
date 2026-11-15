@@ -7,6 +7,7 @@ import { REDACT_MARK } from './redact'
 import { isTrackedDeleted } from './doc-utils'
 import type { NoteInfo, NoteRun, Run, TextboxDisplay } from '@genoffice/docx-engine'
 import type { CellBox } from '../editor/cell-box-segments'
+import { shrinkBoxToFit } from './box-fit'
 import type { AiTrack } from './protocol'
 import type { AiNotesAccess, NoteKind } from './note-ops'
 import {
@@ -1059,6 +1060,8 @@ function applyBoxEdits(tr: Transaction, edits: readonly BoxEdit[]): void {
     if (!node || !boxes) continue
     const next = boxes.map((box) => ({ ...box, paras: box.paras.map((p) => ({ ...p })) }))
     for (const edit of list) next[edit.at].paras[edit.paragraph].runs = edit.runs
+    // a translation is often longer than what it replaces: a fixed-size box takes it smaller
+    for (const at of new Set(list.map((edit) => edit.at))) next[at] = shrinkBoxToFit(next[at])
     tr.setNodeMarkup(pos, undefined, { ...node.attrs, [attr]: next })
   }
 }

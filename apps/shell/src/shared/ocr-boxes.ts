@@ -224,29 +224,44 @@ const FIT_WIDTH_SAFETY = 1.12
 const MIN_FIT_HALF_POINTS = 12
 
 /**
+ * The largest font size, in half-points and at most `maxHalf`, at which the lines of a text fit a
+ * box of `widthPt` x `heightPt`. The text fits when its lines, wrapped at the width, stand within
+ * the height at 1.2 lines per size. Sizes go down in half-point steps to 6 points, below which the
+ * text is left to run over. A size that already fits is returned as it is.
+ */
+export function fitTextHalfPoints(o: {
+  lines: readonly string[]
+  widthPt: number
+  heightPt: number
+  maxHalf: number
+}): number {
+  const emOfLines = o.lines.map(estimateTextEm)
+  for (let half = o.maxHalf; half > MIN_FIT_HALF_POINTS; half--) {
+    const size = half / 2
+    const used = emOfLines.reduce(
+      (count, em) => count + Math.max(1, Math.ceil((em * size * FIT_WIDTH_SAFETY) / o.widthPt)),
+      0,
+    )
+    if (used * size * 1.2 <= o.heightPt + 1e-6) return half
+  }
+  return Math.min(o.maxHalf, MIN_FIT_HALF_POINTS)
+}
+
+/**
  * The font size of a box in half-points: the size of the lettering (`boxFontHalfPoints`) at most,
- * and smaller when the text would not fit the box. The text fits when its lines, wrapped at the
- * width of the box, stand within its height at 1.2 lines per size. The largest size that fits is
- * taken, down to 6 points, below which the text is left to run over.
+ * and smaller when the text would not fit the box (`fitTextHalfPoints`).
  */
 export function fitBoxFontHalfPoints(
   box: OcrBox,
   imageWidthPt: number,
   imageHeightPt: number,
 ): number {
-  const wanted = boxFontHalfPoints(box, imageHeightPt)
-  const widthPt = box.w * imageWidthPt
-  const heightPt = box.h * imageHeightPt
-  const emOfLines = box.text.split(/\r?\n/).map(estimateTextEm)
-  for (let half = wanted; half > MIN_FIT_HALF_POINTS; half--) {
-    const size = half / 2
-    const used = emOfLines.reduce(
-      (count, em) => count + Math.max(1, Math.ceil((em * size * FIT_WIDTH_SAFETY) / widthPt)),
-      0,
-    )
-    if (used * size * 1.2 <= heightPt + 1e-6) return half
-  }
-  return Math.min(wanted, MIN_FIT_HALF_POINTS) === wanted ? wanted : MIN_FIT_HALF_POINTS
+  return fitTextHalfPoints({
+    lines: box.text.split(/\r?\n/),
+    widthPt: box.w * imageWidthPt,
+    heightPt: box.h * imageHeightPt,
+    maxHalf: boxFontHalfPoints(box, imageHeightPt),
+  })
 }
 
 /** the font size of a box in half-points (w:sz): its line height on the placed picture, as 10/12 of it */

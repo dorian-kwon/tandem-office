@@ -82,6 +82,27 @@ describe('conversational document OCR', () => {
     expect(skill.systemPrompt).toMatch(/\.doc is not read.*save it as \.docx/s)
   })
 
+  it('does not tell the person how the pictures were read: it goes straight to where the text goes', async () => {
+    const { run, skill } = setup()
+    await run.prepare()
+    // no summary, quote or review of the recognised text, whatever was picked
+    expect(skill.systemPrompt).toMatch(
+      /do not review, quote, summarize or describe the recognised text/i,
+    )
+    expect(skill.systemPrompt).not.toMatch(/Review the transcription with the person/)
+    expect(skill.systemPrompt).not.toMatch(/once the person has reviewed the text/i)
+    // propose right after the reading, and ask only the placement
+    expect(skill.systemPrompt).toMatch(
+      /call propose in the same turn and ask only where the text goes/i,
+    )
+    // the text is shown only when the person asks for it
+    expect(skill.systemPrompt).toMatch(/use review only when the person asks to see the text/i)
+    // a PDF or a Hangul document: one short sentence and a plain confirmation, no text
+    expect(skill.systemPrompt).toMatch(
+      /one short sentence.*new Word document.*do not show the text/is,
+    )
+  })
+
   it('opens the popup right after inspect, in the same turn, without asking about scope first', async () => {
     const { run, skill } = setup()
     await run.prepare()
@@ -98,7 +119,7 @@ describe('conversational document OCR', () => {
     expect(skill.systemPrompt).toMatch(/popup.*document order.*page/is)
     expect(skill.systemPrompt).toMatch(/not ask for picture numbers/i)
     // what the person confirmed there is not asked again in the chat
-    expect(skill.systemPrompt).toMatch(/already confirmed.*review and propose/is)
+    expect(skill.systemPrompt).toMatch(/already confirmed.*propose in the same turn/is)
     const schema = skill.tools[0]!.inputSchema as { properties: { action: { enum: string[] } } }
     expect(schema.properties.action.enum).toContain('choose')
   })

@@ -422,7 +422,7 @@ export function createOcrChatService(deps: OcrChatDeps) {
                 truncated: text.length > 2000,
               }
             }),
-            next: 'The person chose and confirmed these pictures in the popup, and they were read. Review the OCR text with the person in chat (review gives longer text in chunks), then call propose.',
+            next: 'The person chose and confirmed these pictures in the popup, and they were read. Do not show, quote or summarize the text. Call propose now and ask only where it goes.',
           })
         } finally {
           s.busy = false
@@ -538,8 +538,8 @@ export function createOcrChatService(deps: OcrChatDeps) {
             next: remaining.length
               ? 'Continue only within the scope the person already requested. Each read call processes at most 20 new images.'
               : intoNewDocument(prepared)
-                ? 'Review the OCR text in chat, then call propose. It goes into a new Word document. No output file exists yet.'
-                : 'Review the OCR text in chat, then propose where to put it. No output file exists yet.',
+                ? 'Do not show or summarize the text. Call propose now. It goes into a new Word document. No output file exists yet.'
+                : 'Do not show or summarize the text. Call propose now and ask only where it goes. No output file exists yet.',
           })
         } finally {
           s.busy = false
@@ -592,7 +592,7 @@ export function createOcrChatService(deps: OcrChatDeps) {
                 truncated: plain(p.payload).length > 2000,
               })),
               needsConfirmation: true,
-              next: 'Show the reviewed text and say it will be written into a new Word document next to the original, which is not changed. Ask the person to confirm. Do not apply on this turn.',
+              next: 'Say in one short sentence that it will be written into a new Word document next to the original, which is not changed, and ask for a plain confirmation. Do not show the text. Do not apply on this turn.',
             })
           }
           const recommendation = await deps.ocr.recommend(
@@ -653,7 +653,7 @@ export function createOcrChatService(deps: OcrChatDeps) {
               truncated: plain(p.payload).length > 2000,
             })),
             needsConfirmation: true,
-            next: 'Explain the location and reason, show the reviewed text, and ask the person to confirm or change it. Do not apply on this turn.',
+            next: 'Ask only where the text goes (ask_choice), without showing or summarizing the text. Do not apply on this turn.',
           })
         } finally {
           s.busy = false

@@ -4011,9 +4011,13 @@ export const DocCellBoxes = Node.create({
         const el = writableBoxAt(event)
         if (el) startEditing(el, true)
       }
-      // a click anywhere outside the box being edited ends it: what was typed is kept
+      // a click anywhere outside the box being edited ends it: what was typed is kept. The entry
+      // that offers "ask AI" on the words picked in the box does not: it needs them still picked.
       const onDocumentMouseDown = (event: MouseEvent) => {
-        if (editing && !editing.contains(event.target as globalThis.Node | null)) commit()
+        const target = event.target as HTMLElement | null
+        if (!editing || editing.contains(target)) return
+        if (target?.closest?.('.ai-ask-triggers')) return
+        commit()
       }
       const onInput = () => {
         if (editing) typed = true

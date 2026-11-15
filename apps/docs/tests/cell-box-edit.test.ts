@@ -136,6 +136,23 @@ describe('editing the text of a box in a table cell', () => {
     expect(texts(editor)).toEqual(['ONE EDITED', 'TWO'])
   })
 
+  it('keeps editing while the entry that offers "ask AI" is pressed, and ends on any other press', async () => {
+    const { editor } = await open(cell('A', box(1, 'ONE')))
+    const [first] = boxEls(editor)
+    startEditing(first!)
+    type(first!, 'ONE EDITED')
+    // the entry needs the words still picked in the box: pressing it must not end the edit
+    const entry = document.body.appendChild(document.createElement('div'))
+    entry.className = 'ai-ask-triggers'
+    const button = entry.appendChild(document.createElement('button'))
+    button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+    expect(first!.getAttribute('contenteditable')).toBe('true')
+    // any other press ends it, and what was typed is kept
+    document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+    expect(first!.getAttribute('contenteditable')).not.toBe('true')
+    expect(texts(editor)).toEqual(['ONE EDITED'])
+  })
+
   it('writes what was typed into the model when the person leaves the box', async () => {
     const { editor } = await open(cell('A', box(1, 'ONE')), cell('B', box(2, 'TWO')))
     const [first] = boxEls(editor)
