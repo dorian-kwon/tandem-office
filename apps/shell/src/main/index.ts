@@ -148,6 +148,8 @@ import { chatOcrSourceResolver, pruneOcrWorkDir } from './translate/ocr-chat-sou
 import type { OcrMode } from '@genoffice/translate-project'
 import { createOcrPicturesHost } from './translate/ocr-pictures'
 import { createOcrPopupHost } from './translate/ocr-popup-host'
+import { createOcrChatPopup } from './translate/ocr-chat-popup'
+import { allowAdHocDir } from './translate/adhoc-dirs'
 import { largePreviewJpeg } from './translate/ocr-large-preview'
 import { mountOcrPopupView } from './translate/ocr-popup-view'
 import { TranslateIpcError, TRANSLATE_EVENTS } from '../shared/translate-api'
@@ -9169,8 +9171,13 @@ const ocrPopupHost = createOcrPopupHost({
     contents?.once('destroyed', () => ocrPopupHost.askerGone(asker))
     return view
   },
-  deliver: (asker, outcome) => notifyOcrPopupOutcome(asker, outcome),
+  // a chat tool that opened this popup waits for its outcome; any other goes to the sheets AI
+  deliver: (asker, outcome) => {
+    if (!ocrChatPopup.deliver(asker, outcome)) notifyOcrPopupOutcome(asker, outcome)
+  },
 })
+/** The chat's `document_ocr` choose action: open the popup for the chat session and wait for it. */
+const ocrChatPopup = createOcrChatPopup({ host: ocrPopupHost, allowDir: allowAdHocDir })
 /** The sheets AI's picture OCR: list a workbook's pictures, open the OCR popup overlay. */
 const sheetsPicturesHost = createOcrPicturesHost({
   workDir: chatOcrWorkDir,
@@ -9182,6 +9189,7 @@ chatOcrService = createOcrChatService({
   resolve: chatOcrSourceResolver(chatOcrWorkDir, chatOcrMode),
   route: chatOcrModel.route,
   ask: chatOcrModel.ask,
+  popup: ocrChatPopup.popup,
   now: Date.now,
   newToken: randomUUID,
 })

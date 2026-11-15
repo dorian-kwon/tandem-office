@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
@@ -318,4 +319,80 @@ export async function hwpToText(bytes: Uint8Array): Promise<string> {
   } finally {
     doc.free()
   }
+}
+
+/** A picture of the document body or of a table cell once the engine has laid the pages out. */
+export interface HwpPicturePlace {
+  /** 1-based page the picture is drawn on (the first, when it is drawn on several) */
+  page: number
+  /** top-left of the picture on that page, in the engine's page units, for reading order */
+  y: number
+  x: number
+  /** SHA-256 (hex) of the picture's bytes as the engine hands them out, equal to the stored picture */
+  sha256: string
+}
+
+/**
+ * The pictures of a document in reading order, each with its page and a hash of its bytes, taken
+ * from the engine's own page layout. Only pictures whose bytes the engine can hand out are here:
+ * those of the body and of table cells. A picture of a header, a footer or a master page is drawn
+ * on every page and cannot be taken out of the layout, so it is left out. A picture that stands
+ * on several pages is listed once, on the first.
+ */
+export async function hwpPicturePlaces(bytes: Uint8Array): Promise<HwpPicturePlace[]> {
+  if (bytes[0] === 0x50 && bytes[1] === 0x4b) await assertZipInflatesWithinLimits(bytes)
+  const { HwpDocument } = await loadEngine()
+  let doc: HwpDocument
+  try {
+    doc = new HwpDocument(new Uint8Array(bytes))
+  } catch (thrown) {
+    throw engineError(thrown)
+  }
+  try {
+    const places: HwpPicturePlace[] = []
+    const seen = new Set<string>()
+    const pages = doc.pageCount()
+    for (let page = 0; page < pages; page++) {
+      const layout = JSON.parse(doc.getPageControlLayout(page)) as { controls?: LayoutControl[] }
+      const found: HwpPicturePlace[] = []
+      for (const control of layout.controls ?? []) {
+        if (control.type !== 'image' || control.headerFooter) continue
+        let data: Uint8Array
+        try {
+          data = doc.getControlImageData(
+            control.secIdx ?? 0,
+            control.paraIdx ?? 0,
+            JSON.stringify(control.cellPath ?? []),
+            control.controlIdx ?? 0,
+          )
+        } catch {
+          // a picture the engine does not hand out (a master page picture, a fill)
+          continue
+        }
+        if (data.length === 0) continue
+        const sha256 = createHash('sha256').update(data).digest('hex')
+        if (seen.has(sha256)) continue
+        seen.add(sha256)
+        found.push({ page: page + 1, y: control.y ?? 0, x: control.x ?? 0, sha256 })
+      }
+      // reading order on a page: top to bottom, then left to right
+      places.push(...found.sort((a, b) => a.y - b.y || a.x - b.x))
+    }
+    return places
+  } catch (thrown) {
+    throw engineError(thrown)
+  } finally {
+    doc.free()
+  }
+}
+
+interface LayoutControl {
+  type?: string
+  x?: number
+  y?: number
+  secIdx?: number
+  paraIdx?: number
+  controlIdx?: number
+  cellPath?: unknown
+  headerFooter?: unknown
 }

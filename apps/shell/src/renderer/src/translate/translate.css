@@ -274,6 +274,12 @@
   color: var(--text-muted);
 }
 
+/* the page a picture is on; the same quiet line as its location, a little stronger */
+.translate-ocr-page {
+  display: block;
+  color: var(--text);
+}
+
 .translate-ocr-readings {
   max-height: 180px;
   overflow-y: auto;

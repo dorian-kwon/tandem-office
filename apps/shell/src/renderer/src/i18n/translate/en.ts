@@ -135,6 +135,7 @@ export const en = {
     'Choose the pages or files to read. Only the chosen ones are sent to the AI, one image at a time. The text read is saved as a Word document in the output folder, and you translate that document.',
   ocrLoading: 'Listing the pages…',
   ocrPageLabel: 'Page {page}',
+  ocrPageLabelApprox: 'Page {page} or later',
   ocrSelectAll: 'Select all',
   ocrClear: 'Clear selection',
   ocrSelectedCount: 'Chosen: {count} of {total}',

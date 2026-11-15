@@ -811,7 +811,7 @@ export interface OpenProjectScreenArgs extends ProjectIdArgs {
 
 /** Conversational embedded-image OCR; main resolves and authorizes the document. */
 export interface ChatOcrRequest {
-  action: 'inspect' | 'list' | 'read' | 'review' | 'propose' | 'apply' | 'cancel'
+  action: 'inspect' | 'list' | 'choose' | 'read' | 'review' | 'propose' | 'apply' | 'cancel'
   /** Minted by the panel once per human message, never supplied by the model. */
   turnId: string
   requestId?: string

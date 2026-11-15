@@ -401,9 +401,13 @@ describe('translate:ocr-* handlers', () => {
   })
 })
 
-async function embeddedDoc(width = 10, height = 10) {
+async function embeddedDoc(
+  width = 10,
+  height = 10,
+  body = '<w:p><a:blip r:embed="a"/></w:p><w:p><a:blip r:embed="b"/></w:p>',
+) {
   const zip = new JSZip()
-  zip.file('word/document.xml', '<w:p><a:blip r:embed="a"/></w:p><w:p><a:blip r:embed="b"/></w:p>')
+  zip.file('word/document.xml', body)
   zip.file(
     'word/_rels/document.xml.rels',
     '<Relationships><Relationship Id="a" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/a.png"/><Relationship Id="b" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/b.png"/></Relationships>',
@@ -415,6 +419,29 @@ async function embeddedDoc(width = 10, height = 10) {
   for (const name of ['a', 'b']) zip.file(`word/media/${name}.png`, image)
   return zip.generateAsync({ type: 'nodebuffer' })
 }
+
+it('gives each listed picture of a Word document the page Word recorded for it', async () => {
+  await project([
+    {
+      file: 'pages.docx',
+      kind: 'editable',
+      bytes: await embeddedDoc(
+        10,
+        10,
+        '<w:p><a:blip r:embed="a"/></w:p><w:p><w:r><w:lastRenderedPageBreak/></w:r><a:blip r:embed="b"/></w:p>',
+      ),
+    },
+  ])
+  const listing = await handlers({ ocr: ocrDeps }).ocrPrepare({ dir, files: ['pages.docx'] })
+  expect(listing.items.map((i) => i.page)).toEqual([1, 2])
+  expect(listing.items.some((i) => i.pageApprox)).toBe(false)
+})
+
+it('leaves the page out of an item when the file does not say', async () => {
+  await project([{ file: 'pictures.docx', kind: 'editable', bytes: await embeddedDoc() }])
+  const listing = await handlers({ ocr: ocrDeps }).ocrPrepare({ dir, files: ['pictures.docx'] })
+  expect(listing.items.map((i) => i.page)).toEqual([undefined, undefined])
+})
 
 it('lists embedded images, previews locally and serves only confirmed selections', async () => {
   await project([{ file: 'pictures.docx', kind: 'editable', bytes: await embeddedDoc() }])

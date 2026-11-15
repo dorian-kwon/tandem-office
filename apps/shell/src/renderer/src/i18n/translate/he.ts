@@ -129,6 +129,7 @@ export const he = {
     'בחרו את העמודים או הקבצים לקריאה. רק הנבחרים נשלחים לבינה המלאכותית, תמונה אחת בכל פעם. הטקסט שנקרא נשמר כמסמך Word בתיקיית הפלט, ואת המסמך הזה מתרגמים.',
   ocrLoading: 'מציג את רשימת העמודים…',
   ocrPageLabel: 'עמוד {page}',
+  ocrPageLabelApprox: 'עמוד {page} או מאוחר יותר',
   ocrSelectAll: 'בחירת הכול',
   ocrClear: 'ניקוי הבחירה',
   ocrSelectedCount: 'נבחרו: {count} מתוך {total}',

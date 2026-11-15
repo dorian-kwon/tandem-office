@@ -511,9 +511,11 @@ metadata:
 번역 프로젝트(`translate:ocr-*`)와 대화창의 `document_ocr`에 해당한다.
 
 - **`translate:ocr-prepare`**: HWPX·HWP 원본도 받는다. 답의 `kind`는 `'extracted'`이고 `items`는 문서 안 그림(`name`은 `BinData`의 파일 이름, `location`은 HWPX면 그림을 가리킨 부분 파일 이름 `section0.xml`·`header.xml`, HWP면 `BinData`)이다. `format`·`sheets`·`tables`는 없다. PDF는 `'pdf'`, 이미지 묶음은 `'images'`, docx·xlsx는 기존대로 `'embedded'`다. 그림이 하나도 없는 문서, 암호가 걸렸거나 배포용인 HWP는 `OCR_FAILED`(암호·배포용은 그 까닭을 담은 글)이고, `.pptx`는 `SOURCE_NOT_EDITABLE`이다.
+- **항목의 쪽**: `items[i].page`(1부터, 알 때만)와 `pageApprox`(참일 때만)가 붙는다. PDF 항목은 쪽 번호가 곧 `index`라 `page`가 없다. docx는 `w:lastRenderedPageBreak`를 센 값이 정확하고, 그 표시가 없으면 강제 쪽 나눔(`w:br w:type="page"`, `w:pageBreakBefore`)만 센 하한이라 `pageApprox`가 참이며, 둘 다 없거나 머리말·꼬리말·각주의 그림이면 `page`가 없다. HWP·HWPX는 한글 엔진이 나눈 쪽이다(본문과 표 칸 안 그림만; 머리말·꼬리말·바탕쪽·채우기 그림은 `page` 없이 목록 끝에 저장된 순서로). 목록의 순서는 문서에 써진 순서다.
 - **`translate:ocr-write`**: `'extracted'`와 `'pdf'`는 `placement`를 받지 않고(주어도 무시한다) `output/<이름> (OCR).docx`를 덮어쓰지 않는 새 이름으로 쓴다. 박스 읽기는 `'embedded'` docx에만 있다.
 - **HWP·HWPX의 그림 나열 규칙**: PNG·JPEG만 나열한다(BMP·GIF 등은 뺀다). HWPX는 부분 파일(`Contents/section<N>.xml`을 번호순, 그다음 `Contents/header.xml`)이 `binaryItemIDRef`로 가리킨 순서대로, 같은 파일은 한 번만 넣는다. HWP는 `/BinData/BIN*.png|jpg`를 자연 정렬 순서로 넣는다. 읽을 때 HWP 스트림은 그림 머리글자로 판별해 deflate를 풀거나 그대로 쓴다.
 - **`document_ocr`의 `inspect`**: `.docx`·`.xlsx`·`.hwpx`·`.hwp`·`.pdf`를 받는다. 새 Word 문서로 나가는 형식(PDF, 한글)의 답에는 `result: "new-docx"`가 있다. `.doc`는 거절하며 "Word에서 `.docx`로 저장하라"는 글을 준다(읽지도 변환하지도 않는다). 그 밖의 형식은 거절한다.
+- **`document_ocr`의 `choose`**: 세션이 있어야 하고, 채팅 창 위에 OCR 선택 팝업을 띄워 사람이 그림을 미리보기로 고르고 시작을 확인하면 그 팝업이 읽어 온 글을 도구 결과로 돌려준다(`recognised`, `results[].{index, page, location, text, totalCharacters, truncated}`, `unread`). 도구 호출은 팝업이 끝날 때까지 기다린다. 읽은 글은 세션에 들어가 `review`·`propose`·`apply`가 이어진다. 팝업이 이미 열려 있으면 `alreadyOpen: true`, 사람이 읽지 않고 닫으면 `closed: true`, 띄울 수 없으면 오류(`list`·`read`로 되돌아가라는 글)다. 실행이 취소되면 팝업도 닫힌다. 팝업의 읽기는 박스를 쓰지 않는다. `list`는 그림 번호를 글로 고르는 가벼운 길로 남는다.
 - **`document_ocr`의 `propose`·`apply`**: `result: "new-docx"`인 세션의 `propose`는 `placement`를 내지 않고 받지도 않으며(모델이 준 값은 무시) 검토할 글과 `needsConfirmation: true`만 낸다. `apply`는 배치 없이 쓰고 `{ outputPath, sourceUnchanged: true, format: "docx" }`로 답한다. 사람의 확인은 나중 사람 차례에서만 받는다는 규칙은 그대로다.
 
 ## Google 드라이브 (결정 0033, 0085)

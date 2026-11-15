@@ -136,6 +136,7 @@ export const ja = {
     '読み取るページまたはファイルを選んでください。選んだものだけが、1枚ずつAIに送信されます。読み取ったテキストは出力フォルダーにWord文書として保存され、その文書を翻訳します。',
   ocrLoading: 'ページを一覧にしています…',
   ocrPageLabel: '{page}ページ',
+  ocrPageLabelApprox: '{page}ページ以降',
   ocrSelectAll: 'すべて選択',
   ocrClear: '選択を解除',
   ocrSelectedCount: '選択済み: {total}件中{count}件',

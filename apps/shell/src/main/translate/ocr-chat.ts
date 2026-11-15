@@ -1,6 +1,7 @@
 import type { ChatOcrAnswer, ChatOcrRequest } from '@genoffice/project-store/folder-api'
 import type { OcrService } from './ocr'
 import type { OcrPageResult, OcrPlacement, OcrPrepared } from '../../shared/translate-ocr'
+import type { OcrPopupResult } from '../../shared/ocr-popup'
 import { readAiPage } from '../../../../../packages/pdf-structure/src/ai-read/read-page'
 import type { AiReadRequest } from '../../../../../packages/pdf-structure/src/ai-read/instruction'
 import { resolveOcrSelection } from '../../shared/translate-ocr'
@@ -14,6 +15,24 @@ export interface ChatOcrRoute {
   provider: string
   model: string
   paid: boolean
+}
+/** How the OCR selection popup ended, as the chat tool hears of it. */
+export type OcrChatPopupOutcome =
+  | { kind: 'result'; result: OcrPopupResult }
+  | { kind: 'closed' }
+  | { kind: 'already-open' }
+  | { kind: 'unavailable' }
+/**
+ * The OCR selection popup over the asking window. It shows the pictures with local previews,
+ * takes the person's confirmation to start, reads them and answers with their text. `signal`
+ * closes it when the run is cancelled.
+ */
+export interface OcrChatPopup {
+  ask(
+    owner: number,
+    target: { dir: string; file: string },
+    signal: AbortSignal,
+  ): Promise<OcrChatPopupOutcome>
 }
 export interface OcrChatDeps {
   ocr: OcrService
@@ -29,6 +48,8 @@ export interface OcrChatDeps {
     signal: AbortSignal,
     owner: number,
   ): Promise<string>
+  /** absent where no overlay can be shown: `choose` then points to list and read */
+  popup?: OcrChatPopup
   now(): number
   newToken(): string
 }
@@ -75,6 +96,23 @@ function plain(value: unknown): string {
   const obj = value as Record<string, unknown>
   if (typeof obj.text === 'string') return obj.text
   return Object.values(obj).map(plain).filter(Boolean).join('\n')
+}
+/** A reading made of plain text: one paragraph per blank-line separated block. */
+function textPayload(text: string) {
+  const blocks = text
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+  return {
+    version: 1,
+    blocks: blocks.map((block) => ({
+      kind: 'paragraph',
+      runs: [{ kind: 'text', text: block }],
+    })),
+    footnotes: [],
+    droppedRepetitions: 0,
+    reasked: false,
+  }
 }
 const answer = (value: unknown, extra: Partial<ChatOcrAnswer> = {}): ChatOcrAnswer => ({
   output: JSON.stringify(value),
@@ -229,7 +267,7 @@ export function createOcrChatService(deps: OcrChatDeps) {
               thumbnails.push({
                 url,
                 thumb: url,
-                title: `${item.index}. ${item.name} · ${item.location ?? ''}`,
+                title: `${item.index}. ${item.name}${item.page ? ` · p.${item.page}${item.pageApprox ? '+' : ''}` : ''} · ${item.location ?? ''}`,
               })
             }
           }
@@ -244,6 +282,93 @@ export function createOcrChatService(deps: OcrChatDeps) {
             },
             thumbnails.length ? { display: { kind: 'images', items: thumbnails } } : {},
           )
+        } finally {
+          s.busy = false
+        }
+      }
+      if (input.action === 'choose') {
+        requireThat(
+          deps.popup,
+          'The selection popup is not available here. Choose pictures in the chat with list and read instead.',
+        )
+        s.busy = true
+        try {
+          const outcome = await deps.popup.ask(
+            owner,
+            { dir: s.dir, file: s.file },
+            controller.signal,
+          )
+          controller.signal.throwIfAborted()
+          if (outcome.kind === 'unavailable')
+            throw new Refusal(
+              'The selection popup could not be shown. Choose pictures in the chat with list and read instead.',
+            )
+          if (outcome.kind === 'already-open')
+            return answer({
+              session: s.id,
+              alreadyOpen: true,
+              next: 'The selection popup is already open. Do not open another; wait for the person to finish or close it.',
+            })
+          if (outcome.kind === 'closed')
+            return answer({
+              session: s.id,
+              closed: true,
+              next: 'The person closed the popup without reading anything. Nothing was sent. Ask what they want to do next.',
+            })
+          const count = s.prepared.items.length
+          const kept = outcome.result.pages.filter(
+            (page) =>
+              Number.isInteger(page.index) &&
+              page.index >= 1 &&
+              page.index <= count &&
+              page.text.trim() !== '',
+          )
+          const unread = outcome.result.unread ?? []
+          if (kept.length === 0)
+            return answer({
+              session: s.id,
+              recognised: [],
+              unread,
+              next: 'The popup finished but no picture gave text. Tell the person which pictures were empty or failed and ask what to do.',
+            })
+          // the popup read with a lease of its own; the session takes a fresh one for what was read
+          const indices = kept.map((page) => page.index).sort((a, b) => a - b)
+          await deps.ocr.release(s.prepared.token).catch(() => undefined)
+          s.prepared = await deps.ocr.prepare(s.dir, [s.file], owner)
+          await deps.ocr.start(s.prepared.token, indices)
+          s.allowed = new Set(indices)
+          for (const page of kept)
+            s.pages.set(page.index, { index: page.index, payload: textPayload(page.text) })
+          s.edits.clear()
+          s.proposal = undefined
+          requireThat(
+            JSON.stringify([...s.pages.values()]).length <= 8 * 1024 * 1024,
+            'OCR session text limit reached. Review the recognised images before continuing.',
+          )
+          const items = s.prepared.items
+          return answer({
+            session: s.id,
+            file: s.file,
+            recognised: indices,
+            unread: unread.map((u) => ({
+              index: u.index,
+              page: items[u.index - 1]?.page,
+              location: items[u.index - 1]?.location,
+              reason: u.reason,
+            })),
+            results: indices.slice(-20).map((index) => {
+              const text = plain(s.pages.get(index)!.payload)
+              return {
+                index,
+                page: items[index - 1]?.page,
+                location: items[index - 1]?.location,
+                text: text.slice(0, 2000),
+                totalCharacters: text.length,
+                truncated: text.length > 2000,
+              }
+            }),
+            next: 'The person chose and confirmed these pictures in the popup, and they were read. Review the OCR text with the person in chat (review gives longer text in chunks), then call propose.',
+          })
         } finally {
           s.busy = false
         }
@@ -334,6 +459,7 @@ export function createOcrChatService(deps: OcrChatDeps) {
             remaining,
             results: recognised.slice(-20).map((index) => ({
               index,
+              page: prepared.items[index - 1]?.page,
               location: prepared.items[index - 1]?.location,
               text: plain((s.edits.get(index) ?? s.pages.get(index))!.payload).slice(0, 2000),
               totalCharacters: plain((s.edits.get(index) ?? s.pages.get(index))!.payload).length,

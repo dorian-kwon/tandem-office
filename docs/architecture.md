@@ -285,7 +285,9 @@ PDF 편집기 화면 ── pdfApi.structure.* ──→ 셸 메인(pdf-structur
 1. `ocr.ts`의 `prepare`가 원본의 종류로 `kind`를 정한다. docx·xlsx는 `'embedded'`, HWP·HWPX는 `'extracted'`, PDF는 `'pdf'`다. HWPX·HWP의 그림은 `embedded-images.ts`가 HWPX의 `Contents/content.hpf`와 부분 파일, HWP의 복합 파일 `/BinData/` 스트림(`apps/hwp/src/main/hwp5-file.ts`의 `openHwp`)에서 나열하고, 읽는 함수(`read`)를 그림에 붙여 둔다.
 2. `OcrSelectDialog`는 `'embedded'`와 `'extracted'`에서 그림 목록·미리보기를 보이고(`hasPictureKind`), `'extracted'`와 `'pdf'`에서는 배치 화면 없이 곧바로 `write`로 간다. `runOcr`는 `'extracted'`에서 박스 요청을 만들지 않는다. 그림은 그림 읽기 요청, PDF는 쪽 읽기 요청이다.
 3. 메인의 `write`가 읽은 글을 문서 나무로 바꿔 Markdown을 거쳐 새 docx를 `output/`에 쓴다(스캔 PDF가 이미 가던 길). 원본은 읽기만 한다.
-4. 대화창은 같은 `OcrService`를 `ocr-chat.ts`로 감싼다. `ocr-chat-source.ts`가 열린 문서로 비공개 프로젝트 사본을 만들 때 `.docx`·`.xlsx`·`.hwpx`·`.hwp`·`.pdf`를 받고 `.doc`는 docx로 저장하라는 글로 거절한다. `propose`는 `'extracted'`·`'pdf'`에서 `recommend`를 부르지 않는다.
+4. 목록은 문서에 써진 순서이고 쪽을 알면 붙는다. docx는 `embedded-images.ts`가 본문 XML을 훑으며 Word가 적어 둔 쪽 나눔(`w:lastRenderedPageBreak`)을 센다. HWPX·HWP는 `@genoffice/file-parse/hwp`의 `hwpPicturePlaces`가 한글 엔진(rhwp)으로 쪽마다 컨트롤 배치(`getPageControlLayout`)를 읽고 그림 바이트(`getControlImageData`)의 해시를 돌려주면, `picture-order.ts`의 `orderByPlaces`가 저장된 그림의 해시와 짝지어 순서와 쪽을 정한다. 엔진이 안 되면 저장된 순서로 쪽 없이 나열한다.
+5. 대화창은 같은 `OcrService`를 `ocr-chat.ts`로 감싼다. `ocr-chat-source.ts`가 열린 문서로 비공개 프로젝트 사본을 만들 때 `.docx`·`.xlsx`·`.hwpx`·`.hwp`·`.pdf`를 받고 `.doc`는 docx로 저장하라는 글로 거절한다. `propose`는 `'extracted'`·`'pdf'`에서 `recommend`를 부르지 않는다.
+6. 대화창에서 그림을 고를 때는 `choose`가 `ocr-chat-popup.ts`를 거쳐 기존 선택 팝업(`ocr-popup-host.ts`)을 채팅 창 위에 띄우고 결과를 기다린다. 팝업의 끝은 `index.ts`의 `deliver`가 먼저 기다리는 채팅 도구에 넘기고, 기다리는 도구가 없으면 시트 AI의 기존 경로로 간다. 결과 글은 세션에 들어가고, 팝업이 쓴 열람권은 팝업 화면이 사라질 때 놓이므로 세션이 새 열람권을 받아 `start`한다(읽은 쪽만).
 
 ## 프로세스 경계를 넘는 것과 넘지 않는 것
 

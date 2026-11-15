@@ -7,6 +7,9 @@ import { readZipEntries, type ByteSource, type ZipEntry } from '@genoffice/docx-
 import type { OcrPageImage } from '../../shared/translate-ocr'
 import { inspectBoxableImage } from './ocr-boxes-docx'
 import { openHwp } from '../../../../hwp/src/main/hwp5-file'
+import { createHash } from 'node:crypto'
+import { hwpPicturePlaces } from '@genoffice/file-parse/hwp'
+import { orderByPlaces } from './picture-order'
 
 const MAX_ARCHIVE = 128 * 1024 * 1024
 const MAX_IMAGE = 20 * 1024 * 1024
@@ -29,6 +32,10 @@ export interface EmbeddedImage {
   relId: string
   /** a docx picture that can take boxes (alone on a left-aligned body paragraph); absent = no */
   boxable?: boolean
+  /** the page the picture is on, when the file says so; absent when it cannot be known */
+  page?: number
+  /** the page was counted from hard page breaks only, so the picture may be on a later page */
+  pageApprox?: true
 }
 
 export const supportsEmbeddedOcr = (file: string): boolean => /\.(docx|xlsx)$/i.test(file)
@@ -120,7 +127,7 @@ async function listHwpImages(path: string): Promise<EmbeddedImage[]> {
     )
     .map(({ full }) => full)
     .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
-  return names.map((full) => {
+  const images: EmbeddedImage[] = names.map((full) => {
     const name = basename(full)
     return {
       name,
@@ -151,6 +158,15 @@ async function listHwpImages(path: string): Promise<EmbeddedImage[]> {
       },
     }
   })
+  const fullOf = new Map(names.map((full) => [basename(full), full]))
+  return byLayout(bytes, images, async (image) => {
+    const full = fullOf.get(image.name)!
+    const entry = opened.cfb.FileIndex[opened.cfb.FullPaths.indexOf(full)]
+    const stored = new Uint8Array((entry?.content ?? []) as Uint8Array)
+    return pictureMime(stored)
+      ? stored
+      : new Uint8Array(inflateRawSync(stored, { maxOutputLength: MAX_IMAGE + 1 }))
+  })
 }
 
 function attrs(tag: string): Record<string, string> {
@@ -174,6 +190,26 @@ function target(part: string, value: string): string {
     decoded.startsWith('/') ? decoded.slice(1) : posix.join(posix.dirname(part), decoded),
   )
   return resolved === '..' || resolved.startsWith('../') ? '' : resolved
+}
+
+/**
+ * Where the pages of a Word body begin, as positions in its XML. Word writes down each page it
+ * laid out (`w:lastRenderedPageBreak`), so those are exact. Without them only the hard page breaks
+ * are left, and a page counted from them is a lower bound. A body with neither says nothing about
+ * its pages, and a page is not guessed.
+ */
+function pageStarts(xml: string): { at: number[]; approx: boolean } | null {
+  const rendered = [...xml.matchAll(/<(?:\w+:)?lastRenderedPageBreak\b/g)].map((m) => m.index!)
+  if (rendered.length) return { at: rendered, approx: false }
+  const hard = [
+    ...xml.matchAll(/<(?:\w+:)?br\b[^>]*\btype\s*=\s*["']page["'][^>]*>/g),
+    ...xml.matchAll(
+      /<(?:\w+:)?pageBreakBefore\b(?![^>]*\bval\s*=\s*["'](?:0|false|off)["'])[^>]*>/g,
+    ),
+  ]
+    .map((m) => m.index!)
+    .sort((a, b) => a - b)
+  return hard.length ? { at: hard, approx: true } : null
 }
 
 /** Enumerate content references, never the media folder or external targets. */
@@ -213,7 +249,13 @@ export async function listEmbeddedImages(path: string): Promise<EmbeddedImage[]>
     }
     const images: EmbeddedImage[] = []
     const seen = new Set<string>()
-    const add = async (part: string, id: string, location: string, boxable = false) => {
+    const add = async (
+      part: string,
+      id: string,
+      location: string,
+      boxable = false,
+      page?: { number: number; approx: boolean },
+    ) => {
       const rel = (await relationships(part)).get(id)
       if (
         !rel ||
@@ -233,6 +275,9 @@ export async function listEmbeddedImages(path: string): Promise<EmbeddedImage[]>
         part,
         relId: id,
         ...(boxable ? { boxable: true } : {}),
+        ...(page
+          ? { page: page.number, ...(page.approx ? { pageApprox: true as const } : {}) }
+          : {}),
       })
     }
     if (extname(path).toLowerCase() === '.docx') {
@@ -253,6 +298,8 @@ export async function listEmbeddedImages(path: string): Promise<EmbeddedImage[]>
         const raw = await text(part)
         const styles = (await text('word/styles.xml')) || undefined
         let paragraph = 0
+        // only the body has pages of its own; a header or note part repeats or floats
+        const starts = part === 'word/document.xml' ? pageStarts(xml) : null
         for (const m of xml.matchAll(/<(?:\w+:)?(p|blip|imagedata|fill)\b[^>]*>/g)) {
           if (m[1] === 'p') {
             paragraph++
@@ -267,6 +314,12 @@ export async function listEmbeddedImages(path: string): Promise<EmbeddedImage[]>
               id,
               `${basename(part)} · ¶${at}`,
               m[1] === 'blip' && inspectBoxableImage(part, raw, at, id, styles).ok,
+              starts
+                ? {
+                    number: 1 + starts.at.filter((position) => position < m.index!).length,
+                    approx: starts.approx,
+                  }
+                : undefined,
             )
           }
         }
@@ -348,9 +401,47 @@ export async function listEmbeddedImages(path: string): Promise<EmbeddedImage[]>
         }
       }
     }
+    if (extname(path).toLowerCase() === '.hwpx')
+      return await byLayout(
+        new Uint8Array(await src.bytes.read(0, src.bytes.size)),
+        images,
+        async (image) => new Uint8Array(await readPart(src.bytes, image.entry!, MAX_IMAGE)),
+      )
     return images
   } finally {
     await src.handle.close()
+  }
+}
+
+/** A file larger than this is not laid out for its pages: the engine would hold up the app. */
+const MAX_LAYOUT_BYTES = 30 * 1024 * 1024
+
+/**
+ * Put the pictures of a Hangul document in the order of its pages and give each its page, from
+ * the engine's own layout. Whatever goes wrong (a file the engine cannot lay out, one that is
+ * too large) leaves the pictures as stored and without pages: the listing never fails for it.
+ */
+async function byLayout(
+  documentBytes: Uint8Array,
+  images: EmbeddedImage[],
+  bytesOf: (image: EmbeddedImage) => Promise<Uint8Array>,
+): Promise<EmbeddedImage[]> {
+  if (images.length === 0 || documentBytes.length > MAX_LAYOUT_BYTES) return images
+  try {
+    const places = await hwpPicturePlaces(documentBytes)
+    if (places.length === 0) return images
+    const hashes: string[] = []
+    for (const image of images)
+      hashes.push(
+        createHash('sha256')
+          .update(await bytesOf(image))
+          .digest('hex'),
+      )
+    return orderByPlaces(images, hashes, places).map(({ image, page }) =>
+      page === undefined ? image : { ...image, page },
+    )
+  } catch {
+    return images
   }
 }
 

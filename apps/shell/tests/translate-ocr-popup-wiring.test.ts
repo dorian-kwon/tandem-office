@@ -82,3 +82,14 @@ it('no screen of the shell listens for an "open the OCR popup" event any more', 
   expect(src('shared/translate-api.ts')).not.toContain('open-ocr')
   expect(src('preload/index.ts')).not.toContain('onOpenOcr')
 })
+
+it('the chat tool hears of a popup it opened before the sheets AI does, and opens it for the chat session', () => {
+  const main = src('main/index.ts')
+  // a popup a chat tool waits for is delivered to that tool; any other goes to the sheets AI as before
+  expect(main).toMatch(
+    /deliver: \(asker, outcome\) => \{\s*if \(!ocrChatPopup\.deliver\(asker, outcome\)\) notifyOcrPopupOutcome\(asker, outcome\)\s*\}/,
+  )
+  expect(main).toMatch(/createOcrChatPopup\(\{\s*host: ocrPopupHost,\s*allowDir: allowAdHocDir/)
+  const service = main.slice(main.indexOf('chatOcrService = createOcrChatService'))
+  expect(service.slice(0, 500)).toContain('popup: ocrChatPopup.popup')
+})

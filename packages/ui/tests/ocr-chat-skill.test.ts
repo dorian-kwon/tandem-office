@@ -78,6 +78,18 @@ describe('conversational document OCR', () => {
     expect(skill.systemPrompt).toMatch(/\.doc is not read.*save it as \.docx/s)
   })
 
+  it('lets the person look at the pictures and choose in a popup instead of typing numbers', async () => {
+    const { run, skill } = setup()
+    await run.prepare()
+    expect(skill.systemPrompt).toMatch(/call choose/i)
+    expect(skill.systemPrompt).toMatch(/popup.*document order.*page/is)
+    expect(skill.systemPrompt).toMatch(/not ask.*type.*numbers/is)
+    // what the person confirmed there is not asked again in the chat
+    expect(skill.systemPrompt).toMatch(/already confirmed.*review and propose/is)
+    const schema = skill.tools[0]!.inputSchema as { properties: { action: { enum: string[] } } }
+    expect(schema.properties.action.enum).toContain('choose')
+  })
+
   it('injects trusted turn, scope and request identifiers and forwards the real result', async () => {
     const { run, skill, ocr } = setup('p1')
     await run.prepare()

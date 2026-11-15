@@ -132,6 +132,7 @@ export const vi = {
     'Chọn các trang hoặc tệp cần đọc. Chỉ những mục được chọn mới được gửi cho AI, mỗi lần một hình ảnh. Văn bản đọc được sẽ được lưu thành tài liệu Word trong thư mục kết quả, và bạn dịch tài liệu đó.',
   ocrLoading: 'Đang liệt kê các trang…',
   ocrPageLabel: 'Trang {page}',
+  ocrPageLabelApprox: 'Trang {page} hoặc sau đó',
   ocrSelectAll: 'Chọn tất cả',
   ocrClear: 'Bỏ chọn',
   ocrSelectedCount: 'Đã chọn: {count}/{total}',

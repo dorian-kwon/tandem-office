@@ -139,6 +139,7 @@ export const pl = {
     'Wybierz strony lub pliki do odczytu. Do AI wysyłane są tylko wybrane, po jednym obrazie naraz. Odczytany tekst jest zapisywany jako dokument Word w folderze wyjściowym i to ten dokument tłumaczysz.',
   ocrLoading: 'Wyświetlanie listy stron…',
   ocrPageLabel: 'Strona {page}',
+  ocrPageLabelApprox: 'Strona {page} lub dalsza',
   ocrSelectAll: 'Zaznacz wszystko',
   ocrClear: 'Wyczyść zaznaczenie',
   ocrSelectedCount: 'Wybrano: {count} z {total}',

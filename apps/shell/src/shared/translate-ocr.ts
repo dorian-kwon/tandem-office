@@ -46,6 +46,10 @@ export interface OcrItem {
   location?: string
   /** a docx picture whose text can go back over it as boxes (see ocr-boxes-docx); absent = no */
   boxable?: boolean
+  /** the page the picture is on, when the file says so; absent = not known (a PDF item is its page) */
+  page?: number
+  /** `page` was counted from hard page breaks only, so the picture may be on a later page */
+  pageApprox?: boolean
 }
 
 /** what `prepare` answers: the items to choose from, under a token main holds */

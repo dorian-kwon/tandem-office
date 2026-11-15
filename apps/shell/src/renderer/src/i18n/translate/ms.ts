@@ -139,6 +139,7 @@ export const ms = {
     'Pilih halaman atau fail yang hendak dibaca. Hanya yang dipilih dihantar kepada AI, satu imej pada satu masa. Teks yang dibaca disimpan sebagai dokumen Word dalam folder output, dan dokumen itulah yang anda terjemah.',
   ocrLoading: 'Menyenaraikan halaman…',
   ocrPageLabel: 'Halaman {page}',
+  ocrPageLabelApprox: 'Halaman {page} atau selepasnya',
   ocrSelectAll: 'Pilih semua',
   ocrClear: 'Kosongkan pilihan',
   ocrSelectedCount: 'Dipilih: {count} daripada {total}',

@@ -137,6 +137,7 @@ export const cs = {
     'Vyberte stránky nebo soubory ke čtení. Do AI se posílají jen vybrané, vždy jeden obrázek. Přečtený text se uloží jako dokument Word do výstupní složky a tento dokument pak překládáte.',
   ocrLoading: 'Načítání seznamu stránek…',
   ocrPageLabel: 'Stránka {page}',
+  ocrPageLabelApprox: 'Stránka {page} nebo další',
   ocrSelectAll: 'Vybrat vše',
   ocrClear: 'Zrušit výběr',
   ocrSelectedCount: 'Vybráno: {count} z {total}',

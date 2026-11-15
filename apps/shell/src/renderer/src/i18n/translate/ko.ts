@@ -130,6 +130,7 @@ export const ko = {
     '읽을 페이지나 파일을 고르세요. 고른 것만 한 장씩 그림으로 AI에 보냅니다. 읽은 글은 output 폴더에 Word 문서로 저장되고, 그 문서를 번역합니다.',
   ocrLoading: '페이지를 세는 중…',
   ocrPageLabel: '{page}쪽',
+  ocrPageLabelApprox: '{page}쪽 또는 그 이후',
   ocrSelectAll: '전체 선택',
   ocrClear: '선택 해제',
   ocrSelectedCount: '{total}개 중 {count}개를 골랐습니다',

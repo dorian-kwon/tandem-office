@@ -613,6 +613,13 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
                         </strong>
                       )}{' '}
                       {item.name || s('ocrPageLabel', { page: item.index })}
+                      {item.page !== undefined && (
+                        <small className="translate-ocr-page" data-page={item.page}>
+                          {s(item.pageApprox ? 'ocrPageLabelApprox' : 'ocrPageLabel', {
+                            page: item.page,
+                          })}
+                        </small>
+                      )}
                       {item.location && (
                         <small className="translate-ocr-location">{item.location}</small>
                       )}

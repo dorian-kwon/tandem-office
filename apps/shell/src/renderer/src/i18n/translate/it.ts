@@ -141,6 +141,7 @@ export const it = {
     'Scegli le pagine o i file da leggere. Solo quelli scelti vengono inviati all’IA, un’immagine alla volta. Il testo letto viene salvato come documento Word nella cartella di output, e sarà quel documento a essere tradotto.',
   ocrLoading: 'Elenco delle pagine…',
   ocrPageLabel: 'Pagina {page}',
+  ocrPageLabelApprox: 'Pagina {page} o successiva',
   ocrSelectAll: 'Seleziona tutto',
   ocrClear: 'Cancella selezione',
   ocrSelectedCount: 'Scelti: {count} su {total}',

@@ -127,6 +127,7 @@ export const zh = {
     '请选择要读取的页面或文件。只有选中的内容会逐张图片发送给 AI。读取到的文字会作为 Word 文档保存在输出文件夹中，您翻译的就是这份文档。',
   ocrLoading: '正在列出页面…',
   ocrPageLabel: '第 {page} 页',
+  ocrPageLabelApprox: '第 {page} 页或之后',
   ocrSelectAll: '全选',
   ocrClear: '清除选择',
   ocrSelectedCount: '已选：{count} / {total}',

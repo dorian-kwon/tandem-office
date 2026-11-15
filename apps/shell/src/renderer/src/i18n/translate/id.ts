@@ -138,6 +138,7 @@ export const id = {
     'Pilih halaman atau file yang akan dibaca. Hanya yang dipilih yang dikirim ke AI, satu gambar setiap kali. Teks yang terbaca disimpan sebagai dokumen Word di folder keluaran, dan dokumen itulah yang Anda terjemahkan.',
   ocrLoading: 'Mendaftar halaman…',
   ocrPageLabel: 'Halaman {page}',
+  ocrPageLabelApprox: 'Halaman {page} atau setelahnya',
   ocrSelectAll: 'Pilih semua',
   ocrClear: 'Hapus pilihan',
   ocrSelectedCount: 'Dipilih: {count} dari {total}',

@@ -144,6 +144,7 @@ export const de = {
     'Wählen Sie die Seiten oder Dateien, die gelesen werden sollen. Nur die gewählten werden an die KI gesendet, jeweils ein Bild nach dem anderen. Der gelesene Text wird als Word-Dokument im Ausgabeordner gespeichert, und Sie übersetzen dieses Dokument.',
   ocrLoading: 'Seiten werden aufgelistet …',
   ocrPageLabel: 'Seite {page}',
+  ocrPageLabelApprox: 'Seite {page} oder später',
   ocrSelectAll: 'Alle auswählen',
   ocrClear: 'Auswahl aufheben',
   ocrSelectedCount: 'Ausgewählt: {count} von {total}',

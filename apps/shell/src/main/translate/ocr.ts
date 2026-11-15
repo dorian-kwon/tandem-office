@@ -292,6 +292,8 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
               name: image.name,
               location: image.location,
               ...(image.boxable ? { boxable: true } : {}),
+              ...(image.page ? { page: image.page } : {}),
+              ...(image.pageApprox ? { pageApprox: true } : {}),
             }))
           : kind === 'pdf'
             ? Array.from({ length: count }, (_, i) => ({ index: i + 1, name: '' }))

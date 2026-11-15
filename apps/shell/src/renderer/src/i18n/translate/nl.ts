@@ -140,6 +140,7 @@ export const nl = {
     'Kies de pagina’s of bestanden die gelezen moeten worden. Alleen de gekozen worden naar de AI gestuurd, steeds één afbeelding. De gelezen tekst wordt als Word-document in de uitvoermap opgeslagen, en dat document vertaal je.',
   ocrLoading: 'Pagina’s worden opgesomd…',
   ocrPageLabel: 'Pagina {page}',
+  ocrPageLabelApprox: 'Pagina {page} of later',
   ocrSelectAll: 'Alles selecteren',
   ocrClear: 'Selectie wissen',
   ocrSelectedCount: 'Gekozen: {count} van {total}',

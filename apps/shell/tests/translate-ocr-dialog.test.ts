@@ -161,6 +161,25 @@ describe('OcrSelectDialog', () => {
     expect(ask).not.toHaveBeenCalled()
   })
 
+  it('shows the page of each picture, and says when it may be on a later page', async () => {
+    prepared.kind = 'embedded'
+    prepared.items = [
+      { index: 1, name: 'a.png', location: 'document.xml · ¶1', page: 1 },
+      { index: 2, name: 'b.png', location: 'document.xml · ¶9', page: 3, pageApprox: true },
+      { index: 3, name: 'c.png', location: 'header1.xml · ¶1' },
+    ]
+    await render(
+      { sources: [{ file: 'book.docx', kind: 'editable', sha256: 'x' }] },
+      undefined,
+      true,
+    )
+    await click(button('Choose items'))
+    const pageOf = (n: number) =>
+      host.querySelector(`[data-number="${n}"]`)?.closest('label')?.querySelector('[data-page]')
+    expect(pageOf(1)?.textContent).toBe('Page 1')
+    expect(pageOf(2)?.textContent).toBe('Page 3 or later')
+    expect(pageOf(3)).toBeNull()
+  })
   it('asks for the OCR scope before showing the selection list or sending images', async () => {
     await render({}, undefined, true)
     expect(host.querySelector('[data-step="scope"]')).not.toBeNull()

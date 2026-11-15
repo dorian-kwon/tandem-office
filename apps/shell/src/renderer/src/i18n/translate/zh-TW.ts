@@ -128,6 +128,7 @@ export const zhTW = {
     '請選擇要讀取的頁面或檔案。只有選取的內容會逐張圖片傳送給 AI。讀取到的文字會以 Word 文件儲存在輸出資料夾中，您翻譯的就是這份文件。',
   ocrLoading: '正在列出頁面…',
   ocrPageLabel: '第 {page} 頁',
+  ocrPageLabelApprox: '第 {page} 頁或之後',
   ocrSelectAll: '全選',
   ocrClear: '清除選取',
   ocrSelectedCount: '已選：{count} / {total}',
