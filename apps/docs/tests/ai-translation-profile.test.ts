@@ -22,11 +22,13 @@ const sha = (text: string): string => createHash('sha256').update(text).digest('
 /**
  * Fingerprints of the prompt and tool list as they were before profiles existed. The tool
  * fingerprint was re-pinned when read_runs and translate_blocks gained the text box `box`
- * field (a deliberate change to what every profile sends); nothing else may move it.
+ * field, and again when analyze_media's description began naming document_ocr for pictures
+ * that are not image blocks (deliberate changes to what every profile sends); nothing else may
+ * move it.
  */
 const PRE_PROFILE_PROMPT_SHA = '02b4feecd02268794937d822caf71ea189b4cec097f337fd25fdd594e34a943a'
 const PRE_PROFILE_PROMPT_LENGTH = 25100
-const PRE_PROFILE_TOOLS_SHA = 'c824ababd5f13acfffeaa3d6c4e7012ee84c0cd9a922f8cba510ac87d9fef8f9'
+const PRE_PROFILE_TOOLS_SHA = '02fcfc44419ec12983d429f2ed58f2d8704036e480221ff1169ffa6b81f316c7'
 
 /** Tools a translation workflow can need: none of them may ever be dropped. */
 const MUST_KEEP = [

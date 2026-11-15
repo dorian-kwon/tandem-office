@@ -696,7 +696,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
   {
     name: 'analyze_media',
     description:
-      'Look at a picture that is in the document and answer questions about it, or analyze image/audio/video given by URL or local file path; returns the analysis as text. An image block in the document carries no text of its own — read_blocks cannot tell you what a picture shows, so this is the only way to see it. Pass blockIndex for an image block listed by get_document_context, and/or mediaUrls.',
+      'Look at a picture that is in the document and answer questions about it, or analyze image/audio/video given by URL or local file path; returns the analysis as text. An image block in the document carries no text of its own — read_blocks cannot tell you what a picture shows, so this is the only way to see it. Pass blockIndex for an image block listed by get_document_context, and/or mediaUrls. Only a stand-alone image block can be a blockIndex; never pass a table. Pictures in table cells, text boxes, headers, behind the text or as the page background are not image blocks: read them with document_ocr when available, else tell the person to run OCR from the translation project.',
     inputSchema: {
       type: 'object',
       properties: {

@@ -176,7 +176,7 @@ export async function listEmbeddedImages(path: string): Promise<EmbeddedImage[]>
         const raw = await text(part)
         const styles = (await text('word/styles.xml')) || undefined
         let paragraph = 0
-        for (const m of xml.matchAll(/<(?:\w+:)?(p|blip|imagedata)\b[^>]*>/g)) {
+        for (const m of xml.matchAll(/<(?:\w+:)?(p|blip|imagedata|fill)\b[^>]*>/g)) {
           if (m[1] === 'p') {
             paragraph++
             continue
