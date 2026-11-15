@@ -5,6 +5,7 @@ import type { OcrPopupResult } from '../../shared/ocr-popup'
 import { readAiPage } from '../../../../../packages/pdf-structure/src/ai-read/read-page'
 import type { AiReadRequest } from '../../../../../packages/pdf-structure/src/ai-read/instruction'
 import { resolveOcrSelection } from '../../shared/translate-ocr'
+import { TranslateIpcError } from '../../shared/translate-api'
 import { checkOcrBoxesPayload, readOcrBoxes } from '../../shared/ocr-boxes'
 import { asPictureRequest } from '../../shared/ocr-picture-instruction'
 
@@ -109,6 +110,22 @@ const takesBoxes = (prepared: OcrPrepared, index: number): boolean =>
   prepared.kind === 'embedded' &&
   prepared.format === 'docx' &&
   prepared.items[index - 1]?.boxable === true
+
+/** Texts that name a place on the PC are never passed on. */
+const PATH_LIKE = /[A-Za-z]:[\\/][^\s'"]*|(?:\/[^\s'"/]+){2,}/g
+
+/**
+ * What the model and the person are told when a step failed. A reason the app itself gave (a
+ * refused placement, an expired run, a changed source) is passed on with its code, because it
+ * says what to do next. Anything else, a system error included, stays general and names only the
+ * step: such a text can carry a path or other things that are not for the chat.
+ */
+function failureMessage(action: string, err: unknown): string {
+  const nothing = action === 'apply' ? ' No document was written.' : ' Nothing was changed.'
+  if (err instanceof TranslateIpcError && err.code !== 'UNKNOWN')
+    return `The OCR step (${action}) failed: ${err.message.replace(PATH_LIKE, '<path>')}.${nothing}`
+  return `The OCR step (${action}) failed. No successful change was confirmed. Review the connection, source file or destination before retrying.`
+}
 
 /** JSON with the keys in order, so two placements that say the same thing compare equal */
 function canonical(value: unknown): string {
@@ -675,12 +692,14 @@ export function createOcrChatService(deps: OcrChatDeps) {
       }
       throw new Refusal('Unknown OCR action.')
     } catch (err) {
+      if (!(err instanceof Refusal) && !controller.signal.aborted)
+        console.warn('[document_ocr] step failed:', input.action, err)
       const message =
         err instanceof Refusal
           ? err.message
           : controller.signal.aborted
             ? 'OCR was stopped; no output was applied.'
-            : 'The OCR step failed. No successful change was confirmed. Review the connection, source file or destination before retrying.'
+            : failureMessage(input.action, err)
       return answer({ error: message }, { isError: true })
     } finally {
       active.delete(requestKey)

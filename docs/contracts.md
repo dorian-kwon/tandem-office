@@ -519,6 +519,7 @@ metadata:
 - **Word 그림의 박스(채팅)**: `read`와 `choose`(팝업)는 `boxable` docx 그림을 박스로 읽는다. 팝업의 `OcrPopupResult.pages[].boxes`는 `{x, y, w, h, fontHeight, text}`(그림에 대한 0~1 비율)의 배열이고, 메인이 박스 읽기와 같은 검사(박스 60개 이하, 그림 안)를 다시 한다. 박스가 하나도 없는 그림은 `boxes`가 없다.
 - **`propose`의 답(docx)**: 박스가 나온 그림이 있으면 `placement`는 `{ kind: "docx-image-boxes", images: [{ index, boxes }] }`이고 `reason`은 `"on-picture"`다. 그 밖에는 추천된 목록 배치다. `alternatives`는 제안하지 않은 다른 배치(추천된 목록 배치, `docx-after-images`, `docx-end`)의 목록이다. 글을 고쳐 넘긴(`texts`) 그림의 박스는 버려진다.
 - **`apply`의 `placement`**: 오면 `propose`가 낸 `placement`와 `alternatives` 가운데 같은 것(키 순서와 상관없이)만 받는다. 아니면 거절하고 `propose`를 먼저 부르라고 알린다. 오지 않으면 제안된 배치로 쓴다. 새 Word 문서로 가는 형식(PDF, 한글)에서는 무시한다.
+- **`document_ocr`의 실패 답**: 앱이 스스로 낸 이유(`TranslateIpcError`, `UNKNOWN`은 뺀다)는 `The OCR step (<동작>) failed: [코드] 이유. <아무것도 쓰이지 않았다는 말>` 형태로 코드와 함께 모델에 간다. 이유에 든 경로처럼 보이는 글(`C:\...`, `/a/b`)은 `<path>`로 바꾼다. 그 밖의 오류(시스템 오류 포함)는 동작 이름만 말하는 일반 문구이고 원문은 싣지 않는다. 어느 쪽이든 메인 로그에 동작과 오류를 남긴다.
 - **`document_ocr`의 `propose`·`apply`**: `result: "new-docx"`인 세션의 `propose`는 `placement`를 내지 않고 받지도 않으며(모델이 준 값은 무시) 검토할 글과 `needsConfirmation: true`만 낸다. `apply`는 배치 없이 쓰고 `{ outputPath, sourceUnchanged: true, format: "docx" }`로 답한다. 사람의 확인은 나중 사람 차례에서만 받는다는 규칙은 그대로다.
 
 ## Google 드라이브 (결정 0033, 0085)
