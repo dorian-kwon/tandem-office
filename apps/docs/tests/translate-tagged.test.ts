@@ -90,6 +90,49 @@ describe('how read_runs shows a paragraph of mixed formatting', () => {
   })
 })
 
+describe('formatting that overlaps', () => {
+  const BOLD_ITALIC = '<w:rPr><w:b/><w:i/></w:rPr>'
+
+  it('gets one number for the combination, so the tags never overlap', async () => {
+    const { editor } = await open(
+      para(run('가 ') + run('나 ', BOLD) + run('다', BOLD_ITALIC) + run(' 라', BOLD)),
+    )
+    const e = entry(editor)
+    expect(e.tagged).toBe('<1>가 </1><2>나 </2><3>다</3><2> 라</2>')
+    expect(e.tags).toEqual({ '1': 'regular', '2': 'bold', '3': 'bold, italic' })
+  })
+
+  it('puts the combined formatting on what the translation puts in that tag', async () => {
+    const { editor } = await open(
+      para(run('가 ') + run('나 ', BOLD) + run('다', BOLD_ITALIC) + run(' 라', BOLD)),
+    )
+    const e = entry(editor)
+    applyRunTranslations(editor, [
+      { index: 0, fp: e.fp, tagged: '<1>A </1><2>B </2><3>C</3><2> D</2>' },
+    ])
+    expect(pieces(editor)).toEqual([
+      ['A ', ''],
+      ['B ', 'bold'],
+      ['C', 'bold+italic'],
+      [' D', 'bold'],
+    ])
+  })
+
+  it('takes tags the model nests: the inner one gives the formatting, it does not add to the outer', async () => {
+    const { editor } = await open(
+      para(run('가 ') + run('나 ', BOLD) + run('다', BOLD_ITALIC) + run(' 라', BOLD)),
+    )
+    const e = entry(editor)
+    applyRunTranslations(editor, [{ index: 0, fp: e.fp, tagged: '<1>A </1><2>B <3>C</3> D</2>' }])
+    expect(pieces(editor)).toEqual([
+      ['A ', ''],
+      ['B ', 'bold'],
+      ['C', 'bold+italic'],
+      [' D', 'bold'],
+    ])
+  })
+})
+
 describe('translating a paragraph with its tags', () => {
   it('puts each formatting on the words inside its tag', async () => {
     const { editor } = await open(para(run('이것은 ') + run('중요한', BOLD) + run(' 문장입니다.')))
