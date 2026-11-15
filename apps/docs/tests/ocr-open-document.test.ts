@@ -11,6 +11,7 @@ import type { FileActionContext } from '../src/renderer/file-actions'
 import {
   clearOcrHistory,
   ocrIntoDocumentAvailable,
+  ocrIntoDocumentUnavailableReason,
   ocrRedoAvailable,
   ocrUndoAvailable,
   placeOcrIntoOpenDocument,
@@ -220,6 +221,45 @@ describe('when the document on screen cannot take it', () => {
     await open()
     unsavedEdit()
     expect(ocrIntoDocumentAvailable(ctx)).toBe(true)
+  })
+})
+
+describe('why the document on screen cannot take it', () => {
+  it('says nothing is wrong for a body-only edited Word document', async () => {
+    await open()
+    unsavedEdit()
+    expect(ocrIntoDocumentUnavailableReason(ctx)).toBeNull()
+  })
+
+  it.each([
+    ['an ODT document', { format: 'odt' as const }, /odt|docx/i],
+    ['an encrypted document', { encrypted: true }, /password|encrypt/i],
+  ])('names %s', async (_name, extra, expected) => {
+    await open(extra as Partial<DocState>)
+    expect(ocrIntoDocumentUnavailableReason(ctx)).toMatch(expected)
+  })
+
+  it('names a read-only document', async () => {
+    await open()
+    editor.setEditable(false)
+    expect(ocrIntoDocumentUnavailableReason(ctx)).toMatch(/read-only/i)
+  })
+
+  it('names which other unsaved changes there are', async () => {
+    await open()
+    const target = ctx as unknown as Record<string, unknown>
+    target.headerDirty = true
+    target.commentsDirty = true
+    const reason = ocrIntoDocumentUnavailableReason(ctx)!
+    expect(reason).toMatch(/header/i)
+    expect(reason).toMatch(/comments/i)
+  })
+
+  it('agrees with the yes or no answer', async () => {
+    await open()
+    expect(ocrIntoDocumentAvailable(ctx)).toBe(true)
+    editor.setEditable(false)
+    expect(ocrIntoDocumentAvailable(ctx)).toBe(false)
   })
 })
 

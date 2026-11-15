@@ -424,7 +424,7 @@ import {
   type PendingPdfExport,
 } from './file-actions'
 import {
-  ocrIntoDocumentAvailable,
+  ocrIntoDocumentUnavailableReason,
   ocrRedoAvailable,
   ocrUndoAvailable,
   placeOcrIntoOpenDocument,
@@ -2074,7 +2074,11 @@ export function App() {
   // OCR text into the document on screen: the chat tool's hook, and the keys that undo it
   const ocrOpenDocument = useMemo<OcrOpenDocument>(
     () => ({
-      available: () => ocrIntoDocumentAvailable(fileCtxRef.current),
+      unavailableReason: () => {
+        const reason = ocrIntoDocumentUnavailableReason(fileCtxRef.current)
+        if (reason) console.warn('[ocr-open-document] cannot place into the open document:', reason)
+        return reason
+      },
       apply: (plan) => placeOcrIntoOpenDocument(fileCtxRef.current, plan),
     }),
     [],
@@ -6470,6 +6474,13 @@ export function App() {
       exportPdfTo: (path: string) => exportPdf(path),
       exportHtmlTo: (path: string) => exportHtml(path),
       exportMarkdownTo: (path: string) => exportMarkdown(path),
+      // OCR text into the open document without the AI (what the chat tool asks the editor to do)
+      ocrReason: () => ocrIntoDocumentUnavailableReason(fileCtxRef.current),
+      placeOcr: (plan: Parameters<typeof placeOcrIntoOpenDocument>[1]) =>
+        placeOcrIntoOpenDocument(fileCtxRef.current, plan),
+      ocrUndo: () => tryOcrUndo(fileCtxRef.current),
+      ocrRedo: () => tryOcrRedo(fileCtxRef.current),
+      isUnsaved: () => fileCtxRef.current.dirtyRef.current,
     }
   }, [editor, openRecent, save, status, exportPdf, exportHtml, exportMarkdown])
 

@@ -36,7 +36,7 @@ const apply = (skill: AgentSkill, extra: Record<string, unknown> = {}) =>
 const hook = (
   answer: Awaited<ReturnType<OcrOpenDocument['apply']>> = { ok: true, placed: [1], skipped: [] },
 ) => ({
-  available: vi.fn(() => true),
+  unavailableReason: vi.fn((): string | null => null),
   apply: vi.fn(async () => answer),
 })
 
@@ -99,7 +99,7 @@ describe('apply into the open document', () => {
 
   it('writes a new file instead when the editor throws', async () => {
     const editor = {
-      available: () => true,
+      unavailableReason: () => null,
       apply: vi.fn(async () => Promise.reject(new Error('boom'))),
     }
     const { run, ocr, skill } = setup(editor as never)
@@ -111,14 +111,30 @@ describe('apply into the open document', () => {
     expect(result.output).not.toContain('boom')
   })
 
-  it('does not ask for the open document when the editor cannot take it', async () => {
-    const editor = { available: vi.fn(() => false), apply: vi.fn() }
+  it('writes a new file and says why when the document on screen cannot take it', async () => {
+    const editor = {
+      unavailableReason: vi.fn(() => 'it is read-only (a source copy)'),
+      apply: vi.fn(),
+    }
     const { run, ocr, skill } = setup(editor as never)
     await run.prepare()
     ocr.mockResolvedValueOnce({ output: '{"outputPath":"/x.docx"}', summary: 'OCR' })
-    await apply(skill)
+    const result = await apply(skill)
     expect(ocr.mock.calls[0]![0]).not.toHaveProperty('intoOpenDocument')
     expect(editor.apply).not.toHaveBeenCalled()
+    const body = JSON.parse(result.output)
+    expect(body.outputPath).toBe('/x.docx')
+    expect(body.note).toMatch(/new file.*cannot take it now.*read-only/i)
+  })
+
+  it('adds no note to a refusal, which is not a file that was written', async () => {
+    const editor = { unavailableReason: () => 'it is read-only', apply: vi.fn() }
+    const { run, ocr, skill } = setup(editor as never)
+    await run.prepare()
+    ocr.mockResolvedValueOnce({ output: '{"error":"no"}', summary: 'OCR', isError: true })
+    const result = await apply(skill)
+    expect(result.isError).toBe(true)
+    expect(JSON.parse(result.output)).toEqual({ error: 'no' })
   })
 
   it('never asks for it from an editor that has no such hook', async () => {

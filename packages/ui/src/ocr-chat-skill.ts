@@ -1,5 +1,9 @@
 import type { AgentSkill, AgentToolDef, ToolExecution } from '@genoffice/agent-core'
-import type { ChatOcrPlaceInDocument, ChatOcrRequest } from '@genoffice/project-store/folder-api'
+import type {
+  ChatOcrAnswer,
+  ChatOcrPlaceInDocument,
+  ChatOcrRequest,
+} from '@genoffice/project-store/folder-api'
 import type { ProjectRun } from './project-skill'
 
 const PROMPT = `Embedded-image OCR is available through document_ocr for the current document or the selected translation project. Preserve the original DOCX and XLSX formats. A PDF (read page by page) and the pictures of a Hangul document (HWP, HWPX) are read the same way, but the text goes into a new Word document next to the original, which is never changed. An old .doc is not read: tell the person to save it as .docx first. It covers every picture of the file, wherever it sits: in table cells, in text boxes, in headers and footers, behind the text, as a shape fill or as the page background. A picture inside a table is not an image block, so use document_ocr for it rather than analyze_media.
@@ -14,8 +18,8 @@ Pictures are picked in the popup that choose opens; transcription review, placem
  * the document untouched when it answers `ok: false`.
  */
 export interface OcrOpenDocument {
-  /** whether the document on screen can take it now (format, protection, state) */
-  available(): boolean
+  /** null when the document on screen can take it now, else why it cannot, in plain words */
+  unavailableReason(): string | null
   apply(
     plan: ChatOcrPlaceInDocument,
   ): Promise<{ ok: true; placed: number[]; skipped: number[] } | { ok: false; reason: string }>
@@ -83,6 +87,15 @@ const TOOL: AgentToolDef = {
   },
 }
 
+/** the answer with a `note` the model passes on to the person */
+function withNote(answer: ChatOcrAnswer, note: string): ChatOcrAnswer {
+  try {
+    return { ...answer, output: JSON.stringify({ ...JSON.parse(answer.output), note }) }
+  } catch {
+    return { ...answer, output: `${note}\n${answer.output}` }
+  }
+}
+
 const failure = (output: string): ToolExecution => ({
   output,
   summary: 'document_ocr',
@@ -111,7 +124,9 @@ export function ocrChatSkill(run: ProjectRun, openDocument?: OcrOpenDocument): A
       // Copy only model-owned fields; trusted identifiers always come from the run.
       const requestId = crypto.randomUUID()
       // only an apply can go into the document on screen, and only when the editor can take it now
-      const intoOpenDocument = input.action === 'apply' && openDocument?.available() === true
+      const reason =
+        input.action === 'apply' && openDocument ? openDocument.unavailableReason() : null
+      const intoOpenDocument = input.action === 'apply' && !!openDocument && reason === null
       const request: ChatOcrRequest = {
         action: input.action as ChatOcrRequest['action'],
         ...Object.fromEntries(
@@ -139,7 +154,13 @@ export function ocrChatSkill(run: ProjectRun, openDocument?: OcrOpenDocument): A
         // Return the app's actual execution and display, including refusals.
         const answer = await ocr.call(run.bridge, request)
         if (!intoOpenDocument || !openDocument || !answer.placeInDocument || answer.isError)
-          return answer
+          // a file written because the open document could not take it says why
+          return reason && !answer.isError
+            ? withNote(
+                answer,
+                `The text was written as a new file because the document on screen cannot take it now (${reason}).`,
+              )
+            : answer
         // main wrote nothing: the editor puts the text into the document on screen
         const placed = await openDocument
           .apply(answer.placeInDocument)
@@ -174,12 +195,10 @@ export function ocrChatSkill(run: ProjectRun, openDocument?: OcrOpenDocument): A
         const { intoOpenDocument: _flag, ...plain } = request
         void _flag
         const fallback = await ocr.call(run.bridge, { ...plain, requestId: crypto.randomUUID() })
-        const note = `The text could not be put into the open document (${placed.reason}); it was written as a new file instead.`
-        try {
-          return { ...fallback, output: JSON.stringify({ ...JSON.parse(fallback.output), note }) }
-        } catch {
-          return { ...fallback, output: `${note}\n${fallback.output}` }
-        }
+        return withNote(
+          fallback,
+          `The text could not be put into the open document (${placed.reason}); it was written as a new file instead.`,
+        )
       } catch {
         return failure('The app could not complete OCR. No success was confirmed.')
       } finally {

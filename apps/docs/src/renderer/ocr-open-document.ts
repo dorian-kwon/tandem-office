@@ -33,43 +33,53 @@ import { parseDocxOffThread } from './parse-off-thread'
 export { clearOcrHistory }
 
 /**
- * Whether the document on screen can take OCR text now: a Word document that is editable, not
- * encrypted, and with no other unsaved change than its body (the bytes made from the screen would
- * bake those in, and undo could not give them back).
+ * Why the document on screen cannot take OCR text now, in plain words for the person and the
+ * model, or null when it can. It must be a Word document that is editable, not encrypted, and with
+ * no other unsaved change than its body: the bytes made from the screen would bake those in, and
+ * undo could not give them back.
  */
-export function ocrIntoDocumentAvailable(ctx: FileActionContext): boolean {
+export function ocrIntoDocumentUnavailableReason(ctx: FileActionContext): string | null {
   const { doc, editor } = ctx
-  if (!doc || !editor || editor.isDestroyed || !editor.isEditable) return false
-  if (doc.format !== 'docx' || doc.encrypted || doc.odt) return false
-  const pending =
-    ctx.sectionDirty ||
-    ctx.sectionsDirty?.length > 0 ||
-    ctx.pgNumDirtySections?.length > 0 ||
-    ctx.pgNumEdit != null ||
-    ctx.pageColorDirty ||
-    ctx.headerDirty ||
-    ctx.footerDirty ||
-    ctx.hfVariantsDirty?.length > 0 ||
-    Object.keys(ctx.sectionHfEdits ?? {}).length > 0 ||
-    ctx.titlePgDirty ||
-    ctx.evenOddHfDirty ||
-    ctx.mirrorMarginsDirty ||
-    ctx.commentsDirty ||
-    ctx.watermarkDirty ||
-    ctx.inksDirty ||
-    ctx.inkAnnotations?.length > 0 ||
-    ctx.notesDirty ||
-    ctx.sourcesDirty ||
-    ctx.zoteroDocumentDataDirty ||
-    ctx.themeFontsDirty ||
-    ctx.themeColorsDirty ||
-    ctx.protectionDirty ||
-    ctx.writeProtectionDirty ||
-    ctx.removePersonalInfoDirty ||
-    ctx.numberingDirty ||
-    Object.keys(ctx.styleUpserts ?? {}).length > 0
-  return !pending
+  if (!doc || !editor || editor.isDestroyed) return 'there is no document on screen'
+  if (!editor.isEditable)
+    return 'it is read-only (a source copy, Read Mode or a translation that is still running)'
+  if (doc.format !== 'docx' || doc.odt) return 'it is not a docx document (an ODT document)'
+  if (doc.encrypted) return 'it is password-protected'
+  const pending: [string, boolean][] = [
+    ['page setup or sections', !!ctx.sectionDirty || ctx.sectionsDirty?.length > 0],
+    ['page numbers', ctx.pgNumDirtySections?.length > 0 || ctx.pgNumEdit != null],
+    ['page color', !!ctx.pageColorDirty],
+    ['header', !!ctx.headerDirty],
+    ['footer', !!ctx.footerDirty],
+    [
+      'header or footer variants',
+      ctx.hfVariantsDirty?.length > 0 || Object.keys(ctx.sectionHfEdits ?? {}).length > 0,
+    ],
+    ['title page', !!ctx.titlePgDirty],
+    ['odd and even headers', !!ctx.evenOddHfDirty],
+    ['mirror margins', !!ctx.mirrorMarginsDirty],
+    ['comments', !!ctx.commentsDirty],
+    ['watermark', !!ctx.watermarkDirty],
+    ['ink drawings', !!ctx.inksDirty || ctx.inkAnnotations?.length > 0],
+    ['footnotes or endnotes', !!ctx.notesDirty],
+    ['sources', !!ctx.sourcesDirty],
+    ['reference manager data', !!ctx.zoteroDocumentDataDirty],
+    ['theme fonts', !!ctx.themeFontsDirty],
+    ['theme colors', !!ctx.themeColorsDirty],
+    ['protection', !!ctx.protectionDirty || !!ctx.writeProtectionDirty],
+    ['personal information', !!ctx.removePersonalInfoDirty],
+    ['numbering', !!ctx.numberingDirty],
+    ['styles', Object.keys(ctx.styleUpserts ?? {}).length > 0],
+  ]
+  const names = pending.filter(([, set]) => set).map(([name]) => name)
+  return names.length > 0
+    ? `it has unsaved changes outside the body text (${names.join(', ')}): save it first`
+    : null
 }
+
+/** whether the document on screen can take OCR text now */
+export const ocrIntoDocumentAvailable = (ctx: FileActionContext): boolean =>
+  ocrIntoDocumentUnavailableReason(ctx) === null
 
 export interface OcrOpenDocumentDeps {
   /** the bytes the editor would save now */
@@ -88,8 +98,8 @@ export async function placeOcrIntoOpenDocument(
   plan: ChatOcrPlaceInDocument,
   deps: OcrOpenDocumentDeps = REAL,
 ): Promise<{ ok: true; placed: number[]; skipped: number[] } | { ok: false; reason: string }> {
-  if (!ocrIntoDocumentAvailable(ctx))
-    return { ok: false, reason: 'the document on screen cannot take it now' }
+  const unavailable = ocrIntoDocumentUnavailableReason(ctx)
+  if (unavailable) return { ok: false, reason: unavailable }
   const generation = currentDocGeneration()
   const stillHere = () =>
     generation === currentDocGeneration() && !!ctx.editor && !ctx.editor.isDestroyed

@@ -15,7 +15,7 @@ const panel = read('ai/AiPanel.tsx')
 describe('the chat tool reaches the editor', () => {
   it('App gives the AI panel the hook, built from the live context', () => {
     expect(app).toContain('placeOcrIntoOpenDocument(fileCtxRef.current')
-    expect(app).toContain('ocrIntoDocumentAvailable(fileCtxRef.current')
+    expect(app).toContain('ocrIntoDocumentUnavailableReason(fileCtxRef.current')
     expect(app).toMatch(/<AiPanel[\s\S]*?ocrOpenDocument=\{ocrOpenDocument\}/)
   })
 
@@ -47,5 +47,12 @@ describe('undo and redo ask the OCR text first', () => {
   it('the buttons stay on while the OCR text can still be undone or redone', () => {
     expect(app).toMatch(/canUndo: editor\.can\(\)\.undo\(\) \|\| ocrUndoAvailable\(editor\)/)
     expect(app).toMatch(/canRedo: editor\.can\(\)\.redo\(\) \|\| ocrRedoAvailable\(editor\)/)
+  })
+})
+
+describe('the automation hook', () => {
+  it('can place, undo and redo OCR text without the AI, for end-to-end checks', () => {
+    for (const name of ['ocrReason', 'placeOcr', 'ocrUndo', 'ocrRedo', 'isUnsaved'])
+      expect(app).toContain(`${name}:`)
   })
 })
