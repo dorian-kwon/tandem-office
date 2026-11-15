@@ -38,11 +38,23 @@ export { clearOcrHistory }
  * no other unsaved change than its body: the bytes made from the screen would bake those in, and
  * undo could not give them back.
  */
-export function ocrIntoDocumentUnavailableReason(ctx: FileActionContext): string | null {
+export interface OcrOpenDocumentOptions {
+  /**
+   * The editor is read-only only because the translation view locks its output while the AI runs.
+   * That lock holds off the person, not the AI's own write, and the chat tool's apply always runs
+   * during an AI run, so it is not a reason. Read Mode and a protected document are not this.
+   */
+  translationLocked?: boolean
+}
+
+export function ocrIntoDocumentUnavailableReason(
+  ctx: FileActionContext,
+  options: OcrOpenDocumentOptions = {},
+): string | null {
   const { doc, editor } = ctx
   if (!doc || !editor || editor.isDestroyed) return 'there is no document on screen'
-  if (!editor.isEditable)
-    return 'it is read-only (a source copy, Read Mode or a translation that is still running)'
+  if (!editor.isEditable && !options.translationLocked)
+    return 'it is read-only (a source copy, Read Mode or a protected document)'
   if (doc.format !== 'docx' || doc.odt) return 'it is not a docx document (an ODT document)'
   if (doc.encrypted) return 'it is password-protected'
   const pending: [string, boolean][] = [
@@ -97,8 +109,9 @@ export async function placeOcrIntoOpenDocument(
   ctx: FileActionContext,
   plan: ChatOcrPlaceInDocument,
   deps: OcrOpenDocumentDeps = REAL,
+  options: OcrOpenDocumentOptions = {},
 ): Promise<{ ok: true; placed: number[]; skipped: number[] } | { ok: false; reason: string }> {
-  const unavailable = ocrIntoDocumentUnavailableReason(ctx)
+  const unavailable = ocrIntoDocumentUnavailableReason(ctx, options)
   if (unavailable) return { ok: false, reason: unavailable }
   const generation = currentDocGeneration()
   const stillHere = () =>
@@ -125,6 +138,9 @@ export async function placeOcrIntoOpenDocument(
   // set before the swap: the buttons that follow the editor's transactions see undo is possible
   const history: OcrHistory = { before, after: null, applied: true, restored: null }
   setOcrHistory(history)
+  // the translation lock is let go for the moment of the swap and put back as it was
+  const relock = !editor.isEditable
+  if (relock) editor.setEditable(true, false)
   try {
     swapDocumentContent(ctx, reparsed)
     ctx.dirtyRef.current = true
@@ -142,6 +158,8 @@ export async function placeOcrIntoOpenDocument(
       /* the swap failed before it changed anything that matters */
     }
     return { ok: false, reason: reasonOf(err) }
+  } finally {
+    if (relock && !editor.isDestroyed) editor.setEditable(false, false)
   }
   return { ok: true, placed: placed.placed, skipped: placed.skipped }
 }

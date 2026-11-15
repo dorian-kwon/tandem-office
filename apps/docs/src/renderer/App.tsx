@@ -2072,14 +2072,19 @@ export function App() {
   /** App state bundle for the extracted file actions (file-actions.ts); refreshed every render. */
   const fileCtxRef = useRef<FileActionContext>(null as unknown as FileActionContext)
   // OCR text into the document on screen: the chat tool's hook, and the keys that undo it
+  // the AI's own write is not held off by the translation lock; Read Mode and protection still are
+  const lockOnlyRef = useRef(false)
+  lockOnlyRef.current = translationLocked && !readMode && !isProtected
+  const ocrLockOptions = () => ({ translationLocked: lockOnlyRef.current })
   const ocrOpenDocument = useMemo<OcrOpenDocument>(
     () => ({
       unavailableReason: () => {
-        const reason = ocrIntoDocumentUnavailableReason(fileCtxRef.current)
+        const reason = ocrIntoDocumentUnavailableReason(fileCtxRef.current, ocrLockOptions())
         if (reason) console.warn('[ocr-open-document] cannot place into the open document:', reason)
         return reason
       },
-      apply: (plan) => placeOcrIntoOpenDocument(fileCtxRef.current, plan),
+      apply: (plan) =>
+        placeOcrIntoOpenDocument(fileCtxRef.current, plan, undefined, ocrLockOptions()),
     }),
     [],
   )
@@ -6475,9 +6480,9 @@ export function App() {
       exportHtmlTo: (path: string) => exportHtml(path),
       exportMarkdownTo: (path: string) => exportMarkdown(path),
       // OCR text into the open document without the AI (what the chat tool asks the editor to do)
-      ocrReason: () => ocrIntoDocumentUnavailableReason(fileCtxRef.current),
+      ocrReason: () => ocrIntoDocumentUnavailableReason(fileCtxRef.current, ocrLockOptions()),
       placeOcr: (plan: Parameters<typeof placeOcrIntoOpenDocument>[1]) =>
-        placeOcrIntoOpenDocument(fileCtxRef.current, plan),
+        placeOcrIntoOpenDocument(fileCtxRef.current, plan, undefined, ocrLockOptions()),
       ocrUndo: () => tryOcrUndo(fileCtxRef.current),
       ocrRedo: () => tryOcrRedo(fileCtxRef.current),
       isUnsaved: () => fileCtxRef.current.dirtyRef.current,

@@ -263,6 +263,52 @@ describe('why the document on screen cannot take it', () => {
   })
 })
 
+describe('a translation that is running locks the output, and OCR text still goes in', () => {
+  it('does not take the lock for a reason: the lock holds off the person, not the AI’s own write', async () => {
+    await open()
+    editor.setEditable(false)
+    expect(ocrIntoDocumentUnavailableReason(ctx, { translationLocked: true })).toBeNull()
+    // without the lock the same editor is read-only for real
+    expect(ocrIntoDocumentUnavailableReason(ctx)).toMatch(/read-only/i)
+  })
+
+  it('puts the text in while the editor is locked, and the document is unsaved', async () => {
+    await open()
+    unsavedEdit()
+    editor.setEditable(false)
+    const result = await placeOcrIntoOpenDocument(ctx, plan(), deps, { translationLocked: true })
+    expect(result).toEqual({ ok: true, placed: [1], skipped: [] })
+    expect(boxTexts()).toEqual(['Shop name', 'Opening hours'])
+    expect(editor.state.doc.textContent).toContain('EDITED Intro')
+    expect(ctx.dirtyRef.current).toBe(true)
+  })
+
+  it('leaves the editor as locked as it found it, for the translation to release', async () => {
+    await open()
+    editor.setEditable(false)
+    await placeOcrIntoOpenDocument(ctx, plan(), deps, { translationLocked: true })
+    expect(editor.isEditable).toBe(false)
+  })
+
+  it('undo works afterwards, once the editor is editable again', async () => {
+    await open()
+    editor.setEditable(false)
+    await placeOcrIntoOpenDocument(ctx, plan(), deps, { translationLocked: true })
+    editor.setEditable(true)
+    expect(ocrUndoAvailable(editor)).toBe(true)
+    expect(tryOcrUndo(ctx)).toBe(true)
+    expect(boxTexts()).toEqual([])
+  })
+
+  it('still refuses a read-only document when the lock is not the reason (Read Mode, protection)', async () => {
+    await open()
+    editor.setEditable(false)
+    const result = await placeOcrIntoOpenDocument(ctx, plan(), deps, { translationLocked: false })
+    expect(result.ok).toBe(false)
+    expect(boxTexts()).toEqual([])
+  })
+})
+
 describe('undo and redo of the OCR text', () => {
   it('Ctrl+Z brings back what was on screen, unsaved edit included, and the saved state', async () => {
     await open()
