@@ -58,6 +58,7 @@ import {
 } from '../line-metrics'
 import { firstStrongDir } from './direction'
 import { splitCellBoxGroup } from './protected-render'
+import { annotateCellBoxSegments, type CellBox } from './cell-box-segments'
 import { inlineMathML } from './equation'
 import { isStraightLineKind } from './shape-svg'
 import { borderDrawnPx, borderTotalPt, collapsedEdgePx } from './border-metrics'
@@ -818,6 +819,9 @@ function blockToPmNode(
       )
       // content-control member tables need the shell for chrome hit-testing
       if (block.sdtShell) node.attrs = { ...node.attrs, sdtShell: JSON.stringify(block.sdtShell) }
+      // text boxes inside cells: note which text segment of the table each one is, so a
+      // translated box can be written back into the original table bytes on save
+      if (block.originalXml) annotateCellBoxSegments(node, block.originalXml)
       return node
     }
     default:
@@ -2137,12 +2141,23 @@ export function pmDocToSavePlan(inputDoc: PmNode, originalBlocks: Block[]): Save
           structurallyUnchanged && formattingUnchanged
             ? hostCellParasPatchFromModel(model, original)
             : null
+        // translated text boxes inside cells: written into the original table bytes by segment
+        const cellBoxTexts =
+          structurallyUnchanged && formattingUnchanged
+            ? cellBoxParasPatchFromModel(model, original)
+            : null
         let patchedXml: string | null = null
-        if ((tableTexts || hostTexts) && original.originalXml) {
+        if ((tableTexts || hostTexts || cellBoxTexts) && original.originalXml) {
           const nestedPatched = tableTexts
             ? patchTableCellTexts(original.originalXml, tableTexts)
             : original.originalXml
-          patchedXml = hostTexts ? patchHostCellParas(nestedPatched, hostTexts) : nestedPatched
+          const hostPatched = hostTexts
+            ? patchHostCellParas(nestedPatched, hostTexts)
+            : nestedPatched
+          patchedXml =
+            hostPatched !== null && cellBoxTexts
+              ? patchTextboxParas(hostPatched, cellBoxTexts)
+              : hostPatched
         }
         const hostEdited = hostTexts !== null && patchedXml === null
         if (patchedXml !== null) {
@@ -3107,6 +3122,66 @@ function boxStillEmpty(paras: TextboxDisplay['paras']): boolean {
 }
 
 /**
+ * The per-paragraph patches of one box whose text was edited: null for a paragraph that is as it
+ * was, so the engine keeps its original bytes.
+ */
+function changedParaPatches(
+  box: TextboxDisplay,
+  origBox: TextboxDisplay,
+): (TextboxParaPatch | null)[] {
+  const origParas = origBox.paras
+  return box.paras.map((p, j) => {
+    if (j < origParas.length && textboxParaSignature(p) === textboxParaSignature(origParas[j])) {
+      return null
+    }
+    // align/numPr are always explicit so a removed alignment or list
+    // membership also clears w:jc / w:numPr
+    const m = p.listMarker
+    // indentLeft may be inherited (style character units), so it is only
+    // written when the editor moved it; align/numPr stay always explicit
+    const origIndent = origParas[j]?.indentLeft ?? null
+    const indent = p.indentLeft ?? null
+    return {
+      runs: mergeRuns(p.runs),
+      align: p.align ?? null,
+      numPr: m?.numId != null ? { numId: m.numId, ilvl: m.ilvl ?? 0 } : null,
+      ...(indent !== origIndent ? { indentLeft: indent } : {}),
+    }
+  })
+}
+
+/**
+ * Text patches for the text boxes inside the cells of an original table, addressed by the box's
+ * segment number in the whole table (`tableSegment`, noted at load); null when untouched. A box
+ * without that number was never offered for translation, so nothing of it is written.
+ */
+function cellBoxParasPatchFromModel(
+  current: TableModel,
+  original: Block,
+): TextboxParasPatchSet | null {
+  if (original.type !== 'table' || !original.table) return null
+  const byIndex: (TextboxParaPatch | null)[][] = []
+  current.rows.forEach((row, r) => {
+    const origRow = patchableCells(original.table!.rows[r])
+    patchableCells(row).forEach((cell, c) => {
+      const origCell = origRow[c]
+      if (!origCell) return
+      ;(cell.anchoredBoxes ?? []).forEach((box: CellBox, i) => {
+        const origBox = origCell.anchoredBoxes?.[i]
+        if (box.tableSegment === undefined || !origBox) return
+        const same =
+          box.paras.length === origBox.paras.length &&
+          box.paras.every(
+            (p, j) => textboxParaSignature(p) === textboxParaSignature(origBox.paras[j]),
+          )
+        if (!same) byIndex[box.tableSegment] = changedParaPatches(box, origBox)
+      })
+    })
+  })
+  return byIndex.length > 0 ? { byIndex } : null
+}
+
+/**
  * Per-box, per-paragraph rich-run patches on an original textbox block,
  * addressed by the box's txbxIndex (or shapeId for a box gaining its first
  * text); null when untouched. Unchanged paragraphs stay null so the engine
@@ -3126,27 +3201,7 @@ function textboxParasPatch(node: PmNode, original: Block): TextboxParasPatchSet 
       box.paras.every((p, j) => textboxParaSignature(p) === textboxParaSignature(origParas[j]))
     if (same || (origParas.length === 0 && boxStillEmpty(box.paras))) return
     if (origBox.txbxIndex !== undefined) {
-      byIndex[origBox.txbxIndex] = box.paras.map((p, j) => {
-        if (
-          j < origParas.length &&
-          textboxParaSignature(p) === textboxParaSignature(origParas[j])
-        ) {
-          return null
-        }
-        // align/numPr are always explicit so a removed alignment or list
-        // membership also clears w:jc / w:numPr
-        const m = p.listMarker
-        // indentLeft may be inherited (style character units), so it is only
-        // written when the editor moved it; align/numPr stay always explicit
-        const origIndent = origParas[j]?.indentLeft ?? null
-        const indent = p.indentLeft ?? null
-        return {
-          runs: mergeRuns(p.runs),
-          align: p.align ?? null,
-          numPr: m?.numId != null ? { numId: m.numId, ilvl: m.ilvl ?? 0 } : null,
-          ...(indent !== origIndent ? { indentLeft: indent } : {}),
-        }
-      })
+      byIndex[origBox.txbxIndex] = changedParaPatches(box, origBox)
     } else if (origBox.shapeId) {
       inject.push({
         shapeId: origBox.shapeId,

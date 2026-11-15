@@ -3,9 +3,10 @@ import { boxFontHalfPoints, type OcrBox } from '../../shared/ocr-boxes'
 
 /**
  * Boxes over a docx picture (docs/plans/ocr-box-placement.md). A box is an anchored text box
- * (the editor and the translation already read those), written as holder paragraphs right after
- * the picture paragraph and moved up onto the picture. That only lines up when the picture
- * sits alone on a left-aligned line of the body, so every other picture keeps the list
+ * (the editor and the translation read those, also the ones inside table cells), written as one
+ * holder paragraph right after the picture paragraph and moved up onto the picture. That only
+ * lines up when the picture sits alone on a left-aligned line of the body or of a table cell, so
+ * every other picture (in a text box, a header, behind the text, a background) keeps the list
  * placements. The box fill is opaque white so the translation stays readable over the original
  * pixels; the picture itself is never touched.
  */
@@ -51,17 +52,30 @@ function paragraphSpan(xml: string, n: number): { start: number; end: number } |
   return null
 }
 
-/** how many table cells and text boxes are open where `offset` lies */
-function insideContainer(xml: string, offset: number): boolean {
-  let cells = 0
-  let boxes = 0
-  for (const tag of xml.slice(0, offset).matchAll(/<(\/?)w:(tc|txbxContent)\b[^>]*?(\/?)>/g)) {
-    if (tag[3] === '/') continue
-    const delta = tag[1] === '/' ? -1 : 1
-    if (tag[2] === 'tc') cells += delta
-    else boxes += delta
+/** whether `offset` lies inside the content of a text box, which takes no boxes of its own */
+function insideTextBox(xml: string, offset: number): boolean {
+  let open = 0
+  for (const tag of xml.slice(0, offset).matchAll(/<(\/?)w:txbxContent\b[^>]*?(\/?)>/g)) {
+    if (tag[2] === '/') continue
+    open += tag[1] === '/' ? -1 : 1
   }
-  return cells > 0 || boxes > 0
+  return open > 0
+}
+
+/**
+ * The style id of the innermost table that holds `offset`: an empty string when that table names
+ * none, null when `offset` is not inside a table.
+ */
+function tableStyleAt(xml: string, offset: number): string | null {
+  const starts: number[] = []
+  for (const tag of xml.slice(0, offset).matchAll(/<(\/?)w:tbl>/g)) {
+    if (tag[1] === '/') starts.pop()
+    else starts.push(tag.index!)
+  }
+  const start = starts.at(-1)
+  if (start === undefined) return null
+  const tblPr = /<w:tblPr>[\s\S]*?<\/w:tblPr>/.exec(xml.slice(start))?.[0] ?? ''
+  return /<w:tblStyle\b[^>]*w:val="([^"]*)"/.exec(tblPr)?.[1] ?? ''
 }
 
 const attr = (tag: string, name: string): string | undefined =>
@@ -107,33 +121,60 @@ function readPPr(pPr: string): PPrFacts {
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
+/** the pPr of each style in a `basedOn` chain, nearest first; null when a style is missing or the chain loops */
+function styleChain(styles: string, startId: string | undefined): PPrFacts[] | null {
+  const layers: PPrFacts[] = []
+  const seen = new Set<string>()
+  let id = startId
+  while (id !== undefined) {
+    if (seen.has(id) || seen.size > 20) return null
+    seen.add(id)
+    const block = new RegExp(
+      `<w:style\\b[^>]*\\bw:styleId="${escapeRegExp(id)}"[^>]*>([\\s\\S]*?)</w:style>`,
+    ).exec(styles)?.[1]
+    if (block === undefined) return null
+    layers.push(readPPr(/<w:pPr>[\s\S]*?<\/w:pPr>/.exec(block)?.[0] ?? ''))
+    id = /<w:basedOn\b[^>]*w:val="([^"]*)"/.exec(block)?.[1]
+  }
+  return layers
+}
+
+/** the id of the default style of a type (paragraph or table), when the styles name one */
+function defaultStyleId(styles: string, type: 'paragraph' | 'table'): string | undefined {
+  const tag = [...styles.matchAll(/<w:style\b[^>]*>/g)]
+    .map((m) => m[0])
+    .find((open) => attr(open, 'w:type') === type && attr(open, 'w:default') === '1')
+  return tag ? attr(tag, 'w:styleId') : undefined
+}
+
 /**
  * The paragraph properties in force: the paragraph's own, then its style and the styles it is
- * based on, then the document defaults, the first one that states a property winning. Null when
- * a style it names is missing or the chain loops, because then nothing can be said safely.
+ * based on, then (inside a table) the table's style, then the document defaults, the first one
+ * that states a property winning. Word's own table styles state a spacing after of 0 and win over
+ * the document default, so a picture in a cell must not use the default. Null when a style it
+ * names is missing or a chain loops, because then nothing can be said safely.
  */
-function effectiveFacts(directPPr: string, styles: string | undefined): PPrFacts | null {
+function effectiveFacts(
+  directPPr: string,
+  styles: string | undefined,
+  tableStyle: string | null,
+): PPrFacts | null {
   const layers: PPrFacts[] = [readPPr(directPPr)]
   if (styles !== undefined) {
-    const defaultStyle = [...styles.matchAll(/<w:style\b[^>]*>/g)]
-      .map((m) => m[0])
-      .find((tag) => attr(tag, 'w:type') === 'paragraph' && attr(tag, 'w:default') === '1')
-    let id: string | undefined =
-      /<w:pStyle\b[^>]*w:val="([^"]*)"/.exec(directPPr)?.[1] ??
-      (defaultStyle ? attr(defaultStyle, 'w:styleId') : undefined)
-    const seen = new Set<string>()
-    while (id !== undefined) {
-      if (seen.has(id) || seen.size > 20) return null
-      seen.add(id)
-      const block = new RegExp(
-        `<w:style\\b[^>]*\\bw:styleId="${escapeRegExp(id)}"[^>]*>([\\s\\S]*?)</w:style>`,
-      ).exec(styles)?.[1]
-      if (block === undefined) return null
-      layers.push(readPPr(/<w:pPr>[\s\S]*?<\/w:pPr>/.exec(block)?.[0] ?? ''))
-      id = /<w:basedOn\b[^>]*w:val="([^"]*)"/.exec(block)?.[1]
+    const paragraphStyle =
+      /<w:pStyle\b[^>]*w:val="([^"]*)"/.exec(directPPr)?.[1] ?? defaultStyleId(styles, 'paragraph')
+    const paragraphLayers = styleChain(styles, paragraphStyle)
+    if (!paragraphLayers) return null
+    layers.push(...paragraphLayers)
+    if (tableStyle !== null) {
+      const tableLayers = styleChain(
+        styles,
+        tableStyle === '' ? defaultStyleId(styles, 'table') : tableStyle,
+      )
+      if (!tableLayers) return null
+      layers.push(...tableLayers)
     }
-    const defaults = /<w:pPrDefault>([\s\S]*?)<\/w:pPrDefault>/.exec(styles)?.[1] ?? ''
-    layers.push(readPPr(defaults))
+    layers.push(readPPr(/<w:pPrDefault>([\s\S]*?)<\/w:pPrDefault>/.exec(styles)?.[1] ?? ''))
   }
   const pick = <K extends keyof PPrFacts>(key: K): PPrFacts[K] =>
     layers.find((layer) => layer[key] !== undefined)?.[key]
@@ -165,7 +206,7 @@ export function inspectBoxableImage(
   if (part !== 'word/document.xml') return { ok: false, reason: 'container' }
   const span = paragraphSpan(xml, paragraph)
   if (!span) return { ok: false, reason: 'missing' }
-  if (insideContainer(xml, span.start)) return { ok: false, reason: 'container' }
+  if (insideTextBox(xml, span.start)) return { ok: false, reason: 'container' }
   const p = xml.slice(span.start, span.end)
   const directPPr = /<w:pPr>[\s\S]*?<\/w:pPr>/.exec(p)?.[0] ?? ''
   const content = p.replace(directPPr, '')
@@ -190,7 +231,7 @@ export function inspectBoxableImage(
   }
   // the holders go right after this paragraph: a section break would put them in the next section
   if (/<w:sectPr\b/.test(directPPr)) return { ok: false, reason: 'section' }
-  const facts = effectiveFacts(directPPr, styles)
+  const facts = effectiveFacts(directPPr, styles, tableStyleAt(xml, span.start))
   // a justified line holding only a picture sits at the left like a left-aligned one
   if (
     !facts ||

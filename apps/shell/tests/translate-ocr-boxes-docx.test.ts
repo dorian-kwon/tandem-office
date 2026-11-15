@@ -59,7 +59,7 @@ describe('inspectBoxableImage', () => {
     ['cropped', para(text('x')) + para(drawing({ srcRect: '<a:srcRect l="1000"/>' }))],
     ['rotated', para(text('x')) + para(drawing({ xfrm: ' rot="5400000"' }))],
     ['rotated', para(text('x')) + para(drawing({ xfrm: ' flipH="1"' }))],
-    ['container', para(text('x')) + `<w:tbl><w:tr><w:tc>${para(drawing())}</w:tc></w:tr></w:tbl>`],
+    ['container', `<w:p><w:r><w:txbxContent>${para(drawing())}</w:txbxContent></w:r></w:p>`],
     ['crowded', para(text('x')) + para(text('caption') + drawing())],
     ['crowded', para(text('x')) + para(drawing() + drawing())],
     ['aligned', para(text('x')) + para(drawing(), '<w:jc w:val="center"/>')],
@@ -143,6 +143,57 @@ describe('inspectBoxableImage', () => {
     const doc =
       para(text('x')) + para(drawing(), '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/></w:sectPr>')
     expect(inspect(doc)).toEqual({ ok: false, reason: 'section' })
+  })
+
+  const cellOf = (inner: string) =>
+    `<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid><w:tr><w:tc>${inner}</w:tc></w:tr></w:tbl>`
+
+  it('accepts a picture alone in a table cell, also in a nested table, and reads its extent', () => {
+    // paragraph numbers: 1 intro, 2 the cell paragraph that holds the picture
+    expect(inspect(para(text('Intro')) + cellOf(para(drawing())))).toMatchObject({
+      ok: true,
+      widthEmu: W,
+      heightEmu: H,
+    })
+    const nested = cellOf(para(text('Label')) + cellOf(para(drawing())) + '<w:p/>')
+    expect(inspect(para(text('Intro')) + nested, 3)).toMatchObject({ ok: true })
+  })
+
+  it('still refuses a cell picture that shares its paragraph with text or is centered', () => {
+    expect(inspect(para(text('Intro')) + cellOf(para(text('caption') + drawing())))).toEqual({
+      ok: false,
+      reason: 'crowded',
+    })
+    expect(
+      inspect(para(text('Intro')) + cellOf(para(drawing(), '<w:jc w:val="center"/>'))),
+    ).toEqual({ ok: false, reason: 'aligned' })
+  })
+
+  const tableStyles = (defaultsAfter: number, tableAfter: number | null, paragraphAfter?: number) =>
+    '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+    `<w:docDefaults><w:pPrDefault><w:pPr><w:spacing w:after="${defaultsAfter}"/></w:pPr></w:pPrDefault></w:docDefaults>` +
+    '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>' +
+    (paragraphAfter === undefined
+      ? ''
+      : `<w:style w:type="paragraph" w:styleId="Tight"><w:name w:val="Tight"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:after="${paragraphAfter}"/></w:pPr></w:style>`) +
+    '<w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/></w:style>' +
+    `<w:style w:type="table" w:styleId="TableGrid"><w:name w:val="Table Grid"/><w:basedOn w:val="TableNormal"/>${
+      tableAfter === null ? '' : `<w:pPr><w:spacing w:after="${tableAfter}"/></w:pPr>`
+    }</w:style></w:styles>`
+  const gridCell = (inner: string) =>
+    `<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/></w:tblPr><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid><w:tr><w:tc>${inner}</w:tc></w:tr></w:tbl>`
+
+  it('takes the spacing after a cell picture from the table style, not the document defaults', () => {
+    const body = para(text('Intro')) + gridCell(para(drawing()))
+    // Word's Table Grid style sets the spacing after to 0 and wins over the document default 160
+    expect(inspectStyled(body, tableStyles(160, 0))).toMatchObject({ ok: true, afterTwips: 0 })
+    // a table style that says nothing leaves the document default in force
+    expect(inspectStyled(body, tableStyles(160, null))).toMatchObject({ ok: true, afterTwips: 160 })
+  })
+
+  it('lets a paragraph style that states the spacing win over the table style', () => {
+    const body = para(text('Intro')) + gridCell(para(drawing(), '<w:pStyle w:val="Tight"/>'))
+    expect(inspectStyled(body, tableStyles(160, 0, 80))).toMatchObject({ ok: true, afterTwips: 80 })
   })
 
   it('refuses a picture in a header and a relationship the paragraph does not hold', () => {

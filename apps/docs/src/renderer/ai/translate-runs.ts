@@ -6,6 +6,7 @@ import { TRACK_IGNORE } from '../editor/revisions'
 import { REDACT_MARK } from './redact'
 import { isTrackedDeleted } from './doc-utils'
 import type { NoteInfo, NoteRun, Run, TextboxDisplay } from '@genoffice/docx-engine'
+import type { CellBox } from '../editor/cell-box-segments'
 import type { AiTrack } from './protocol'
 import type { AiNotesAccess, NoteKind } from './note-ops'
 import {
@@ -369,6 +370,43 @@ function textboxesOf(node: ProseMirrorNode): TextboxDisplay[] | null {
   return Array.isArray(boxes) && boxes.length > 0 ? (boxes as TextboxDisplay[]) : null
 }
 
+/** one box of a block and where its text lives */
+interface BoxRef {
+  /**
+   * The number read_runs lists and translate_blocks takes: the box's index in a text box block,
+   * or its text segment number in the whole table for a box inside a table cell. Undefined for a
+   * cell box that cannot be written back.
+   */
+  key: number | undefined
+  box: TextboxDisplay
+  /** absolute position of the node that holds the box, the attribute of it and the index inside */
+  nodePos: number
+  attr: 'textboxes' | 'boxes'
+  at: number
+}
+
+/** the boxes of a text box block or of the cells of a table, in document order; null when none */
+function boxRefsOf(node: ProseMirrorNode, pos: number): BoxRef[] | null {
+  const own = textboxesOf(node)
+  if (own) return own.map((box, at) => ({ key: at, box, nodePos: pos, attr: 'textboxes', at }))
+  if (node.type.name !== 'docTable') return null
+  const refs: BoxRef[] = []
+  node.descendants((child, offset) => {
+    if (child.type.name !== 'docCellBoxes' || !Array.isArray(child.attrs.boxes)) return true
+    ;(child.attrs.boxes as CellBox[]).forEach((box, at) =>
+      refs.push({
+        key: box.readOnly ? undefined : box.tableSegment,
+        box,
+        nodePos: pos + 1 + offset,
+        attr: 'boxes',
+        at,
+      }),
+    )
+    return false
+  })
+  return refs.length > 0 ? refs : null
+}
+
 interface BoxGroup {
   /** index into the paragraph's runs */
   run: number
@@ -394,20 +432,27 @@ function boxGroupsOf(runs: readonly Run[]): BoxGroup[] {
 }
 
 /** read_runs lines for the paragraphs of a block's text boxes (a read-only box is listed once, as skipped) */
-function boxRunEntries(index: number, boxes: readonly TextboxDisplay[]): RunParagraph[] {
+function boxRunEntries(index: number, refs: readonly BoxRef[]): RunParagraph[] {
   const out: RunParagraph[] = []
-  boxes.forEach((box, boxIndex) => {
+  let unwritable = false
+  refs.forEach(({ box, key }) => {
     const listed = box.paras.map((p) => boxGroupsOf(p.runs).map((g) => g.text))
+    const hasText = listed.some((segments) => segments.length > 0)
+    if (key === undefined) {
+      // a cell box nothing can be written to (no segment number, or read-only): said once per block
+      if (hasText) unwritable = true
+      return
+    }
     if (box.readOnly) {
-      if (listed.some((segments) => segments.length > 0))
-        out.push({ index, box: boxIndex, skip: 'read-only text box' })
+      if (hasText) out.push({ index, box: key, skip: 'read-only text box' })
       return
     }
     listed.forEach((segments, paragraph) => {
       if (segments.length === 0) return
-      out.push({ index, box: boxIndex, paragraph, fp: runFingerprint(segments), segments })
+      out.push({ index, box: key, paragraph, fp: runFingerprint(segments), segments })
     })
   })
+  if (unwritable) out.push({ index, skip: 'text box in a table cell that cannot be written back' })
   return out
 }
 
@@ -431,8 +476,8 @@ export function readRunGroups(
     }
     const blocks = textblocksOf(node, pos)
     if (!blocks) {
-      const boxes = textboxesOf(node)
-      if (boxes) out.push(...boxRunEntries(index, boxes))
+      const refs = boxRefsOf(node, pos)
+      if (refs) out.push(...boxRunEntries(index, refs))
       else out.push({ index, skip: String(node.attrs.blockType || node.type.name) })
       continue
     }
@@ -477,6 +522,11 @@ export function readRunGroups(
         inTable ? { index, paragraph, ...cellFields, fp, segments } : { index, fp, segments },
       )
     })
+    // text boxes inside the cells of this table (the boxes OCR puts over a picture)
+    if (inTable) {
+      const refs = boxRefsOf(node, pos)
+      if (refs) out.push(...boxRunEntries(index, refs))
+    }
   }
   return out
 }
@@ -901,8 +951,10 @@ function planParagraph(doc: ProseMirrorNode, item: RunTranslationItem): PlanResu
 
 /** the new runs of one text box paragraph, written back into the block's `textboxes` attribute */
 interface BoxEdit {
-  blockPos: number
-  box: number
+  /** the node holding the box (a text box block, or the cell box node of a table), its attribute and the box index in it */
+  nodePos: number
+  attr: 'textboxes' | 'boxes'
+  at: number
   paragraph: number
   runs: Run[]
 }
@@ -921,14 +973,15 @@ function planBoxParagraph(doc: ProseMirrorNode, item: RunTranslationItem): BoxPl
       ok: false,
       error: `${where}: no such block (the document has ${doc.childCount} blocks)`,
     }
-  const boxes = textboxesOf(top.node)
-  if (!boxes) return { ok: false, error: `${where}: the block has no text box` }
-  const box = boxes[item.box as number]
-  if (!box)
+  const refs = boxRefsOf(top.node, top.pos)
+  if (!refs) return { ok: false, error: `${where}: the block has no text box` }
+  const ref = refs.find((r) => r.key === item.box)
+  if (!ref)
     return {
       ok: false,
-      error: `${where}: no such text box (the block has ${boxes.length}); use the box numbers read_runs lists`,
+      error: `${where}: no such text box that can be written (use the box numbers read_runs lists)`,
     }
+  const box = ref.box
   if (box.readOnly)
     return { ok: false, error: `${where}: this text box is read-only (it holds a table); leave it` }
   if (!Number.isInteger(item.paragraph))
@@ -981,7 +1034,13 @@ function planBoxParagraph(doc: ProseMirrorNode, item: RunTranslationItem): BoxPl
     ok: true,
     edit:
       report.changed > 0
-        ? { blockPos: top.pos, box: item.box as number, paragraph: item.paragraph as number, runs }
+        ? {
+            nodePos: ref.nodePos,
+            attr: ref.attr,
+            at: ref.at,
+            paragraph: item.paragraph as number,
+            runs,
+          }
         : null,
     report,
   }
@@ -989,17 +1048,18 @@ function planBoxParagraph(doc: ProseMirrorNode, item: RunTranslationItem): BoxPl
 
 /** put the new runs into the blocks' `textboxes` attributes; positions are mapped through the edits already in `tr` */
 function applyBoxEdits(tr: Transaction, edits: readonly BoxEdit[]): void {
-  const byBlock = new Map<number, BoxEdit[]>()
-  for (const edit of edits)
-    byBlock.set(edit.blockPos, [...(byBlock.get(edit.blockPos) ?? []), edit])
-  for (const [blockPos, list] of byBlock) {
-    const pos = tr.mapping.map(blockPos)
+  const byNode = new Map<number, BoxEdit[]>()
+  for (const edit of edits) byNode.set(edit.nodePos, [...(byNode.get(edit.nodePos) ?? []), edit])
+  for (const [nodePos, list] of byNode) {
+    const pos = tr.mapping.map(nodePos)
     const node = tr.doc.nodeAt(pos)
-    const boxes = node ? textboxesOf(node) : null
+    const attr = list[0]!.attr
+    const boxes =
+      node && Array.isArray(node.attrs[attr]) ? (node.attrs[attr] as TextboxDisplay[]) : null
     if (!node || !boxes) continue
     const next = boxes.map((box) => ({ ...box, paras: box.paras.map((p) => ({ ...p })) }))
-    for (const edit of list) next[edit.box].paras[edit.paragraph].runs = edit.runs
-    tr.setNodeMarkup(pos, undefined, { ...node.attrs, textboxes: next })
+    for (const edit of list) next[edit.at].paras[edit.paragraph].runs = edit.runs
+    tr.setNodeMarkup(pos, undefined, { ...node.attrs, [attr]: next })
   }
 }
 
