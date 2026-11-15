@@ -143,6 +143,24 @@ describe('OcrSelectDialog', () => {
     expect(api.ocrPageImage).not.toHaveBeenCalled()
     expect(ask).not.toHaveBeenCalled()
   })
+  it('shows the pictures taken out of a Hangul document like embedded ones, with their numbers and previews', async () => {
+    prepared.kind = 'extracted'
+    prepared.items = [{ index: 1, name: 'BIN0001.png', location: 'BinData' }]
+    await render(
+      { sources: [{ file: 'form.hwp', kind: 'editable', sha256: 'x' }] },
+      undefined,
+      true,
+    )
+    await click(button('Choose items'))
+    expect(host.textContent).toContain('BinData')
+    expect(host.querySelector('[data-number="1"]')).not.toBeNull()
+    expect(host.querySelector('img[alt="BIN0001.png"]')?.getAttribute('src')).toBe(
+      'data:image/png;base64,AQID',
+    )
+    expect(host.querySelector('[data-action="enlarge"]')).not.toBeNull()
+    expect(ask).not.toHaveBeenCalled()
+  })
+
   it('asks for the OCR scope before showing the selection list or sending images', async () => {
     await render({}, undefined, true)
     expect(host.querySelector('[data-step="scope"]')).not.toBeNull()

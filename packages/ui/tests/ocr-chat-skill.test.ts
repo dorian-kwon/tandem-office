@@ -67,6 +67,17 @@ describe('conversational document OCR', () => {
     expect(schema.properties).not.toHaveProperty('scope')
   })
 
+  it('teaches the formats that end in a new Word document and the old .doc', async () => {
+    const { run, skill } = setup()
+    await run.prepare()
+    // a PDF and a Hangul document: no placement question, a plain confirmation instead
+    expect(skill.systemPrompt).toMatch(/PDF.*Hangul.*new Word document/s)
+    expect(skill.systemPrompt).toMatch(/new-docx.*no placement/s)
+    expect(skill.systemPrompt).toMatch(/do not ask the ocrPlacement question/i)
+    // an old .doc is not read
+    expect(skill.systemPrompt).toMatch(/\.doc is not read.*save it as \.docx/s)
+  })
+
   it('injects trusted turn, scope and request identifiers and forwards the real result', async () => {
     const { run, skill, ocr } = setup('p1')
     await run.prepare()

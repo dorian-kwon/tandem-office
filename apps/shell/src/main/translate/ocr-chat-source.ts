@@ -10,7 +10,7 @@ import {
   type OcrMode,
 } from '@genoffice/translate-project'
 import type { ChatOcrRequest } from '@genoffice/project-store/folder-api'
-import type { ChatOcrContext } from './ocr-chat'
+import { OLD_WORD_MESSAGE, type ChatOcrContext } from './ocr-chat'
 const sameName = (a: string, b: string) => a.normalize('NFC') === b.normalize('NFC')
 
 /** Private copies older than this are removed. */
@@ -86,7 +86,8 @@ export function chatOcrSourceResolver(workDir: () => string, ocrMode: () => OcrM
     const path = context.docPath
     if (!path || (given && !sameName(basename(path), given)))
       throw new Error('Open the document or select its translation project first')
-    if (!/\.(docx|xlsx)$/i.test(extname(path)))
+    if (extname(path).toLowerCase() === '.doc') throw new Error(OLD_WORD_MESSAGE)
+    if (!/\.(docx|xlsx|hwpx|hwp|pdf)$/i.test(extname(path)))
       throw new Error('This document format is not supported by embedded OCR')
     const info = await stat(path)
     if (!info.isFile() || info.size > 128 * 1024 * 1024)

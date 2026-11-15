@@ -280,6 +280,13 @@ PDF 편집기 화면 ── pdfApi.structure.* ──→ 셸 메인(pdf-structur
 4. 메인의 `write`가 박스 payload와 배치를 다시 검사하고, `placeOcrText`(`ocr-placement.ts`)가 그림마다 `buildImageBoxParagraphsXml`(`ocr-boxes-docx.ts`)의 홀더 문단을 한 번에 끼운다. 상자를 놓을 수 없는 그림은 같은 순서에서 "그림 뒤 문단"으로 쓴다. 결과는 `output/`의 새 docx다.
 5. 그 docx를 번역 화면이 열면 편집기가 상자를 텍스트 상자 블록(`docProtected`의 `textboxes`)으로 들고, `read_runs`/`translate_blocks`(`translate-runs.ts`)가 상자 문단을 읽고 쓰며, 저장은 `textboxParasPatch`가 원래 XML에 되쓴다.
 
+## 그림 OCR이 PDF·한글에서 새 Word 문서로 끝나는 길 (결정 0105)
+
+1. `ocr.ts`의 `prepare`가 원본의 종류로 `kind`를 정한다. docx·xlsx는 `'embedded'`, HWP·HWPX는 `'extracted'`, PDF는 `'pdf'`다. HWPX·HWP의 그림은 `embedded-images.ts`가 HWPX의 `Contents/content.hpf`와 부분 파일, HWP의 복합 파일 `/BinData/` 스트림(`apps/hwp/src/main/hwp5-file.ts`의 `openHwp`)에서 나열하고, 읽는 함수(`read`)를 그림에 붙여 둔다.
+2. `OcrSelectDialog`는 `'embedded'`와 `'extracted'`에서 그림 목록·미리보기를 보이고(`hasPictureKind`), `'extracted'`와 `'pdf'`에서는 배치 화면 없이 곧바로 `write`로 간다. `runOcr`는 `'extracted'`에서 박스 요청을 만들지 않는다. 그림은 그림 읽기 요청, PDF는 쪽 읽기 요청이다.
+3. 메인의 `write`가 읽은 글을 문서 나무로 바꿔 Markdown을 거쳐 새 docx를 `output/`에 쓴다(스캔 PDF가 이미 가던 길). 원본은 읽기만 한다.
+4. 대화창은 같은 `OcrService`를 `ocr-chat.ts`로 감싼다. `ocr-chat-source.ts`가 열린 문서로 비공개 프로젝트 사본을 만들 때 `.docx`·`.xlsx`·`.hwpx`·`.hwp`·`.pdf`를 받고 `.doc`는 docx로 저장하라는 글로 거절한다. `propose`는 `'extracted'`·`'pdf'`에서 `recommend`를 부르지 않는다.
+
 ## 프로세스 경계를 넘는 것과 넘지 않는 것
 
 | 경계                    | 넘어가는 것                                                                                                                                                                                                                                                            | 넘어가지 않는 것                                                                           |

@@ -49,6 +49,11 @@ import {
  * The run itself is `runOcr`; embedded sources keep their format and require placement review.
  */
 
+/** pictures of one document: embedded in a docx or xlsx, or taken out of a Hangul document */
+function hasPictureKind(prepared: OcrPrepared | null | undefined): prepared is OcrPrepared {
+  return prepared?.kind === 'embedded' || prepared?.kind === 'extracted'
+}
+
 export interface OcrSelectDialogProps {
   /** a registered translation project */
   dir: string
@@ -480,7 +485,7 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
           current,
           lang: () => lang,
           // pictures inside a document: text in drawings and speech bubbles counts
-          pictures: prepared.kind === 'embedded',
+          pictures: hasPictureKind(prepared),
         })
     setStep({
       kind: 'running',
@@ -593,7 +598,7 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
                       checked={selected.has(item.index)}
                       onChange={() => toggle(item.index)}
                     />
-                    {api && prepared?.kind === 'embedded' && (
+                    {api && hasPictureKind(prepared) && (
                       <OcrImagePreview
                         api={api}
                         token={prepared.token}
@@ -602,7 +607,7 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
                       />
                     )}
                     <span>
-                      {prepared?.kind === 'embedded' && (
+                      {hasPictureKind(prepared) && (
                         <strong className="translate-ocr-number" data-number={item.index}>
                           {s('ocrPictureNumber', { n: item.index })}
                         </strong>
@@ -613,7 +618,7 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
                       )}
                     </span>
                   </label>
-                  {prepared?.kind === 'embedded' && (
+                  {hasPictureKind(prepared) && (
                     <button
                       type="button"
                       className="btn btn-secondary translate-ocr-enlarge"
@@ -808,7 +813,7 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
           </>
         )}
       </div>
-      {lightbox !== null && api && prepared?.kind === 'embedded' && (
+      {lightbox !== null && api && hasPictureKind(prepared) && (
         <OcrImageLightbox
           api={api}
           token={prepared.token}

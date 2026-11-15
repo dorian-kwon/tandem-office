@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { saveProject, loadProject } from '@genoffice/translate-project'
 import { EventEmitter } from 'node:events'
 import JSZip from 'jszip'
-import { buildDocx } from '../../../packages/docx-engine/tests/helpers/build-docx'
+import { buildDocx, TINY_PNG_BASE64 } from '../../../packages/docx-engine/tests/helpers/build-docx'
 import {
   createTranslateHandlers,
   registerTranslateIpc,
@@ -655,4 +655,85 @@ describe('ocr popup bridge', () => {
     ).rejects.toThrow()
     expect(onOcrPopupResult).toHaveBeenCalledTimes(1)
   })
+})
+
+async function hwpxDoc(pictures = 2) {
+  const zip = new JSZip()
+  zip.file('mimetype', 'application/hwp+zip')
+  const items = Array.from(
+    { length: pictures },
+    (_, i) => `<opf:item id="img${i + 1}" href="BinData/img${i + 1}.png" media-type="image/png"/>`,
+  ).join('')
+  zip.file(
+    'Contents/content.hpf',
+    `<opf:package xmlns:opf="http://www.idpf.org/2007/opf/"><opf:manifest>${items}</opf:manifest></opf:package>`,
+  )
+  const refs = Array.from(
+    { length: pictures },
+    (_, i) =>
+      `<hp:p><hp:run><hp:pic><hc:img binaryItemIDRef="img${i + 1}"/></hp:pic></hp:run></hp:p>`,
+  ).join('')
+  zip.file(
+    'Contents/section0.xml',
+    `<hs:sec xmlns:hs="s" xmlns:hp="p" xmlns:hc="c">${refs}</hs:sec>`,
+  )
+  // a real 1x1 picture: the local preview reads its size before it makes a thumbnail
+  for (let i = 1; i <= pictures; i++)
+    zip.file(`BinData/img${i}.png`, Buffer.from(TINY_PNG_BASE64, 'base64'))
+  return zip.generateAsync({ type: 'nodebuffer' })
+}
+
+it('takes the pictures of a HWPX source as extracted ones, to be read into a new Word document', async () => {
+  const bytes = await hwpxDoc()
+  await project([{ file: 'form.hwpx', kind: 'editable', bytes }])
+  const thumbnail = vi.fn(() => PNG)
+  const h = handlers({ ocr: { ...ocrDeps, thumbnail } })
+  const listing = await h.ocrPrepare({ dir, files: ['form.hwpx'] })
+  expect(listing.kind).toBe('extracted')
+  expect(listing.items.map((i) => i.name)).toEqual(['img1.png', 'img2.png'])
+  expect(listing.items.every((i) => i.boxable === undefined)).toBe(true)
+  expect(listing.format).toBeUndefined()
+
+  await h.ocrStart({ token: listing.token, pages: [2] })
+  expect(await codeOf(h.ocrPageImage({ token: listing.token, index: 1 }))).toBe('INVALID_ARGUMENT')
+  const image = await h.ocrPageImage({ token: listing.token, index: 2 })
+  expect(image.mime).toBe('image/png')
+  const preview = await h.ocrPreview({ token: listing.token, index: 2 })
+  expect(preview).toEqual({ data: PNG, mime: 'image/png' })
+  expect(thumbnail).toHaveBeenCalledTimes(1)
+
+  const result = await h.ocrWrite({
+    token: listing.token,
+    pages: [{ index: 2, payload: PAYLOAD('Menu text') }],
+  })
+  expect(result.outputPath).toMatch(/form \(OCR\)\.docx$/)
+  expect(ocrDeps.markdownToDocx).toHaveBeenCalledTimes(1)
+  expect(String(ocrDeps.markdownToDocx.mock.calls[0]![0])).toContain('Menu text')
+  expect(readFileSync(join(dir, 'source', 'form.hwpx')).equals(bytes)).toBe(true)
+})
+
+it('refuses a placement for extracted pictures, since nothing is placed into the Hangul file', async () => {
+  await project([{ file: 'form.hwpx', kind: 'editable', bytes: await hwpxDoc(1) }])
+  const h = handlers()
+  const listing = await h.ocrPrepare({ dir, files: ['form.hwpx'] })
+  await h.ocrStart({ token: listing.token, pages: [1] })
+  const result = await h.ocrWrite({
+    token: listing.token,
+    pages: [{ index: 1, payload: PAYLOAD('Text') }],
+    placement: { kind: 'docx-end' },
+  })
+  // the placement is ignored: the readings still become the new document
+  expect(result.outputPath).toMatch(/\(OCR\)\.docx$/)
+})
+
+it('explains why a HWPX without any picture cannot be read', async () => {
+  await project([{ file: 'plain.hwpx', kind: 'editable', bytes: await hwpxDoc(0) }])
+  expect(await codeOf(handlers().ocrPrepare({ dir, files: ['plain.hwpx'] }))).toBe('OCR_FAILED')
+})
+
+it('still refuses the editable formats it cannot read pictures of', async () => {
+  await project([{ file: 'slides.pptx', kind: 'editable', bytes: new Uint8Array([1, 2, 3]) }])
+  expect(await codeOf(handlers().ocrPrepare({ dir, files: ['slides.pptx'] }))).toBe(
+    'SOURCE_NOT_EDITABLE',
+  )
 })

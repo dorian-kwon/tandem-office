@@ -376,3 +376,61 @@ describe('runOcr box reading of embedded docx pictures', () => {
     expect(ask.mock.calls.every(([, request]) => !request.system.includes('<boxes>'))).toBe(true)
   })
 })
+
+describe('runOcr on the pictures taken out of a Hangul document', () => {
+  function extractedSetup() {
+    const prepared: OcrPrepared = {
+      token: 'tok',
+      kind: 'extracted',
+      ocr: { kind: 'ai', provider: 'claude' },
+      items: [
+        { index: 1, name: 'BIN0001.png', location: 'BinData' },
+        { index: 2, name: 'BIN0002.jpg', location: 'BinData' },
+      ],
+    }
+    const bridge = {
+      prepare: vi.fn(async () => prepared),
+      start: vi.fn(async () => undefined),
+      pageImage: vi.fn(async (_token: string, index: number) => ({
+        data: new Uint8Array([index]),
+        mime: 'image/png' as const,
+      })),
+      write: vi.fn(async () => ({ outputPath: '/p/output/form (OCR).docx' })),
+      release: vi.fn(async () => undefined),
+    } satisfies OcrBridge
+    const ask = vi.fn<OcrAsk>(async () => ANSWER)
+    return { prepared, bridge, ask }
+  }
+
+  it('reads the chosen pictures and writes the new document with no placement step', async () => {
+    const { prepared, bridge, ask } = extractedSetup()
+    const result = await runOcr({
+      dir: '/p',
+      source: { file: 'form.hwpx', sha256: 'x', kind: 'editable' },
+      selection: { kind: 'pages', pages: [2] },
+      confirm: async () => true,
+      bridge,
+      ask,
+      prepared,
+    })
+    expect(ask).toHaveBeenCalledTimes(1)
+    expect(result.outputPath).toBe('/p/output/form (OCR).docx')
+    // no placement is asked for or sent: the readings become a new Word document
+    expect(bridge.write).toHaveBeenCalledWith('tok', [expect.objectContaining({ index: 2 })])
+  })
+
+  it('never uses the box request, which is for pictures of a Word document', async () => {
+    const { prepared, bridge, ask } = extractedSetup()
+    await runOcr({
+      dir: '/p',
+      source: { file: 'form.hwpx', sha256: 'x', kind: 'editable' },
+      selection: { kind: 'all' },
+      confirm: async () => true,
+      bridge,
+      ask,
+      prepared,
+      boxes: true,
+    })
+    expect(ask.mock.calls.every(([, request]) => !request.system.includes('<boxes>'))).toBe(true)
+  })
+})

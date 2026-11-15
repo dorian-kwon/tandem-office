@@ -6,6 +6,7 @@ import { decodeEntities } from '@genoffice/docx-engine'
 import { readZipEntries, type ByteSource, type ZipEntry } from '@genoffice/docx-engine/zip-splice'
 import type { OcrPageImage } from '../../shared/translate-ocr'
 import { inspectBoxableImage } from './ocr-boxes-docx'
+import { openHwp } from '../../../../hwp/src/main/hwp5-file'
 
 const MAX_ARCHIVE = 128 * 1024 * 1024
 const MAX_IMAGE = 20 * 1024 * 1024
@@ -17,7 +18,10 @@ const LIMITS = { maxParts: 10000, maxPartBytes: MAX_IMAGE, maxTotalBytes: 256 * 
 export interface EmbeddedImage {
   name: string
   location: string
-  entry: ZipEntry
+  /** the picture's part of the zip package; absent for a picture of a HWP file */
+  entry?: ZipEntry
+  /** reads the picture by itself when it is not a part of a zip package (HWP) */
+  read?: () => Promise<OcrPageImage>
   signature: string
   /** the package part that holds the reference, for example `word/document.xml` */
   part: string
@@ -28,6 +32,9 @@ export interface EmbeddedImage {
 }
 
 export const supportsEmbeddedOcr = (file: string): boolean => /\.(docx|xlsx)$/i.test(file)
+
+/** Hangul documents: their pictures are taken out and read, and the text goes into a new Word document */
+export const supportsExtractedOcr = (file: string): boolean => /\.(hwpx|hwp)$/i.test(file)
 
 async function source(path: string) {
   const handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))
@@ -78,6 +85,74 @@ async function readPart(src: ByteSource, entry: ZipEntry, limit: number): Promis
   return data
 }
 
+const PNG_MAGIC = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
+
+function pictureMime(data: Uint8Array): 'image/png' | 'image/jpeg' | null {
+  if (data.length >= 8 && Buffer.from(data.subarray(0, 8)).equals(PNG_MAGIC)) return 'image/png'
+  if (data.length >= 3 && data[0] === 255 && data[1] === 216 && data[2] === 255) return 'image/jpeg'
+  return null
+}
+
+/**
+ * The pictures of a HWP 5 file, from its BinData streams in name order. A stream is deflated
+ * when the document says so, but a picture can also be stored as it is, so the picture header
+ * decides: the bytes as they are, else inflated.
+ */
+async function listHwpImages(path: string): Promise<EmbeddedImage[]> {
+  const load = async () => {
+    const src = await source(path)
+    try {
+      const bytes = new Uint8Array(await src.bytes.read(0, src.bytes.size))
+      return { bytes, signature: src.signature }
+    } finally {
+      await src.handle.close()
+    }
+  }
+  const { bytes, signature } = await load()
+  const opened = openHwp(bytes)
+  if (!opened)
+    throw new Error(
+      'this Hangul document cannot be read: it is encrypted, protected for distribution, or damaged',
+    )
+  const names = opened.cfb.FullPaths.map((full, i) => ({ full, entry: opened.cfb.FileIndex[i]! }))
+    .filter(
+      ({ full, entry }) => /\/BinData\/BIN[^/]*\.(png|jpe?g)$/i.test(full) && (entry.size ?? 0) > 0,
+    )
+    .map(({ full }) => full)
+    .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
+  return names.map((full) => {
+    const name = basename(full)
+    return {
+      name,
+      location: 'BinData',
+      signature,
+      part: `BinData/${name}`,
+      relId: name,
+      read: async () => {
+        const again = await load()
+        if (again.signature !== signature) throw new Error('OCR source changed after listing')
+        const reopened = openHwp(again.bytes)
+        const entry = reopened?.cfb.FileIndex[reopened.cfb.FullPaths.indexOf(full)]
+        if (!reopened || !entry?.content)
+          throw new Error('this picture is no longer in the document')
+        const stored = new Uint8Array(entry.content as Uint8Array)
+        let data: Uint8Array | null = pictureMime(stored) ? stored : null
+        if (!data) {
+          try {
+            data = new Uint8Array(inflateRawSync(stored, { maxOutputLength: MAX_IMAGE + 1 }))
+          } catch {
+            data = null
+          }
+        }
+        const mime = data ? pictureMime(data) : null
+        if (!data || !mime || data.length > MAX_IMAGE)
+          throw new Error('only PNG and JPEG images can be read')
+        return { data, mime }
+      },
+    }
+  })
+}
+
 function attrs(tag: string): Record<string, string> {
   return Object.fromEntries(
     [...tag.matchAll(/([\w:.-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)].map((m) => [
@@ -103,7 +178,9 @@ function target(part: string, value: string): string {
 
 /** Enumerate content references, never the media folder or external targets. */
 export async function listEmbeddedImages(path: string): Promise<EmbeddedImage[]> {
-  if (!supportsEmbeddedOcr(path)) throw new Error('only DOCX and XLSX support embedded OCR')
+  if (!supportsEmbeddedOcr(path) && !supportsExtractedOcr(path))
+    throw new Error('only DOCX, XLSX, HWPX and HWP pictures can be listed')
+  if (extname(path).toLowerCase() === '.hwp') return listHwpImages(path)
   const src = await source(path)
   try {
     const entries = new Map((await readZipEntries(src.bytes, LIMITS)).map((e) => [e.name, e]))
@@ -194,6 +271,35 @@ export async function listEmbeddedImages(path: string): Promise<EmbeddedImage[]>
           }
         }
       }
+    } else if (extname(path).toLowerCase() === '.hwpx') {
+      // the manifest maps an item id to a BinData file; the sections (body, tables, headers) and
+      // header.xml (background and fill pictures) name the items they use
+      const hrefById = new Map<string, string>()
+      for (const m of (await text('Contents/content.hpf')).matchAll(/<(?:\w+:)?item\b[^>]*>/g)) {
+        const a = attrs(m[0])
+        if (a.id && a.href) hrefById.set(a.id, target('', a.href))
+      }
+      const parts = [...entries.keys()]
+        .filter((n) => /^Contents\/section\d+\.xml$/.test(n))
+        .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
+      if (entries.has('Contents/header.xml')) parts.push('Contents/header.xml')
+      for (const part of parts)
+        for (const m of (await text(part)).matchAll(/binaryItemIDRef\s*=\s*"([^"]*)"/g)) {
+          const id = decodeEntities(m[1]!)
+          const href = hrefById.get(id)
+          const entry = href ? entries.get(href) : undefined
+          if (!href || !entry || entry.usize === 0 || seen.has(href)) continue
+          if (!/\.(png|jpe?g)$/i.test(href)) continue
+          seen.add(href)
+          images.push({
+            name: basename(href),
+            location: basename(part),
+            entry,
+            signature: src.signature,
+            part,
+            relId: id,
+          })
+        }
     } else {
       const workbook = 'xl/workbook.xml'
       const sheets = await relationships(workbook)
@@ -252,7 +358,9 @@ export async function listEmbeddedImages(path: string): Promise<EmbeddedImage[]>
 export async function readEmbeddedImage(path: string, image: EmbeddedImage): Promise<OcrPageImage> {
   const src = await source(path)
   try {
+    if (image.read) return await image.read()
     if (src.signature !== image.signature) throw new Error('OCR source changed after listing')
+    if (!image.entry) throw new Error('this picture has no package part to read')
     const data = new Uint8Array(await readPart(src.bytes, image.entry, MAX_IMAGE))
     const mime =
       data.length >= 8 &&

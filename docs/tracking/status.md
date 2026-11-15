@@ -186,6 +186,8 @@ Tandem Office 기준 버전: **0.15.0 (2026-11-15)**. `dorian-kwon/tandem-office
 
 28. **내장 그림 OCR(결정 없음, 계획 `docs/superpowers/plans/2026-11-04-embedded-image-ocr.md`) — 단위 테스트까지, 사람 확인 남음.** DOCX·XLSX 안의 그림 읽기와 놓을 자리 창, 채팅의 `document_ocr`, 시트 AI의 `ocr_pictures`(묻고 있는 창 위의 겹침 팝업이 그림 고르기와 시작 확인만 하고, 놓을 자리는 채팅의 `ask_choice`로 정한다; 시트 창은 `document_ocr`를 등록하지 않는다). 손 확인은 `docs/superpowers/notes/manual-checks.md`.
 
+29. **그림 OCR을 PDF·한글로(결정 0105) — 구현 끝, 사람 확인 남음.** 가지 `feat/ocr-more-formats`에서 번역 프로젝트의 OCR 창과 대화창의 `document_ocr`가 PDF·HWP·HWPX를 읽고 결과를 원본 옆 새 Word 문서로 쓰게 했다(HWPX는 `content.hpf`와 부분 파일이 가리키는 `BinData` 그림, HWP는 복합 파일의 `/BinData/` 스트림). 옛 `.doc`는 docx로 저장하라는 안내만 한다. 합성 파일 단위 시험까지 했고, 실제 한글 문서와 실제 구독 AI로 읽어 보는 것, 그림 순서가 문서의 어느 그림인지 사람이 알아보기 쉬운지는 확인하지 못했다(`findings.md`). main에는 아직 합치지 않았다.
+
 ## 막힌 것
 
 저장소 주인의 Anthropic 상업 약관 동의와 GitHub 저장소의 비공개 취약점 신고 켜기는 끝났다(2026-10-15). 첫 릴리스는 합친 설치본의 확인과 자동 업데이트 확인을 기다린다.

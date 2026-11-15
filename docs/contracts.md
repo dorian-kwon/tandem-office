@@ -506,6 +506,16 @@ metadata:
 - **문서 안의 모양**: 그림마다 그림 문단 바로 뒤(본문이든 표 칸 안이든 같은 칸·같은 본문 안)에 홀더 문단 하나(정확한 줄 높이 20 twips)가 놓이고, 그 안에 박스마다 떠 있는 텍스트 상자(`wp:anchor`, 불투명 흰색 `FFFFFF`)가 앵커되어 그림 위로 올려 놓인다. 그림과 문서의 다른 부분은 바뀌지 않는다. 그림 문단이 구역의 끝(`w:sectPr`)이거나, 같은 줄에 줄바꿈·탭·기호·글이 있거나, 문단과 스타일과 문서 기본값을 합친 정렬이 왼쪽(또는 양쪽)이 아니거나 들여쓰기·번호가 있으면 그 그림은 상자를 놓지 않는다. 표 칸 안의 그림은 그 표의 표 서식(예: Word의 Table Grid는 아래 간격 0)을 문단 서식 아래, 문서 기본값 위에 합쳐서 판단한다. 텍스트 상자·머리말·꼬리말 안의 그림은 상자를 놓지 않는다.
 - **번역 도구**: `read_runs`는 텍스트 상자 블록을 `{ index, box, paragraph, fp, segments }`로 나열하고, `translate_blocks`는 같은 `box`·`paragraph`를 받아 상자 안 글을 바꾼다. 표 칸 안의 텍스트 상자는 `box`가 그 표 전체에서 그 상자 글이 몇 번째 글 조각인지(편집기가 불러올 때 엔진의 `patchTextboxParas`로 알아내 상자에 적어 둔 `tableSegment`)이고, `paragraph`는 그 상자 안의 문단이다. 번호를 알아내지 못한 상자는 `read_runs`에서 한 줄로 건너뛴다고 알리고 번역하지 않는다. `revise_blocks`와 `add_bilingual`은 `box` 항목을 거절한다. 변경 추적이 켜져 있으면 `translate_blocks`는 `box` 항목을 건너뛰고(상자는 변경 기록을 담을 수 없다) 결과에 알리며, 완료 검사(`read_runs`의 `checkRemaining`)는 그동안 상자 문단을 세지 않는다.
 
+## 그림 OCR의 형식 확장 (결정 0105)
+
+번역 프로젝트(`translate:ocr-*`)와 대화창의 `document_ocr`에 해당한다.
+
+- **`translate:ocr-prepare`**: HWPX·HWP 원본도 받는다. 답의 `kind`는 `'extracted'`이고 `items`는 문서 안 그림(`name`은 `BinData`의 파일 이름, `location`은 HWPX면 그림을 가리킨 부분 파일 이름 `section0.xml`·`header.xml`, HWP면 `BinData`)이다. `format`·`sheets`·`tables`는 없다. PDF는 `'pdf'`, 이미지 묶음은 `'images'`, docx·xlsx는 기존대로 `'embedded'`다. 그림이 하나도 없는 문서, 암호가 걸렸거나 배포용인 HWP는 `OCR_FAILED`(암호·배포용은 그 까닭을 담은 글)이고, `.pptx`는 `SOURCE_NOT_EDITABLE`이다.
+- **`translate:ocr-write`**: `'extracted'`와 `'pdf'`는 `placement`를 받지 않고(주어도 무시한다) `output/<이름> (OCR).docx`를 덮어쓰지 않는 새 이름으로 쓴다. 박스 읽기는 `'embedded'` docx에만 있다.
+- **HWP·HWPX의 그림 나열 규칙**: PNG·JPEG만 나열한다(BMP·GIF 등은 뺀다). HWPX는 부분 파일(`Contents/section<N>.xml`을 번호순, 그다음 `Contents/header.xml`)이 `binaryItemIDRef`로 가리킨 순서대로, 같은 파일은 한 번만 넣는다. HWP는 `/BinData/BIN*.png|jpg`를 자연 정렬 순서로 넣는다. 읽을 때 HWP 스트림은 그림 머리글자로 판별해 deflate를 풀거나 그대로 쓴다.
+- **`document_ocr`의 `inspect`**: `.docx`·`.xlsx`·`.hwpx`·`.hwp`·`.pdf`를 받는다. 새 Word 문서로 나가는 형식(PDF, 한글)의 답에는 `result: "new-docx"`가 있다. `.doc`는 거절하며 "Word에서 `.docx`로 저장하라"는 글을 준다(읽지도 변환하지도 않는다). 그 밖의 형식은 거절한다.
+- **`document_ocr`의 `propose`·`apply`**: `result: "new-docx"`인 세션의 `propose`는 `placement`를 내지 않고 받지도 않으며(모델이 준 값은 무시) 검토할 글과 `needsConfirmation: true`만 낸다. `apply`는 배치 없이 쓰고 `{ outputPath, sourceUnchanged: true, format: "docx" }`로 답한다. 사람의 확인은 나중 사람 차례에서만 받는다는 규칙은 그대로다.
+
 ## Google 드라이브 (결정 0033, 0085)
 
 같은 데이터 폴더에 둘이 있다. 터미널 명령어와 MCP는 둘 다 읽지도 쓰지도 않는다.

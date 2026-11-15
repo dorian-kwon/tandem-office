@@ -85,6 +85,9 @@ function filesOf(project: ProjectFile, kind: TranslateMaterialKind): string[] {
 }
 
 /** One translation project: three separate upload lists, prompt, OCR and the start button. */
+/** the sources whose pictures OCR can read: embedded in Word and Excel, taken out of Hangul documents */
+const OCR_PICTURE_FILE = /\.(docx|xlsx|hwpx|hwp)$/i
+
 export function ProjectDetail({
   dir,
   onBack,
@@ -347,7 +350,7 @@ export function ProjectDetail({
         data-file={file}
       >
         {s(
-          kind === 'source' && /\.(docx|xlsx)$/i.test(file)
+          kind === 'source' && OCR_PICTURE_FILE.test(file)
             ? 'pictureHintEmbedded'
             : kind === 'source'
               ? 'pictureHintSource'
@@ -456,7 +459,7 @@ export function ProjectDetail({
         <div role="cell" className="tt-cell tt-actions">
           {kind === 'source' &&
             onStartOcr &&
-            /\.(docx|xlsx)$/i.test(file) &&
+            OCR_PICTURE_FILE.test(file) &&
             rowAction(
               'embedded-ocr',
               `${s('ocrTitle')}: ${file}`,

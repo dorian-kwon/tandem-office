@@ -623,6 +623,28 @@ describe('ProjectDetail picture notice', () => {
     expect(api.openTranslation).not.toHaveBeenCalled()
   })
 
+  it('offers OCR for the Hangul sources too and says their pictures can be read with it', async () => {
+    api.getProject.mockResolvedValue(
+      project({
+        sources: [
+          { file: 'form.hwpx', kind: 'editable', sha256: 'x' },
+          { file: 'old.hwp', kind: 'editable', sha256: 'y' },
+          { file: 'notes.md', kind: 'editable', sha256: 'z' },
+        ],
+      }),
+    )
+    api.pictureInfo.mockResolvedValue([{ file: 'form.hwpx', kind: 'source', pictures: 4 }])
+    const onStartOcr = vi.fn()
+    await render(ProjectDetail, { ...props(), onStartOcr })
+    const buttons = [...host.querySelectorAll('button[data-action="embedded-ocr"]')]
+    expect(buttons).toHaveLength(2)
+    await click(buttons[0]!)
+    expect(onStartOcr).toHaveBeenCalledWith('form.hwpx')
+    const hint = host.querySelector('[data-picture-notice][data-file="form.hwpx"]')!
+    expect(hint.textContent).toContain('Use OCR to read all or selected images')
+    expect(hint.textContent).not.toContain('does not read pictures inside this file')
+  })
+
   it('says next to a file that its pictures need OCR and will not be translated', async () => {
     api.getProject.mockResolvedValue(
       project({

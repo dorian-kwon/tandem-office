@@ -29,6 +29,7 @@ import {
   listEmbeddedImages,
   readEmbeddedImage,
   supportsEmbeddedOcr,
+  supportsExtractedOcr,
   type EmbeddedImage,
 } from './embedded-images'
 import { imageSize } from '../../../../../packages/cli/src/formats/image-size'
@@ -77,6 +78,10 @@ export interface OcrServiceDeps {
 
 /** the most bytes the enlarged local preview may carry over the bridge */
 export const OCR_LARGE_PREVIEW_MAX_BYTES = 2 * 1024 * 1024
+
+/** a lease whose items are pictures taken out of one document (embedded in docx/xlsx, or from a Hangul file) */
+const hasPictures = (l: { kind: OcrPrepared['kind'] }): boolean =>
+  l.kind === 'embedded' || l.kind === 'extracted'
 
 interface Lease {
   token: string
@@ -197,7 +202,12 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
       const entries = entriesOf(project.sources, files)
       const isPdf = (e: SourceEntry) => e.kind === 'pdf' || e.kind === 'scan'
       const editable = entries.some((e) => e.kind === 'editable')
-      if (entries.some((e) => e.kind === 'editable' && !supportsEmbeddedOcr(e.file)))
+      if (
+        entries.some(
+          (e) =>
+            e.kind === 'editable' && !supportsEmbeddedOcr(e.file) && !supportsExtractedOcr(e.file),
+        )
+      )
         throw new TranslateIpcError(
           'SOURCE_NOT_EDITABLE',
           'an editable document is translated in its editor, not read by OCR',
@@ -221,10 +231,23 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
       for (const [token, l] of leases) if (l.key === key) leases.delete(token)
 
       const paths = entries.map((e) => join(dir, 'source', e.file))
-      const kind = editable ? 'embedded' : isPdf(entries[0]!) ? 'pdf' : 'images'
+      // a Hangul document's pictures are taken out and read into a new Word document
+      const extracted = editable && supportsExtractedOcr(entries[0]!.file)
+      const kind = extracted
+        ? 'extracted'
+        : editable
+          ? 'embedded'
+          : isPdf(entries[0]!)
+            ? 'pdf'
+            : 'images'
       const embedded = editable
-        ? await listEmbeddedImages(paths[0]!).catch(() => {
-            throw new TranslateIpcError('OCR_FAILED', 'the document images could not be listed')
+        ? await listEmbeddedImages(paths[0]!).catch((err: unknown) => {
+            // only our own reason about a Hangul file is passed on (never a system error with a path)
+            const reason =
+              extracted && err instanceof Error && err.message.startsWith('this Hangul document')
+                ? err.message
+                : 'the document images could not be listed'
+            throw new TranslateIpcError('OCR_FAILED', reason)
           })
         : undefined
       const count =
@@ -254,7 +277,7 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
         token,
         kind,
         ocr: project.ocr,
-        ...(editable
+        ...(kind === 'embedded'
           ? {
               format:
                 extname(first).toLowerCase() === '.xlsx' ? ('xlsx' as const) : ('docx' as const),
@@ -316,7 +339,7 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
     async preview(token: unknown, index: unknown): Promise<OcrPageImage | null> {
       const l = lease(token)
       if (
-        l.kind !== 'embedded' ||
+        !hasPictures(l) ||
         !Number.isInteger(index) ||
         (index as number) < 1 ||
         (index as number) > l.count
@@ -341,7 +364,7 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
     async previewLarge(token: unknown, index: unknown): Promise<OcrPageImage | null> {
       const l = lease(token)
       if (
-        l.kind !== 'embedded' ||
+        !hasPictures(l) ||
         !Number.isInteger(index) ||
         (index as number) < 1 ||
         (index as number) > l.count
@@ -361,7 +384,7 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
       const l = lease(token)
       if (l.selection === null || typeof index !== 'number' || !l.selection.has(index))
         throw invalid('only a confirmed page can be read')
-      if (l.kind === 'embedded') {
+      if (hasPictures(l)) {
         await embeddedPath(l.dir, l.source!)
         return readEmbeddedImage(l.paths[0]!, l.embedded![index - 1]!).catch(() => {
           throw new TranslateIpcError(

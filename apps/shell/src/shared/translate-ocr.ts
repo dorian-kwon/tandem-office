@@ -51,7 +51,8 @@ export interface OcrItem {
 /** what `prepare` answers: the items to choose from, under a token main holds */
 export interface OcrPrepared {
   token: string
-  kind: 'pdf' | 'images' | 'embedded'
+  /** `extracted`: the pictures of a Hangul document, read into a new Word document with no placement step */
+  kind: 'pdf' | 'images' | 'embedded' | 'extracted'
   ocr: OcrMode
   items: OcrItem[]
   format?: 'docx' | 'xlsx'

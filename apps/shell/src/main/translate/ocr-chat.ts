@@ -47,9 +47,22 @@ interface Session {
   edits: Map<number, OcrPageResult>
   touched: number
   busy: boolean
-  proposal?: { placement: OcrPlacement; pages: OcrPageResult[]; turn: string }
+  /** `placement` is absent when the text goes into a new Word document */
+  proposal?: { placement?: OcrPlacement; pages: OcrPageResult[]; turn: string }
 }
 class Refusal extends Error {}
+
+/** The formats chat OCR takes. A Word or Excel file gets the text placed in it; the others get a new Word document. */
+const CHAT_FORMATS = /\.(docx|xlsx|hwpx|hwp|pdf)$/i
+const OLD_WORD = /\.doc$/i
+export const OLD_WORD_MESSAGE =
+  'An old .doc file cannot be read. Ask the person to open it in Word, save it as .docx, and add that file. No format conversion was performed.'
+/**
+ * A PDF read page by page and the pictures of a Hangul document end in a new Word document next
+ * to the original: there is no placement to recommend, choose or confirm.
+ */
+const intoNewDocument = (prepared: OcrPrepared): boolean =>
+  prepared.kind === 'pdf' || prepared.kind === 'extracted'
 function requireThat(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Refusal(message)
 }
@@ -133,9 +146,10 @@ export function createOcrChatService(deps: OcrChatDeps) {
             files: source.files,
             next: 'Ask which document the person wants to OCR.',
           })
+        requireThat(!OLD_WORD.test(source.file), OLD_WORD_MESSAGE)
         requireThat(
-          /\.(docx|xlsx)$/i.test(source.file),
-          'Conversational embedded OCR currently supports DOCX and XLSX. No format conversion was performed.',
+          CHAT_FORMATS.test(source.file),
+          'Conversational OCR supports DOCX, XLSX, HWPX, HWP and PDF. No format conversion was performed.',
         )
         for (const s of sessions.values())
           if (s.owner === owner && s.dir === source.dir) {
@@ -151,10 +165,15 @@ export function createOcrChatService(deps: OcrChatDeps) {
           await deps.ocr.release(prepared.token)
           controller.signal.throwIfAborted()
         }
-        requireThat(
-          prepared.kind === 'embedded' && prepared.ocr.kind === 'ai',
-          'OCR is not enabled for this document.',
-        )
+        if (!(
+          (prepared.kind === 'embedded' ||
+            prepared.kind === 'extracted' ||
+            prepared.kind === 'pdf') &&
+          prepared.ocr.kind === 'ai'
+        )) {
+          await deps.ocr.release(prepared.token).catch(() => undefined)
+          throw new Refusal('OCR is not enabled for this document.')
+        }
         let route: ChatOcrRoute | undefined
         try {
           route = deps.route(prepared.ocr)
@@ -185,7 +204,11 @@ export function createOcrChatService(deps: OcrChatDeps) {
           sheets: prepared.sheets,
           tables: prepared.tables,
           ocr: route ?? { available: false },
-          next: 'Ask in chat: all images or selected images? No image has been sent and no document changed.',
+          ...(intoNewDocument(prepared) ? { result: 'new-docx' } : {}),
+          next:
+            prepared.kind === 'pdf'
+              ? 'Ask in chat: all pages or selected pages? No page has been sent and no document changed.'
+              : 'Ask in chat: all images or selected images? No image has been sent and no document changed.',
         })
       }
       const s = held(owner, input, context)
@@ -285,8 +308,14 @@ export function createOcrChatService(deps: OcrChatDeps) {
                 image: image.data,
                 mime: image.mime,
                 signal: controller.signal,
-                // pictures inside a document: the text in drawings counts
-                ask: (request, signal) => deps.ask(route, asPictureRequest(request), signal, owner),
+                // pictures inside a document: the text in drawings counts; a PDF page is a page
+                ask: (request, signal) =>
+                  deps.ask(
+                    route,
+                    s.prepared.kind === 'pdf' ? request : asPictureRequest(request),
+                    signal,
+                    owner,
+                  ),
               })
               s.pages.set(index, { index, payload: reading.payload })
               s.proposal = undefined
@@ -312,7 +341,9 @@ export function createOcrChatService(deps: OcrChatDeps) {
             })),
             next: remaining.length
               ? 'Continue only within the scope the person already requested. Each read call processes at most 20 new images.'
-              : 'Review the OCR text in chat, then propose where to put it. No output file exists yet.',
+              : intoNewDocument(prepared)
+                ? 'Review the OCR text in chat, then call propose. It goes into a new Word document. No output file exists yet.'
+                : 'Review the OCR text in chat, then propose where to put it. No output file exists yet.',
           })
         } finally {
           s.busy = false
@@ -350,6 +381,24 @@ export function createOcrChatService(deps: OcrChatDeps) {
         }
         s.busy = true
         try {
+          if (intoNewDocument(s.prepared)) {
+            // no placement: a placement the model made up is ignored
+            controller.signal.throwIfAborted()
+            for (const page of pages) s.edits.set(page.index, page)
+            s.proposal = { pages, turn: input.turnId }
+            return answer({
+              session: s.id,
+              result: 'new-docx',
+              texts: pages.slice(0, 20).map((p) => ({
+                index: p.index,
+                text: plain(p.payload).slice(0, 2000),
+                totalCharacters: plain(p.payload).length,
+                truncated: plain(p.payload).length > 2000,
+              })),
+              needsConfirmation: true,
+              next: 'Show the reviewed text and say it will be written into a new Word document next to the original, which is not changed. Ask the person to confirm. Do not apply on this turn.',
+            })
+          }
           const recommendation = await deps.ocr.recommend(
             s.prepared.token,
             pages.map((p) => p.index),
@@ -388,17 +437,15 @@ export function createOcrChatService(deps: OcrChatDeps) {
         s.busy = true
         try {
           controller.signal.throwIfAborted()
-          const output = await deps.ocr.write(
-            s.prepared.token,
-            s.proposal.pages,
-            s.proposal.placement,
-          )
+          const output = s.proposal.placement
+            ? await deps.ocr.write(s.prepared.token, s.proposal.pages, s.proposal.placement)
+            : await deps.ocr.write(s.prepared.token, s.proposal.pages)
           sessions.delete(s.id)
           return answer(
             {
               outputPath: output.outputPath,
               sourceUnchanged: true,
-              format: prepared.format,
+              format: prepared.format ?? 'docx',
               next: 'Report the actual output file. The original file was not modified.',
             },
             { display: { kind: 'links', items: [{ url: output.outputPath, title: s.file }] } },
