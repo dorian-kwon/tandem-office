@@ -1,6 +1,6 @@
 # 진행 현황
 
-Tandem Office 기준 버전: **0.15.0 (2026-11-15)**. `dorian-kwon/tandem-office`의 `067a4841d`를 Windows 전용 정식 릴리스로 공개했다. docx 그림의 OCR 글을 AI가 준 박스로 그림 위 텍스트 상자에 놓고 글자 크기를 맞추며, 번역이 텍스트 상자 안 글을 읽고 쓴다(결정 0104). 설치 파일·블록맵·`latest.yml` 세 파일이 릴리스에 붙었고, Windows build의 설치 파일·업데이트 피드·묶인 프로그램 검사와 설치한 앱의 스모크 시험, 출처 증명이 통과했다. `latest.yml`의 버전(0.15.0)과 파일 이름이 설치 파일과 같은 것을, 로그인 없이 내려받아 확인했다. 처음 실행한 Windows build는 Actions 아티팩트 저장 용량 초과로 파일을 붙이지 못했다. 오래된 아티팩트를 모두 지우고 저장소를 공개로 바꾼 뒤 다시 실행해 붙었다. 실제 구독 AI가 준 박스 좌표와 Word·LibreOffice에서의 모양, 옛 버전을 설치한 PC에서 이 버전으로의 업데이트는 확인하지 못했다(`findings.md`). 그 뒤에 번역 창의 박스 읽기가 그림 모드와 겹쳐 실제 호출에서 동작하지 않았을 가능성을 찾았고, 고친 것이 가지 `feat/ocr-more-formats`에 있다(릴리스 전, `findings.md`).
+Tandem Office 기준 버전: **0.15.1 (2026-11-16)**. `dorian-kwon/tandem-office`의 `01b2af06e`를 Windows 전용 정식 릴리스로 공개했다. PDF·한글 그림 OCR, 열린 Word 문서에 OCR 글 바로 넣기(Ctrl+Z로 되돌리기), 그림 고르기 팝업, 표 칸 안의 상자와 그 글의 번역·바로 고치기, 상자에 맞는 글자 크기가 들어갔고, 0.15.0에서 박스 읽기가 그림 모드에 덮이던 결함을 고쳤다(결정 0105, 0106). 설치 파일·블록맵·`latest.yml` 세 파일이 릴리스에 붙었고, Windows build가 성공했다. `latest.yml`의 버전(0.15.1)과 파일 이름·크기가 설치 파일과 같은 것, `releases/latest/download/latest.yml` 주소가 내려받아지는 것을 확인했다. 확인하지 못한 것: 옛 버전을 설치한 PC에서 이 버전으로의 업데이트, 실제 구독 AI가 준 박스 좌표와 Word·LibreOffice에서의 모양, 실제 앱 화면에서의 글자 크기 맞춤. 큰 문서에서 OCR한 글을 번역하면 화면이 사라지는 오류(React #185)는 원인을 찾지 못한 채 릴리스했고 본문 알려진 한계에 적었다(`findings.md`).
 
 이전 기준 버전: 0.14.2 (2026-11-09). `dorian-kwon/tandem-office`의 `ec6a9acd4`를 Windows 전용 정식 릴리스로 공개했다. 설치 파일·블록맵·`latest.yml` 세 파일을 첨부했고, Windows build의 설치본 검사와 창 없는 내보내기 검사가 통과했다. 내려받은 세 파일의 SHA-256을 GitHub 메타데이터와 비교하고, 설치 파일의 SHA-512·크기·이름을 `latest.yml`과 대조해 모두 일치함을 확인했다. 공개한 본문은 `docs/releases/0.14.2.md`, 상세 검증은 `verification-2026-11-09.md`에 있다. 일반 CI는 단위 검사 45분·Electron e2e 60분 제한에 걸려 중단됐으며, Windows PC에서의 설치·제자리 업데이트 확인은 남았다. AI 비교는 별도 `compare-ai` 브랜치의 로컬 시험 빌드로만 제공하며 이번 릴리스에는 포함하지 않았다.
 
@@ -186,7 +186,7 @@ Tandem Office 기준 버전: **0.15.0 (2026-11-15)**. `dorian-kwon/tandem-office
 
 28. **내장 그림 OCR(결정 없음, 계획 `docs/superpowers/plans/2026-11-04-embedded-image-ocr.md`) — 단위 테스트까지, 사람 확인 남음.** DOCX·XLSX 안의 그림 읽기와 놓을 자리 창, 채팅의 `document_ocr`, 시트 AI의 `ocr_pictures`(묻고 있는 창 위의 겹침 팝업이 그림 고르기와 시작 확인만 하고, 놓을 자리는 채팅의 `ask_choice`로 정한다; 시트 창은 `document_ocr`를 등록하지 않는다). 손 확인은 `docs/superpowers/notes/manual-checks.md`.
 
-29. **그림 OCR을 PDF·한글로(결정 0105) — 구현 끝, 사람 확인 남음.** 가지 `feat/ocr-more-formats`에서 번역 프로젝트의 OCR 창과 대화창의 `document_ocr`가 PDF·HWP·HWPX를 읽고 결과를 원본 옆 새 Word 문서로 쓰게 했다(HWPX는 `content.hpf`와 부분 파일이 가리키는 `BinData` 그림, HWP는 복합 파일의 `/BinData/` 스트림). 옛 `.doc`는 docx로 저장하라는 안내만 한다. 합성 파일 단위 시험까지 했고, 실제 한글 문서와 실제 구독 AI로 읽어 보는 것, 그림 순서가 문서의 어느 그림인지 사람이 알아보기 쉬운지는 확인하지 못했다(`findings.md`). 그 뒤 채팅에서 바로 팝업을 띄워 고르게 하고, 쪽 표기와 문서 순서를 붙이고, Word 그림을 박스로 읽어 열려 있는 문서에 바로 넣고 Ctrl+Z로 되돌리게 했다(결정 0106, 앱 화면에서 끝까지 확인하지 못했다). main에는 아직 합치지 않았다.
+29. **그림 OCR을 PDF·한글로(결정 0105) — 구현 끝, 0.15.1로 릴리스, 사람 확인 남음.** 번역 프로젝트의 OCR 창과 대화창의 `document_ocr`가 PDF·HWP·HWPX를 읽고 결과를 원본 옆 새 Word 문서로 쓰게 했다(HWPX는 `content.hpf`와 부분 파일이 가리키는 `BinData` 그림, HWP는 복합 파일의 `/BinData/` 스트림). 옛 `.doc`는 docx로 저장하라는 안내만 한다. 합성 파일 단위 시험까지 했고, 실제 한글 문서와 실제 구독 AI로 읽어 보는 것, 그림 순서가 문서의 어느 그림인지 사람이 알아보기 쉬운지는 확인하지 못했다(`findings.md`). 그 뒤 채팅에서 바로 팝업을 띄워 고르게 하고, 쪽 표기와 문서 순서를 붙이고, Word 그림을 박스로 읽어 열려 있는 문서에 바로 넣고 Ctrl+Z로 되돌리게 했다(결정 0106, 앱 화면에서 끝까지 확인하지 못했다). 0.15.1에 들어갔다.
 
 ## 막힌 것
 
