@@ -516,6 +516,9 @@ metadata:
 - **HWP·HWPX의 그림 나열 규칙**: PNG·JPEG만 나열한다(BMP·GIF 등은 뺀다). HWPX는 부분 파일(`Contents/section<N>.xml`을 번호순, 그다음 `Contents/header.xml`)이 `binaryItemIDRef`로 가리킨 순서대로, 같은 파일은 한 번만 넣는다. HWP는 `/BinData/BIN*.png|jpg`를 자연 정렬 순서로 넣는다. 읽을 때 HWP 스트림은 그림 머리글자로 판별해 deflate를 풀거나 그대로 쓴다.
 - **`document_ocr`의 `inspect`**: `.docx`·`.xlsx`·`.hwpx`·`.hwp`·`.pdf`를 받는다. 새 Word 문서로 나가는 형식(PDF, 한글)의 답에는 `result: "new-docx"`가 있다. `.doc`는 거절하며 "Word에서 `.docx`로 저장하라"는 글을 준다(읽지도 변환하지도 않는다). 그 밖의 형식은 거절한다.
 - **`document_ocr`의 `choose`**: 세션이 있어야 하고, 채팅 창 위에 OCR 선택 팝업을 띄워 사람이 그림을 미리보기로 고르고 시작을 확인하면 그 팝업이 읽어 온 글을 도구 결과로 돌려준다(`recognised`, `results[].{index, page, location, text, totalCharacters, truncated}`, `unread`). 도구 호출은 팝업이 끝날 때까지 기다린다. 읽은 글은 세션에 들어가 `review`·`propose`·`apply`가 이어진다. 팝업이 이미 열려 있으면 `alreadyOpen: true`, 사람이 읽지 않고 닫으면 `closed: true`, 띄울 수 없으면 오류(`list`·`read`로 되돌아가라는 글)다. 실행이 취소되면 팝업도 닫힌다. 팝업의 읽기는 박스를 쓰지 않는다. `list`는 그림 번호를 글로 고르는 가벼운 길로 남는다.
+- **Word 그림의 박스(채팅)**: `read`와 `choose`(팝업)는 `boxable` docx 그림을 박스로 읽는다. 팝업의 `OcrPopupResult.pages[].boxes`는 `{x, y, w, h, fontHeight, text}`(그림에 대한 0~1 비율)의 배열이고, 메인이 박스 읽기와 같은 검사(박스 60개 이하, 그림 안)를 다시 한다. 박스가 하나도 없는 그림은 `boxes`가 없다.
+- **`propose`의 답(docx)**: 박스가 나온 그림이 있으면 `placement`는 `{ kind: "docx-image-boxes", images: [{ index, boxes }] }`이고 `reason`은 `"on-picture"`다. 그 밖에는 추천된 목록 배치다. `alternatives`는 제안하지 않은 다른 배치(추천된 목록 배치, `docx-after-images`, `docx-end`)의 목록이다. 글을 고쳐 넘긴(`texts`) 그림의 박스는 버려진다.
+- **`apply`의 `placement`**: 오면 `propose`가 낸 `placement`와 `alternatives` 가운데 같은 것(키 순서와 상관없이)만 받는다. 아니면 거절하고 `propose`를 먼저 부르라고 알린다. 오지 않으면 제안된 배치로 쓴다. 새 Word 문서로 가는 형식(PDF, 한글)에서는 무시한다.
 - **`document_ocr`의 `propose`·`apply`**: `result: "new-docx"`인 세션의 `propose`는 `placement`를 내지 않고 받지도 않으며(모델이 준 값은 무시) 검토할 글과 `needsConfirmation: true`만 낸다. `apply`는 배치 없이 쓰고 `{ outputPath, sourceUnchanged: true, format: "docx" }`로 답한다. 사람의 확인은 나중 사람 차례에서만 받는다는 규칙은 그대로다.
 
 ## Google 드라이브 (결정 0033, 0085)

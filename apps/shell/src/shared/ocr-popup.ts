@@ -1,3 +1,4 @@
+import { checkOcrBoxesPayload, type OcrBox } from './ocr-boxes'
 /** One recognised picture as the asking AI panel receives it: plain text only. */
 export interface OcrPopupPage {
   /** 1-based picture number in the listing */
@@ -5,6 +6,8 @@ export interface OcrPopupPage {
   /** where the picture sits, for example `Sheet1 · A7` */
   location: string
   text: string
+  /** a Word picture read as the places of its text; `text` is all of them in reading order */
+  boxes?: OcrBox[]
 }
 
 /** A picture the popup could not get text from: nothing found, or the reading failed. */
@@ -67,7 +70,18 @@ export function checkOcrPopupResult(value: unknown): OcrPopupResult {
     )
       return bad()
     total += page.text.length
-    return { index: page.index as number, location: page.location, text: page.text }
+    const out: OcrPopupPage = {
+      index: page.index as number,
+      location: page.location,
+      text: page.text,
+    }
+    if (page.boxes !== undefined) {
+      // the boxes are checked the way main checks a box reading before it writes one
+      const checked = checkOcrBoxesPayload({ kind: 'boxes', boxes: page.boxes, text: page.text })
+      if (!checked) return bad()
+      out.boxes = checked.boxes
+    }
+    return out
   })
   if (total > OCR_POPUP_MAX_TOTAL) return bad()
   const result: OcrPopupResult = { pages }

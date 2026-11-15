@@ -8,6 +8,7 @@ import {
 import { parseAiPageResponse } from '../../../packages/pdf-structure/src/ai-read/parse'
 import { PICTURE_OCR_INSTRUCTION, asPictureRequest } from '../src/shared/ocr-picture-instruction'
 import { ocrPayloadPlainText } from '../src/shared/ocr-popup'
+import { buildOcrBoxRequest, parseOcrBoxResponse } from '../src/shared/ocr-boxes'
 import { createOcrAsk, type OcrStreamBridge } from '../src/renderer/src/translate/ocr-ask'
 import type { AiSettings, AiStreamChunk, AiStreamRequest } from '@genoffice/ai-provider'
 import type { OcrRoute } from '../src/renderer/src/translate/ocr-route'
@@ -92,5 +93,48 @@ describe('createOcrAsk picture mode', () => {
     expect(sent[0]!.system).toBe(PICTURE_OCR_INSTRUCTION)
     expect(sent[0]!.messages[0]!.images).toHaveLength(1)
     expect(sent[0]!.tools ?? []).toEqual([])
+  })
+
+  it('keeps the box request as it is: its own instruction asks for places, which a page answer lacks', async () => {
+    let listener: ((c: AiStreamChunk) => void) | null = null
+    const sent: AiStreamRequest[] = []
+    const bridge: OcrStreamBridge = {
+      aiStream: async (req) => {
+        sent.push(req)
+        queueMicrotask(() => {
+          listener?.({ requestId: req.requestId, type: 'delta', text: 'x' })
+          listener?.({ requestId: req.requestId, type: 'done' })
+        })
+      },
+      aiStreamCancel: async () => undefined,
+      onAiStream: (h) => {
+        listener = h
+        return () => (listener = null)
+      },
+    }
+    const ask = createOcrAsk({
+      confirmed,
+      ocr: 'claude',
+      current: () => confirmed,
+      lang: () => 'en',
+      bridge,
+      pictures: true,
+    })
+    const boxes = buildOcrBoxRequest({ image: new Uint8Array([1, 2, 3]), mime: 'image/png' })
+    await ask('claude', boxes, new AbortController().signal)
+    expect(sent[0]!.system).toBe(boxes.system)
+    expect(sent[0]!.system).not.toBe(PICTURE_OCR_INSTRUCTION)
+  })
+})
+
+describe('asPictureRequest', () => {
+  it('leaves a box request alone, so the model is still told to answer with places', () => {
+    const boxes = buildOcrBoxRequest({ image: new Uint8Array([1]), mime: 'image/png' })
+    expect(asPictureRequest(boxes)).toBe(boxes)
+  })
+
+  it('the answer the page instruction asks for is not a box answer', () => {
+    const answer = `${AI_READ_OPEN_TAG}\nSome text\n${AI_READ_CLOSE_TAG}`
+    expect(parseOcrBoxResponse(answer).ok).toBe(false)
   })
 })

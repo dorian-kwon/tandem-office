@@ -90,6 +90,16 @@ describe('conversational document OCR', () => {
     expect(schema.properties.action.enum).toContain('choose')
   })
 
+  it('puts the text boxes over the picture first when propose recommends them', async () => {
+    const { run, skill } = setup()
+    await run.prepare()
+    expect(skill.systemPrompt).toMatch(/on-picture.*text boxes over the picture.*first/is)
+    // the way that was not proposed first stays an option
+    expect(skill.systemPrompt).toMatch(/alternatives/i)
+    // and the placement of the recommendation is passed on to apply as it is
+    expect(skill.systemPrompt).toMatch(/docx-image-boxes.*as it is/is)
+  })
+
   it('injects trusted turn, scope and request identifiers and forwards the real result', async () => {
     const { run, skill, ocr } = setup('p1')
     await run.prepare()

@@ -4,6 +4,7 @@ import {
   AI_READ_OPEN_TAG,
   type AiReadRequest,
 } from '../../../../packages/pdf-structure/src/ai-read/instruction'
+import { OCR_BOX_INSTRUCTION } from './ocr-boxes'
 
 /**
  * The reading instruction for a picture embedded in a document (a webtoon strip, a
@@ -28,7 +29,12 @@ What to write:
 Answer format: a line ${AI_READ_OPEN_TAG}, then the transcription, then a line ${AI_READ_CLOSE_TAG}. Write nothing else.
 A picture with no legible text at all: write only ${AI_READ_EMPTY_PAGE} between the two lines.`
 
-/** The same request with the picture instruction as its system prompt. */
+/**
+ * The same request with the picture instruction as its system prompt. A box request keeps its
+ * own: it asks for where each text stands in a different answer format, and the picture
+ * instruction would turn the answer into a plain page that has no places.
+ */
 export function asPictureRequest(request: AiReadRequest): AiReadRequest {
+  if (request.system === OCR_BOX_INSTRUCTION) return request
   return { ...request, system: PICTURE_OCR_INSTRUCTION }
 }

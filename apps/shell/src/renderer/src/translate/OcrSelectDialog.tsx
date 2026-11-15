@@ -28,9 +28,11 @@ import { OcrImageLightbox } from './OcrImageLightbox'
 import { OcrPlacementDialog } from './OcrPlacementDialog'
 import {
   ocrPayloadPlainText,
+  type OcrPopupPage,
   type OcrPopupResult,
   type OcrPopupUnread,
 } from '../../../shared/ocr-popup'
+import { checkOcrBoxesPayload, type OcrBox } from '../../../shared/ocr-boxes'
 
 /**
  * The translation OCR window (spec 6.5): pick the pages of a scanned PDF or
@@ -146,6 +148,8 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
   const outcomeRef = useRef<OcrSettled | null>(null)
   /** selectOnly: text kept per picture across runs, so a retry of the failed ones adds to it */
   const collectedRef = useRef(new Map<number, string>())
+  /** selectOnly: the places of the text of a Word picture read as boxes, by picture */
+  const boxesRef = useRef(new Map<number, OcrBox[]>())
   /** selectOnly: every picture the person asked for, over all runs */
   const requestedRef = useRef(new Set<number>())
   /** selectOnly: the review is showing, so the run's own stop is not an error */
@@ -216,6 +220,17 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
       return next
     })
 
+  /** one picture as the asking chat receives it: its text, and the places of it when it has them */
+  const pageOfResult = (index: number): OcrPopupPage => {
+    const boxes = boxesRef.current.get(index)
+    return {
+      index,
+      location: items[index - 1]?.location ?? '',
+      text: collectedRef.current.get(index) ?? '',
+      ...(boxes && boxes.length > 0 ? { boxes } : {}),
+    }
+  }
+
   /** the picture's text for the asking chat, with the local placement analysis for these pictures */
   const deliver = async (
     indices: number[],
@@ -229,11 +244,7 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
         : undefined
     recognisedRef.current = true
     propsRef.current.onRecognised?.({
-      pages: indices.map((index) => ({
-        index,
-        location: items[index - 1]?.location ?? '',
-        text: collectedRef.current.get(index) ?? '',
-      })),
+      pages: indices.map(pageOfResult),
       ...(unread.length > 0 ? { unread } : {}),
       ...(recommendation ? { recommendation } : {}),
     })
@@ -281,11 +292,7 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
     } catch {
       recognisedRef.current = true
       propsRef.current.onRecognised?.({
-        pages: indices.map((index) => ({
-          index,
-          location: items[index - 1]?.location ?? '',
-          text: collectedRef.current.get(index) ?? '',
-        })),
+        pages: indices.map(pageOfResult),
         ...(unread.length > 0 ? { unread } : {}),
       })
     }
@@ -351,10 +358,8 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
       },
       signal: controller.signal,
       onProgress: (progress) => setStep({ kind: 'running', progress }),
-      // the chat popup only wants text; the translation project places boxes over docx pictures
-      ...(prepared.kind === 'embedded' && prepared.format === 'docx' && !props.selectOnly
-        ? { boxes: true }
-        : {}),
+      // Word pictures are read as boxes, for the translation project and for the chat popup alike
+      ...(prepared.kind === 'embedded' && prepared.format === 'docx' ? { boxes: true } : {}),
       ...(prepared.kind === 'embedded' && props.selectOnly
         ? {
             choosePlacement: async (done: OcrPageResult[]) => {
@@ -364,9 +369,14 @@ export function OcrSelectDialog(props: OcrSelectDialogProps): ReactElement {
               const empties: number[] = []
               for (const p of done) {
                 const text = ocrPayloadPlainText(p.payload).trim()
-                if (text) collectedRef.current.set(p.index, text)
-                else {
+                if (text) {
+                  collectedRef.current.set(p.index, text)
+                  const boxes = checkOcrBoxesPayload(p.payload)?.boxes ?? []
+                  if (boxes.length > 0) boxesRef.current.set(p.index, boxes)
+                  else boxesRef.current.delete(p.index)
+                } else {
                   collectedRef.current.delete(p.index)
+                  boxesRef.current.delete(p.index)
                   empties.push(p.index)
                 }
               }

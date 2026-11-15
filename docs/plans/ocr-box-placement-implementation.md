@@ -19,7 +19,7 @@
 - 화면 색은 `docs/standards.md`의 규칙을 따른다(`npm run check:theme-colors`).
 - AI 호출 수·보내는 이미지·확인 화면의 요금 문구는 지금과 같다. 박스 읽기는 기존 읽기를 **대체**한다.
 - 사람이 확정하기 전에는 문서에 쓰지 않는다. 원본 그림은 바꾸지 않는다.
-- 1단계는 docx만. xlsx와 AI 채팅의 OCR 팝업(`selectOnly`)은 지금 동작 그대로다.
+- 1단계는 docx만. xlsx는 지금 동작 그대로다. AI 채팅의 OCR(읽기와 팝업)은 이 단계에서는 박스를 쓰지 않았고, 결정 0105가 채팅에도 연결했다.
 - 테스트는 `apps/shell/tests`에 둔다. 실행: 저장소 루트에서 `npx vitest run apps/shell/tests/<파일>`.
 
 ## 복습할 위험(작업 밖 입력과 조건)
@@ -37,11 +37,13 @@
 사용자가 A를 승인했다(2026-11-14). 관문 테스트(`translate-textbox-gate.test.ts`)가 실패했고 원인은 `textblocksOf()`가 텍스트 상자 노드(`docProtected`, `blockType: 'passthrough'`)를 건너뛰는 것이다. 이 작업은 `apps/docs`의 번역 코드만 고친다. `packages/docx-engine`은 고치지 않는다(저장 쪽 `convert.ts`의 `textboxParasPatch`가 상자 문단의 되쓰기를 이미 한다).
 
 **파일:**
+
 - 고친다: `apps/docs/src/renderer/ai/translate-runs.ts` (`RunParagraph`, `readRunGroups`, `RunTranslationItem`, `applyRunTranslations`, `remainingUntranslated`)
 - 고친다: `apps/docs/src/renderer/ai/tools.ts` (`translate_blocks` 입력의 `box`, `read_runs` 설명, `revise_blocks`·`add_bilingual`에서 `box` 거절)
 - 테스트: `apps/docs/tests/translate-textbox-gate.test.ts`(이미 있고 실패 중), 같은 파일에 케이스를 더한다.
 
 **인터페이스:**
+
 - 만드는 것:
   - `RunParagraph.box?: number`와 `RunTranslationItem.box?: number` — `docProtected` 블록의 `attrs.textboxes` 안 위치(0부터). `paragraph`는 그 상자의 `paras` 안 위치.
   - `readRunGroups`는 `textboxes`가 있는 `docProtected` 블록에서, `readOnly`가 아닌 상자의 글이 있는 문단마다 `{ index, box, paragraph, fp, segments }`를 낸다. 세그먼트는 `text.trim() !== ''`인 `Run`마다 하나이고 `fp`는 기존 `runFingerprint(segments)`다. `readOnly` 상자는 `{ index, box, skip: 'read-only text box' }`, 글이 없는 상자는 아무것도 내지 않는다. 다른 `docProtected`는 지금처럼 `skip`이다.
@@ -68,10 +70,12 @@
 ### Task 2: 박스 읽기의 약속(지시문, 응답 검사, 폰트 환산)
 
 **파일:**
+
 - 만든다: `apps/shell/src/shared/ocr-boxes.ts`
 - 테스트: `apps/shell/tests/translate-ocr-boxes.test.ts`
 
 **인터페이스:**
+
 - 쓰는 것: `AiReadRequest`·`buildAiReadRequest`가 쓰는 `base64Encode`, `JobUnitFailure`, `AI_READ_MALFORMED_REASON`(`packages/pdf-structure`에서 가져오기만 한다).
 - 만드는 것:
   - `interface OcrBox { x: number; y: number; w: number; h: number; fontHeight: number; text: string }` — 모두 그림 너비·높이에 대한 0~1 비율(`fontHeight`는 글자 줄 높이/그림 높이).
@@ -103,12 +107,14 @@
 ### Task 3: 박스 읽기를 OCR 실행과 메인의 쓰기 검사에 연결
 
 **파일:**
+
 - 고친다: `apps/shell/src/shared/translate-ocr.ts` (`OcrItem`, `OcrPlacement`, `RunOcrArgs`, `readOne`)
 - 고친다: `apps/shell/src/main/translate/ocr.ts` (`prepare`의 항목 만들기, `write`의 payload 검사와 글 만들기)
 - 고친다: `apps/shell/src/main/translate/embedded-images.ts` (`EmbeddedImage`에 `part`, `relId`)
 - 테스트: `apps/shell/tests/translate-ocr.test.ts`(읽기), `apps/shell/tests/translate-ocr-main.test.ts`(쓰기)에 케이스를 더한다.
 
 **인터페이스:**
+
 - 쓰는 것: 작업 2의 `readOcrBoxes`, `checkOcrBoxesPayload`, `OcrBox`, `OcrBoxesPayload`.
 - 만드는 것:
   - `OcrItem`에 `boxable?: boolean`.
@@ -132,11 +138,13 @@
 ### Task 4: docx에서 그림 위에 박스를 쓰기
 
 **파일:**
+
 - 만든다: `apps/shell/src/main/translate/ocr-boxes-docx.ts`
 - 고친다: `apps/shell/src/main/translate/ocr-placement.ts` (docx 분기), `apps/shell/src/main/translate/ocr.ts` (`prepare`가 `boxable`을 채움)
 - 테스트: `apps/shell/tests/translate-ocr-boxes-docx.test.ts`, `apps/shell/tests/translate-ocr-placement.test.ts`에 케이스 추가.
 
 **인터페이스:**
+
 - 쓰는 것: `buildAnchoredTextboxParagraphXml`, `OcrBox`, `boxFontHalfPoints`, `OcrTextItem`.
 - 만드는 것:
   - `type BoxableInfo = { ok: true; widthEmu: number; heightEmu: number; afterTwips: number } | { ok: false; reason: 'missing' | 'anchored' | 'cropped' | 'rotated' | 'container' | 'crowded' | 'aligned' }`
@@ -164,11 +172,13 @@
 ### Task 5: 배치 화면 — 그림 위 박스 편집기
 
 **파일:**
+
 - 만든다: `apps/shell/src/renderer/src/translate/ocr-box-geometry.ts`, `apps/shell/src/renderer/src/translate/OcrBoxEditor.tsx`
 - 고친다: `apps/shell/src/renderer/src/translate/OcrPlacementDialog.tsx`, `apps/shell/src/renderer/src/translate/OcrSelectDialog.tsx`, `apps/shell/src/renderer/src/translate/translate.css`, 21개 `apps/shell/src/renderer/src/i18n/translate/<언어>.ts`
 - 테스트: `apps/shell/tests/translate-ocr-box-geometry.test.ts`, `apps/shell/tests/translate-ocr-box-editor.test.ts`, `apps/shell/tests/translate-ocr-placement-flow.test.ts`에 케이스 추가.
 
 **인터페이스:**
+
 - 쓰는 것: `OcrBox`, `OcrBoxesPayload`, `OcrPlacement`(`docx-image-boxes`), `TranslateApi.ocrPreviewLarge`, `OcrPrepared.items[i].boxable`.
 - 만드는 것:
   - `moveBox(box: OcrBox, dx: number, dy: number): OcrBox`, `resizeBox(box: OcrBox, dw: number, dh: number): OcrBox`, `newBox(): OcrBox` — 결과는 항상 그림 안(0~1)이고 최소 크기(0.02)를 지킨다.
@@ -191,6 +201,7 @@
 ### Task 6: 문서, 결정 기록, 전체 검사
 
 **파일:**
+
 - 만든다: `docs/tracking/decisions/NNNN-ocr-box-placement.md`(다음 빈 번호, 지금은 0104. `index.md`에 한 줄 추가)
 - 고친다: `docs/architecture.md`, `docs/contracts.md`, `apps/shell/AGENTS.md`, `docs/tracking/status.md`, `docs/tracking/findings.md`, `docs/plans/ocr-box-placement.md`(상태를 "구현됨, 사람 확인 남음"으로)
 

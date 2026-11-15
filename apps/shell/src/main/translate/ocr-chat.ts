@@ -5,6 +5,7 @@ import type { OcrPopupResult } from '../../shared/ocr-popup'
 import { readAiPage } from '../../../../../packages/pdf-structure/src/ai-read/read-page'
 import type { AiReadRequest } from '../../../../../packages/pdf-structure/src/ai-read/instruction'
 import { resolveOcrSelection } from '../../shared/translate-ocr'
+import { checkOcrBoxesPayload, readOcrBoxes } from '../../shared/ocr-boxes'
 import { asPictureRequest } from '../../shared/ocr-picture-instruction'
 
 export interface ChatOcrContext {
@@ -69,7 +70,13 @@ interface Session {
   touched: number
   busy: boolean
   /** `placement` is absent when the text goes into a new Word document */
-  proposal?: { placement?: OcrPlacement; pages: OcrPageResult[]; turn: string }
+  proposal?: {
+    placement?: OcrPlacement
+    /** the placements the person may choose between: the proposed one and the alternatives */
+    offered: OcrPlacement[]
+    pages: OcrPageResult[]
+    turn: string
+  }
 }
 class Refusal extends Error {}
 
@@ -97,6 +104,23 @@ function plain(value: unknown): string {
   if (typeof obj.text === 'string') return obj.text
   return Object.values(obj).map(plain).filter(Boolean).join('\n')
 }
+/** a Word picture whose text can go back over it as boxes */
+const takesBoxes = (prepared: OcrPrepared, index: number): boolean =>
+  prepared.kind === 'embedded' &&
+  prepared.format === 'docx' &&
+  prepared.items[index - 1]?.boxable === true
+
+/** JSON with the keys in order, so two placements that say the same thing compare equal */
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`
+  if (value && typeof value === 'object')
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`)
+      .join(',')}}`
+  return JSON.stringify(value) ?? 'null'
+}
+
 /** A reading made of plain text: one paragraph per blank-line separated block. */
 function textPayload(text: string) {
   const blocks = text
@@ -338,7 +362,14 @@ export function createOcrChatService(deps: OcrChatDeps) {
           await deps.ocr.start(s.prepared.token, indices)
           s.allowed = new Set(indices)
           for (const page of kept)
-            s.pages.set(page.index, { index: page.index, payload: textPayload(page.text) })
+            s.pages.set(page.index, {
+              index: page.index,
+              // a reading with places keeps them; the boxes were checked when the popup answered
+              payload:
+                page.boxes && page.boxes.length > 0 && takesBoxes(s.prepared, page.index)
+                  ? { kind: 'boxes', boxes: page.boxes, text: page.text }
+                  : textPayload(page.text),
+            })
           s.edits.clear()
           s.proposal = undefined
           requireThat(
@@ -427,22 +458,37 @@ export function createOcrChatService(deps: OcrChatDeps) {
               controller.signal.throwIfAborted()
               const image = await deps.ocr.pageImage(s.prepared.token, index)
               controller.signal.throwIfAborted()
-              const reading = await readAiPage({
-                page: index,
-                pageFingerprint: '',
-                image: image.data,
-                mime: image.mime,
-                signal: controller.signal,
-                // pictures inside a document: the text in drawings counts; a PDF page is a page
-                ask: (request, signal) =>
-                  deps.ask(
-                    route,
-                    s.prepared.kind === 'pdf' ? request : asPictureRequest(request),
-                    signal,
-                    owner,
-                  ),
-              })
-              s.pages.set(index, { index, payload: reading.payload })
+              // pictures inside a document: the text in drawings counts; a PDF page is a page
+              const asked = (
+                request: Parameters<typeof asPictureRequest>[0],
+                signal: AbortSignal,
+              ): Promise<string> =>
+                deps.ask(
+                  route,
+                  s.prepared.kind === 'pdf' ? request : asPictureRequest(request),
+                  signal,
+                  owner,
+                )
+              if (takesBoxes(s.prepared, index)) {
+                // where each text stands, so the text can be put back over the picture
+                const boxes = await readOcrBoxes({
+                  image: image.data,
+                  mime: image.mime,
+                  signal: controller.signal,
+                  ask: asked,
+                })
+                s.pages.set(index, { index, payload: boxes })
+              } else {
+                const reading = await readAiPage({
+                  page: index,
+                  pageFingerprint: '',
+                  image: image.data,
+                  mime: image.mime,
+                  signal: controller.signal,
+                  ask: asked,
+                })
+                s.pages.set(index, { index, payload: reading.payload })
+              }
               s.proposal = undefined
               requireThat(
                 JSON.stringify([...s.pages.values()]).length <= 8 * 1024 * 1024,
@@ -511,7 +557,7 @@ export function createOcrChatService(deps: OcrChatDeps) {
             // no placement: a placement the model made up is ignored
             controller.signal.throwIfAborted()
             for (const page of pages) s.edits.set(page.index, page)
-            s.proposal = { pages, turn: input.turnId }
+            s.proposal = { offered: [], pages, turn: input.turnId }
             return answer({
               session: s.id,
               result: 'new-docx',
@@ -529,18 +575,53 @@ export function createOcrChatService(deps: OcrChatDeps) {
             s.prepared.token,
             pages.map((p) => p.index),
           )
-          const placement = input.placement ?? recommendation.placement
+          // text boxes over the pictures that gave places, unless the person chose another way
+          const boxed = pages.flatMap((p) => {
+            const payload = checkOcrBoxesPayload(p.payload)
+            return payload && payload.boxes.length > 0
+              ? [{ index: p.index, boxes: payload.boxes }]
+              : []
+          })
+          const onPicture = !input.placement && s.prepared.format === 'docx' && boxed.length > 0
+          const placement =
+            input.placement ??
+            (onPicture ? { kind: 'docx-image-boxes', images: boxed } : recommendation.placement)
           requireThat(
-            placement && typeof placement === 'object' && JSON.stringify(placement).length < 4096,
+            placement && typeof placement === 'object' && JSON.stringify(placement).length < 262144,
             'Choose a valid placement.',
           )
           controller.signal.throwIfAborted()
           for (const page of pages) s.edits.set(page.index, page)
-          s.proposal = { placement: placement as OcrPlacement, pages, turn: input.turnId }
+          // the other ways a Word document can take the text; the person chooses among these
+          const alternatives =
+            s.prepared.format === 'docx'
+              ? [
+                  recommendation.placement,
+                  { kind: 'docx-after-images' },
+                  { kind: 'docx-end' },
+                ].filter(
+                  (candidate, at, all) =>
+                    candidate &&
+                    canonical(candidate) !== canonical(placement) &&
+                    all.findIndex((other) => canonical(other) === canonical(candidate)) === at,
+                )
+              : []
+          s.proposal = {
+            placement: placement as OcrPlacement,
+            offered: [placement as OcrPlacement, ...(alternatives as OcrPlacement[])],
+            pages,
+            turn: input.turnId,
+          }
           return answer({
             session: s.id,
             placement,
-            reason: input.placement ? 'user-requested' : recommendation.reason,
+            reason: input.placement
+              ? 'user-requested'
+              : onPicture
+                ? 'on-picture'
+                : recommendation.reason,
+            // the ways that are not proposed first stay open to the person
+            ...(alternatives.length > 0 ? { alternatives } : {}),
             texts: pages.slice(0, 20).map((p) => ({
               index: p.index,
               text: plain(p.payload).slice(0, 2000),
@@ -563,8 +644,20 @@ export function createOcrChatService(deps: OcrChatDeps) {
         s.busy = true
         try {
           controller.signal.throwIfAborted()
-          const output = s.proposal.placement
-            ? await deps.ocr.write(s.prepared.token, s.proposal.pages, s.proposal.placement)
+          let placement = s.proposal.placement
+          if (placement && input.placement !== undefined) {
+            // the way the person chose: only one that was offered, never one made up at apply
+            const chosen = s.proposal.offered.find(
+              (offered) => canonical(offered) === canonical(input.placement),
+            )
+            requireThat(
+              chosen,
+              'That placement was not proposed. Call propose with it and wait for the person to confirm it.',
+            )
+            placement = chosen
+          }
+          const output = placement
+            ? await deps.ocr.write(s.prepared.token, s.proposal.pages, placement)
             : await deps.ocr.write(s.prepared.token, s.proposal.pages)
           sessions.delete(s.id)
           return answer(
