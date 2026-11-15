@@ -157,3 +157,44 @@ describe('translating the text of a text box in the body', () => {
     expect(size).toBeLessThan(FIRST_SIZE)
   })
 })
+
+describe('typing the translation into a box by hand', () => {
+  const boxElements = (editor: Editor) => [
+    ...editor.view.dom.querySelectorAll<HTMLElement>('.doc-cell-boxes .doc-textbox'),
+  ]
+  /** click into the box, type, and leave it: the way a person writes the translation in */
+  const typeInto = (editor: Editor, text: string) => {
+    const [el] = boxElements(editor)
+    el!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }))
+    el!.querySelector('.doc-textbox-para')!.textContent = text
+    el!.dispatchEvent(new Event('input', { bubbles: true }))
+    el!.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null }))
+  }
+  const attached = async () => {
+    const bytes = await buildDocx({
+      bodyXml: `<w:p><w:r><w:t>Before</w:t></w:r></w:p>${table(cell('A', box(1, ['조림'])))}<w:p/>`,
+    })
+    const parsed = await parseDocx(bytes)
+    const host = document.body.appendChild(document.createElement('div'))
+    const editor = new Editor({
+      element: host,
+      extensions: editorExtensions,
+      content: blocksToPmDoc(parsed.blocks) as never,
+    })
+    live.push(editor)
+    return editor
+  }
+
+  it('makes the text smaller when what was typed is longer than the box holds', async () => {
+    const editor = await attached()
+    typeInto(editor, 'Braised short ribs')
+    const [[size]] = sizesOf(editor) as [[number]]
+    expect(size).toBeLessThan(FIRST_SIZE)
+  })
+
+  it('keeps the size when what was typed fits', async () => {
+    const editor = await attached()
+    typeInto(editor, 'Ribs')
+    expect(sizesOf(editor)).toEqual([[FIRST_SIZE]])
+  })
+})

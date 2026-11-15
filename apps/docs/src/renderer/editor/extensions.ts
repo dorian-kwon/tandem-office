@@ -201,6 +201,7 @@ import {
   textboxIsFilled,
   wireChartEditing,
 } from './protected-render'
+import { shrinkBoxToFit } from '../ai/box-fit'
 import { isStraightLineKind } from './shape-svg'
 import {
   BoldMark,
@@ -3955,7 +3956,10 @@ export const DocCellBoxes = Node.create({
         if (!changed) return
         const pos = getPos()
         if (typeof pos !== 'number') return
-        const nextBoxes = boxes.map((b, i) => (i === index ? { ...b, paras: nextParas } : b))
+        // the text may be longer than before (a translation typed in): a box of fixed size takes it smaller
+        const nextBoxes = boxes.map((b, i) =>
+          i === index ? shrinkBoxToFit({ ...b, paras: nextParas }) : b,
+        )
         editor.view.dispatch(
           editor.view.state.tr.setNodeMarkup(pos, undefined, {
             ...current.attrs,
