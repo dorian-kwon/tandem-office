@@ -185,7 +185,7 @@ jobs:
             apps/shell/release/*.blockmap
             apps/shell/release/*-mac.yml
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 1
 
   attach:
     # the one job that writes: it adds the build to a release the maintainer

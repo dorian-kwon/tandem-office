@@ -245,7 +245,7 @@ jobs:
             apps/shell/release/*cli*.tar.gz.sha256
             apps/shell/release/*-linux.yml
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 1
 
   attach:
     # the one job that writes: it adds the build to a release the maintainer
