@@ -11,6 +11,7 @@ import {
   type ProjectChatEntry,
   type ProjectChatOptions,
 } from '../src/use-project-chat'
+import { panelProjectSkill } from '../src/project-skill'
 import { chatMessage, fakeProjectBridge, flush } from './project-fake-bridge'
 
 function fakeLoop() {
@@ -751,5 +752,41 @@ describe('useProjectChat', () => {
     act(() => root.unmount())
     root = createRoot(host)
     expect(fake.listening).toBe(false)
+  })
+})
+
+describe('the bridge the AI skills use', () => {
+  it('hands the OCR and the kept-answer calls on, each called on the bridge itself', async () => {
+    const fake = fakeProjectBridge({})
+    const ocr = vi.fn(async () => ({ ok: true }))
+    const rememberChoice = vi.fn(async () => ({ status: 'ok' }))
+    const bridge = Object.assign(fake.bridge, { ocr, rememberChoice })
+    const { controller } = setup({}, { bridge: bridge as never })
+
+    const picked = controller.run!.bridge
+    expect(typeof picked.ocr).toBe('function')
+    expect(typeof picked.rememberChoice).toBe('function')
+    await picked.ocr!({ action: 'inspect', turnId: 't', requestId: 'r' } as never)
+    expect(ocr).toHaveBeenCalledWith({ action: 'inspect', turnId: 't', requestId: 'r' })
+    await picked.rememberChoice!({ key: 'outputMode', value: 'new document' } as never)
+    expect(rememberChoice).toHaveBeenCalledWith({ key: 'outputMode', value: 'new document' })
+  })
+
+  it('does not make up an OCR call a bridge does not have', () => {
+    const { controller } = setup()
+    expect(controller.run!.bridge.ocr).toBeUndefined()
+    expect(controller.run!.bridge.rememberChoice).toBeUndefined()
+  })
+
+  it('offers document_ocr to the AI in a prepared turn, with or without a project', async () => {
+    const fake = fakeProjectBridge({})
+    const bridge = Object.assign(fake.bridge, { ocr: vi.fn(async () => ({ ok: true })) })
+    const { controller } = setup({}, { bridge: bridge as never })
+    const skills = panelProjectSkill({ run: controller.run, lang: () => 'en' })
+    const names = () => skills.flatMap((skill) => skill.tools ?? []).map((tool) => tool.name)
+
+    expect(names()).not.toContain('document_ocr')
+    await controller.run!.prepare()
+    expect(names()).toContain('document_ocr')
   })
 })

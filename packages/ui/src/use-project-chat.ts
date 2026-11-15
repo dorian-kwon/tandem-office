@@ -289,6 +289,9 @@ function pickSkillBridge(bridge: ProjectSkillBridge): ProjectSkillBridge {
     search: (args) => bridge.search(args),
     read: (args) => bridge.read(args),
     remember: (args) => bridge.remember(args),
+    // only when the bridge has them: the OCR tool and the kept answers are offered by what exists
+    ...(bridge.ocr ? { ocr: (args) => bridge.ocr!(args) } : {}),
+    ...(bridge.rememberChoice ? { rememberChoice: (args) => bridge.rememberChoice!(args) } : {}),
   }
 }
 
