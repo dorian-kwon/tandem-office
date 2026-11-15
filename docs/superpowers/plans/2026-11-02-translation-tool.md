@@ -43,15 +43,17 @@
 이 작업은 이후 작업의 경로와 이름을 확정한다. 확인 결과를 `docs/superpowers/notes/integration-points.md`에 적는다.
 
 **Files:**
-- Create: `/Users/dorian/Projects/tandem2/app/` (포크한 저장소)
+
+- Create: `<workspace>/tandem2/app/` (포크한 저장소)
 - Create: `docs/superpowers/notes/integration-points.md`
 
 **Interfaces:**
+
 - Produces: 아래 연결 지점의 실제 파일 경로와 함수 이름. Task 5~11이 이 문서를 근거로 삼는다.
 
 - [ ] **Step 1: 포크하고 내려받는다**
 
-Run: `cd /Users/dorian/Projects/tandem2 && gh repo fork pblsketch/openoffice --clone=true --fork-name tandem -- app` 실패하면 `gh repo clone pblsketch/openoffice app`으로 받고 새 원격 저장소를 연결한다.
+Run: `cd <workspace>/tandem2 && gh repo fork pblsketch/openoffice --clone=true --fork-name tandem -- app` 실패하면 `gh repo clone pblsketch/openoffice app`으로 받고 새 원격 저장소를 연결한다.
 Expected: `app/` 안에 `package.json`, `apps/`, `packages/`가 있다.
 
 - [ ] **Step 2: 설치하고 빌드해서 기준선을 기록한다**
@@ -62,17 +64,19 @@ Expected: 앱이 실행되고 홈 화면이 뜬다.
 - [ ] **Step 3: 연결 지점을 찾아 노트에 적는다**
 
 다음 여섯 가지의 파일 경로와 공개 함수·채널 이름을 찾는다.
+
 1. `apps/shell/src/main/projects/`의 프로젝트 목록 저장, 지침 주입 함수. main에 합쳐져 동작하는지도 확인한다.
 2. 분할 화면을 여는 함수(`apps/shell/src/main/split-layout.ts`, `tab-manager.ts`)와 읽기 전용으로 여는 방법의 유무.
 3. 홈 화면(`apps/shell/src/renderer/src/Home.tsx`)에 새 화면을 더하는 방식.
 4. 앱 설정(`app-settings.json`)에 값을 더하는 방식(`docs/engineering-notes.md`의 "설정 파일", `docs/contracts.md`).
 5. AI 페이지 읽기의 호출 진입점과 확인 창(`packages/pdf-structure/src/ai-read`).
 6. PDF 번역 작업 엔진의 호출 진입점(`packages/pdf-structure/src/translate`)과 대역본 옵션.
-또한 도구를 끈 구독 실행에서 앱 쪽 읽기 도구가 요청에 닿는지 확인한다.
+   또한 도구를 끈 구독 실행에서 앱 쪽 읽기 도구가 요청에 닿는지 확인한다.
 
 - [ ] **Step 4: 규칙 확인 후 커밋**
 
 `npm run check:no-genspark`와 `docs/standards.md`의 합치기 전 검사를 실행한다.
+
 ```bash
 git add docs/superpowers/notes/integration-points.md
 git commit -m "docs: record integration points for translation project"
@@ -83,6 +87,7 @@ git commit -m "docs: record integration points for translation project"
 ### Task 1: translate-project 패키지 골격과 프로젝트 파일 스키마
 
 **Files:**
+
 - Create: `app/packages/translate-project/package.json` (이름 `@genoffice/translate-project`, 다른 패키지의 형식을 따른다)
 - Create: `app/packages/translate-project/AGENTS.md`
 - Create: `app/packages/translate-project/src/project-file.ts`
@@ -90,6 +95,7 @@ git commit -m "docs: record integration points for translation project"
 - Test: `app/packages/translate-project/src/project-file.test.ts`
 
 **Interfaces:**
+
 - Produces:
   - `type OcrMode = { kind: 'off' } | { kind: 'ai'; provider: 'claude' | 'chatgpt' }`
   - `type ProjectFile = { version: 1; name: string; sourceLang: string; targetLang: string; projectPrompt: string; ocr: OcrMode; sources: SourceEntry[]; references: string[]; glossaryFiles: string[] }`
@@ -128,11 +134,13 @@ git commit -m "feat(translate-project): project file schema"
 ### Task 2: 단어집 읽기와 용어 고르기
 
 **Files:**
+
 - Create: `app/packages/translate-project/src/glossary.ts`
 - Test: `app/packages/translate-project/src/glossary.test.ts`
 - Fixtures: `app/packages/translate-project/src/__fixtures__/glossary-cp949.csv`, `glossary-header.csv`, `glossary.txt`, `glossary.xlsx`
 
 **Interfaces:**
+
 - Produces:
   - `type GlossaryEntry = { source: string; target: string; note?: string }`
   - `function parseGlossary(bytes: Uint8Array, fileName: string): GlossaryEntry[]` 확장자(csv, txt, xlsx)로 판단한다. txt는 탭 구분이고, csv는 쉼표 구분이다.
@@ -174,10 +182,12 @@ git commit -m "feat(translate-project): glossary parsing and selection"
 ### Task 3: 원본 복사와 해시 검사
 
 **Files:**
+
 - Create: `app/packages/translate-project/src/source-guard.ts`
 - Test: `app/packages/translate-project/src/source-guard.test.ts`
 
 **Interfaces:**
+
 - Consumes: `SourceEntry` (Task 1)
 - Produces:
   - `function importSource(projectDir: string, originalPath: string): Promise<SourceEntry>` 파일을 `source/`로 복사하고 SHA-256을 계산한다. 같은 이름이 있으면 `이름 (2).확장자`로 구분한다.
@@ -214,10 +224,12 @@ git commit -m "feat(translate-project): source import and hash verification"
 ### Task 4: 프로젝트 만들기, 불러오기, 삭제
 
 **Files:**
+
 - Create: `app/packages/translate-project/src/project-store.ts`
 - Test: `app/packages/translate-project/src/project-store.test.ts`
 
 **Interfaces:**
+
 - Consumes: `defaultProjectFile`, `parseProjectFile`, `serializeProjectFile` (Task 1)
 - Produces:
   - `function createProject(parentDir: string, name: string, sourceLang: string, targetLang: string): Promise<{ dir: string; project: ProjectFile }>` 폴더 구조(`source/`, `references/`, `glossary/`, `output/`, `.tandem/project.json`)를 만든다. 같은 이름의 폴더가 이미 있으면 `ProjectExistsError`를 던진다.
@@ -254,10 +266,12 @@ git commit -m "feat(translate-project): create, load, remove projects"
 ### Task 5: 상세 화면 동작: 자료 올리기와 지우기
 
 **Files:**
+
 - Create: `app/packages/translate-project/src/materials.ts`
 - Test: `app/packages/translate-project/src/materials.test.ts`
 
 **Interfaces:**
+
 - Consumes: `importSource`, `SourceEntry` (Task 3), `saveProject`, `loadProject` (Task 4), `parseGlossary` (Task 2)
 - Produces:
   - `function addSource(dir: string, originalPath: string): Promise<ProjectFile>`
@@ -296,10 +310,12 @@ git commit -m "feat(translate-project): material add/remove"
 ### Task 6: 프롬프트 조립
 
 **Files:**
+
 - Create: `app/packages/translate-project/src/compose.ts`
 - Test: `app/packages/translate-project/src/compose.test.ts`
 
 **Interfaces:**
+
 - Consumes: `ProjectFile` (Task 1), `GlossaryEntry`, `selectGlossary` (Task 2)
 - Produces:
   - `type ComposedContext = { text: string; items: { kind: 'system' | 'project' | 'glossary' | 'reference'; label: string; included: boolean }[] }`
@@ -335,12 +351,14 @@ git commit -m "feat(translate-project): compose AI context"
 Task 0의 노트에 적힌 경로를 따른다. 아래 경로는 노트와 다르면 노트를 우선한다.
 
 **Files:**
+
 - Create: `app/apps/shell/src/main/translate/translate-ipc.ts`
 - Create: `app/apps/shell/src/shared/translate-api.ts`
 - Modify: preload와 설정 파일(Task 0에서 확인한 위치)에 `translateSystemPrompt: string`, 프로젝트 목록 경로 배열을 더한다.
 - Test: `app/apps/shell/src/main/translate/translate-ipc.test.ts`
 
 **Interfaces:**
+
 - Consumes: Task 1~6의 모든 공개 함수
 - Produces (`translate-api.ts`의 채널 계약):
   - `translate:list(): Promise<{ dir: string; name: string; status: 'ok' | 'not-found' | 'invalid'; sourceLang: string; targetLang: string; lastOpened: number }[]>`
@@ -381,6 +399,7 @@ git commit -m "feat(shell): translate project IPC and settings"
 ### Task 8: 목록 화면과 상세 화면
 
 **Files:**
+
 - Create: `app/apps/shell/src/renderer/src/translate/ProjectList.tsx`
 - Create: `app/apps/shell/src/renderer/src/translate/ProjectDetail.tsx`
 - Modify: `app/apps/shell/src/renderer/src/Home.tsx` (진입 카드 하나)
@@ -388,6 +407,7 @@ git commit -m "feat(shell): translate project IPC and settings"
 - Test (e2e): `app/e2e/translate-projects.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `translate:*` 채널 (Task 7)
 - Produces: 목록 화면(생성, 삭제 확인 창, 목록, 시스템 프롬프트 입력란), 상세 화면(번역할 문서·참고자료·단어집 각각의 올리기 목록과 삭제 단추, 프로젝트 프롬프트 입력란, OCR 선택 칸, "번역 시작" 단추).
 
@@ -429,11 +449,13 @@ git commit -m "feat(shell): project list and detail screens"
 ### Task 9: 번역 화면 (분할, 읽기 전용 원본, 숨김)
 
 **Files:**
+
 - Create: `app/apps/shell/src/main/translate/open-translation.ts`
 - Modify: `app/apps/shell/src/main/split-layout.ts`, `tab-manager.ts` (읽기 전용 칸과 숨김 토글, Task 0 노트의 실제 위치)
 - Test: `app/apps/shell/src/main/translate/open-translation.test.ts`, `app/e2e/translate-split.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `verifySource` (Task 3), 분할 화면 열기 함수(Task 0 노트)
 - Produces:
   - `function openTranslation(dir: string, source: SourceEntry): Promise<{ sourceTabId: string; outputTabId: string; hashStatus: 'ok' | 'changed' | 'missing' }>` 편집 가능 형식은 `source/`의 파일을 읽기 전용으로 왼쪽에, `output/`의 사본(없으면 만든다)을 오른쪽에 연다. PDF·스캔·이미지의 열기는 Task 11에서 한다.
@@ -475,6 +497,7 @@ git commit -m "feat(shell): split translation view with read-only source and hid
 ### Task 10: AI 맥락 자동 전달과 OCR(AI 읽기)
 
 **Files:**
+
 - Create: `app/apps/shell/src/main/translate/context-injection.ts`
 - Create: `app/apps/shell/src/main/translate/ocr.ts`
 - Modify: 프로젝트 폴더 기능의 지시문 주입 지점(Task 0 노트)
@@ -482,6 +505,7 @@ git commit -m "feat(shell): split translation view with read-only source and hid
 - Test: `context-injection.test.ts`, `ocr.test.ts` (같은 폴더)
 
 **Interfaces:**
+
 - Consumes: `composeContext` (Task 6), `loadGlossary` (Task 5), `loadProject`, `OcrMode` (Task 1)
 - Produces:
   - `function buildTranslationInstructions(dir: string, paragraph: string): Promise<ComposedContext>` 앱 설정의 시스템 프롬프트를 읽어 `composeContext`에 넘긴다.
@@ -528,11 +552,13 @@ git commit -m "feat(shell): inject translation context and AI OCR"
 ### Task 11: PDF·스캔·이미지의 번역 결과
 
 **Files:**
+
 - Create: `app/apps/shell/src/main/translate/non-editable.ts`
 - Modify: `app/apps/shell/src/main/translate/open-translation.ts` (Task 9)
 - Test: `app/apps/shell/src/main/translate/non-editable.test.ts`
 
 **Interfaces:**
+
 - Consumes: `runOcr` (Task 10), PDF 번역 작업 엔진 진입점(Task 0 노트), `SourceEntry`
 - Produces:
   - `function translateNonEditable(args: { dir: string; source: SourceEntry; bilingual: boolean; ocrSelection?: OcrSelection }): Promise<{ outputPath: string }>` `kind: 'pdf'`는 글자 층이 있으면 기존 번역 엔진으로 번역 PDF(`bilingual`이면 대역본)를 `output/`에 쓴다. 글자 층이 없는 PDF(`scan`)와 `image`는 `runOcr`로 만든 Word 문서를 `output/`에 두고 Task 9의 편집 화면으로 연다.
@@ -573,12 +599,14 @@ git commit -m "feat(shell): translation output for PDF, scan and image sources"
 ### Task 12: 문구, 이름, 마무리 검사
 
 **Files:**
+
 - Modify: `app/packages/i18n/` 하위 문구 파일(21개 언어, Task 0 노트의 위치)
 - Create: `app/apps/shell/src/renderer/src/i18n/translate/` 번역 화면 문구
 - Modify: 도움말 주제 하나 추가("번역 프로젝트")
 - Test: 기존 `tools/check-help-langs.mjs`
 
 **Interfaces:**
+
 - Consumes: Task 8, 9, 10의 문구 키
 
 - [ ] **Step 1: Write the failing check**

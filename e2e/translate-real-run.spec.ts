@@ -13,12 +13,10 @@ import { closeAndSaveVideo, launchShell } from './helpers'
  * IEUM_TRANSLATE_REAL=1. Not part of the suite.
  */
 const REAL = process.env.IEUM_TRANSLATE_REAL === '1'
-const SRC_PROJECT =
-  process.env.REAL_RUN_SRC ?? '/Users/dorian/Documents/tandem office/test/번역프로젝트'
-const DOC = '공간 속의 기호_도록용_이민수.docx'
-const OUT_DIR =
-  process.env.REAL_RUN_OUT ??
-  '/private/tmp/claude-501/-Users-dorian-Projects-tandem2/2cbfc8e3-3205-43ba-bb7d-a50bd4094fd0/scratchpad/real-run'
+// a local translation project folder and one document of its source/ folder; nothing of either is in the repo
+const SRC_PROJECT = process.env.REAL_RUN_SRC ?? ''
+const DOC = process.env.REAL_RUN_DOC ?? ''
+const OUT_DIR = process.env.REAL_RUN_OUT ?? join(tmpdir(), 'ieum-real-run')
 const RUN_TIMEOUT = 15 * 60_000
 
 async function queueDialogPicks(app: ElectronApplication, picks: string[][]) {
@@ -70,7 +68,10 @@ function realAiSettingsPath(): string | null {
   return null
 }
 
-test.skip(!REAL, 'spends the subscription; set IEUM_TRANSLATE_REAL=1')
+test.skip(
+  !REAL || !SRC_PROJECT || !DOC,
+  'spends the subscription; set IEUM_TRANSLATE_REAL=1, REAL_RUN_SRC and REAL_RUN_DOC',
+)
 
 /** newest modification time (ms) of any file under `dir`, 0 when it does not exist */
 function newestMtime(dir: string): number {

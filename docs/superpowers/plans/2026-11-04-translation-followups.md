@@ -30,10 +30,12 @@
 ## Task 1: Recent translation documents
 
 **Files:**
+
 - Create: `apps/shell/src/main/translate/recent-documents.ts`, `apps/shell/tests/translate-recent-documents.test.ts`
 - Modify: `apps/shell/src/main/translate/translate-ipc.ts`, `apps/shell/src/main/translate/open-translation.ts`, `apps/shell/src/shared/translate-api.ts`, the translate preload bridge, `apps/shell/src/renderer/src/translate/ProjectList.tsx`, `translate.css`, i18n `translate/*.ts` (21 files), `e2e/translate-projects.spec.ts`
 
 **Interfaces:**
+
 - Produces `TranslateRecentDocument { dir: string; projectName: string; file: string; sourceLang: string; targetLang: string; openedAt: number; available: boolean }`; `translateApi.recent(): Promise<TranslateRecentDocument[]>` (newest first, at most 10, one entry per project+file).
 - Main records an entry in the app settings file (not in `project.json`) each time `openTranslation` opens a document successfully.
 
@@ -46,11 +48,13 @@
 ## Task 2: Run-preserving translation tool for the docx editor
 
 **Files:**
+
 - Create: `apps/docs/src/renderer/ai/translate-runs.ts`, `apps/docs/tests/translate-runs.test.ts`
 - Modify: `apps/docs/src/renderer/ai/tools.ts` (tool definition and dispatch), the docs AI system prompt text that lists tools, `apps/shell/src/main/translate/context-injection.ts` or `packages/translate-project/src/compose.ts` (translation rule text), `docs/superpowers/notes/manual-checks.md`
-- Test fixture: copy of `/Users/dorian/Documents/tandem office/test/번역프로젝트/source/공간 속의 기호_도록용_이민수.docx` into `apps/docs/tests/fixtures/` only if the repo's fixture policy allows it; otherwise build an equivalent fixture in the test.
+- Test fixture: copy of a document from a local test project (`<test project>/source/<document>.docx`) into `apps/docs/tests/fixtures/` only if the repo's fixture policy allows it; otherwise build an equivalent fixture in the test.
 
 **Interfaces:**
+
 - Produces tool `translate_blocks` with input `{ blocks: Array<{ index: number; segments: string[] }> }` where `segments[i]` is the translation of the i-th text-run group of paragraph `index`. Companion `read_runs(startBlockIndex, endBlockIndex)` returns, per paragraph, the ordered run groups as numbered segments (text only) so the model never sees or invents formatting. Paragraph, heading and list-item blocks are supported; tables are supported cell paragraph by cell paragraph; empty paragraphs are listed as `empty:true` and ignored.
 - `applyRunTranslation(editor, blockIndex, segments)` replaces text inside existing text nodes via a ProseMirror transaction, keeping each node's marks (`docTextStyle` including raw run bytes), keeping atom nodes (footnote references, tabs, breaks) and paragraph attrs untouched. Segment count mismatch: extra segments are appended to the last group, missing ones leave that group's original text unchanged and the call reports which block was incomplete.
 
@@ -64,10 +68,12 @@
 ## Task 3: Reference material as markdown with a keyword index
 
 **Files:**
+
 - Create: `packages/translate-project/src/reference-md.ts`, `reference-index.ts`, tests in `packages/translate-project/tests/`
 - Modify: `packages/translate-project/src/materials.ts`, `compose.ts`, `apps/shell/src/main/translate/translate-ipc.ts`, `context-injection.ts`, `ProjectDetail.tsx` (status and "view converted text"), i18n files, `PRIVACY.md`, decision doc 0102
 
 **Interfaces:**
+
 - `convertReferenceToMarkdown(file): Promise<{ ok: true; md: string } | { ok: false; reason: 'needs-ocr' | 'unsupported' | 'failed' }>` using existing parsers (`file-parse`, document engines); text-bearing PDFs, docx/hwp/pptx/xlsx/epub/html/md/txt only; scans return `needs-ocr` and use the existing OCR confirmation flow.
 - Converted copy: `references/.md/<name>.md`; index file `.tandem/references-index.json` (chunks of heading/paragraph groups with source name, offset, term frequencies, source sha256).
 - `queryReferences(dir, text, maxChars): Array<{ file: string; heading: string; text: string }>` BM25 over chunks; total at or below `maxChars` returns everything unindexed.
@@ -82,10 +88,12 @@
 ## Task 4: Send fixed context once per conversation
 
 **Files:**
+
 - Modify: `apps/shell/src/main/translate/context-injection.ts`, `apps/shell/src/main/projects/*` (project-folder context path), `packages/ui/src/use-project-chat.ts` / `project-skill.ts` as needed, tests alongside
 - First read decision 0088 and how each provider (Claude, ChatGPT) keeps a conversation, and record in the task report whether a resumed session really keeps earlier turns.
 
 **Interfaces:**
+
 - Fixed part = system prompt + project prompt + language pair + translation rules; variable part = glossary matches + reference chunks. Fixed part carries a hash; it is sent on the first request of a conversation and again whenever the hash changes or a new conversation / provider session starts; later requests send only the variable part plus a one-line marker `fixed-context: <hash8>`.
 
 - [ ] **Step 1:** Write failing tests: first request includes the fixed part; second request in the same conversation omits it; editing the project prompt re-sends it; a new conversation re-sends it; a provider that does not keep a session (verified in the investigation) always re-sends it.

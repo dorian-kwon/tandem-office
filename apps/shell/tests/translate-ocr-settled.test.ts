@@ -69,7 +69,7 @@ describe('runOcr onSettled', () => {
     const settled = vi.fn()
     const ask: OcrAsk = async (_p, request) => {
       if (request.messages[0]!.images![0]!.base64 === 'AQ==')
-        throw new Error('spawn failed at /Users/dorian/.local/bin/claude: boom')
+        throw new Error('spawn failed at /home/user/.local/bin/claude: boom')
       return OK
     }
     await run(ask, settled)
