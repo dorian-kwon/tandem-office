@@ -19,7 +19,7 @@ import {
   registerTranslateIpc,
   type TranslateIpcDeps,
 } from '../src/main/translate/translate-ipc'
-import type { OcrServiceDeps } from '../src/main/translate/ocr'
+import { createOcrService, type OcrServiceDeps } from '../src/main/translate/ocr'
 import { parseTranslateError, TRANSLATE_CHANNELS } from '../src/shared/translate-api'
 
 /**
@@ -763,4 +763,95 @@ it('still refuses the editable formats it cannot read pictures of', async () => 
   expect(await codeOf(handlers().ocrPrepare({ dir, files: ['slides.pptx'] }))).toBe(
     'SOURCE_NOT_EDITABLE',
   )
+})
+
+describe('working out what to place into an open Word document', () => {
+  const BOX = { x: 0.1, y: 0.2, w: 0.3, h: 0.1, fontHeight: 0.08, text: 'Shop name' }
+  async function started(pages = [1, 2]) {
+    await project([{ file: 'pictures.docx', kind: 'editable', bytes: await embeddedDoc() }])
+    const service = createOcrService(
+      ocrDeps,
+      () => clock,
+      () => `p${++tokenSeq}`,
+    )
+    const listing = await service.prepare(dir, ['pictures.docx'])
+    await service.start(listing.token, pages)
+    return { service, token: listing.token }
+  }
+
+  it('gives the pictures to place with their text, part and relationship id, and writes no file', async () => {
+    const { service, token } = await started()
+    const plan = await service.place(
+      token,
+      [
+        { index: 1, payload: PAYLOAD('Menu') },
+        { index: 2, payload: { kind: 'boxes', boxes: [BOX], text: 'Shop name' } },
+      ],
+      { kind: 'docx-image-boxes', images: [{ index: 2, boxes: [BOX] }] },
+    )
+    expect(plan.format).toBe('docx')
+    expect(plan.placement).toEqual({
+      kind: 'docx-image-boxes',
+      images: [{ index: 2, boxes: [BOX] }],
+    })
+    expect(plan.items).toEqual([
+      expect.objectContaining({ index: 1, text: 'Menu', part: 'word/document.xml', relId: 'a' }),
+      expect.objectContaining({
+        index: 2,
+        text: 'Shop name',
+        part: 'word/document.xml',
+        relId: 'b',
+      }),
+    ])
+    expect(readdirSync(join(dir, 'output'))).toEqual([])
+  })
+
+  it('leaves the reading usable: it can still be written as a new document', async () => {
+    const { service, token } = await started([1])
+    await service.place(token, [{ index: 1, payload: PAYLOAD('Menu') }], {
+      kind: 'docx-after-images',
+    })
+    const written = await service.write(token, [{ index: 1, payload: PAYLOAD('Menu') }], {
+      kind: 'docx-after-images',
+    })
+    expect(written.outputPath).toMatch(/\(OCR\)\.docx$/)
+  })
+
+  it('refuses a table destination, a page that was not confirmed, and a box list of a picture not read', async () => {
+    const { service, token } = await started([1])
+    await expect(
+      service.place(token, [{ index: 1, payload: PAYLOAD('x') }], {
+        kind: 'docx-table-cell',
+        table: 1,
+        row: 1,
+        column: 1,
+        overwrite: false,
+      }),
+    ).rejects.toThrow(/table/i)
+    await expect(
+      service.place(token, [{ index: 2, payload: PAYLOAD('x') }], { kind: 'docx-after-images' }),
+    ).rejects.toThrow()
+    await expect(
+      service.place(token, [{ index: 1, payload: PAYLOAD('x') }], {
+        kind: 'docx-image-boxes',
+        images: [{ index: 2, boxes: [BOX] }],
+      }),
+    ).rejects.toThrow(/not read/)
+  })
+
+  it('refuses a reading that is not of a Word document', async () => {
+    await project([{ file: 'scan.pdf', kind: 'scan', bytes: new Uint8Array([1]) }])
+    const service = createOcrService(
+      ocrDeps,
+      () => clock,
+      () => `p${++tokenSeq}`,
+    )
+    const listing = await service.prepare(dir, ['scan.pdf'])
+    await service.start(listing.token, [1])
+    await expect(
+      service.place(listing.token, [{ index: 1, payload: PAYLOAD('x') }], {
+        kind: 'docx-after-images',
+      }),
+    ).rejects.toThrow(/Word/)
+  })
 })

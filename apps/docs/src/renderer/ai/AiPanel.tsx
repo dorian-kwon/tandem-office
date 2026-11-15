@@ -38,6 +38,7 @@ import {
   useComposerSkills,
   panelUserSkills,
   panelProjectSkill,
+  type OcrOpenDocument,
   SkillUsedNotes,
   useSkillProposals,
   useSkillTemplates,
@@ -511,6 +512,11 @@ interface AiPanelProps {
    * is switched read-only by the App); false on every other document.
    */
   onTranslationLockChange?: (locked: boolean) => void
+  /**
+   * Puts OCR text into the document on screen instead of a new file (the chat's `document_ocr`
+   * apply asks for it when this says it can).
+   */
+  ocrOpenDocument?: OcrOpenDocument
   /** Absolute path of the currently open file (used for chat-history persistence) */
   filePath?: string | null
   /** queued selection-scoped edits (owned by App, which also owns the anchors) */
@@ -558,6 +564,7 @@ export function AiPanel({
   onExpand,
   onCollapse,
   onTranslationLockChange,
+  ocrOpenDocument,
   filePath,
   editQueue = [],
   onQueueEditInstruction,
@@ -1293,7 +1300,11 @@ export function AiPanel({
         // the chosen project folder: its context and its four app-run tools (spec 5.4, 5.5)
         // the numbered-choice question (ask_choice): the answer arrives as the next message
         choice.skill,
-        ...panelProjectSkill({ run: project.chat.run, lang: () => langRef.current }),
+        ...panelProjectSkill({
+          run: project.chat.run,
+          lang: () => langRef.current,
+          openDocument: ocrOpenDocument,
+        }),
       ]),
       captureSnapshot: () => captureRollbackSnapshot(editorRef.current),
       events: runStatus.wrap({

@@ -3,6 +3,7 @@ import { Editor, Extension, Node } from '@tiptap/core'
 import { SHAPE_INLINE_WRAP } from './floating-z-order'
 import { StreamingTailGuardExtension } from './streaming-tail-guard'
 import { OdtGuardExtension } from './odt-guard'
+import { OcrHistoryKeysExtension } from './ocr-history-keys'
 import { odtLabelSrc } from '../odt-labels'
 import type { ChainedCommands, RawCommands } from '@tiptap/core'
 import { Gapcursor, UndoRedo } from '@tiptap/extensions'
@@ -7111,6 +7112,7 @@ export const AutoLinkOnDelimiter = Extension.create({
 
 export const editorExtensions = [
   StreamingTailGuardExtension,
+  OcrHistoryKeysExtension,
   OdtGuardExtension,
   ScriptFonts,
   DocDocument,

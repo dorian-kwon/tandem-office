@@ -825,6 +825,19 @@ export interface ChatOcrRequest {
   placement?: Record<string, unknown>
   /** Revised transcription or translation requested by the person; propose only. */
   texts?: { index: number; text: string }[]
+  /**
+   * apply only: the editor can put the text into the Word document on screen. Main then writes
+   * nothing and answers with `placeInDocument`; for anything that cannot go there it writes the
+   * new file as usual.
+   */
+  intoOpenDocument?: boolean
+}
+
+/** What the editor puts into the Word document that is open (see `ChatOcrAnswer`). */
+export interface ChatOcrPlaceInDocument {
+  format: 'docx'
+  items: { index: number; text: string; location?: string; part?: string; relId?: string }[]
+  placement: Record<string, unknown>
 }
 
 export interface ChatOcrAnswer {
@@ -832,6 +845,8 @@ export interface ChatOcrAnswer {
   summary: string
   isError?: boolean
   mutated?: boolean
+  /** the reading to put into the open Word document; the editor does it, main wrote nothing */
+  placeInDocument?: ChatOcrPlaceInDocument
   display?: {
     kind: 'images' | 'links'
     items?: { url: string; title?: string; thumb?: string }[]

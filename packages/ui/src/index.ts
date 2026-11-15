@@ -282,7 +282,12 @@ export {
 export { AiTypingIndicator } from './AiTypingIndicator'
 export { AiRunStatusLine } from './AiRunStatusLine'
 export { AiChoiceCard, type AiChoiceCardProps } from './AiChoiceCard'
-export { useAiChoice, type AiChoiceController, type ChoiceRememberHost, type UseAiChoiceOptions } from './use-ai-choice'
+export {
+  useAiChoice,
+  type AiChoiceController,
+  type ChoiceRememberHost,
+  type UseAiChoiceOptions,
+} from './use-ai-choice'
 export {
   ASK_CHOICE_TOOL,
   CHOICE_PROMPT,
@@ -569,6 +574,7 @@ export {
   projectSystemPrompt,
   windowProjectFolderBridge,
 } from './project-skill'
+export type { OcrOpenDocument } from './ocr-chat-skill'
 export type {
   CreateProjectRunOptions,
   PanelProjectSkillOptions,

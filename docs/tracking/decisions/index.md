@@ -104,3 +104,4 @@
 | [0103](0103-translation-fixed-context-once.md)                | 번역 맥락의 고정 부분을 대화마다 한 번만 보내는 길은 만들어 두되, 차례 사이에 시스템 프롬프트를 지니는 AI 경로가 없어 꺼 둔다     | 2026-11-04 |
 | [0104](0104-ocr-box-placement.md)                             | docx 그림의 OCR 글은 AI가 준 박스로 그림 위에 불투명 텍스트 상자로 놓고, 번역은 상자 안 글도 읽는다                               | 2026-11-14 |
 | [0105](0105-ocr-pdf-hangul-new-docx.md)                       | 그림 OCR을 PDF·한글(HWP·HWPX)로 넓히고, 결과는 새 Word 문서로 쓰며, 옛 .doc는 docx로 저장하라고 안내한다                          | 2026-11-15 |
+| [0106](0106-ocr-into-open-document.md)                        | 채팅의 OCR은 팝업으로 바로 고르게 하고, 결과는 열려 있는 Word 문서에 넣어 저장 안 됨으로 두며 Ctrl+Z로 되돌린다                   | 2026-11-16 |

@@ -1,4 +1,8 @@
-import type { ChatOcrAnswer, ChatOcrRequest } from '@genoffice/project-store/folder-api'
+import type {
+  ChatOcrAnswer,
+  ChatOcrPlaceInDocument,
+  ChatOcrRequest,
+} from '@genoffice/project-store/folder-api'
 import type { OcrService } from './ocr'
 import type { OcrPageResult, OcrPlacement, OcrPrepared } from '../../shared/translate-ocr'
 import type { OcrPopupResult } from '../../shared/ocr-popup'
@@ -105,6 +109,9 @@ function plain(value: unknown): string {
   if (typeof obj.text === 'string') return obj.text
   return Object.values(obj).map(plain).filter(Boolean).join('\n')
 }
+/** the Word placements that make sense in a document that may have changed since it was listed */
+const OPEN_DOCUMENT_PLACEMENTS: string[] = ['docx-image-boxes', 'docx-after-images', 'docx-end']
+
 /** a Word picture whose text can go back over it as boxes */
 const takesBoxes = (prepared: OcrPrepared, index: number): boolean =>
   prepared.kind === 'embedded' &&
@@ -286,8 +293,8 @@ export function createOcrChatService(deps: OcrChatDeps) {
           ...(intoNewDocument(prepared) ? { result: 'new-docx' } : {}),
           next:
             prepared.kind === 'pdf'
-              ? 'Ask in chat: all pages or selected pages? No page has been sent and no document changed.'
-              : 'Ask in chat: all images or selected images? No image has been sent and no document changed.',
+              ? 'Call choose now: the popup offers all pages or a selection, so do not ask about scope in the chat. No page has been sent and no document changed.'
+              : 'Call choose now: the popup offers all images or a selection, so do not ask about scope in the chat. No image has been sent and no document changed.',
         })
       }
       const s = held(owner, input, context)
@@ -672,6 +679,24 @@ export function createOcrChatService(deps: OcrChatDeps) {
               'That placement was not proposed. Call propose with it and wait for the person to confirm it.',
             )
             placement = chosen
+          }
+          // the editor puts it into the document on screen: nothing is written and the reading stays
+          if (
+            input.intoOpenDocument === true &&
+            placement &&
+            s.prepared.kind === 'embedded' &&
+            s.prepared.format === 'docx' &&
+            OPEN_DOCUMENT_PLACEMENTS.includes(placement.kind)
+          ) {
+            const plan = await deps.ocr.place(s.prepared.token, s.proposal.pages, placement)
+            return answer(
+              {
+                session: s.id,
+                intoOpenDocument: true,
+                next: 'The editor puts this text into the open document now. Nothing was written to disk.',
+              },
+              { placeInDocument: plan as ChatOcrPlaceInDocument },
+            )
           }
           const output = placement
             ? await deps.ocr.write(s.prepared.token, s.proposal.pages, placement)

@@ -34,6 +34,7 @@ import {
 } from './embedded-images'
 import { imageSize } from '../../../../../packages/cli/src/formats/image-size'
 import { ocrSheetNames, ocrWordTables, placeOcrText } from './ocr-placement'
+import { checkWordPlacement, type OcrTextItem } from './ocr-docx-placement'
 import { recommendOcrPlacement } from './ocr-recommendation'
 
 /**
@@ -152,6 +153,13 @@ async function embeddedPath(dir: string, entry: SourceEntry): Promise<string> {
   return path
 }
 
+/** what goes into a Word document that is open (see `OcrService.place`) */
+export interface OcrPlacementPlan {
+  format: 'docx'
+  items: OcrTextItem[]
+  placement: OcrPlacement
+}
+
 export function createOcrService(deps: OcrServiceDeps, now: () => number, newToken: () => string) {
   const leases = new Map<string, Lease>()
 
@@ -189,6 +197,80 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
       if (!entry) throw new TranslateIpcError('NOT_LISTED', 'this document is not in the project')
       return entry
     })
+  }
+
+  /** the readings of a started run as a document tree, with the places of box readings */
+  function gatherReadings(l: Lease, pages: unknown) {
+    if (l.selection === null) throw invalid('this OCR run has not started')
+    if (!Array.isArray(pages) || pages.length === 0 || pages.length > l.selection.size)
+      throw invalid('there is no reading to write')
+    const seen = new Set<number>()
+    // a box reading (embedded docx pictures) keeps its text and places; it has no document tree
+    const boxReadings = new Map<number, OcrBoxesPayload>()
+    const readings = (pages as OcrPageResult[])
+      .map((p) => {
+        const index = (p as { index?: unknown } | null)?.index
+        if (typeof index !== 'number' || !l.selection!.has(index) || seen.has(index))
+          throw invalid('a reading is for a page that was not confirmed')
+        seen.add(index)
+        const boxes = checkOcrBoxesPayload(p.payload)
+        if (boxes) {
+          if (l.kind !== 'embedded') throw invalid('a box reading is only for embedded pictures')
+          boxReadings.set(index, boxes)
+          return null
+        }
+        // the renderer's copy is checked by the engine's own payload reader
+        const payload = readAiReadPayload(p.payload)
+        if (!payload) throw invalid('a reading is not in the expected form')
+        return materializeReading(payload, index, '')
+      })
+      .filter((reading): reading is NonNullable<typeof reading> => reading !== null)
+      .sort((a, b) => a.page - b.page)
+
+    const tree: DocumentTree = {
+      version: 1,
+      variant: 'original',
+      info: { title: l.stem },
+      sourcePageCount: l.count,
+      pages: readings.map((r) => ({
+        page: r.page,
+        fingerprint: '',
+        status: 'ai',
+        widthPt: 0,
+        heightPt: 0,
+      })),
+      blocks: readings.flatMap((r) => r.blocks),
+      footnotes: readings.flatMap((r) => r.footnotes),
+      outline: [],
+      toc: [],
+      footnoteLinkFailedPages: readings.filter((r) => r.footnoteLinkFailed).map((r) => r.page),
+      warnings: [],
+    }
+    return { tree, seen, readings, boxReadings }
+  }
+
+  /** what to place for each picture read: its text (or the text of its boxes) and where it stands */
+  function placementItems(l: Lease, g: ReturnType<typeof gatherReadings>): OcrTextItem[] {
+    const textOf = new Map(
+      g.readings.map((r) => [
+        r.page,
+        treeToMarkdown({
+          ...g.tree,
+          pages: g.tree.pages.filter((p) => p.page === r.page),
+          blocks: r.blocks,
+          footnotes: r.footnotes,
+        }).markdown,
+      ]),
+    )
+    return [...g.seen]
+      .sort((a, b) => a - b)
+      .map((index) => ({
+        index,
+        location: l.embedded![index - 1]!.location,
+        part: l.embedded![index - 1]!.part,
+        relId: l.embedded![index - 1]!.relId,
+        text: g.boxReadings.get(index)?.text ?? (textOf.get(index) ?? '').trimEnd(),
+      }))
   }
 
   return {
@@ -430,51 +512,8 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
 
     async write(token: unknown, pages: unknown, placement?: OcrPlacement): Promise<OcrWritten> {
       const l = lease(token)
-      if (l.selection === null) throw invalid('this OCR run has not started')
-      if (!Array.isArray(pages) || pages.length === 0 || pages.length > l.selection.size)
-        throw invalid('there is no reading to write')
-      const seen = new Set<number>()
-      // a box reading (embedded docx pictures) keeps its text and places; it has no document tree
-      const boxReadings = new Map<number, OcrBoxesPayload>()
-      const readings = (pages as OcrPageResult[])
-        .map((p) => {
-          const index = (p as { index?: unknown } | null)?.index
-          if (typeof index !== 'number' || !l.selection!.has(index) || seen.has(index))
-            throw invalid('a reading is for a page that was not confirmed')
-          seen.add(index)
-          const boxes = checkOcrBoxesPayload(p.payload)
-          if (boxes) {
-            if (l.kind !== 'embedded') throw invalid('a box reading is only for embedded pictures')
-            boxReadings.set(index, boxes)
-            return null
-          }
-          // the renderer's copy is checked by the engine's own payload reader
-          const payload = readAiReadPayload(p.payload)
-          if (!payload) throw invalid('a reading is not in the expected form')
-          return materializeReading(payload, index, '')
-        })
-        .filter((reading): reading is NonNullable<typeof reading> => reading !== null)
-        .sort((a, b) => a.page - b.page)
-
-      const tree: DocumentTree = {
-        version: 1,
-        variant: 'original',
-        info: { title: l.stem },
-        sourcePageCount: l.count,
-        pages: readings.map((r) => ({
-          page: r.page,
-          fingerprint: '',
-          status: 'ai',
-          widthPt: 0,
-          heightPt: 0,
-        })),
-        blocks: readings.flatMap((r) => r.blocks),
-        footnotes: readings.flatMap((r) => r.footnotes),
-        outline: [],
-        toc: [],
-        footnoteLinkFailedPages: readings.filter((r) => r.footnoteLinkFailed).map((r) => r.page),
-        warnings: [],
-      }
+      const g = gatherReadings(l, pages)
+      const { tree } = g
       if (l.kind === 'embedded') {
         if (!placement) throw invalid('choose where the OCR text goes')
         const path = await embeddedPath(l.dir, l.source!)
@@ -484,26 +523,7 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
             'the source changed before placing OCR text',
           )
         const format = extname(l.source!.file).toLowerCase() === '.xlsx' ? 'xlsx' : 'docx'
-        const textOf = new Map(
-          readings.map((r) => [
-            r.page,
-            treeToMarkdown({
-              ...tree,
-              pages: tree.pages.filter((p) => p.page === r.page),
-              blocks: r.blocks,
-              footnotes: r.footnotes,
-            }).markdown,
-          ]),
-        )
-        const items = [...seen]
-          .sort((a, b) => a - b)
-          .map((index) => ({
-            index,
-            location: l.embedded![index - 1]!.location,
-            part: l.embedded![index - 1]!.part,
-            relId: l.embedded![index - 1]!.relId,
-            text: boxReadings.get(index)?.text ?? textOf.get(index) ?? '',
-          }))
+        const items = placementItems(l, g)
         const bytes = await placeOcrText(await readFile(path), format, items, placement)
         const outputPath = await writeNewFile(
           join(l.dir, 'output'),
@@ -518,6 +538,24 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
       const outputPath = await writeNewFile(join(l.dir, 'output'), `${l.stem} (OCR)`, '.docx', docx)
       leases.delete(l.token)
       return { outputPath }
+    },
+
+    /**
+     * What to place into the Word document that is open, for a started run: the pictures with their
+     * text and places, the placement checked, and nothing written. The run stays usable, so the
+     * same reading can still be written as a new document when the open document cannot take it.
+     */
+    async place(token: unknown, pages: unknown, placement: unknown): Promise<OcrPlacementPlan> {
+      const l = lease(token)
+      if (l.kind !== 'embedded' || extname(l.source!.file).toLowerCase() !== '.docx')
+        throw invalid('only the pictures of a Word document can go into a document that is open')
+      if ((await verifySource(l.dir, l.source!)) !== 'ok')
+        throw new TranslateIpcError('SOURCE_CHANGED', 'the source changed before placing OCR text')
+      const items = placementItems(l, gatherReadings(l, pages))
+      const checked = checkWordPlacement(items, placement).placement
+      if (checked.kind === 'docx-table-cell')
+        throw invalid('a table destination cannot go into a document that may have changed')
+      return { format: 'docx', items, placement: checked }
     },
 
     async release(token: unknown): Promise<void> {

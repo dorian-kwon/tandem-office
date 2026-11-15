@@ -28,6 +28,7 @@ import {
   useSplitPaneFocusPing,
   templateDocumentOf,
   type TemplateDocument,
+  type OcrOpenDocument,
 } from '@genoffice/ui'
 import { wordRangeAtCaret } from './editor/comments'
 import { setFieldInstr, toggleAllFieldCodes, type FieldRange } from './editor/field-codes'
@@ -422,6 +423,15 @@ import {
   type FileActionContext,
   type PendingPdfExport,
 } from './file-actions'
+import {
+  ocrIntoDocumentAvailable,
+  ocrRedoAvailable,
+  ocrUndoAvailable,
+  placeOcrIntoOpenDocument,
+  tryOcrRedo,
+  tryOcrUndo,
+} from './ocr-open-document'
+import { registerOcrHistoryHandlers } from './ocr-history-state'
 import { BlockIndex } from './pagination-index'
 import { isPhasedContentPending } from './phased-content'
 import { sameSectionInfos } from './pagination-sections'
@@ -2061,6 +2071,21 @@ export function App() {
 
   /** App state bundle for the extracted file actions (file-actions.ts); refreshed every render. */
   const fileCtxRef = useRef<FileActionContext>(null as unknown as FileActionContext)
+  // OCR text into the document on screen: the chat tool's hook, and the keys that undo it
+  const ocrOpenDocument = useMemo<OcrOpenDocument>(
+    () => ({
+      available: () => ocrIntoDocumentAvailable(fileCtxRef.current),
+      apply: (plan) => placeOcrIntoOpenDocument(fileCtxRef.current, plan),
+    }),
+    [],
+  )
+  useEffect(() => {
+    registerOcrHistoryHandlers({
+      undo: () => tryOcrUndo(fileCtxRef.current),
+      redo: () => tryOcrRedo(fileCtxRef.current),
+    })
+    return () => registerOcrHistoryHandlers(null)
+  }, [])
   // style-pane previews patch the parsed styles; a font-settle rebuild must keep them
   const liveStylesRef = useRef<{ parsed: ParsedDocFull; styles: Map<string, StyleInfo> } | null>(
     null,
@@ -5316,7 +5341,9 @@ export function App() {
       const parsed = fileCtxRef.current.doc?.parsed
       const live = liveStylesRef.current
       if (parsed) {
-        setDocCss(docStyleCss(live?.parsed === parsed ? { ...parsed, styles: live.styles } : parsed))
+        setDocCss(
+          docStyleCss(live?.parsed === parsed ? { ...parsed, styles: live.styles } : parsed),
+        )
       }
       return true
     }
@@ -5905,9 +5932,12 @@ export function App() {
           void save(true)
           break
         case 'undo':
+          // OCR text put into the document is undone first, once the editor has nothing left
+          if (editor && tryOcrUndo(fileCtxRef.current)) break
           editor?.chain().focus().undo().run()
           break
         case 'redo':
+          if (editor && tryOcrRedo(fileCtxRef.current)) break
           editor?.chain().focus().redo().run()
           break
         case 'zoom-in':
@@ -7111,7 +7141,10 @@ export function App() {
   useEffect(() => {
     if (!editor) return
     const refresh = ({ transaction }: { transaction?: { docChanged: boolean } } = {}) => {
-      setHistState({ canUndo: editor.can().undo(), canRedo: editor.can().redo() })
+      setHistState({
+        canUndo: editor.can().undo() || ocrUndoAvailable(editor),
+        canRedo: editor.can().redo() || ocrRedoAvailable(editor),
+      })
       if (transaction?.docChanged) setDocVersion((v) => v + 1)
     }
     refresh()
@@ -7137,7 +7170,10 @@ export function App() {
           data-tip={t('appUndo')}
           aria-label={t('appUndo')}
           disabled={!hasDoc || !histState.canUndo}
-          onClick={() => editor?.chain().focus().undo().run()}
+          onClick={() => {
+            if (editor && tryOcrUndo(fileCtxRef.current)) return
+            editor?.chain().focus().undo().run()
+          }}
         >
           <IconUndo size={16} />
         </button>
@@ -7146,7 +7182,10 @@ export function App() {
           data-tip={t('appRedo')}
           aria-label={t('appRedo')}
           disabled={!hasDoc || !histState.canRedo}
-          onClick={() => editor?.chain().focus().redo().run()}
+          onClick={() => {
+            if (editor && tryOcrRedo(fileCtxRef.current)) return
+            editor?.chain().focus().redo().run()
+          }}
         >
           <IconRedo size={16} />
         </button>
@@ -7647,6 +7686,7 @@ export function App() {
               onExpand={aiDock.onExpand}
               onCollapse={() => setShowAi(false)}
               onTranslationLockChange={setTranslationLocked}
+              ocrOpenDocument={ocrOpenDocument}
               filePath={doc?.filePath ?? null}
               editQueue={editQueue}
               onQueueEditInstruction={queueUpdate}

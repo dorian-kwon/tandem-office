@@ -62,6 +62,7 @@ import {
 import { hfSaveOptions } from './hf-sections'
 import { fetchDocBytes } from './doc-bytes'
 import { parseDocxOffThread, parseOdtOffThread } from './parse-off-thread'
+import { clearOcrHistory } from './ocr-history-state'
 import { captureRenderedObjects } from './odt-objects'
 import {
   beginOdtSession,
@@ -1070,10 +1071,129 @@ let docGeneration = 0
 export function noteDocumentSwapped(): void {
   pathlessDocSavedPath = null
   docGeneration++
+  clearOcrHistory()
 }
 
 export function currentDocGeneration(): number {
   return docGeneration
+}
+
+/**
+ * Swap what is on screen for `parsed`: its styles, numbering and fonts, its content (the given
+ * ProseMirror document, or the one built from `parsed`), and its document-level state. The file
+ * stays the open document's own. Undo history is dropped (the swap is not a user edit), and the
+ * caret stays where it was. The caller says whether the document is saved afterwards.
+ */
+export function swapDocumentContent(
+  ctx: FileActionContext,
+  parsed: ParsedDocFull,
+  content?: PmNode,
+): void {
+  const editor = ctx.editor
+  if (!editor) return
+  setLazyMediaHashes(parsed.extras.lazyMediaHashes)
+  setDocFontTable(parsed.fontTable)
+  editor.storage.listNumbering.styles = parsed.styles
+  editor.storage.listNumbering.docDefaults = parsed.docDefaults
+  editor.storage.listNumbering.defs = parsed.numbering
+  applyDocLayoutSettings(editor, parsed)
+  const next = content ?? blocksToPmDoc(parsed.blocks, readSections(parsed), pmDocOptions(parsed))
+  const before = editor.state.doc
+  const caret = editor.state.selection.from
+  editor
+    .chain()
+    .setMeta(TRACK_IGNORE, true)
+    .setContent(next as never)
+    .run()
+  resetEditorHistory(editor)
+  editor.chain().setTextSelection(Math.min(caret, editor.state.doc.content.size)).run()
+  // the swap is not a user edit: the AI freshness baseline follows the new doc object
+  carryDocSeen(editor, before)
+  applyReparsedState(ctx, parsed, ctx.doc?.filePath ?? null)
+}
+
+/**
+ * Make the editor's document-level state (styles, sections, headers, notes, protection…) the
+ * state of `reparsed`, as after a save: every pending flag is clear because what was pending is
+ * in `reparsed`. The file path and name are those given (the open document's own, or the path a
+ * save just wrote).
+ */
+export function applyReparsedState(
+  ctx: FileActionContext,
+  reparsed: ParsedDocFull,
+  savedPath: string | null,
+): void {
+  ctx.setDocCss(docStyleCss(reparsed))
+  ctx.setDoc((prev) =>
+    prev
+      ? {
+          ...prev,
+          parsed: reparsed,
+          filePath: savedPath,
+          fileName: savedPath?.split(/[\\/]/).pop() ?? prev.fileName,
+        }
+      : prev,
+  )
+  ctx.setSection(readSectionSettings(reparsed))
+  ctx.setSections(readSections(reparsed))
+  ctx.setSectionDirty(false)
+  ctx.setPageColor(readPageColor(reparsed))
+  ctx.setPageColorDirty(false)
+  ctx.setHeader(
+    reparsed.headerText || reparsed.headerHasPageNumber || reparsed.headerParas?.length
+      ? {
+          text: reparsed.headerText ?? '',
+          pageNumber: reparsed.headerHasPageNumber,
+          paras: reparsed.headerParas ?? undefined,
+        }
+      : null,
+  )
+  ctx.setHeaderDirty(false)
+  ctx.setFooter(
+    reparsed.footerText || reparsed.footerHasPageNumber || reparsed.footerParas?.length
+      ? {
+          text: reparsed.footerText ?? '',
+          pageNumber: reparsed.footerHasPageNumber,
+          paras: reparsed.footerParas ?? undefined,
+        }
+      : null,
+  )
+  ctx.setFooterDirty(false)
+  ctx.setHfVariants(hfVariantsFromParsed(reparsed))
+  resetCrossDocEditState(ctx)
+  ctx.setHfVariantsDirty([])
+  ctx.setTitlePg(reparsed.titlePg ?? false)
+  ctx.setTitlePgDirty(false)
+  ctx.setEvenOddHf(reparsed.evenAndOddHeaders ?? false)
+  ctx.setEvenOddHfDirty(false)
+  ctx.setMirrorMargins(reparsed.mirrorMargins ?? false)
+  ctx.setMirrorMarginsDirty(false)
+  ctx.setComments(reparsed.comments)
+  ctx.setCommentsDirty(false)
+  ctx.setWatermark(reparsed.watermarkText ?? null)
+  ctx.setWatermarkDirty(false)
+  ctx.setWatermarkStyle(null)
+  ctx.setWatermarkPicture(null)
+  ctx.setInkAnnotations(annotationsFromParsed(reparsed.inks))
+  ctx.setInksDirty(false)
+  ctx.setFootnotes(reparsed.footnotes)
+  ctx.setEndnotes(reparsed.endnotes)
+  ctx.setNotesDirty(false)
+  ctx.setSources(reparsed.sources)
+  ctx.setSourcesDirty(false)
+  ctx.setZoteroDocumentData(reparsed.zoteroDocumentData)
+  ctx.setZoteroDocumentDataDirty(false)
+  ctx.setThemeFonts(reparsed.themeFonts ?? null)
+  ctx.setThemeFontsDirty(false)
+  ctx.setThemeColors(reparsed.themeColors ?? null)
+  ctx.setThemeColorsDirty(false)
+  ctx.setProtection(reparsed.protection)
+  ctx.setProtectionDirty(false)
+  // no onWriteProtectionLoaded here: saving must not re-lock the session
+  ctx.setWriteProtection(reparsed.writeProtection)
+  ctx.setWriteProtectionDirty(false)
+  ctx.setRemovePersonalInfo(reparsed.removePersonalInfo)
+  ctx.setRemovePersonalInfoDirty(false)
 }
 
 export function save(
@@ -1483,77 +1603,9 @@ async function saveOnce(
     }
     // the reload is not a user edit: the AI freshness baseline follows the new doc object
     carryDocSeen(editor, docBeforeReload)
-    ctx.setDocCss(docStyleCss(reparsed))
-    ctx.setDoc((prev) =>
-      prev
-        ? {
-            ...prev,
-            parsed: reparsed,
-            filePath: savedPath,
-            fileName: savedPath?.split(/[\\/]/).pop() ?? prev.fileName,
-          }
-        : prev,
-    )
-    ctx.setSection(readSectionSettings(reparsed))
-    ctx.setSections(readSections(reparsed))
-    ctx.setSectionDirty(false)
-    ctx.setPageColor(readPageColor(reparsed))
-    ctx.setPageColorDirty(false)
-    ctx.setHeader(
-      reparsed.headerText || reparsed.headerHasPageNumber || reparsed.headerParas?.length
-        ? {
-            text: reparsed.headerText ?? '',
-            pageNumber: reparsed.headerHasPageNumber,
-            paras: reparsed.headerParas ?? undefined,
-          }
-        : null,
-    )
-    ctx.setHeaderDirty(false)
-    ctx.setFooter(
-      reparsed.footerText || reparsed.footerHasPageNumber || reparsed.footerParas?.length
-        ? {
-            text: reparsed.footerText ?? '',
-            pageNumber: reparsed.footerHasPageNumber,
-            paras: reparsed.footerParas ?? undefined,
-          }
-        : null,
-    )
-    ctx.setFooterDirty(false)
-    ctx.setHfVariants(hfVariantsFromParsed(reparsed))
-    resetCrossDocEditState(ctx)
-    ctx.setHfVariantsDirty([])
-    ctx.setTitlePg(reparsed.titlePg ?? false)
-    ctx.setTitlePgDirty(false)
-    ctx.setEvenOddHf(reparsed.evenAndOddHeaders ?? false)
-    ctx.setEvenOddHfDirty(false)
-    ctx.setMirrorMargins(reparsed.mirrorMargins ?? false)
-    ctx.setMirrorMarginsDirty(false)
-    ctx.setComments(reparsed.comments)
-    ctx.setCommentsDirty(false)
-    ctx.setWatermark(reparsed.watermarkText ?? null)
-    ctx.setWatermarkDirty(false)
-    ctx.setWatermarkStyle(null)
-    ctx.setWatermarkPicture(null)
-    ctx.setInkAnnotations(annotationsFromParsed(reparsed.inks))
-    ctx.setInksDirty(false)
-    ctx.setFootnotes(reparsed.footnotes)
-    ctx.setEndnotes(reparsed.endnotes)
-    ctx.setNotesDirty(false)
-    ctx.setSources(reparsed.sources)
-    ctx.setSourcesDirty(false)
-    ctx.setZoteroDocumentData(reparsed.zoteroDocumentData)
-    ctx.setZoteroDocumentDataDirty(false)
-    ctx.setThemeFonts(reparsed.themeFonts ?? null)
-    ctx.setThemeFontsDirty(false)
-    ctx.setThemeColors(reparsed.themeColors ?? null)
-    ctx.setThemeColorsDirty(false)
-    ctx.setProtection(reparsed.protection)
-    ctx.setProtectionDirty(false)
-    // no onWriteProtectionLoaded here: saving must not re-lock the session
-    ctx.setWriteProtection(reparsed.writeProtection)
-    ctx.setWriteProtectionDirty(false)
-    ctx.setRemovePersonalInfo(reparsed.removePersonalInfo)
-    ctx.setRemovePersonalInfoDirty(false)
+    applyReparsedState(ctx, reparsed, savedPath)
+    // the saved document is the new baseline: undo of OCR text may not go back over it
+    clearOcrHistory()
     ctx.dirtyRef.current = false
     ctx.setStatus(
       auto ? t('appAutoSavedAt', { time: new Date().toLocaleTimeString() }) : t('appSaved'),

@@ -37,7 +37,8 @@ describe('saveOnce caret-mark wiring', () => {
     // after the replacement, and before the branch closes — the equal-doc path
     // must stay untouched so undo history, caret and scroll keep surviving
     expect(restore).toBeGreaterThan(setContent)
-    const branchEnd = src.indexOf('ctx.setDocCss(', restore)
+    // the state update that follows the branch is one call now (applyReparsedState)
+    const branchEnd = src.indexOf('applyReparsedState(ctx, reparsed, savedPath)', restore)
     expect(restore).toBeLessThan(branchEnd)
   })
 

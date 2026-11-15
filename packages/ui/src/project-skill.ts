@@ -12,7 +12,7 @@ import type {
   ProjectNotice,
   ToolActivity,
 } from '@genoffice/project-store'
-import { ocrChatSkill } from './ocr-chat-skill'
+import { ocrChatSkill, type OcrOpenDocument } from './ocr-chat-skill'
 import { projectChatText } from './strings-project-chat'
 
 /**
@@ -581,6 +581,11 @@ export interface PanelProjectSkillOptions {
    * never carries two OCR prompts that contradict each other.
    */
   ocrChat?: boolean | undefined
+  /**
+   * The editor can put OCR text into the document on screen (the Word editor does). `apply` then
+   * asks main for what to place instead of a new file; without it every apply writes a new file.
+   */
+  openDocument?: OcrOpenDocument | undefined
 }
 
 /**
@@ -776,5 +781,7 @@ export function panelProjectSkill(options: PanelProjectSkillOptions): AgentSkill
       }
     },
   }
-  return run.bridge.ocr && options.ocrChat !== false ? [skill, ocrChatSkill(run)] : [skill]
+  return run.bridge.ocr && options.ocrChat !== false
+    ? [skill, ocrChatSkill(run, options.openDocument)]
+    : [skill]
 }

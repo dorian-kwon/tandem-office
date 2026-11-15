@@ -49,14 +49,16 @@ describe('conversational document OCR', () => {
     const { run, skill } = setup()
     await run.prepare()
     expect(skill.systemPrompt).toMatch(/inspect.*first/i)
-    expect(skill.systemPrompt).toMatch(/whole.*selected/i)
+    // the scope is chosen in the popup, never asked in the chat
+    expect(skill.systemPrompt).toMatch(/not ask.*whole document.*popup/is)
+    expect(skill.systemPrompt).not.toMatch(/Ask in this chat whether/)
     expect(skill.systemPrompt).toMatch(/list.*only.*request/i)
     expect(skill.systemPrompt).toMatch(/read.*explicit.*select/i)
     expect(skill.systemPrompt).toMatch(/read.*never writes/i)
     expect(skill.systemPrompt).toMatch(/propose.*location.*reason/i)
     expect(skill.systemPrompt).toMatch(/apply.*explicit confirmation.*later human turn/i)
     expect(skill.systemPrompt).toMatch(/DOCX.*XLSX/)
-    expect(skill.systemPrompt).toMatch(/never.*modal/i)
+    expect(skill.systemPrompt).toMatch(/never tell.*other dialog/is)
     // the placement question goes through the shared numbered card, never prose
     expect(skill.systemPrompt).toMatch(/ask_choice.*ocrPlacement/s)
     expect(skill.systemPrompt).toMatch(/recommended placement first/i)
@@ -78,12 +80,21 @@ describe('conversational document OCR', () => {
     expect(skill.systemPrompt).toMatch(/\.doc is not read.*save it as \.docx/s)
   })
 
+  it('opens the popup right after inspect, in the same turn, without asking about scope first', async () => {
+    const { run, skill } = setup()
+    await run.prepare()
+    expect(skill.systemPrompt).toMatch(/inspect first.*then call choose in the same turn/is)
+    expect(skill.systemPrompt).toMatch(/offers the whole document or a selection/i)
+    // after the popup only the placement is asked, as the numbered card
+    expect(skill.systemPrompt).toMatch(/ask_choice.*ocrPlacement/s)
+  })
+
   it('lets the person look at the pictures and choose in a popup instead of typing numbers', async () => {
     const { run, skill } = setup()
     await run.prepare()
     expect(skill.systemPrompt).toMatch(/call choose/i)
     expect(skill.systemPrompt).toMatch(/popup.*document order.*page/is)
-    expect(skill.systemPrompt).toMatch(/not ask.*type.*numbers/is)
+    expect(skill.systemPrompt).toMatch(/not ask for picture numbers/i)
     // what the person confirmed there is not asked again in the chat
     expect(skill.systemPrompt).toMatch(/already confirmed.*review and propose/is)
     const schema = skill.tools[0]!.inputSchema as { properties: { action: { enum: string[] } } }

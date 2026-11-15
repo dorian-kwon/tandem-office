@@ -289,6 +289,14 @@ PDF 편집기 화면 ── pdfApi.structure.* ──→ 셸 메인(pdf-structur
 5. 대화창은 같은 `OcrService`를 `ocr-chat.ts`로 감싼다. `ocr-chat-source.ts`가 열린 문서로 비공개 프로젝트 사본을 만들 때 `.docx`·`.xlsx`·`.hwpx`·`.hwp`·`.pdf`를 받고 `.doc`는 docx로 저장하라는 글로 거절한다. `propose`는 `'extracted'`·`'pdf'`에서 `recommend`를 부르지 않는다.
 6. 대화창에서 그림을 고를 때는 `choose`가 `ocr-chat-popup.ts`를 거쳐 기존 선택 팝업(`ocr-popup-host.ts`)을 채팅 창 위에 띄우고 결과를 기다린다. 팝업의 끝은 `index.ts`의 `deliver`가 먼저 기다리는 채팅 도구에 넘기고, 기다리는 도구가 없으면 시트 AI의 기존 경로로 간다. 결과 글은 세션에 들어가고, 팝업이 쓴 열람권은 팝업 화면이 사라질 때 놓이므로 세션이 새 열람권을 받아 `start`한다(읽은 쪽만).
 
+## 열린 Word 문서에 OCR 글을 넣는 길 (결정 0106)
+
+1. 채팅의 `document_ocr`는 `inspect` 바로 뒤에 `choose`로 OCR 선택 팝업을 띄우고, 사람이 고르고 시작을 확인하면 읽은 글이 세션에 들어간다. `propose`가 위치를 정하고 사람이 선택지 카드에서 고른다.
+2. `apply`에서 `@genoffice/ui`의 OCR 스킬이 편집기의 훅(`OcrOpenDocument`, 워드 편집기만 제공)에 "지금 넣을 수 있나"를 묻고, 가능하면 요청에 `intoOpenDocument`를 실어 보낸다. 메인(`ocr-chat.ts`)은 `OcrService.place`로 무엇을 넣을지만 돌려주고 파일을 쓰지 않는다.
+3. 워드 편집기(`apps/docs/src/renderer/ocr-open-document.ts`)가 화면 문서의 저장될 바이트(`buildDocBytes`)에 `ocr-docx-placement.ts`의 `placeOcrIntoOpenDocx`로 박스 문단을 끼운다. 사진은 관계 id로 다시 찾는다. 결과는 `parseDocxOffThread`로 읽고 `swapDocumentContent`(`file-actions.ts`)가 화면 내용, 스타일·번호·글꼴, 문서 상태(`applyReparsedState`)를 바꿔 끼운다. 저장할 때 재읽기와 같은 상태 설정을 쓴다.
+4. 바꾸기 직전과 직후의 상태는 `ocr-history-state.ts`에 한 벌씩 둔다. Ctrl+Z·Ctrl+Shift+Z·Ctrl+Y는 편집기 확장(`ocr-history-keys.ts`)이 먼저 받고, 메뉴와 리본 버튼은 `App.tsx`가 같은 함수를 부른다. 저장과 다른 문서 열기가 보관본을 버린다.
+5. 편집기가 넣지 못하면(`.odt`, 암호, 읽기 전용, 본문 밖의 저장 안 한 수정, 표 칸 배치) 스킬이 같은 `apply`를 새 파일 쓰기로 다시 보내고 이유를 알린다.
+
 ## 프로세스 경계를 넘는 것과 넘지 않는 것
 
 | 경계                    | 넘어가는 것                                                                                                                                                                                                                                                            | 넘어가지 않는 것                                                                           |
