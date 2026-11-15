@@ -61,7 +61,9 @@ describe('conversational document OCR', () => {
     expect(skill.systemPrompt).toMatch(/never tell.*other dialog/is)
     // the placement question goes through the shared numbered card, never prose
     expect(skill.systemPrompt).toMatch(/ask_choice.*ocrPlacement/s)
-    expect(skill.systemPrompt).toMatch(/recommended placement first/i)
+    // the options are the person's to choose between: none is marked recommended
+    expect(skill.systemPrompt).toMatch(/do not mark any of them as recommended/i)
+    expect(skill.systemPrompt).not.toMatch(/marked as recommended|recommended placement first/i)
     expect(skill.systemPrompt).toMatch(/reference.*cancel.*do not apply/is)
     const schema = skill.tools[0]!.inputSchema
     expect(schema.properties).not.toHaveProperty('turnId')
@@ -101,10 +103,12 @@ describe('conversational document OCR', () => {
     expect(schema.properties.action.enum).toContain('choose')
   })
 
-  it('puts the text boxes over the picture first when propose recommends them', async () => {
+  it('lists the text boxes over the picture first, without calling them recommended', async () => {
     const { run, skill } = setup()
     await run.prepare()
-    expect(skill.systemPrompt).toMatch(/on-picture.*text boxes over the picture.*first/is)
+    expect(skill.systemPrompt).toMatch(
+      /text boxes over the picture when the result's reason is on-picture/i,
+    )
     // the way that was not proposed first stays an option
     expect(skill.systemPrompt).toMatch(/alternatives/i)
     // and the placement of the recommendation is passed on to apply as it is
