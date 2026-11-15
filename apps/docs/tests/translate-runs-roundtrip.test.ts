@@ -452,7 +452,14 @@ describe('translate_blocks round trip through the production open/save path', ()
         id: 'table-save-undo',
         name: 'translate_blocks',
         input: {
-          blocks: [{ ...entry, segments: entry.segments!.map((_, i) => `Cell ${i}`) }],
+          blocks: [
+            {
+              index: entry.index,
+              paragraph: entry.paragraph,
+              fp: entry.fp,
+              segments: entry.segments!.map((_, i) => `Cell ${i}`),
+            },
+          ],
         },
       },
       { bullet: null, ordered: null },

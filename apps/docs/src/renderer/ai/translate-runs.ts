@@ -8,6 +8,7 @@ import { isTrackedDeleted } from './doc-utils'
 import type { NoteInfo, NoteRun, Run, TextboxDisplay } from '@genoffice/docx-engine'
 import type { CellBox } from '../editor/cell-box-segments'
 import { shrinkBoxToFit } from './box-fit'
+import { parseTagged, taggedViewOf } from './tagged-runs'
 import type { AiTrack } from './protocol'
 import type { AiNotesAccess, NoteKind } from './note-ops'
 import {
@@ -66,6 +67,13 @@ export interface RunParagraph {
   /** a text box block: which of its boxes (0-based); `paragraph` is then the paragraph inside that box */
   box?: number
   segments?: string[]
+  /**
+   * a paragraph of mixed formatting as one sentence, a numbered tag around each stretch of one
+   * formatting: translate it whole with `tagged` instead of run by run (see tagged-runs.ts)
+   */
+  tagged?: string
+  /** what each tag number of `tagged` means */
+  tags?: Record<string, string>
   /** fingerprint of the paragraph's segment texts; translate_blocks checks it */
   fp?: string
   /** a table paragraph: its cell in the visual grid, 0-based "r<row>c<column>" (the anchor of a merged cell) */
@@ -483,7 +491,8 @@ export function readRunGroups(
       continue
     }
     const inTable = node.type.name === 'docTable'
-    const listed = blocks.map((block) => groupsOf(block.node, block.pos).map((g) => g.text))
+    const groupsList = blocks.map((block) => groupsOf(block.node, block.pos))
+    const listed = groupsList.map((groups) => groups.map((g) => g.text))
     const fps = listed.map((segments) => (segments.length > 0 ? runFingerprint(segments) : null))
     const roles = inTable ? tableTwinRoles(editor, fps) : []
     const cells = inTable ? cellInfoOf(node, pos) : null
@@ -519,8 +528,12 @@ export function readRunGroups(
         )
         return
       }
+      const view = taggedViewOf(block.node, block.pos, groupsList[paragraph], isFixed)
+      const tagged = view ? { tagged: view.tagged, tags: view.tags } : {}
       out.push(
-        inTable ? { index, paragraph, ...cellFields, fp, segments } : { index, fp, segments },
+        inTable
+          ? { index, paragraph, ...cellFields, fp, segments, ...tagged }
+          : { index, fp, segments, ...tagged },
       )
     })
     // text boxes inside the cells of this table (the boxes OCR puts over a picture)
@@ -540,7 +553,10 @@ export interface RunTranslationItem {
   paragraph?: number
   /** the fingerprint read_runs gave; when present, a mismatch refuses the item */
   fp?: string
-  segments: string[]
+  /** the translation of each run group, in order (or `tagged`) */
+  segments?: string[]
+  /** the translation of the whole paragraph with the numbered tags read_runs gave (or `segments`) */
+  tagged?: string
 }
 
 /**
@@ -587,6 +603,8 @@ interface Edit {
   blockPos: number
   /** italic spans (character offsets in `text`) added on top of `marks` */
   italics?: SpanOffsets
+  /** a tagged translation: these pieces, each with its own marks, replace from..to (`text` is unused) */
+  pieces?: Array<{ text: string; marks: readonly Mark[]; italics?: SpanOffsets }>
 }
 
 const LEAD = /^\s*/
@@ -863,12 +881,49 @@ type PlanResult =
   | { ok: true; edits: Edit[]; report: RunTranslationReport }
   | { ok: false; error: string; stale?: true }
 
+/** a translation written with the numbered tags read_runs gave: the pieces replace the whole run range */
+function planTagged(
+  item: RunTranslationItem,
+  where: string,
+  block: { node: ProseMirrorNode; pos: number },
+  groups: readonly Group[],
+  report: RunTranslationReport,
+): PlanResult {
+  const view = taggedViewOf(block.node, block.pos, groups, isFixed)
+  if (!view)
+    return {
+      ok: false,
+      error: `${where}: read_runs gave no "tagged" text for this paragraph; translate it with "segments"`,
+    }
+  const parsed = parseTagged(item.tagged as string, view.formats.length)
+  if (!parsed.ok) return { ok: false, error: `${where}: ${parsed.error}` }
+  const bad = segmentsError(
+    where,
+    parsed.pieces.map((p) => p.text),
+  )
+  if (bad) return { ok: false, error: bad }
+  const pieces = parsed.pieces.map((p) => {
+    const spans = parseItalicSegment(p.text)
+    return {
+      text: spans.plain,
+      marks: view.formats[p.format],
+      italics: placeSpans(spans.plain, spans),
+    }
+  })
+  report.changed = 1
+  return {
+    ok: true,
+    edits: [{ from: view.from, to: view.to, text: '', marks: [], blockPos: block.pos, pieces }],
+    report,
+  }
+}
+
 function planParagraph(doc: ProseMirrorNode, item: RunTranslationItem): PlanResult {
   const where =
     item.paragraph === undefined
       ? `block ${item.index}`
       : `block ${item.index} paragraph ${item.paragraph}`
-  const bad = segmentsError(where, item.segments)
+  const bad = item.tagged === undefined ? segmentsError(where, item.segments) : null
   if (bad) return { ok: false, error: bad }
   const top = topLevel(doc, item.index)
   if (!top)
@@ -904,8 +959,9 @@ function planParagraph(doc: ProseMirrorNode, item: RunTranslationItem): PlanResu
       stale: true,
       error: `${where} changed since read_runs (fingerprint mismatch); read it again`,
     }
+  if (item.tagged !== undefined) return planTagged(item, where, block, groups, report)
   // italic spans ride along as ranges; everything below works on the plain text
-  const parsed = item.segments.map(parseItalicSegment)
+  const parsed = (item.segments as string[]).map(parseItalicSegment)
   // one empty segment is a piece with no counterpart; all of them would delete the paragraph's text
   if (parsed.length > 0 && parsed.every((p) => p.plain.trim() === ''))
     return {
@@ -966,6 +1022,8 @@ type BoxPlanResult =
 
 function planBoxParagraph(doc: ProseMirrorNode, item: RunTranslationItem): BoxPlanResult {
   const where = `block ${item.index} box ${item.box} paragraph ${item.paragraph}`
+  if (item.tagged !== undefined)
+    return { ok: false, error: `${where}: a text box paragraph is translated with "segments"` }
   const bad = segmentsError(where, item.segments)
   if (bad) return { ok: false, error: bad }
   const top = topLevel(doc, item.index)
@@ -1011,7 +1069,7 @@ function planBoxParagraph(doc: ProseMirrorNode, item: RunTranslationItem): BoxPl
       error: `${where} changed since read_runs (fingerprint mismatch); read it again`,
     }
   // a text box run takes plain text: italic spans cannot ride along here
-  const plain = item.segments.map((segment) => parseItalicSegment(segment).plain)
+  const plain = (item.segments as string[]).map((segment) => parseItalicSegment(segment).plain)
   if (plain.length > 0 && plain.every((text) => text.trim() === ''))
     return {
       ok: false,
@@ -1080,7 +1138,12 @@ function applyEdits(editor: Editor, edits: Edit[], track?: AiTrack): Transaction
     const ins = schema.marks.ins.create({ author: track.author, date })
     const del = schema.marks.del.create({ author: track.author, date })
     for (const edit of ordered) {
-      if (edit.text !== '')
+      if (edit.pieces)
+        tr.insert(
+          edit.to,
+          edit.pieces.flatMap((p) => textNodes(schema, p.text, ins.addToSet(p.marks), p.italics)),
+        )
+      else if (edit.text !== '')
         tr.insert(edit.to, textNodes(schema, edit.text, ins.addToSet(edit.marks), edit.italics))
       if (edit.to > edit.from) tr.addMark(edit.from, edit.to, del)
     }
@@ -1089,7 +1152,13 @@ function applyEdits(editor: Editor, edits: Edit[], track?: AiTrack): Transaction
   }
   const flagged = new Set<number>()
   for (const edit of ordered) {
-    if (edit.text === '') tr.delete(edit.from, edit.to)
+    if (edit.pieces)
+      tr.replaceWith(
+        edit.from,
+        edit.to,
+        edit.pieces.flatMap((p) => textNodes(schema, p.text, p.marks, p.italics)),
+      )
+    else if (edit.text === '') tr.delete(edit.from, edit.to)
     else tr.replaceWith(edit.from, edit.to, textNodes(schema, edit.text, edit.marks, edit.italics))
     flagged.add(edit.blockPos)
   }
