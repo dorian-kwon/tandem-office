@@ -189,6 +189,66 @@ export function checkOcrBoxesPayload(raw: unknown): OcrBoxesPayload | null {
   return { kind: 'boxes', boxes, text: value.text }
 }
 
+/**
+ * How wide a text is in em, estimated by kind of character (no font is read, so this runs in the
+ * editor window too). Korean, Chinese and Japanese letters are one em; Latin text is narrower,
+ * a capital wider than a small letter. The numbers lean wide: a text estimated to fit does.
+ */
+export function estimateTextEm(text: string): number {
+  let em = 0
+  for (const char of text) {
+    const c = char.codePointAt(0)!
+    if (
+      (c >= 0x1100 && c <= 0x11ff) ||
+      (c >= 0x2e80 && c <= 0xa4cf) ||
+      (c >= 0xac00 && c <= 0xd7af) ||
+      (c >= 0xf900 && c <= 0xfaff) ||
+      (c >= 0xff00 && c <= 0xffef)
+    )
+      em += 1
+    else if (c === 0x20) em += 0.3
+    else if (c >= 0x30 && c <= 0x39) em += 0.56
+    else if (c >= 0x41 && c <= 0x5a) em += 0.68
+    else if (c >= 0x61 && c <= 0x7a) em += 0.55
+    else if (/[.,:;'"!|()[\]]/.test(char)) em += 0.35
+    else em += 0.6
+  }
+  return em
+}
+
+/** a text is taken to be this much wider than estimated: a word that does not break where the
+ *  estimate does costs a line */
+const FIT_WIDTH_SAFETY = 1.12
+
+/** the smallest size a box's text is made, in half-points (6 points) */
+const MIN_FIT_HALF_POINTS = 12
+
+/**
+ * The font size of a box in half-points: the size of the lettering (`boxFontHalfPoints`) at most,
+ * and smaller when the text would not fit the box. The text fits when its lines, wrapped at the
+ * width of the box, stand within its height at 1.2 lines per size. The largest size that fits is
+ * taken, down to 6 points, below which the text is left to run over.
+ */
+export function fitBoxFontHalfPoints(
+  box: OcrBox,
+  imageWidthPt: number,
+  imageHeightPt: number,
+): number {
+  const wanted = boxFontHalfPoints(box, imageHeightPt)
+  const widthPt = box.w * imageWidthPt
+  const heightPt = box.h * imageHeightPt
+  const emOfLines = box.text.split(/\r?\n/).map(estimateTextEm)
+  for (let half = wanted; half > MIN_FIT_HALF_POINTS; half--) {
+    const size = half / 2
+    const used = emOfLines.reduce(
+      (count, em) => count + Math.max(1, Math.ceil((em * size * FIT_WIDTH_SAFETY) / widthPt)),
+      0,
+    )
+    if (used * size * 1.2 <= heightPt + 1e-6) return half
+  }
+  return Math.min(wanted, MIN_FIT_HALF_POINTS) === wanted ? wanted : MIN_FIT_HALF_POINTS
+}
+
 /** the font size of a box in half-points (w:sz): its line height on the placed picture, as 10/12 of it */
 export function boxFontHalfPoints(box: OcrBox, imageHeightPt: number): number {
   const points = (box.fontHeight * imageHeightPt) / 1.2

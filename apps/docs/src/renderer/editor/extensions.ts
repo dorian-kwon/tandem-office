@@ -3875,9 +3875,22 @@ export const DocTableHeader = Node.create({
   },
 })
 
-/** Anchored shapes/textboxes inside a table cell (display-only): Word renders them
- *  in the cell and grows the row to hold them, so the wrapper takes the boxes'
- *  bottom extent as in-flow height (pagination then pushes the row like Word) */
+/** a box inside a table cell that can be edited where it stands: it has a place in its table's
+ *  text segments, so the saved table can take its new text (the translation writes the same way) */
+function cellBoxWritable(box: TextboxDisplay & { tableSegment?: number }): boolean {
+  return (
+    box.txbxIndex !== undefined &&
+    !box.readOnly &&
+    box.tableSegment !== undefined &&
+    !box.paras.some((para) => para.cells)
+  )
+}
+
+/** Anchored shapes/textboxes inside a table cell. Word renders them in the cell and grows the
+ *  row to hold them, so the wrapper takes the boxes' bottom extent as in-flow height (pagination
+ *  then pushes the row like Word). A box with a place in its table is edited where it stands:
+ *  double-click, type, leave (or Escape). The new text goes into the node's attribute and is
+ *  saved into the original table by its segment, the way a translated box is. */
 export const DocCellBoxes = Node.create({
   name: 'docCellBoxes',
   atom: true,
@@ -3890,6 +3903,168 @@ export const DocCellBoxes = Node.create({
   },
   renderHTML({ node }) {
     return cellBoxesSpec((node.attrs.boxes as TextboxDisplay[] | null) ?? [])
+  },
+  addNodeView() {
+    return ({ node, editor, getPos }) => {
+      let current = node
+      const boxesOf = (n: PmNode) => (n.attrs.boxes as TextboxDisplay[] | null) ?? []
+      const build = (n: PmNode) =>
+        DOMSerializer.renderSpec(document, cellBoxesSpec(boxesOf(n)) as never).dom as HTMLElement
+      const dom = build(node)
+      let editing: HTMLElement | null = null
+      let typed = false
+
+      const boxElements = () => Array.from(dom.querySelectorAll<HTMLElement>('.doc-textbox'))
+      const paraElements = (el: HTMLElement) =>
+        Array.from(el.children).filter((child) => child.classList.contains('doc-textbox-para'))
+
+      const finishEditing = () => {
+        const el = editing
+        editing = null
+        typed = false
+        if (!el) return
+        el.removeAttribute('contenteditable')
+        el.classList.remove('doc-content-editing')
+      }
+
+      /** put what was typed into the model, unless the paragraphs are not the ones it had */
+      const commit = () => {
+        const el = editing
+        if (!el) return
+        const wasTyped = typed
+        const index = boxElements().indexOf(el)
+        finishEditing()
+        if (!wasTyped || index < 0) return
+        const boxes = boxesOf(current)
+        const box = boxes[index]
+        const paras = paraElements(el)
+        if (!box || paras.length !== box.paras.length) {
+          // the browser merged or dropped a paragraph: show the box as the model has it
+          dom.replaceChildren(...Array.from(build(current).childNodes))
+          return
+        }
+        let changed = false
+        const nextParas = box.paras.map((para, j) => {
+          const text = protectedText(paras[j] as HTMLElement).replace(/\r?\n/g, ' ')
+          const was = para.runs.map((r) => r.text).join('')
+          if (text === was) return para
+          changed = true
+          const first = para.runs[0]
+          return { ...para, runs: [first ? { ...first, text } : { text }] }
+        })
+        if (!changed) return
+        const pos = getPos()
+        if (typeof pos !== 'number') return
+        const nextBoxes = boxes.map((b, i) => (i === index ? { ...b, paras: nextParas } : b))
+        editor.view.dispatch(
+          editor.view.state.tr.setNodeMarkup(pos, undefined, {
+            ...current.attrs,
+            boxes: nextBoxes,
+          }),
+        )
+      }
+
+      /**
+       * `atEnd`: put the caret at the end of the text. A click leaves it to the browser, which
+       * puts it where the person clicked once the box is editable.
+       */
+      const startEditing = (el: HTMLElement, atEnd: boolean) => {
+        if (editing === el) return
+        if (editing) commit()
+        editing = el
+        typed = false
+        el.setAttribute('contenteditable', 'true')
+        el.classList.add('doc-content-editing')
+        el.focus()
+        if (!atEnd) return
+        try {
+          const selection = window.getSelection()
+          const range = document.createRange()
+          range.selectNodeContents(el)
+          range.collapse(false)
+          selection?.removeAllRanges()
+          selection?.addRange(range)
+        } catch {
+          /* no selection to place */
+        }
+      }
+
+      /** the box under this event, when it is one the person may edit here */
+      const writableBoxAt = (event: MouseEvent): HTMLElement | null => {
+        const el = (event.target as HTMLElement | null)?.closest?.(
+          '.doc-textbox',
+        ) as HTMLElement | null
+        if (!el || !dom.contains(el) || !editor.isEditable) return null
+        const box = boxesOf(current)[boxElements().indexOf(el)] as
+          (TextboxDisplay & { tableSegment?: number }) | undefined
+        return box && cellBoxWritable(box) ? el : null
+      }
+
+      // one click is enough: the browser then puts the caret where the person clicked
+      const onMouseDown = (event: MouseEvent) => {
+        if (event.button !== 0 || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey)
+          return
+        const el = writableBoxAt(event)
+        if (el) startEditing(el, false)
+      }
+      const onDoubleClick = (event: MouseEvent) => {
+        const el = writableBoxAt(event)
+        if (el) startEditing(el, true)
+      }
+      // a click anywhere outside the box being edited ends it: what was typed is kept
+      const onDocumentMouseDown = (event: MouseEvent) => {
+        if (editing && !editing.contains(event.target as globalThis.Node | null)) commit()
+      }
+      const onInput = () => {
+        if (editing) typed = true
+      }
+      const onKeyDown = (event: KeyboardEvent) => {
+        if (!editing) return
+        if (event.key === 'Enter') {
+          preventProtectedLineBreak(event)
+        } else if (event.key === 'Escape') {
+          commit()
+        }
+      }
+      const onFocusOut = (event: FocusEvent) => {
+        const next = event.relatedTarget as HTMLElement | null
+        if (editing && next && editing.contains(next)) return
+        commit()
+      }
+      dom.addEventListener('mousedown', onMouseDown, true)
+      dom.addEventListener('dblclick', onDoubleClick, true)
+      dom.addEventListener('input', onInput)
+      dom.addEventListener('keydown', onKeyDown, true)
+      dom.addEventListener('focusout', onFocusOut)
+      document.addEventListener('mousedown', onDocumentMouseDown, true)
+      window.addEventListener('ai-docs-commit-tables', commit)
+
+      return {
+        dom,
+        update: (updated: PmNode) => {
+          if (updated.type !== current.type) return false
+          if (updated === current) return true
+          current = updated
+          // another version of the boxes (an undo, a translation): drawn again, editing is over
+          finishEditing()
+          const fresh = build(updated)
+          dom.className = fresh.className
+          const style = fresh.getAttribute('style')
+          if (style) dom.setAttribute('style', style)
+          else dom.removeAttribute('style')
+          dom.replaceChildren(...Array.from(fresh.childNodes))
+          return true
+        },
+        // the boxes draw themselves, and what is typed in one is read back on leaving it
+        ignoreMutation: () => true,
+        stopEvent: (event: Event) =>
+          editing !== null && editing.contains(event.target as globalThis.Node | null),
+        destroy: () => {
+          document.removeEventListener('mousedown', onDocumentMouseDown, true)
+          window.removeEventListener('ai-docs-commit-tables', commit)
+        },
+      }
+    }
   },
 })
 

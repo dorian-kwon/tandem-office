@@ -1,5 +1,5 @@
 import { buildAnchoredTextboxParagraphXml } from '@genoffice/docx-engine'
-import { boxFontHalfPoints, type OcrBox } from '../../shared/ocr-boxes'
+import { fitBoxFontHalfPoints, type OcrBox } from '../../shared/ocr-boxes'
 
 /**
  * Boxes over a docx picture (docs/plans/ocr-box-placement.md). A box is an anchored text box
@@ -274,7 +274,8 @@ export function buildImageBoxParagraphsXml(
 ): string {
   const { widthEmu, heightEmu, afterTwips } = info
   const parts = boxes.map((box, k) => {
-    const half = boxFontHalfPoints(box, heightEmu / EMU_PER_POINT)
+    // the size the lettering had, made smaller when the text would run past the box
+    const half = fitBoxFontHalfPoints(box, widthEmu / EMU_PER_POINT, heightEmu / EMU_PER_POINT)
     const holder = buildAnchoredTextboxParagraphXml({
       anchor: 'paragraph',
       xEmu: Math.round(box.x * widthEmu),

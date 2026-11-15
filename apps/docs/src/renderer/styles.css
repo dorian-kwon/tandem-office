@@ -13773,3 +13773,12 @@ tr > .page-gap-cut {
 .ribbon-tabs > .ribbon-tabs-spacer {
   flex: 0;
 }
+
+/* a box in a table cell while its text is edited where it stands (double-click, Esc to leave) */
+.doc-cell-boxes .doc-textbox.doc-content-editing {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+}
