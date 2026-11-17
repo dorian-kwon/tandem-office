@@ -276,7 +276,7 @@ function prepare(
       error: `${where} changed since read_runs (fingerprint mismatch); read it again`,
     }
   // italic spans ride along as ranges; everything below works on the plain text
-  const parsed = item.segments.map(parseItalicSegment)
+  const parsed = (item.segments as string[]).map(parseItalicSegment)
   if (parsed.length > 0 && parsed.every((p) => p.plain.trim() === ''))
     return { ok: false, error: `${where}: every segment is empty; give the translation` }
   const report: { extra?: number; incomplete?: { groups: number; given: number } } = {}

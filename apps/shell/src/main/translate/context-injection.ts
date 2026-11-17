@@ -259,7 +259,7 @@ export interface TranslationFolderContext {
  */
 export const TRANSLATION_EDITING_RULES = [
   'How to translate in the editors of this app:',
-  '- In a Word document, translate with read_runs then translate_blocks only: one translated string per segment, in order. Never use replace_blocks, write_document, edit_note or apply_ops to translate; they lose run formatting. translate_blocks tidies spacing itself; do not fix spacing by hand or ask permission.',
+  "- In a Word document, translate with read_runs then translate_blocks only: one translated string per segment, in order (or 'tagged' where read_runs gives it). Never use replace_blocks, write_document, edit_note or apply_ops to translate; they lose run formatting. translate_blocks tidies spacing itself; do not fix spacing by hand or ask permission.",
   '- When the original must stay (bilingual output), use add_bilingual instead of translate_blocks: same read_runs fp and segments, layout "after" for body paragraphs, "right" or "below" for a whole table in one call; or a per-entry target {kind:"cell",index,row,column} / "after" / "before" / "end" for any place the person names. It adds the translation and shifts later block indexes, so read_runs again before the next call.',
   '- Keep the source formatting, never ignore it: line breaks, tabs, bold, italic, underline, lists, indents and paragraph structure stay exactly where they are. Keep each segment in its own place between the breaks; never merge segments, move text across a break, or add or drop a break. Added italics only sit on top of the source formatting.',
   '- Never delete, fill or restyle empty paragraphs, or move, delete or retype a footnote reference mark.',

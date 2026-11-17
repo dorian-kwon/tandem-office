@@ -114,6 +114,9 @@ import { applyRevisions, type ReviseItem, type ReviseReport } from './revise-run
  */
 
 const READ_MAX_CHARS = 24_000
+/** said once per read that lists a tagged paragraph (kept out of the tool text every call carries) */
+const TAGGED_NOTE =
+  'Paragraphs with "tagged" are translated as one sentence: reply with "tagged" (not "segments"), your translation with the same numbered tags around the words that correspond, in any order; "tags" says what each number is, and the app applies that formatting. Do not write other markup.'
 
 export const AGENT_TOOLS: AgentToolDef[] = [
   {
@@ -238,8 +241,8 @@ export const AGENT_TOOLS: AgentToolDef[] = [
   {
     name: 'translate_blocks',
     description:
-      'The way to translate existing document text (never use replace_blocks or write_document to translate). Read the paragraphs with read_runs first, then pass for each paragraph its "fp" from read_runs unchanged and the translations of its segments, in the same order and the same number: segments[i] replaces the text of segment i, which keeps its own formatting (font, italics, color, raw run properties); footnote references, tabs, breaks, paragraph styles and empty paragraphs stay exactly as they are. ' +
-      'Word order may move text between segments of one paragraph, but give every segment a translation; use an empty string only for a piece with no counterpart in the translation. Segments are plain text: no line breaks, no HTML (the only exception is the <i> span of the writing-style rule, when the project has one; it applies to add_bilingual and revise_blocks too). Fewer segments leave the remaining segments untranslated (reported); extra segments are appended to the last one. A table block needs its "paragraph" number. An item whose fp no longer matches (the paragraph changed since read_runs) is skipped and reported, the other items are applied; read_runs the skipped blocks again. Block indexes do not change. Footnotes and endnotes go in the same call: an entry with "note" (footnote or endnote) and "id" from read_runs notes:true instead of "index", with the same fp and segments; their run formatting is kept too.',
+      'The way to translate existing document text (never use replace_blocks or write_document to translate). Read the paragraphs with read_runs first, then pass for each paragraph its "fp" from read_runs unchanged and the translations of its segments, in the same order and the same number: segments[i] replaces the text of segment i, which keeps its own formatting; footnote references, tabs, breaks, paragraph styles and empty paragraphs stay exactly as they are. ' +
+      'Word order may move text between segments of one paragraph, but give every segment a translation; use an empty string only for a piece with no counterpart in the translation. Segments are plain text: no line breaks, no HTML (the only exception is the <i> span of the writing-style rule, when the project has one; it applies to add_bilingual and revise_blocks too). Fewer segments leave the remaining segments untranslated (reported); extra segments are appended to the last one. A table block needs its "paragraph" number. An item whose fp no longer matches is skipped and reported, the other items are applied; read_runs the skipped blocks again. Block indexes do not change. Footnotes and endnotes go in the same call: an entry with "note" (footnote or endnote) and "id" from read_runs notes:true instead of "index", with the same fp and segments.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -275,8 +278,9 @@ export const AGENT_TOOLS: AgentToolDef[] = [
                 items: { type: 'string' },
                 description: 'the translated text of each segment, in read_runs order',
               },
+              tagged: { type: 'string' },
             },
-            required: ['fp', 'segments'],
+            required: ['fp'],
           },
         },
       },
@@ -2007,7 +2011,8 @@ function executeSyncTool(
         (next === null
           ? ''
           : `\n…(truncated: call read_runs again with startBlockIndex=${next} to continue)`) +
-        (noteLine ? `\n${noteLine}` : '')
+        (noteLine ? `\n${noteLine}` : '') +
+        (lines.some((line) => line.includes('"tagged":')) ? `\n${TAGGED_NOTE}` : '')
       return {
         output: lines.length > 0 ? lines.join('\n') + note : '(range is empty)',
         mutated: false,
@@ -2274,6 +2279,7 @@ function executeSyncTool(
           paragraph?: unknown
           fp?: unknown
           segments?: unknown
+          tagged?: unknown
         }
         const isNote = e.note !== undefined && e.note !== null
         const isBox = e.box !== undefined && e.box !== null
@@ -2298,10 +2304,22 @@ function executeSyncTool(
             summary,
             `${name}: fp is missing; pass the "fp" read_runs gave for this paragraph (call read_runs if you have none)`,
           )
+        const tagged = typeof e.tagged === 'string' ? e.tagged : undefined
+        if (tagged !== undefined && (isNote || isBox))
+          return fail(
+            summary,
+            `${name}: "tagged" is for body and table paragraphs; a note or a text box paragraph is translated with "segments"`,
+          )
+        if (tagged !== undefined && Array.isArray(e.segments))
+          return fail(summary, `${name}: give either "tagged" or "segments", not both`)
         const segments = e.segments as string[]
-        const joined = Array.isArray(segments) ? segments.join('\n') : ''
+        const joined = tagged ?? (Array.isArray(segments) ? segments.join('\n') : '')
         const echo = toolEchoError(joined) ?? contextMarkerError(joined)
-        if (echo) return fail(summary, `${name}: ${echo.replace(/^html/, 'a segment')}`)
+        if (echo)
+          return fail(
+            summary,
+            `${name}: ${echo.replace(/^html/, tagged === undefined ? 'a segment' : 'the tagged text')}`,
+          )
         const paragraph =
           e.paragraph === undefined || e.paragraph === null
             ? {}
@@ -2318,7 +2336,7 @@ function executeSyncTool(
           items.push({
             index: Number(e.index),
             fp: e.fp,
-            segments,
+            ...(tagged === undefined ? { segments } : { tagged }),
             ...(isBox ? { box: Number(e.box) } : {}),
             ...paragraph,
           })
