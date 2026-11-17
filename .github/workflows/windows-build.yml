@@ -145,6 +145,29 @@ jobs:
           status=$(powershell -NoProfile -Command "(Get-AuthenticodeSignature '$installer').Status")
           [ "$(echo "$status" | tr -d '\r')" = "NotSigned" ] || { echo "the installer is signed ($status)"; exit 1; }
 
+      # The installed app reads this feed as it is (the private GitHub provider never
+      # fetches the release body), so the notes its update window shows have to be inside
+      # it. Done before the attestation, which covers latest.yml. Only for a release build.
+      - name: Put the release notes into latest.yml
+        if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
+        env:
+          TAG: ${{ inputs.release_tag }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "not a version tag: $TAG"; exit 1; }
+          feed="apps/shell/release/latest.yml"
+          notes="$RUNNER_TEMP/release-notes.html"
+          gh api -H "Accept: application/vnd.github.html+json" "repos/$GH_REPO/releases/tags/$TAG" --jq '.body_html // ""' > "$notes"
+          node tools/release-feed-notes.mjs "$feed" "$notes"
+          # a release with a body must have put it in; the rest of the feed must be as built
+          if [ -n "$(tr -d '[:space:]' < "$notes")" ]; then
+            grep -q '^releaseNotes: "' "$feed" || { echo "the release notes did not reach latest.yml"; exit 1; }
+          fi
+          built=$(sed -n 's/^version: *//p' "$feed" | tr -d "'\"")
+          [ "v$built" = "$TAG" ] || { echo "latest.yml says $built, the release is $TAG"; exit 1; }
+
       # The packaged app itself, run without a window: a Markdown and a CSV file
       # (the latter through the xlsx sidecar) are exported to PDF
       - name: Smoke test the packaged app
