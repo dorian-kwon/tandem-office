@@ -106,3 +106,4 @@
 | [0105](0105-ocr-pdf-hangul-new-docx.md)                       | 그림 OCR을 PDF·한글(HWP·HWPX)로 넓히고, 결과는 새 Word 문서로 쓰며, 옛 .doc는 docx로 저장하라고 안내한다                          | 2026-11-15 |
 | [0106](0106-ocr-into-open-document.md)                        | 채팅의 OCR은 팝업으로 바로 고르게 하고, 결과는 열려 있는 Word 문서에 넣어 저장 안 됨으로 두며 Ctrl+Z로 되돌린다                   | 2026-11-16 |
 | [0107](0107-update-notes-travel-in-the-feed.md)               | 업데이트 창의 릴리스 본문은 비공개 저장소 방식으로는 오지 않아, 빌드 때 `latest.yml`의 `releaseNotes`에 넣어 보낸다               | 2026-11-17 |
+| [0108](0108-translate-mixed-format-lines-whole.md)            | 서식이 섞인 줄은 서식마다 번호 태그를 달아 줄 전체를 한 문장으로 번역하고, 서식은 앱이 되입힌다                                   | 2026-11-17 |
