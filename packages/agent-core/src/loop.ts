@@ -101,8 +101,13 @@ const SUMMARIZE_TIMEOUT_MS = 30_000
 const STALE_TOOL_KEEP_RECENT = 2
 const STALE_TOOL_OUTPUT_MAX = 1_000
 
-/** Unified turn budget across the suite's chat panels (apps may still override per loop) */
-export const DEFAULT_MAX_TURNS = 100
+/**
+ * Unified turn budget across the suite's chat panels (apps may still override per loop).
+ * Large on purpose: a whole-workbook or whole-document pass reads in many small calls, and
+ * the old 100 ended such runs with the turn-limit notice. Runaway loops are caught earlier
+ * by the repeat / all-error / unusable-input guards; this cap is only the last backstop.
+ */
+export const DEFAULT_MAX_TURNS = 1000
 
 /** Cap on consecutive turns whose tool input was all unusable (a turn that executes a call resets it); abort beyond it (keeps the model from burning turns on bad JSON) */
 const MAX_INPUT_PARSE_RETRIES = 3

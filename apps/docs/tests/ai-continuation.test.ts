@@ -4,7 +4,7 @@ import { DOCS_CONTINUE_INSTRUCTION } from '../src/renderer/ai/continuation'
 
 describe('Docs AI continuation', () => {
   it('uses the suite-wide unified turn budget', () => {
-    expect(DEFAULT_MAX_TURNS).toBe(100)
+    expect(DEFAULT_MAX_TURNS).toBe(1000)
   })
 
   it('instructs continuation to preserve completed work', () => {

@@ -294,6 +294,42 @@ describe('AgentLoop', () => {
     })
   })
 
+  it('by default a long run of distinct tool calls is not cut off', async () => {
+    // A whole-workbook or whole-document pass reads in many small calls; the old
+    // 100-turn default ended such a run with the turn-limit notice
+    const script: Array<(cb: AgentStreamCallbacks) => void> = Array.from(
+      { length: 150 },
+      (_, i) => (cb: AgentStreamCallbacks) => {
+        cb.onToolCall({ id: `t${i}`, name: 'do_thing', input: { n: i } })
+        cb.onDone()
+      },
+    )
+    script.push((cb) => {
+      cb.onDelta('finished the whole pass')
+      cb.onDone()
+    })
+    const transport = scriptedTransport(script)
+    const onDone = vi.fn()
+    const onError = vi.fn()
+    const loop = new AgentLoop({
+      transport,
+      skill: makeSkill(),
+      compaction: false,
+      events: { onDone, onError },
+    })
+    loop.run('review every row')
+    for (let i = 0; i < 400 && onDone.mock.calls.length === 0; i++) await flush()
+    expect(onError).not.toHaveBeenCalled()
+    expect(transport.requests).toHaveLength(151)
+    // every tool turn still offered tools: none became the tool-less finalizing turn
+    expect(transport.requests.slice(0, 150).every((r) => r.toolCount > 0)).toBe(true)
+    expect(onDone).toHaveBeenCalledWith({
+      text: 'finished the whole pass',
+      cancelled: false,
+      turnLimit: false,
+    })
+  })
+
   it('restore drops turn-limit notes persisted by older builds', () => {
     const loop = new AgentLoop({ transport: scriptedTransport([]), skill: makeSkill() })
     loop.restore([
