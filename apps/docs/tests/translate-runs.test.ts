@@ -1,3 +1,4 @@
+import { applyAiPanelPrefs } from '@genoffice/ui'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Editor } from '@tiptap/core'
 import { BLANK_BULLET_NUM_ID, BLANK_ORDERED_NUM_ID } from '@genoffice/docx-engine'
@@ -63,6 +64,7 @@ const emptyParagraph: PmNode = {
 
 const liveEditors: Editor[] = []
 afterEach(() => {
+  applyAiPanelPrefs({})
   for (const editor of liveEditors.splice(0)) editor.destroy()
 })
 
@@ -251,6 +253,7 @@ describe('applyRunTranslation', () => {
 
 describe('read_runs / translate_blocks tools', () => {
   it('translate_blocks edits several blocks in one undoable step and reports incomplete ones', async () => {
+    applyAiPanelPrefs({ aiEditUndoHistory: true })
     const editor = await createEditor([mixedParagraph, emptyParagraph, mixedParagraph])
     const read = await executeTool(
       editor,

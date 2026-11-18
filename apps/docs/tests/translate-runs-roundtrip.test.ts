@@ -1,3 +1,4 @@
+import { applyAiPanelPrefs } from '@genoffice/ui'
 import { copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -168,6 +169,7 @@ async function documentXml(bytes: Uint8Array): Promise<string> {
 const dirs: string[] = []
 const editors: Editor[] = []
 afterEach(async () => {
+  applyAiPanelPrefs({})
   for (const editor of editors.splice(0)) editor.destroy()
   for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true })
 })
@@ -440,6 +442,7 @@ describe('translate_blocks round trip through the production open/save path', ()
   })
 
   it('keeps table translation undo and redo through repeated autosaves', async () => {
+    applyAiPanelPrefs({ aiEditUndoHistory: true })
     const { editor, ctx, path } = await openCopy(await fixtureDocx())
     const entry = readRunGroups(editor, 0, editor.state.doc.childCount - 1).find(
       (e) => e.paragraph !== undefined && e.segments?.length,

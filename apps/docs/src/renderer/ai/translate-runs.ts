@@ -1,3 +1,4 @@
+import { originalAiEditor } from './ai-history-gate'
 import type { Editor } from '@tiptap/core'
 import type { Mark, Node as ProseMirrorNode } from '@tiptap/pm/model'
 import type { Transaction } from '@tiptap/pm/state'
@@ -222,10 +223,10 @@ export function recordTwins(
   pairs: ReadonlyArray<readonly [string, string]>,
   options: { placed?: boolean } = {},
 ): void {
-  let map = twinPairs.get(editor)
-  if (!map) twinPairs.set(editor, (map = new Map()))
-  let placed = placedPairs.get(editor)
-  if (options.placed && !placed) placedPairs.set(editor, (placed = new Map()))
+  let map = twinPairs.get(originalAiEditor(editor))
+  if (!map) twinPairs.set(originalAiEditor(editor), (map = new Map()))
+  let placed = placedPairs.get(originalAiEditor(editor))
+  if (options.placed && !placed) placedPairs.set(originalAiEditor(editor), (placed = new Map()))
   for (const [original, twin] of pairs) {
     let set = map.get(original)
     if (!set) map.set(original, (set = new Set()))
@@ -259,7 +260,7 @@ function fingerprintsOfDoc(doc: ProseMirrorNode): Set<string> {
 
 /** the role of a paragraph by explicit placement (its twin or original is anywhere in the document) */
 function placedRole(editor: Editor, fp: string): TwinRole | null {
-  const placed = placedPairs.get(editor)
+  const placed = placedPairs.get(originalAiEditor(editor))
   if (!placed || placed.size === 0) return null
   const present = fingerprintsOfDoc(editor.state.doc)
   const mine = placed.get(fp)
@@ -270,12 +271,14 @@ function placedRole(editor: Editor, fp: string): TwinRole | null {
 
 /** block indexes may have moved since the model last read them (blocks were inserted by add_bilingual) */
 const shiftedSinceRead = new WeakSet<object>()
-export const noteBlocksShifted = (editor: Editor): void => void shiftedSinceRead.add(editor)
-export const blocksShifted = (editor: Editor): boolean => shiftedSinceRead.has(editor)
+export const noteBlocksShifted = (editor: Editor): void =>
+  void shiftedSinceRead.add(originalAiEditor(editor))
+export const blocksShifted = (editor: Editor): boolean =>
+  shiftedSinceRead.has(originalAiEditor(editor))
 
 /** true once add_bilingual has added a twin in this editor */
 export function hasTwins(editor: Editor): boolean {
-  return (twinPairs.get(editor)?.size ?? 0) > 0
+  return (twinPairs.get(originalAiEditor(editor))?.size ?? 0) > 0
 }
 
 export type TwinRole = 'source' | 'twin'
@@ -294,7 +297,7 @@ export function plainTwinRole(
   index: number,
   fp: string,
 ): TwinRole | null {
-  const pairs = twinPairs.get(editor)
+  const pairs = twinPairs.get(originalAiEditor(editor))
   if (!pairs || pairs.size === 0) return null
   const prev = blockFp(doc, index - 1)
   if (prev && pairs.get(prev)?.has(fp)) return 'twin'
@@ -308,7 +311,7 @@ export function tableTwinRoles(
   editor: Editor,
   fps: ReadonlyArray<string | null>,
 ): Array<TwinRole | null> {
-  const pairs = twinPairs.get(editor)
+  const pairs = twinPairs.get(originalAiEditor(editor))
   if (!pairs || pairs.size === 0) return fps.map(() => null)
   const present = new Set(fps.filter((f): f is string => f !== null))
   return fps.map((fp) => {
@@ -474,7 +477,7 @@ export function readRunGroups(
 ): RunParagraph[] {
   const doc = editor.state.doc
   const out: RunParagraph[] = []
-  shiftedSinceRead.delete(editor)
+  shiftedSinceRead.delete(originalAiEditor(editor))
   for (let index = start; index <= end; index++) {
     const top = topLevel(doc, index)
     if (!top) break
@@ -1519,8 +1522,8 @@ const handledFingerprints = new WeakMap<object, Set<string>>()
 
 /** remember the paragraphs just submitted, so a later check does not list them as untouched */
 export function recordHandled(editor: Editor, fps: Array<string | undefined>): void {
-  let set = handledFingerprints.get(editor)
-  if (!set) handledFingerprints.set(editor, (set = new Set()))
+  let set = handledFingerprints.get(originalAiEditor(editor))
+  if (!set) handledFingerprints.set(originalAiEditor(editor), (set = new Set()))
   for (const fp of fps) if (fp) set.add(fp)
 }
 
@@ -1564,7 +1567,7 @@ export function remainingUntranslated(
   options: { tracking?: boolean } = {},
 ): RemainingReport {
   const script = sourceScriptOf(language)
-  const handled = handledFingerprints.get(editor)
+  const handled = handledFingerprints.get(originalAiEditor(editor))
   const pending = (segments: string[], fp: string): boolean => {
     const text = segments.join(' ')
     if (script) return script.test(text)

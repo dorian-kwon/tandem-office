@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { Editor } from '@tiptap/core'
+import { applyAiPanelPrefs } from '@genoffice/ui'
 import type { CommentInfo } from '@genoffice/docx-engine'
 import { BLANK_BULLET_NUM_ID, BLANK_ORDERED_NUM_ID } from '@genoffice/docx-engine'
 import type { PmNode } from '../src/renderer/editor/convert'
@@ -48,6 +49,7 @@ const empty: PmNode = { type: 'docParagraph', attrs: { styleId: 'BlankLine', doc
 
 const live: Editor[] = []
 afterEach(() => {
+  applyAiPanelPrefs({})
   for (const e of live.splice(0)) e.destroy()
 })
 
@@ -250,7 +252,8 @@ describe('revise_blocks', () => {
     expect(result.output).toMatch(/cannot carry tracked changes/)
   })
 
-  it('is one undo step', async () => {
+  it('is one undo step when AI edit undo history is enabled', async () => {
+    applyAiPanelPrefs({ aiEditUndoHistory: true })
     const editor = await createEditor([mixed()])
     const before = editor.state.doc
     await revise(editor, [
@@ -259,6 +262,17 @@ describe('revise_blocks', () => {
     expect(editor.state.doc.eq(before)).toBe(false)
     editor.commands.undo()
     expect(editor.state.doc.eq(before)).toBe(true)
+  })
+
+  it('does not add an undo step by default', async () => {
+    const editor = await createEditor([mixed()])
+    const result = await revise(editor, [
+      { index: 0, fp: FP, segments: ['The quick red fox ', 'jumps over it.'] },
+    ])
+    expect(result.isError).toBeFalsy()
+    const revised = editor.state.doc
+    expect(editor.commands.undo()).toBe(false)
+    expect(editor.state.doc).toBe(revised)
   })
 
   it('a second pass replaces its own insertion instead of deleting it again', async () => {

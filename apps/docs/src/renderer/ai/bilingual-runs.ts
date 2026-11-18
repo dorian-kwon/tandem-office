@@ -1,3 +1,4 @@
+import { originalAiEditor } from './ai-history-gate'
 import type { Editor } from '@tiptap/core'
 import { Fragment, type Mark, type Node as PmNode, type Schema } from '@tiptap/pm/model'
 import type { Transaction } from '@tiptap/pm/state'
@@ -336,7 +337,7 @@ function matches(editor: Editor, doc: PmNode, index: number, item: BilingualItem
  */
 function locate(editor: Editor, doc: PmNode, item: BilingualItem): number {
   if (matches(editor, doc, item.index, item)) return item.index
-  const slack = addedBodyTwins.get(editor) ?? 0
+  const slack = addedBodyTwins.get(originalAiEditor(editor)) ?? 0
   for (let d = 1; d <= slack; d++)
     if (matches(editor, doc, item.index + d, item)) return item.index + d
   return item.index
@@ -1116,7 +1117,10 @@ export function applyBilingual(
   if (pairs.length > 0) recordTwins(editor, pairs)
   if (placedPairsList.length > 0) recordTwins(editor, placedPairsList, { placed: true })
   const inserted = bodyOps.length + placeOps.length
-  addedBodyTwins.set(editor, (addedBodyTwins.get(editor) ?? 0) + inserted)
+  addedBodyTwins.set(
+    originalAiEditor(editor),
+    (addedBodyTwins.get(originalAiEditor(editor)) ?? 0) + inserted,
+  )
   if (inserted > 0) noteBlocksShifted(editor)
   return {
     ok: true,

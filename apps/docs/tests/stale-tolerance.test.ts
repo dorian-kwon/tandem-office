@@ -1,3 +1,4 @@
+import { applyAiPanelPrefs } from '@genoffice/ui'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Editor } from '@tiptap/core'
 import { BLANK_BULLET_NUM_ID, BLANK_ORDERED_NUM_ID } from '@genoffice/docx-engine'
@@ -32,6 +33,7 @@ const table = (...cells: string[]): PmNode => ({
 
 const live: Editor[] = []
 afterEach(() => {
+  applyAiPanelPrefs({})
   for (const e of live.splice(0)) e.destroy()
 })
 async function createEditor(blocks: PmNode[]): Promise<Editor> {
@@ -127,7 +129,20 @@ describe('stale tolerance: revise_blocks', () => {
 })
 
 describe('stale tolerance: add_bilingual', () => {
+  it('with history off, manual undo removes the earlier typing and preserves later AI twins', async () => {
+    const editor = await createEditor([plain('가'), plain('나'), plain('다')])
+    userTypes(editor, 1)
+    const result = await run(editor, 'add_bilingual', {
+      layout: 'after',
+      blocks: [entry(0, '가', ['A']), entry(1, '나', ['B']), entry(2, '다', ['C'])],
+    })
+    expect(result.isError).toBeFalsy()
+    expect(editor.commands.undo()).toBe(true)
+    expect(bodyTexts(editor)).toEqual(['가', 'A', '나', '다', 'C'])
+  })
+
   it('adds the translation for the untouched paragraphs and skips the edited one', async () => {
+    applyAiPanelPrefs({ aiEditUndoHistory: true })
     const editor = await createEditor([plain('가'), plain('나'), plain('다')])
     userTypes(editor, 1)
     const before = editor.state.doc
