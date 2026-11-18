@@ -91,7 +91,14 @@ import { queueConvertedContent } from './generate/converted-tab'
 import { installReadOnlyGuard } from './read-only-guard'
 import { isTranslationOutputTab } from './translation-output'
 import { releaseClosedRenderer } from './renderer-disposal'
-import { readMemory, SPARE_RECHECK_MS, spareViewVerdict } from './spare-view-policy'
+import {
+  HIDDEN_PANE_RECHECK_MS,
+  hiddenPaneVerdict,
+  readMemory,
+  SPARE_RECHECK_MS,
+  spareViewVerdict,
+} from './spare-view-policy'
+import { noteActivity } from './activity-trail'
 import type { SessionStripState } from './session-record'
 
 /** a tab lifted out of the strip with its live view: what "Open in New Window",
@@ -197,6 +204,9 @@ interface TabRecord {
   /** opened read-only (the translation view's source pane): the shell refuses
    *  its saves, keeps it in the strip and never asks to save it on close */
   readOnly?: boolean
+  /** a read-only tab whose renderer was let go while its pane was hidden and memory was
+   *  short: it has no view, its `opener` reads the file again when the pane is shown */
+  released?: boolean
   /** tabs sharing a group id are one unit (a translation view's source and
    *  output): closing any member closes them all, and they stay adjacent */
   groupId?: string
@@ -239,6 +249,8 @@ export class TabManager {
   private spareSheetsTimer: ReturnType<typeof setTimeout> | null = null
   /** looks at the PC's free memory while a spare exists */
   private spareSheetsWatch: ReturnType<typeof setInterval> | null = null
+  /** looks at the PC's free memory while a read-only pane is hidden */
+  private hiddenPaneWatch: ReturnType<typeof setInterval> | null = null
   /** live two-pane split of this window (decision 0037); null = one visible document */
   private split: SplitViewState | null = null
   /** the tab shown before the current one: the "other document" a split falls
@@ -446,6 +458,16 @@ export class TabManager {
   }
 
   /**
+   * Whether a split pane still has what it needs: a view, or, for the hidden read-only
+   * pane whose renderer was let go (`released`), its place in the split until it is shown.
+   */
+  private paneHasPlace(split: SplitViewState, side: 'a' | 'b'): boolean {
+    const tab = this.tabById(side === 'a' ? split.aTabId : split.bTabId)
+    if (!tab) return false
+    return !!tab.view || (tab.released === true && split.collapsed === side)
+  }
+
+  /**
    * Re-fit every visible view after a window resize, an activation or a split
    * change: a covering view (fullscreen / slides show) fills the window, a
    * focused pane shows both panes at their computed rectangles, and anything
@@ -460,10 +482,7 @@ export class TabManager {
     // after a Windows taskbar restore. Keep the last good layout instead.
     if (!isSettledRect(bounds)) return
     // pane references can go stale while a close prompt is settling; drop them
-    if (
-      this.split &&
-      (!this.tabById(this.split.aTabId)?.view || !this.tabById(this.split.bTabId)?.view)
-    ) {
+    if (this.split && !(this.paneHasPlace(this.split, 'a') && this.paneHasPlace(this.split, 'b'))) {
       this.split = null
     }
     const cover = this.coverTabId()
@@ -1148,6 +1167,9 @@ export class TabManager {
     this.trackPaneFocus(view)
     tab.view = view
     tab.opener = undefined
+    // a read-only tab read again after its renderer was let go is guarded like the first time
+    if (tab.readOnly) installReadOnlyGuard(view.webContents)
+    delete tab.released
     const lazy: LazyLoadState = {
       ready: loaded.ready ?? pageLoaded(view.webContents),
       settled: false,
@@ -1410,6 +1432,8 @@ export class TabManager {
     this.focusActiveView()
     this.onChanged()
     this.notifySplitChanged()
+    // a split that starts with its read-only pane hidden (a remembered arrangement)
+    this.watchHiddenSourcePane()
   }
 
   /**
@@ -1529,6 +1553,13 @@ export class TabManager {
     if (!this.isReadOnlyTab(split.aTabId) && !this.isReadOnlyTab(split.bTabId)) return false
     const next = { ...split, ...withPaneHidden(split, paneOfSide(side), hidden) }
     if (next.collapsed === split.collapsed && next.focus === split.focus) return true
+    // a pane whose renderer was let go is read again before it is shown; if that fails it
+    // stays hidden
+    for (const pane of ['a', 'b'] as const) {
+      if (next.collapsed === pane) continue
+      const tab = this.tabById(pane === 'a' ? next.aTabId : next.bTabId)
+      if (tab?.released && !this.loadTab(tab)) return false
+    }
     const focusId = next.focus === 'a' ? next.aTabId : next.bTabId
     this.split = next
     if (this.activeId === split.aTabId || this.activeId === split.bTabId) {
@@ -1540,7 +1571,69 @@ export class TabManager {
     this.focusActiveView()
     this.onChanged()
     this.notifySplitChanged()
+    this.watchHiddenSourcePane()
     return true
+  }
+
+  /** the hidden pane of the split when it is a read-only one (the translation view's source) */
+  private hiddenSourceTab(): TabRecord | null {
+    const split = this.split
+    if (!split || !split.collapsed) return null
+    const tab = this.tabById(split.collapsed === 'a' ? split.aTabId : split.bTabId)
+    return tab?.readOnly ? tab : null
+  }
+
+  /**
+   * While a read-only pane is hidden, look at the PC's free memory every half minute and let
+   * its renderer go when memory is not plentiful (spare-view-policy.ts). It is never brought
+   * back by memory: showing the pane reads the file again.
+   */
+  private watchHiddenSourcePane(): void {
+    if (this.hiddenPaneWatch || !this.hiddenSourceTab()) return
+    const watch = setInterval(() => {
+      const tab = this.hiddenSourceTab()
+      if (!tab || !tab.view) {
+        this.stopWatchingHiddenSourcePane()
+        return
+      }
+      if (hiddenPaneVerdict(readMemory()) !== 'release') return
+      this.releaseReadOnlyView(tab)
+      this.stopWatchingHiddenSourcePane()
+    }, HIDDEN_PANE_RECHECK_MS)
+    watch.unref?.()
+    this.hiddenPaneWatch = watch
+  }
+
+  private stopWatchingHiddenSourcePane(): void {
+    if (this.hiddenPaneWatch) clearInterval(this.hiddenPaneWatch)
+    this.hiddenPaneWatch = null
+  }
+
+  /**
+   * End the renderer of a read-only tab but keep the tab, its place in the strip and in the
+   * split: it turns into an unloaded tab whose opener reads the file as it is on disk. There
+   * is nothing to lose (a read-only tab holds no edits). The view is taken down the way a
+   * closed tab's is.
+   */
+  private releaseReadOnlyView(tab: TabRecord): void {
+    const view = tab.view
+    if (!view || !tab.readOnly) return
+    dropGenerateHandoff(view.webContents.id)
+    view.setVisible(false)
+    this.shellWindow.contentView.removeChildView(view)
+    if (tab.kind === 'docs') {
+      // see removeTabOnly: a docs view is detached, not destroyed, and its process is ended
+      teardownDocsRenderer(view.webContents)
+      releaseClosedRenderer(view.webContents)
+    } else {
+      view.webContents.close()
+    }
+    tab.view = null
+    tab.lazy = undefined
+    tab.opener = plainTabOpener
+    tab.released = true
+    noteActivity('source-pane-released')
+    this.onChanged()
   }
 
   /**

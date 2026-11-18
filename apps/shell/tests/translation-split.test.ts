@@ -210,6 +210,14 @@ vi.mock('../../epub/src/main/epub-main', () => ({
   requestEpubClose: (...args: unknown[]) => requestEpubClose(...(args as [])),
 }))
 
+// the PC's free memory decides whether a hidden source pane is let go; the tests set it
+const { memory } = vi.hoisted(() => ({ memory: { freeMB: 10_000, totalMB: 16_384 } }))
+
+vi.mock('../src/main/spare-view-policy', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/main/spare-view-policy')>()
+  return { ...actual, readMemory: () => ({ ...memory }) }
+})
+
 import { TabManager } from '../src/main/tab-manager'
 
 const TAB_STRIP_HEIGHT = 40
@@ -246,6 +254,8 @@ let manager: TabManager
 
 beforeEach(() => {
   vi.clearAllMocks()
+  memory.freeMB = 10_000
+  memory.totalMB = 16_384
   nextWebContentsId = 1
   docsQueryDirty.mockImplementation(() => Promise.resolve(false))
   requestDocsClose.mockImplementation(() => Promise.resolve(true))
@@ -533,5 +543,217 @@ describe('translation pair as a tab group', () => {
     const { right } = pair()
     expect(manager.canDetachTab(right)).toBe(false)
     expect(manager.detachTab(right)).toBeNull()
+  })
+})
+
+describe('letting go of a hidden source pane when memory is short', () => {
+  // a hidden read-only pane keeps a whole copy of the document in its own renderer; with
+  // little memory to spare it is released (the tab and the split stay) and comes back,
+  // read from its file again, when the pane is shown
+
+  function pair() {
+    const { left, right } = translationSplit()
+    manager.groupTabs(left, right)
+    return { left, right }
+  }
+  const lastDocsView = (): FakeView => createDocsView.mock.results.at(-1)!.value as FakeView
+  const quiet = () => vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+  it('keeps a hidden source pane while memory is plentiful', () => {
+    vi.useFakeTimers()
+    try {
+      const { left } = pair()
+      manager.setPaneHidden('left', true)
+      vi.advanceTimersByTime(120_000)
+      expect(teardownDocsRenderer).not.toHaveBeenCalled()
+      expect(manager.isTabUnloaded(left)).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('lets it go when memory is short, keeping the tab, its place and the split', () => {
+    vi.useFakeTimers()
+    try {
+      memory.freeMB = 1_000
+      const { left, right } = pair()
+      const leftView = viewOf(left)
+      manager.setPaneHidden('left', true)
+      vi.advanceTimersByTime(30_000)
+
+      expect(teardownDocsRenderer).toHaveBeenCalledWith(leftView.webContents)
+      expect(releaseClosedRenderer).toHaveBeenCalledWith(leftView.webContents)
+      expect(shellWindow.contentView.removeChildView).toHaveBeenCalledWith(leftView)
+      expect(manager.isTabUnloaded(left)).toBe(true)
+      expect(manager.list().find((t) => t.id === left)).toMatchObject({ readOnly: true })
+      expect(manager.splitState()).toMatchObject({ aTabId: left, bTabId: right, collapsed: 'a' })
+
+      // a layout pass must not take the pane's missing view for a stale split
+      manager.layout()
+      expect(manager.splitState()).toMatchObject({ aTabId: left, bTabId: right, collapsed: 'a' })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('leaves the visible panes and the editable output alone', () => {
+    vi.useFakeTimers()
+    try {
+      memory.freeMB = 1_000
+      const { left, right } = pair()
+      // nothing hidden: nothing is let go
+      vi.advanceTimersByTime(120_000)
+      expect(teardownDocsRenderer).not.toHaveBeenCalled()
+      // the output pane hidden: it is the editable one
+      manager.setPaneHidden('right', true)
+      vi.advanceTimersByTime(120_000)
+      expect(teardownDocsRenderer).not.toHaveBeenCalled()
+      expect(manager.isTabUnloaded(left)).toBe(false)
+      expect(manager.isTabUnloaded(right)).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('looks again each half minute: memory that runs short later lets it go then', () => {
+    vi.useFakeTimers()
+    try {
+      const { left } = pair()
+      manager.setPaneHidden('left', true)
+      vi.advanceTimersByTime(30_000)
+      expect(manager.isTabUnloaded(left)).toBe(false)
+      memory.freeMB = 1_000
+      vi.advanceTimersByTime(30_000)
+      expect(manager.isTabUnloaded(left)).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not let go of a pane that was shown again before the check', () => {
+    vi.useFakeTimers()
+    try {
+      memory.freeMB = 1_000
+      const { left } = pair()
+      manager.setPaneHidden('left', true)
+      vi.advanceTimersByTime(10_000)
+      manager.setPaneHidden('left', false)
+      vi.advanceTimersByTime(120_000)
+      expect(teardownDocsRenderer).not.toHaveBeenCalled()
+      expect(manager.isTabUnloaded(left)).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('reads the document again, read-only, when the pane is shown', () => {
+    vi.useFakeTimers()
+    try {
+      memory.freeMB = 1_000
+      const { left } = pair()
+      manager.setPaneHidden('left', true)
+      vi.advanceTimersByTime(30_000)
+      createDocsView.mockClear()
+
+      expect(manager.setPaneHidden('left', false)).toBe(true)
+      expect(createDocsView).toHaveBeenCalledWith('/p/source/a.docx')
+      const fresh = lastDocsView()
+      expect(manager.isTabUnloaded(left)).toBe(false)
+      expect(manager.isReadOnlyTab(left)).toBe(true)
+      expect(manager.isReadOnlyWebContents(fresh.webContents.id)).toBe(true)
+      expect(manager.splitState()?.collapsed).toBeNull()
+      expect(fresh.setVisible).toHaveBeenLastCalledWith(true)
+      expect(fresh.setBounds).toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('comes back too when the other pane is hidden instead', () => {
+    vi.useFakeTimers()
+    try {
+      memory.freeMB = 1_000
+      const { left } = pair()
+      manager.setPaneHidden('left', true)
+      vi.advanceTimersByTime(30_000)
+      createDocsView.mockClear()
+      // hiding the output pane shows the source pane
+      expect(manager.setPaneHidden('right', true)).toBe(true)
+      expect(createDocsView).toHaveBeenCalledWith('/p/source/a.docx')
+      expect(manager.isTabUnloaded(left)).toBe(false)
+      expect(manager.splitState()?.collapsed).toBe('b')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('comes back when its tab is picked in the strip', () => {
+    vi.useFakeTimers()
+    try {
+      memory.freeMB = 1_000
+      const { left } = pair()
+      manager.setPaneHidden('left', true)
+      vi.advanceTimersByTime(30_000)
+      createDocsView.mockClear()
+      manager.activateTab(left)
+      expect(createDocsView).toHaveBeenCalledWith('/p/source/a.docx')
+      expect(manager.isTabUnloaded(left)).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('stays hidden, and can be tried again, when the document cannot be read again', () => {
+    vi.useFakeTimers()
+    const warn = quiet()
+    try {
+      memory.freeMB = 1_000
+      const { left } = pair()
+      manager.setPaneHidden('left', true)
+      vi.advanceTimersByTime(30_000)
+      createDocsView.mockImplementationOnce(() => {
+        throw new Error('the file is gone')
+      })
+      expect(manager.setPaneHidden('left', false)).toBe(false)
+      expect(manager.splitState()?.collapsed).toBe('a')
+      expect(manager.isTabUnloaded(left)).toBe(true)
+      expect(manager.setPaneHidden('left', false)).toBe(true)
+      expect(manager.isTabUnloaded(left)).toBe(false)
+    } finally {
+      warn.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
+  it('also watches a split that starts with the source pane already hidden', () => {
+    vi.useFakeTimers()
+    try {
+      memory.freeMB = 1_000
+      const left = manager.openDocsTab('/p/source/a.docx')
+      const right = manager.openDocsTab('/p/output/a.docx')
+      manager.setTabReadOnly(left)
+      // a remembered arrangement is restored with the source pane hidden
+      manager.beginSplit(left, right, 'side', 0.5, 'b', 'a')
+      expect(manager.splitState()?.collapsed).toBe('a')
+      vi.advanceTimersByTime(30_000)
+      expect(manager.isTabUnloaded(left)).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('closes with its pair, view or no view', async () => {
+    vi.useFakeTimers()
+    try {
+      memory.freeMB = 1_000
+      const { left, right } = pair()
+      manager.setPaneHidden('left', true)
+      vi.advanceTimersByTime(30_000)
+      expect(manager.isTabUnloaded(left)).toBe(true)
+      expect(manager.closeTabWithoutPrompt(right)).toBe(true)
+      expect(manager.list().map((t) => t.id)).toEqual(['home'])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
