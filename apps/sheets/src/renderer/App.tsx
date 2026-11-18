@@ -462,6 +462,7 @@ import { installCellClipAnchorFix } from './cell-clip-anchor-fix'
 import { installBorderOverflowExclusionFix } from './border-overflow-exclusion'
 import { installCfEmptySheetFastPath } from './cf-empty-fast-path'
 import { installStylesCacheReuse } from './styles-cache-reuse'
+import { installMacroTaskChannelFix } from './macro-task-channel-fix'
 import { installMergeBorderFix } from './merge-border-fix'
 import { installThickBorderFix } from './thick-border-fix'
 import { installCenterContinuousRender } from './center-continuous'
@@ -2331,6 +2332,9 @@ export function App({
     // Borders stored on a merged range's main cell must render their edge
     // segments like Excel; stock Univer drops them entirely.
     installMergeBorderFix()
+    // Univer's render debounces leave a MessageChannel open per call; every
+    // AI request leaked ~110 of them (native memory, never collected).
+    installMacroTaskChannelFix()
     // Thick borders must read visibly heavier than medium ones like Excel;
     // stock Univer's 3px thick shares the footprint of its smeared 2px medium.
     installThickBorderFix()
