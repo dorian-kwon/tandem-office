@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  HIDDEN_PANE_RECHECK_MS,
   SPARE_RECHECK_MS,
+  hiddenPaneVerdict,
   readMemory,
   spareViewVerdict,
   type MemoryReading,
@@ -65,6 +67,38 @@ describe('the two limits', () => {
 
   it('look again every half minute', () => {
     expect(SPARE_RECHECK_MS).toBe(30_000)
+  })
+})
+
+describe('hiddenPaneVerdict', () => {
+  // a hidden read-only pane (the translation view's source) holds a whole copy of the
+  // document in its own renderer; it is let go unless memory is plentiful
+
+  it('keeps it while memory is plentiful, the bar for making a spare view', () => {
+    expect(hiddenPaneVerdict(at(16_384, 5_000))).toBe('keep')
+    expect(hiddenPaneVerdict(at(16_384, 3_277))).toBe('keep')
+    expect(hiddenPaneVerdict(at(8_192, 3_072))).toBe('keep')
+  })
+
+  it('lets it go when memory is not plentiful', () => {
+    expect(hiddenPaneVerdict(at(16_384, 3_000))).toBe('release')
+    expect(hiddenPaneVerdict(at(8_192, 2_000))).toBe('release')
+    expect(hiddenPaneVerdict(at(32_768, 6_000))).toBe('release')
+  })
+
+  it('agrees with the spare view: memory that makes a spare keeps the pane', () => {
+    for (const totalMB of [4_096, 8_192, 16_384, 65_536]) {
+      for (let freeMB = 0; freeMB <= totalMB; freeMB += 256) {
+        const plenty = spareViewVerdict(at(totalMB, freeMB), false) === 'create'
+        expect(hiddenPaneVerdict(at(totalMB, freeMB)) === 'keep', `${totalMB}/${freeMB}`).toBe(
+          plenty,
+        )
+      }
+    }
+  })
+
+  it('is looked at every half minute', () => {
+    expect(HIDDEN_PANE_RECHECK_MS).toBe(30_000)
   })
 })
 

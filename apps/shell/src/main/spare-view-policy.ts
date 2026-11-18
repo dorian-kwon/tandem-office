@@ -21,6 +21,9 @@ export type SpareVerdict = 'create' | 'wait' | 'keep' | 'drop'
 /** how often a missing spare is looked for again and an existing one is checked */
 export const SPARE_RECHECK_MS = 30_000
 
+/** how often a hidden read-only pane is checked for being let go */
+export const HIDDEN_PANE_RECHECK_MS = 30_000
+
 const CREATE_MIN_FREE_MB = 3072
 const CREATE_MIN_FREE_SHARE = 0.2
 const DROP_MIN_FREE_MB = 1536
@@ -46,6 +49,16 @@ export function readMemory(): MemoryReading {
     /* fall through to os */
   }
   return { totalMB: Math.round(totalmem() / MB), freeMB: Math.round(freemem() / MB) }
+}
+
+/**
+ * What to do about a hidden read-only pane (the translation view's source), which holds a
+ * whole copy of the document in its own renderer: let it go unless memory is plentiful, the
+ * same bar as making a spare view. It is only ever released, never brought back by this: the
+ * person showing the pane again loads it.
+ */
+export function hiddenPaneVerdict(memory: MemoryReading): 'keep' | 'release' {
+  return spareViewVerdict(memory, false) === 'create' ? 'keep' : 'release'
 }
 
 /** what to do about the spare view at this reading of memory */
