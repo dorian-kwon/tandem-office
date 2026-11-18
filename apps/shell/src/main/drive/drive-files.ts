@@ -213,7 +213,11 @@ export class DriveFiles {
   }
 
   /** Open a Drive file: fetch it unless the local copy is current or holds unsent changes */
-  async open(fileId: string, signal?: AbortSignal): Promise<OpenOutcome> {
+  async open(
+    fileId: string,
+    signal?: AbortSignal,
+    openPath = this.deps.openPath,
+  ): Promise<OpenOutcome> {
     await this.start()
     const api = this.deps.api()
     const meta = await api.file(fileId, signal)
@@ -235,7 +239,7 @@ export class DriveFiles {
         existing.openedAt = this.now()
         await this.saveIndex()
         if (dirty && !existing.detached) void this.syncIfChanged(existing.sourceId)
-        return this.deps.openPath(existing.localPath) ? { ok: true } : { ok: false, kind: 'disk' }
+        return openPath(existing.localPath) ? { ok: true } : { ok: false, kind: 'disk' }
       }
     }
 
@@ -272,7 +276,7 @@ export class DriveFiles {
       openedAt: this.now(),
     })
     await this.saveIndex()
-    return this.deps.openPath(localPath) ? { ok: true } : { ok: false, kind: 'disk' }
+    return openPath(localPath) ? { ok: true } : { ok: false, kind: 'disk' }
   }
 
   private changed(path: string): void {

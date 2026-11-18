@@ -81,7 +81,7 @@ export interface DriveIpcDeps {
 
 export interface DriveService {
   /** a local path is a copy of a Drive file: reopen through Drive so a stale copy is refreshed */
-  reopen(path: string): Promise<boolean> | null
+  reopen(path: string, openPath?: (path: string) => boolean): Promise<boolean> | null
   stop(): void
 }
 
@@ -426,10 +426,10 @@ export function registerDriveIpc(deps: DriveIpcDeps): DriveService {
   })
 
   return {
-    reopen(path) {
+    reopen(path, openPath = deps.openPath) {
       const entry = files.entryFor(path)
       if (!entry) return null
-      return files.open(entry.sourceId).then((r) => r.ok || deps.openPath(path))
+      return files.open(entry.sourceId, undefined, openPath).then((r) => r.ok || openPath(path))
     },
     stop() {
       setAiRunGuard(null)

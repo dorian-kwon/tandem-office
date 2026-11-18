@@ -35,6 +35,7 @@ import type {
   WebContents,
 } from 'electron'
 import { atomicWriteFile } from './atomic-write'
+import { cancelDocumentImageOpens, queueDocumentImageOpen } from './document-images/open'
 import { tabStripOverlay } from './title-bar-overlay'
 import { shellWindowBackground } from './window-background'
 import { installPointerSize } from './pointer-size'
@@ -5490,7 +5491,7 @@ function showAppWarning(message: string): void {
  * can host the drop target, so the shell must reveal itself after opening.
  */
 const droppedFilesDeps = () => ({
-  openDocumentPath,
+  openDocumentPath: openUserDocumentPath,
   revealShellWindow,
   showWarning: showAppWarning,
   unsupportedMessage: (exts: string[]) => tm('errUnsupportedExt', { ext: exts.join(', ') }),
@@ -5502,11 +5503,37 @@ function registerDroppedFilesIpc(): void {
   )
 }
 
+/** File picker, Recent, Finder and OS drops share the optional image copy prompt. */
+function openUserDocumentPath(filePath: string, owner = shellWindow): boolean {
+  if (!tabManager || appQuitting) return false
+  if (isPathOpenInAnyTab(filePath)) return openDocumentPath(filePath)
+  // A Drive working copy may need a refresh before its bytes are inspected.
+  const open = (path: string) => queueImageCopyOrOpen(path, owner)
+  const viaDrive = driveService?.reopen(filePath, open)
+  if (viaDrive) {
+    void viaDrive.catch(() => open(filePath))
+    return true
+  }
+  return open(filePath)
+}
+
+function queueImageCopyOrOpen(filePath: string, owner: BrowserWindow | null): boolean {
+  if (appQuitting || drainingImageCopies || owner?.isDestroyed()) return false
+  return (
+    queueDocumentImageOpen(filePath, {
+      parent: () => owner,
+      lang: currentLang,
+      isOpen: isPathOpenInAnyTab,
+      open: routeDocumentPath,
+    }) || routeDocumentPath(filePath)
+  )
+}
+
 /** the single router: extension decides which module owns the file; false = nothing opened */
 function openDocumentPath(filePath: string): boolean {
   // a copy of a Drive file (from Recent, say) reopens through Drive, so a copy
   // older than the file in Drive is refreshed first unless it holds unsent edits
-  const viaDrive = driveService?.reopen(filePath)
+  const viaDrive = driveService?.reopen(filePath, routeDocumentPath)
   if (viaDrive) {
     void viaDrive.catch(() => routeDocumentPath(filePath))
     return true
@@ -6384,9 +6411,9 @@ function registerHomeIpc(): void {
     if (typeof path === 'string') toggleStarredFile(path)
   })
 
-  ipcMain.handle(HOME_CHANNELS.openPath, (_event, path: unknown) => {
+  ipcMain.handle(HOME_CHANNELS.openPath, (event, path: unknown) => {
     if (typeof path !== 'string' || !path || path.length > 4096) return
-    openDocumentPath(path)
+    openUserDocumentPath(path, BrowserWindow.fromWebContents(event.sender) ?? shellWindow)
     fileIndexer?.refresh()
   })
 
@@ -6410,7 +6437,7 @@ function registerHomeIpc(): void {
       ],
       properties: ['openFile', 'multiSelections'],
     })
-    if (!result.canceled) for (const path of result.filePaths) openDocumentPath(path)
+    if (!result.canceled) for (const path of result.filePaths) openUserDocumentPath(path, win)
   })
 
   ipcMain.handle(HOME_CHANNELS.newDoc, (_event, opts?: NewFileOpts) => {
@@ -7932,7 +7959,7 @@ async function openFileViaDialog(): Promise<void> {
     filters: [{ name: tm('filterSupported'), extensions: OPEN_DIALOG_EXTENSIONS }],
     properties: ['openFile', 'multiSelections'],
   })
-  if (!result.canceled) for (const path of result.filePaths) openDocumentPath(path)
+  if (!result.canceled) for (const path of result.filePaths) openUserDocumentPath(path, win)
 }
 
 function buildHomeMenu(): void {
@@ -9164,7 +9191,7 @@ function revealShellWindow(): void {
 
 function openLaunchPaths(paths: readonly string[]): void {
   let opened = false
-  for (const filePath of paths) opened = openDocumentPath(filePath) || opened
+  for (const filePath of paths) opened = openUserDocumentPath(filePath) || opened
   if (!opened) tabManager?.openHomeTab()
 }
 
@@ -9717,8 +9744,8 @@ app.whenReady().then(async () => {
     settingsPath: APP_SETTINGS_PATH,
     lang: () => currentLang(),
     window: () => shellWindow,
-    // a Drive copy opens like any local file; the Drive service already chose the copy
-    openPath: (path) => routeDocumentPath(path),
+    // A Drive copy opens like any local file after the Drive service selects its bytes.
+    openPath: (path) => queueImageCopyOrOpen(path, shellWindow),
     isOpen: (path) =>
       (tabManager?.openFilePaths() ?? []).some(
         (open) => resolve(open).toLowerCase() === resolve(path).toLowerCase(),
@@ -9869,7 +9896,7 @@ app.whenReady().then(async () => {
     writeSettings: (next) => writeAppSetting(APP_SETTINGS_PATH(), 'quickLook', next),
     openInEditor: (filePath) => {
       revealShellWindow()
-      openDocumentPath(filePath)
+      openUserDocumentPath(filePath)
     },
     showShellWindow: () => {
       revealShellWindow()
@@ -10237,7 +10264,21 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-app.on('before-quit', () => {
+let drainingImageCopies = false
+app.on('before-quit', (event) => {
+  const imageWork = cancelDocumentImageOpens()
+  if (imageWork) {
+    event.preventDefault()
+    if (!drainingImageCopies) {
+      drainingImageCopies = true
+      const retryQuit = () => {
+        drainingImageCopies = false
+        app.quit()
+      }
+      void imageWork.then(retryQuit, retryQuit)
+    }
+    return
+  }
   noteActivity('app-quit')
   // "Restart & Install": the tabs as they are now come back after the update,
   // whatever the closing windows report on the way out
