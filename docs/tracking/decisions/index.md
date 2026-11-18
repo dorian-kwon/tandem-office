@@ -111,3 +111,4 @@
 | [0110](0110-spare-sheets-view-follows-free-memory.md)         | 미리 띄운 엑셀 화면은 PC의 남은 메모리를 읽어 넉넉할 때만 만들고, 모자라지면 닫는다                                               | 2026-11-18 |
 | [0111](0111-hidden-source-pane-released-when-memory-short.md) | 번역 화면에서 숨긴 원본 칸은 메모리가 넉넉하지 않으면 내려 두고, 칸을 보일 때 파일에서 다시 연다                                  | 2026-11-18 |
 | [0112](0112-isolate-html-conversion-window.md)                | HTML을 Word로 바꾸는 숨은 창은 따로 떼어 둔 세션에서 허락한 것만 불러온다(이음오피스 결정 0142에서 옮김, 보안 수정)               | 2026-11-18 |
+| [0113](0113-upstream-is-ieumoffice.md)                        | 원본 받아오기는 직계 부모인 이음오피스를 기준으로 하고, 엔진 폴더 커밋만 하나씩 골라 옮긴다                                       | 2026-11-18 |

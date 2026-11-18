@@ -186,26 +186,35 @@ GitHub Actions에서 만든다.
 
 ## 원본의 개선 받아오기
 
-원본의 문서 엔진 쪽 커밋을 하나씩 골라 옮긴다. 원본 가지를 통째로 합치지 않는다. 통째로 합치면 걷어낸 제작사 연결과 화면이 한꺼번에 되돌아온다.
+**기준은 이음오피스다**(결정 0113). 이 저장소의 직계 부모인 이음오피스(`pblsketch/openoffice`)가 GenOffice의 엔진 수정을 이미 골라 받고 제작사 연결도 걷어 두었으므로, GenOffice를 따로 받지 않고 이음오피스의 문서 엔진 쪽 커밋을 하나씩 골라 옮긴다. 가지를 통째로 합치지 않는다. 통째로 합치면 걷어낸 제작사 연결과 이음오피스 고유의 화면·기능·결정 번호가 한꺼번에 들어온다.
 
 ```bash
-git remote add upstream <원본 저장소 주소>     # 처음 한 번. 주소는 소개 문서의 출처 단락에 있다
-git fetch upstream
-# 엔진 폴더에 닿은 원본 커밋만 본다
-git log --oneline HEAD..upstream/main -- packages/docx-engine packages/pptx-engine packages/pptx-ops \
-  packages/pptx-render packages/xlsx-gateway packages/pdf2docx packages/html2docx packages/file-parse \
-  packages/zip-gate packages/font-metrics apps/sheets/native
+git remote add upstream https://github.com/pblsketch/openoffice.git   # 처음 한 번
+git fetch upstream --no-tags
+# 엔진 폴더에 닿은 커밋만 본다. 마지막으로 받은 곳은 아래 "마지막으로 받은 곳"에 있다
+git log --reverse --format=%H <마지막으로 받은 곳>..upstream/main -- packages/docx-engine packages/pptx-engine \
+  packages/pptx-ops packages/pptx-render packages/xlsx-gateway packages/pdf2docx packages/html2docx \
+  packages/file-parse packages/zip-gate packages/font-metrics apps/sheets/native
 git checkout -b sync/<날짜>
-git cherry-pick -x <커밋>                      # 하나씩. -x가 원본 커밋 번호를 커밋 글에 남긴다
-npm run check:no-genspark                      # 원본에서 다시 딸려 온 제작사 표기·연결을 여기서 잡는다
+git cherry-pick -x -n <커밋>                   # 하나씩. 아래 규칙대로 엔진 밖 파일을 되돌린 뒤 -x 글과 함께 커밋한다
+npm run check:no-genspark                      # 다시 딸려 온 제작사 표기·연결을 여기서 잡는다
 npm run typecheck
 ```
 
-- 엔진 밖의 파일까지 고치는 커밋은 엔진 쪽 변경만 받는다. 화면 문구 파일, 껍데기 앱의 뒷단, AI 연결부에서 충돌이 나면 이 프로젝트의 것을 남긴다.
+- **zsh에서 경로 목록을 변수에 담지 않는다.** zsh는 따옴표 없는 변수를 공백으로 나누지 않아 경로 하나로 취급하고, 아무것도 걸리지 않아 "새 커밋 0개"처럼 보인다. 위처럼 경로를 바로 쓰거나 bash의 배열(`"${P[@]}"`)을 쓴다.
+- 합병 커밋은 건너뛴다. 각 PR의 실제 커밋이 목록에 따로 있어 함께 옮겨진다.
+- 엔진 밖의 파일까지 고치는 커밋은 엔진 쪽 변경만 받는다(`cherry-pick -x -n` 뒤 엔진 밖 파일을 이 가지의 HEAD로 되돌리고 커밋한다). 화면 문구 파일, 껍데기 앱의 뒷단, AI 연결부에서 충돌이 나면 이 프로젝트의 것을 남긴다. 엔진 밖 코드가 꼭 함께 바뀌어야 하는 커밋(형 검사가 깨지거나 필요한 패키지가 이 저장소에 없는 경우)은 건너뛰고 따로 판단한다. **보안 수정이면 뒷단까지 옮긴다**(2026-11-18의 HTML 변환 창 격리, 결정 0112).
+- 옮긴 커밋의 글에 있는 이음오피스 결정 번호는 이 저장소에 없다. 옮긴 문서가 그 결정을 링크하면 링크는 끊어지니, 글로 바꾸거나 이 저장소의 번호로 새 결정을 만든다.
+- 옮긴 `package.json`에 의존이 더해졌으면 `package-lock.json`의 같은 패키지 항목에도 같은 줄을 넣는다(엔진 밖 파일이라 옮겨지지 않는다).
 - 원본이 화면 문구 키를 늘렸으면 21개 언어 모두에 들어왔는지 형 검사로 확인한다.
 - 옮긴 뒤 위의 검사 전체와, 건드린 엔진 패키지의 테스트를 돌린다.
 - `packages/pdf2docx`(결정 0058)와 `packages/docx-engine`(결정 0092)에는 원본과 다른 동작이 있다. 그 패키지의 `AGENTS.md` "원본과 다른 점"에 적힌 시험이 옮긴 뒤에도 통과하는지 본다. 충돌이 나면 그 목록의 동작을 남긴다. 원본이 같은 수정을 받아들였으면 그 항목을 지운다.
 - `packages/pptx-engine`·`packages/pptx-ops`에도 원본과 다른 동작이 있다(결정 0094: 강조 색·문자 간격 쓰기, 도형 숨기기·이름). 두 패키지의 `AGENTS.md` "원본과 다른 점"의 시험으로 같은 확인을 한다.
+
+### 마지막으로 받은 곳
+
+- **2026-11-18:** 이음오피스 `729e64952`(그날의 `main`)까지. 엔진 폴더 커밋 170개 가운데 146개를 옮겼고(`sync/2026-11-18-ieum`), HTML 변환 창 격리 보안 수정 1개는 워드·HTML 뒷단과 함께 따로 옮겼다(결정 0112). 건너뛴 것은 합병 커밋 22개(각 PR의 커밋은 옮겨졌다)와 draw.io 읽기(`24febbe0e`. 이 저장소에 없는 `@genoffice/drawio-model` 패키지가 필요하고 첨부 형식 목록도 바꾼다)다. 다음에는 `729e64952..upstream/main`부터 본다.
+- 이음오피스 고유의 ODS 열기·내보내기(약 40개 커밋, 이음오피스 결정 0119)가 엑셀 엔진에 들어와 있다. 내보내기 명령 `convert_to_ods`는 화면과 뒷단에 연결하지 않아 지금은 쓰이지 않는 코드다.
 
 ## 한글 엔진(rhwp) 다시 빌드하기
 
