@@ -514,7 +514,7 @@ describe('AiPanel under the subscription contract', () => {
     })
     const container = await mountPanel()
     await sendMessage(container, 'hello')
-    expect(bridge.requests[0]!.system).toContain('tandem office Markdown')
+    expect(bridge.requests[0]!.system).toContain('Tandem Office Markdown')
     expect(bridge.requests[0]!.system).not.toContain('GenOffice')
   })
 })
