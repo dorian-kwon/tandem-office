@@ -83,6 +83,10 @@
 - **"주석 빼기"는 링크와 입력란을 남긴다.** `annot-strip.ts`의 `stripCommentAnnotsBytes`가 메모·형광펜·그리기·도장만 지운다. 링크와 위젯까지 지우는 PDF 도구의 "주석 한꺼번에 지우기"와 종류가 다르다.
 - **"받아들이고 저장"이 방금 받아들인 형광펜을 빠뜨린다.** 받아들이기는 markups를 state에 넣지만, 같은 클릭에서 `save()`를 부르면 그 `save`는 이전 렌더의 markups를 들고 있다. → 받아들이기 뒤 `acceptSaveRequest`를 올리고, 새 렌더가 끝난 뒤의 effect에서 `saveRef.current`로 저장한다. `accepted`는 그 저장이 성공한 뒤에만 쓴다.
 
+## 엑셀 저장
+
+- **저장한 .xlsx를 진짜 Excel이 "내용에 문제가 있습니다. 복구하시겠습니까?"라며 열지 못한다. 복구 창은 `/xl/worksheets/sheet1.xml` "로드 오류, 1행 0열"이라고 한다.** 워크시트의 자식 요소는 정해진 순서(`sheetPr`, `dimension`, `sheetViews`, `sheetFormatPr`, `cols`, `sheetData` …)로 써야 하고 Excel은 어긋난 순서를 거부한다. 2026-11-18에 본 파일은 Open XML SDK 계열 생성기가 만든 것이라 `<dimension>`이 없고 `<sheetPr>`는 있었는데, 셀을 고쳐 저장하자 `expandWorksheetDimensionToCells`가 `<dimension>`을 `<worksheet>` 바로 뒤, 곧 `<sheetPr>` 앞에 끼워 넣었다. XML로는 정상이라 파서 검사로는 잡히지 않고, LibreOffice 같은 느슨한 프로그램은 열어 준다. → 요소를 끼울 때는 앞에 올 요소가 있는지 보고 그 뒤에 넣는다(`tests/dimension-element-order.test.ts`). 이미 저장된 파일은 `<dimension>`을 `</sheetPr>` 뒤로 옮기면 열린다. 시트에 `<sheetPr>`가 있고 `<dimension>`이 없던 파일을 고쳐 저장한 경우에만 생긴다(0.15.2까지).
+
 ## ODT
 
 - **한컴 ODT는 표준 검사기에서 처음부터 오류가 난다.** 한컴이 쓴 ODT는 `mimetype`이 맨 앞이 아니고 압축돼 있으며, `office:version`이 없고 스키마 오류도 있다. → ODF 검사기로는 "우리가 새 오류를 만들지 않았다"만 본다. 받은 파일의 오류는 고치지 않는다. 합격 여부는 한컴 한글 2024가 읽은 결과로 정한다.

@@ -3164,6 +3164,13 @@ function expandWorksheetDimensionToCells(worksheetXml: string): string {
   if (dimension) {
     return worksheetXml.replace(/(<dimension\b[^>]*\bref=")[^"]+("[^>]*\/?>)/, `$1${reference}$2`)
   }
+  // CT_Worksheet is a sequence and <sheetPr> comes first: a <dimension> in front of it makes
+  // Excel stop with "load error" and offer to repair the file.
+  const properties = /<sheetPr\b[^>]*\/>|<sheetPr\b[^>]*>[\s\S]*?<\/sheetPr\s*>/.exec(worksheetXml)
+  if (properties) {
+    const end = properties.index + properties[0].length
+    return `${worksheetXml.slice(0, end)}<dimension ref="${reference}"/>${worksheetXml.slice(end)}`
+  }
   return worksheetXml.replace(/(<worksheet\b[^>]*>)/, `$1<dimension ref="${reference}"/>`)
 }
 
