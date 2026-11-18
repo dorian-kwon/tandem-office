@@ -109,6 +109,142 @@ afterEach(() => {
 })
 
 describe('marks of changes', () => {
+  it('uses hinted geometry when header repetition is enabled but no cells are headers', () => {
+    const { plugin, doc } = open(['prefix', ''], (d) => {
+      d.pasteHtml(0, 1, 0, '<table><tr><td>target</td><td>target</td></tr></table>')
+      d.setTableProperties(0, 1, 0, JSON.stringify({ repeatHeader: true }))
+    })
+    const full = vi.spyOn(doc, 'getSelectionRectsInCellByPath')
+    const hinted = vi.spyOn(doc, 'getSelectionRectsInCellByPathEx')
+    const dimensions = vi.spyOn(doc, 'getTableDimensions')
+    plugin.replaceAllText('target', 'changed')
+    expect(full).not.toHaveBeenCalled()
+    expect(hinted).toHaveBeenCalledTimes(2)
+    expect(dimensions).toHaveBeenCalledTimes(1)
+    const expected = [0, 1].flatMap(
+      (cellIndex) =>
+        JSON.parse(
+          doc.getSelectionRectsInCellByPath(
+            0,
+            1,
+            JSON.stringify([{ controlIndex: 0, cellIndex, cellParaIndex: 0 }]),
+            0,
+            0,
+            0,
+            7,
+          ),
+        ) as Rect[],
+    )
+    expect(marksOnPage()).toEqual(
+      expected.map((r) => ({
+        pageIndex: r.pageIndex,
+        x: Math.round(r.x),
+        y: Math.round(r.y),
+        width: Math.round(r.width),
+        height: Math.round(r.height),
+      })),
+    )
+  })
+
+  it('keeps the entire repeated header row on the full query and hints ordinary rows', () => {
+    const { plugin, doc } = open(['prefix', ''], (d) => {
+      d.pasteHtml(
+        0,
+        1,
+        0,
+        '<table><tr><td>target</td><td>target</td></tr><tr><td>target</td><td>target</td></tr></table>',
+      )
+      d.setTableProperties(0, 1, 0, JSON.stringify({ repeatHeader: true }))
+      d.setCellProperties(0, 1, 0, 0, JSON.stringify({ isHeader: true }))
+    })
+    const full = vi.spyOn(doc, 'getSelectionRectsInCellByPath')
+    const hinted = vi.spyOn(doc, 'getSelectionRectsInCellByPathEx')
+    const dimensions = vi.spyOn(doc, 'getTableDimensions')
+    const cellProperties = vi.spyOn(doc, 'getCellProperties')
+    plugin.replaceAllText('target', 'changed')
+    expect(full.mock.calls.map((call) => JSON.parse(call[2])[0].cellIndex)).toEqual([0, 1])
+    expect(
+      hinted.mock.calls.map((call) => JSON.parse(JSON.parse(call[0]).path)[0].cellIndex),
+    ).toEqual([2, 3])
+    expect(dimensions).toHaveBeenCalledTimes(1)
+    expect(cellProperties).toHaveBeenCalledTimes(4)
+    const expected = [0, 1, 2, 3].flatMap(
+      (cellIndex) =>
+        JSON.parse(
+          doc.getSelectionRectsInCellByPath(
+            0,
+            1,
+            JSON.stringify([{ controlIndex: 0, cellIndex, cellParaIndex: 0 }]),
+            0,
+            0,
+            0,
+            7,
+          ),
+        ) as Rect[],
+    )
+    expect(marksOnPage()).toEqual(
+      expected.map((r) => ({
+        pageIndex: r.pageIndex,
+        x: Math.round(r.x),
+        y: Math.round(r.y),
+        width: Math.round(r.width),
+        height: Math.round(r.height),
+      })),
+    )
+  })
+
+  it('protects every row spanned by a header cell, including unflagged neighbouring cells', () => {
+    const { plugin, doc } = open(['prefix', ''], (d) => {
+      d.pasteHtml(
+        0,
+        1,
+        0,
+        '<table><tr><td>header</td><td>top</td></tr><tr><td>covered</td><td>target</td></tr><tr><td>bottom</td><td>target</td></tr></table>',
+      )
+      d.mergeTableCells(0, 1, 0, 0, 0, 1, 0)
+      d.setTableProperties(0, 1, 0, JSON.stringify({ repeatHeader: true }))
+      d.setCellProperties(0, 1, 0, 0, JSON.stringify({ isHeader: true }))
+    })
+    expect(JSON.parse(doc.getCellInfo(0, 1, 0, 0)).rowSpan).toBe(2)
+    const full = vi.spyOn(doc, 'getSelectionRectsInCellByPath')
+    const hinted = vi.spyOn(doc, 'getSelectionRectsInCellByPathEx')
+    plugin.replaceAllText('target', 'changed')
+    expect(full).toHaveBeenCalledTimes(1)
+    expect(hinted).toHaveBeenCalledTimes(1)
+    const protectedCell = JSON.parse(full.mock.calls[0][2])[0].cellIndex
+    const ordinaryCell = JSON.parse(JSON.parse(hinted.mock.calls[0][0]).path)[0].cellIndex
+    expect(JSON.parse(doc.getCellInfo(0, 1, 0, protectedCell)).row).toBe(1)
+    expect(JSON.parse(doc.getCellInfo(0, 1, 0, ordinaryCell)).row).toBe(2)
+    expect(marksOnPage()).toHaveLength(2)
+  })
+
+  it.each(['over budget', 'missing header flag', 'failed metadata'])(
+    'keeps full geometry for %s without rescanning the table',
+    (reason) => {
+      const { plugin, doc } = open(['prefix', ''], (d) => {
+        d.pasteHtml(0, 1, 0, '<table><tr><td>target</td><td>target</td></tr></table>')
+        d.setTableProperties(0, 1, 0, JSON.stringify({ repeatHeader: true }))
+      })
+      const dimensions = vi.spyOn(doc, 'getTableDimensions')
+      const properties = vi.spyOn(doc, 'getCellProperties')
+      if (reason === 'over budget')
+        dimensions.mockReturnValue(JSON.stringify({ cellCount: 2001, rowCount: 1 }))
+      else if (reason === 'missing header flag') properties.mockReturnValue('{}')
+      else
+        properties.mockImplementation(() => {
+          throw new Error('metadata unavailable')
+        })
+      const full = vi.spyOn(doc, 'getSelectionRectsInCellByPath')
+      const hinted = vi.spyOn(doc, 'getSelectionRectsInCellByPathEx')
+      plugin.replaceAllText('target', 'changed')
+      expect(full).toHaveBeenCalledTimes(2)
+      expect(hinted).not.toHaveBeenCalled()
+      expect(dimensions).toHaveBeenCalledTimes(1)
+      expect(properties).toHaveBeenCalledTimes(reason === 'over budget' ? 0 : 1)
+      expect(marksOnPage()).toHaveLength(2)
+    },
+  )
+
   it('reuses page geometry for redraws, but refreshes it after layout settles or text changes', () => {
     vi.useFakeTimers()
     const { plugin, doc, redraw } = open(['first', 'target'])
@@ -177,24 +313,27 @@ describe('marks of changes', () => {
     )
   })
 
-  it.each(['repeated header', 'missing endpoint'])('keeps full path geometry for %s', (reason) => {
-    const { plugin, doc } = open([''], (d) => {
-      d.pasteHtml(0, 0, 0, '<table><tr><td>target</td></tr></table>')
-    })
-    if (reason === 'repeated header') {
-      vi.spyOn(doc, 'getTableProperties').mockReturnValue(JSON.stringify({ repeatHeader: true }))
-    } else {
-      vi.spyOn(doc, 'getCursorRectByPath').mockImplementation(() => {
-        throw new Error('unavailable')
+  it.each(['unknown header metadata', 'missing endpoint'])(
+    'keeps full path geometry for %s',
+    (reason) => {
+      const { plugin, doc } = open([''], (d) => {
+        d.pasteHtml(0, 0, 0, '<table><tr><td>target</td></tr></table>')
       })
-    }
-    const scan = vi.spyOn(doc, 'getSelectionRectsInCellByPath')
-    const hinted = vi.spyOn(doc, 'getSelectionRectsInCellByPathEx')
-    plugin.replaceText('target', 'changed', null)
-    expect(scan).toHaveBeenCalledTimes(1)
-    expect(hinted).not.toHaveBeenCalled()
-    expect(marksOnPage().length).toBeGreaterThan(0)
-  })
+      if (reason === 'unknown header metadata') {
+        vi.spyOn(doc, 'getTableProperties').mockReturnValue('{}')
+      } else {
+        vi.spyOn(doc, 'getCursorRectByPath').mockImplementation(() => {
+          throw new Error('unavailable')
+        })
+      }
+      const scan = vi.spyOn(doc, 'getSelectionRectsInCellByPath')
+      const hinted = vi.spyOn(doc, 'getSelectionRectsInCellByPathEx')
+      plugin.replaceText('target', 'changed', null)
+      expect(scan).toHaveBeenCalledTimes(1)
+      expect(hinted).not.toHaveBeenCalled()
+      expect(marksOnPage().length).toBeGreaterThan(0)
+    },
+  )
 
   it('keeps every line of a marked cell spanning several pages', () => {
     const { plugin, doc } = open(['prefix', ''], (d) => {

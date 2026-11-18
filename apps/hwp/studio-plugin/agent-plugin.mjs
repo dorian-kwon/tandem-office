@@ -3415,12 +3415,66 @@ function spanOf(mark, length) {
   return want > 0 ? [offset, Math.min(length, offset + want)] : [0, length]
 }
 
+const MAX_MARK_TABLE_CELLS = 2000
+
+/** One bounded metadata scan per table per geometry refresh; null keeps the full query. */
+function markTableRows(doc, sec, para, control, cache) {
+  const key = `${sec}:${para}:${control}`
+  if (cache.has(key)) return cache.get(key)
+  cache.set(key, null)
+  try {
+    const properties = parse(doc.getTableProperties(sec, para, control))
+    if (properties.repeatHeader === false) {
+      const result = { headerEnd: 0, rows: null }
+      cache.set(key, result)
+      return result
+    }
+    if (properties.repeatHeader !== true) return null
+    const dimensions = parse(doc.getTableDimensions(sec, para, control))
+    const { cellCount, rowCount } = dimensions
+    if (
+      !Number.isInteger(cellCount) ||
+      cellCount < 1 ||
+      cellCount > MAX_MARK_TABLE_CELLS ||
+      !Number.isInteger(rowCount) ||
+      rowCount < 1
+    )
+      return null
+    const rows = []
+    let headerEnd = 0
+    for (let cell = 0; cell < cellCount; cell++) {
+      const { row, rowSpan } = parse(doc.getCellInfo(sec, para, control, cell))
+      const { isHeader } = parse(doc.getCellProperties(sec, para, control, cell))
+      if (
+        !Number.isInteger(row) ||
+        row < 0 ||
+        row >= rowCount ||
+        !Number.isInteger(rowSpan) ||
+        rowSpan < 1 ||
+        rowSpan > rowCount - row ||
+        typeof isHeader !== 'boolean'
+      )
+        return null
+      rows.push(row)
+      // The engine repeats whole leading rows, including an unflagged cell beside
+      // a header and every row covered by its span. Excluding through the last
+      // flagged row is conservative when header rows have gaps.
+      if (isHeader) headerEnd = Math.max(headerEnd, row + rowSpan)
+    }
+    const result = { headerEnd, rows }
+    cache.set(key, result)
+    return result
+  } catch {
+    return null
+  }
+}
+
 /**
  * Where a marked place is on the pages: rectangles in page pixels with their page. A place
  * without text of its own (a table on a line of its own) is the tables of its paragraph.
  * Nothing for a place that is no longer there.
  */
-function markRects(doc, mark) {
+function markRects(doc, mark, tableRows) {
   const { sec, para } = mark
   if (sec >= doc.getSectionCount()) return []
   const path = Array.isArray(mark.path) && mark.path.length > 0 ? mark.path : null
@@ -3445,8 +3499,8 @@ function markRects(doc, mark) {
   const [start, end] = spanOf(mark, doc.getCellParagraphLengthByPath(sec, para, json))
   if (end <= start) return []
   // Unhinted cell selection visits every page for every marked cell. Use actual
-  // endpoint pages for ordinary tables; repeated headers (including nested tables)
-  // can also appear on pages outside those endpoints and must retain the full query.
+  // endpoint pages for nonrepeated rows; headers (including nested tables) can
+  // also appear outside those endpoints and must retain the full query.
   if (
     path.length === 1 &&
     typeof doc.getSelectionRectsInCellByPathEx === 'function' &&
@@ -3454,8 +3508,11 @@ function markRects(doc, mark) {
     typeof doc.getTableProperties === 'function'
   ) {
     try {
-      const properties = parse(doc.getTableProperties(sec, para, path[0].controlIndex))
-      if (properties.repeatHeader === false) {
+      const metadata = markTableRows(doc, sec, para, path[0].controlIndex, tableRows)
+      if (
+        metadata &&
+        (metadata.rows === null || metadata.rows[path[0].cellIndex] >= metadata.headerEnd)
+      ) {
         const first = parse(doc.getCursorRectByPath(sec, para, json, start))
         const last = parse(doc.getCursorRectByPath(sec, para, json, end))
         if ([first.pageIndex, last.pageIndex].every((p) => Number.isInteger(p) && p >= 0)) {
@@ -4137,15 +4194,16 @@ export const agentPlugin = {
       markViewport = { zoom, width, height }
       const rects =
         markRectCache ??
-        host.read((doc) =>
-          marks.flatMap((mark) => {
+        host.read((doc) => {
+          const tableRows = new Map()
+          return marks.flatMap((mark) => {
             try {
-              return markRects(doc, mark)
+              return markRects(doc, mark, tableRows)
             } catch {
               return []
             }
-          }),
-        )
+          })
+        })
       markRectCache = rects
       for (const rect of rects) {
         const box = page.createElement('div')
