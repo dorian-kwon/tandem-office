@@ -1,3 +1,4 @@
+import { applyAiPanelPrefs } from '@genoffice/ui'
 /**
  * The AI panel inside the whole editor, against a scripted main process: the
  * model's answers are written out here as stream chunks, so no provider is
@@ -47,6 +48,7 @@ interface FakeOptions {
   bytes?: Uint8Array
   statuses: SubscriptionStatusMap
   reply?: Reply
+  undoHistory?: boolean
 }
 
 function fakeApi(options: FakeOptions) {
@@ -100,7 +102,7 @@ function fakeApi(options: FakeOptions) {
     setAiSettings: async () => {},
     onAiSettingsChanged: () => () => {},
     openAiModelSettings: async () => {},
-    getAiPanelPrefs: async () => ({}),
+    getAiPanelPrefs: async () => ({ aiEditUndoHistory: options.undoHistory ?? false }),
     onAiPanelPrefsChanged: () => () => {},
     setProvisionalTitle: (title: string) => void titles.push(title),
     addAttachmentPaths: async (paths: string[]) => {
@@ -153,6 +155,7 @@ beforeEach(() => {
   Element.prototype.scrollTo = () => undefined
 })
 afterEach(() => {
+  applyAiPanelPrefs({})
   unmount()
   unmount = () => {}
   document.body.innerHTML = ''
@@ -237,6 +240,7 @@ describe('a run', () => {
     }
     expect(request.tools.map((tool) => tool.name).sort()).toEqual(
       [
+        'ask_choice',
         'edit_map',
         'image_search',
         'insert_image',
@@ -259,6 +263,7 @@ describe('a run', () => {
     const bytes = await (await documentOf(sheet)).save()
     const rootId = sheet.rootTopic.id
     const fake = fakeApi({
+      undoHistory: true,
       pending: 'C:/maps/a.xmind',
       bytes,
       statuses: statusMap('ready', 'ready'),
@@ -302,6 +307,7 @@ describe('a run', () => {
   it('a turn that wrote a sheet is taken back with that sheet', async () => {
     const bytes = await (await documentOf(plainSheet())).save()
     const fake = fakeApi({
+      undoHistory: true,
       pending: 'C:/maps/a.xmind',
       bytes,
       statuses: statusMap('ready', 'ready'),

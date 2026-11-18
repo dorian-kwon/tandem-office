@@ -110,7 +110,7 @@ export async function dropPicture(
   if (topicId === null) return 'no-topic'
   const read = await readDroppedPicture(first)
   if (!read.ok) return read.reason
-  const result = await setTopicImage(host, { topicId }, read.picture, null)
+  const result = await setTopicImage(host, { topicId }, read.picture, null, 'user')
   if (result.isError) return 'failed'
   return pictures.length > 1 ? 'done-first-only' : 'done'
 }

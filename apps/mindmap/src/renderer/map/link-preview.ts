@@ -123,7 +123,7 @@ export async function applyLinkPreview(
   const picture = result.picture ? await previewPicture(result.picture.base64, options.toPng) : null
   const retitle = (current: string) =>
     previewTitle(current, result.title, address, options.newTopicName)
-  const change = await setTopicPicture(host, { topicId }, { picture, retitle }, null)
+  const change = await setTopicPicture(host, { topicId }, { picture, retitle }, null, 'user')
   if (change.isError) return 'failed'
   if (!change.mutated) return 'nothing'
   return picture ? 'done' : 'title-only'

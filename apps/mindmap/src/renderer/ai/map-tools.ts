@@ -4,9 +4,8 @@
  * The rule of this file: the AI changes the map the way the user does, through
  * the editor's edit functions (`MapController.edit`). A batch of edits is
  * worked out on a copy of the drawing library's tree and then goes in as one
- * edit: the library draws it, records it as one step of its history and the
- * session reconciles it with the source tree, exactly like a change made by
- * hand. So Ctrl+Z takes it back, and the screen and the source tree never part.
+ * edit: the library draws it and the session reconciles it with the source
+ * tree. When AI undo history is enabled, the library records it as one step.
  * Nothing here writes to the source tree itself; the only straight writes are
  * the ones the sheet tabs make too (adding a sheet, naming one).
  *
@@ -620,7 +619,7 @@ export async function editMap(
   }
   const done = outcomes.filter((outcome) => outcome.ok).length
   const lines = [
-    `Sheet ${position}: ${done} of ${edits.length} edit(s) applied${done > 0 ? ' as one step the user can undo' : ''}.`,
+    `Sheet ${position}: ${done} of ${edits.length} edit(s) applied.`,
     ...outcomes.map((outcome) =>
       outcome.ok
         ? `#${outcome.index} ${outcome.op} ok${outcome.id ? ` (id ${outcome.id})` : ''}`
@@ -764,8 +763,9 @@ export async function setTopicImage(
   input: { sheet?: unknown; topicId?: unknown },
   picture: PictureBytes,
   turn: MapTurn | null,
+  source: 'ai' | 'user' = 'ai',
 ): Promise<MapToolResult> {
-  return setTopicPicture(host, input, { picture }, turn)
+  return setTopicPicture(host, input, { picture }, turn, source)
 }
 
 /** A picture and a new title for one topic, put on it together. */
@@ -785,6 +785,7 @@ export async function setTopicPicture(
   input: { sheet?: unknown; topicId?: unknown },
   change: TopicPictureChange,
   turn: MapTurn | null,
+  source: 'ai' | 'user' = 'ai',
 ): Promise<MapToolResult> {
   const { picture } = change
   const topicId = textArg(input.topicId)
@@ -823,7 +824,7 @@ export async function setTopicPicture(
       }
     }
     turn?.noteEdit(session, key)
-    controller.edit((root) => takeTree(root, data.nodeData), { aiEdit: true })
+    controller.edit((root) => takeTree(root, data.nodeData), { aiEdit: source === 'ai' })
 
     const shown = topicInView(session.view(key).root, topicId)
     if (entryName !== null && shown?.image?.entryName !== entryName) {
@@ -838,13 +839,13 @@ export async function setTopicPicture(
   }
   if (entryName === null) {
     return {
-      output: `Changed the title of topic ${topicId} of sheet ${position}; the user can undo this step.`,
+      output: `Changed the title of topic ${topicId} of sheet ${position}.`,
       mutated: true,
       detail: { done: 1, total: 1 },
     }
   }
   return {
-    output: `Put the picture on topic ${topicId} of sheet ${position}. It is saved inside the map file (${entryName}); the user can undo this step.`,
+    output: `Put the picture on topic ${topicId} of sheet ${position}. It is saved inside the map file (${entryName}).`,
     mutated: true,
     detail: { done: 1, total: 1 },
   }
