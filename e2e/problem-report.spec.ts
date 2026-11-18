@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { closeAndSaveVideo, launchShell } from './helpers'
@@ -47,6 +47,22 @@ test('a page error is recorded and the Help menu saves a report', async () => {
     expect((line.trail as Array<{ a: string }>).map((item) => item.a)).toContain('app-start')
     expect(raw).not.toMatch(/salary|visit|react\.dev/)
 
+    await writeFile(
+      join(userDataDir, 'renderer-watchdog-1795003200000.json'),
+      JSON.stringify({
+        at: '2026-11-18T12:00:00.000Z',
+        document: {
+          kind: 'sheets',
+          title: 'private-budget.xlsx',
+          filePath: '/private/customer/private-budget.xlsx',
+        },
+        url: 'file:///private/customer/private-budget.xlsx',
+        memoryMB: 1756,
+        cpuPercent: 32,
+        metric: { name: 'private-budget.xlsx', memory: { workingSetSize: 1798144 } },
+      }),
+    )
+
     // the Help menu offers the report
     const labels = await app.evaluate(({ Menu }) => {
       const help = Menu.getApplicationMenu()?.items.find((item) => item.role === 'help')
@@ -80,6 +96,8 @@ test('a page error is recorded and the Help menu saves a report', async () => {
     expect(report).toContain('== Crash record')
     expect(report).toContain('renderer-error')
     expect(report).toContain('app-start')
+    expect(report).toContain('1756')
+    expect(report).not.toMatch(/private-budget|\/private\/customer|file:\/\/\//)
     expect(report).not.toMatch(/salary|visit|react\.dev/)
   } finally {
     await closeAndSaveVideo(launched, 'problem-report')
