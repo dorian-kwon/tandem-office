@@ -52,7 +52,7 @@ Files: shell opening preflight, localized strings, `apps/shell/src/main/index.ts
 - [x] Update decisions, approved release notes and validation records.
 - [x] Run affected full tests, typecheck, lint, formatting and guards.
 - [x] Build and run E2E; commit with personal identity.
-- [ ] Present the release for its final approval.
+- [x] Present the release for its final approval.
 
 ## Real report verification
 
@@ -81,3 +81,7 @@ Files: shell opening preflight, localized strings, `apps/shell/src/main/index.ts
 - The full shell run had the same three Mac failures reproduced on the baseline
   (Control+W and two MCP environment assumptions). All other 4,369 tests passed,
   with two skips.
+
+The owner approved the notes, version, commercial terms confirmation, and
+publication. The Windows x64 release and its verified assets are recorded in
+`docs/tracking/status.md`.

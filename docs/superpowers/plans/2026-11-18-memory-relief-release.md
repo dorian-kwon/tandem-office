@@ -32,7 +32,7 @@ AI work, a version bump, and the HWPX CPU issue explicitly added by the user. Ke
 - [x] Draft `docs/releases/0.15.5.md`; final wording depends on verified editor behavior.
 - [x] Record actual validation and limitations in tracking documents.
 - [x] Commit the reviewed result with personal author identity.
-- [ ] Present the final release text and any required publication confirmation.
+- [x] Present the final release text and any required publication confirmation.
 
 The previous release was Windows-only. Do not claim Windows runtime or installer
 validation from macOS tests. GitHub commands must exclude inherited `GH_TOKEN`
@@ -61,3 +61,7 @@ and `GITHUB_TOKEN`, which otherwise select the work account; verify the personal
   after integrating the file-open prompt.
 - The BMP work and large-report validation are recorded in the document-copy
   plan. No live AI subscription calls were made during this continuation.
+
+The owner approved the notes, version, commercial terms confirmation, and
+publication. The Windows x64 release and its verified assets are recorded in
+`docs/tracking/status.md`.
