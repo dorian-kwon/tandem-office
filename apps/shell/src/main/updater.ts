@@ -41,6 +41,7 @@ import {
   showUpdateWindow,
 } from './update-window'
 import { normalizeReleaseNotes } from './update-notes'
+import { noteActivity } from './activity-trail'
 
 /**
  * Full-package auto-update from the GitHub Releases of the product's private
@@ -706,6 +707,7 @@ function applyFeedToken(token: string | null): void {
 }
 
 function checkFeed(): ReturnType<typeof autoUpdater.checkForUpdates> {
+  noteActivity('update-check')
   const known = feedAuth.peek()
   // a settled answer starts the check at once; only the first look (or a retry) waits for gh
   if (known !== undefined) {
@@ -987,6 +989,7 @@ export function initAutoUpdater(
   }
 
   const startInstaller = (version: string): void => {
+    noteActivity('update-install')
     // Windows: the installer's own window, progress page only, which reopens
     // the app at the end (build/installer.nsh). A silent install left the user
     // a minute or more of nothing, long enough to start the app again into
@@ -1072,6 +1075,7 @@ export function initAutoUpdater(
         return
       }
       downloadInFlight = true
+      noteActivity('update-download')
       setPhase({ phase: 'downloading', percent: 0 })
       const gen = ++downloadGen
       downloadToken = new CancellationToken()

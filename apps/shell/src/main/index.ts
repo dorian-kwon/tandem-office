@@ -432,7 +432,16 @@ import {
 } from '@genoffice/ai-provider/subscription'
 import { showErrorDialog } from './error-dialog'
 import { startRendererWatchdog } from './renderer-watchdog'
-import { memoryFigures, startCrashWatch, startLowMemoryWatch } from './crash-watch'
+import {
+  memoryFigures,
+  startCrashWatch,
+  startLowMemoryWatch,
+  startRendererErrorWatch,
+} from './crash-watch'
+import { CRASH_LOG_FILE } from './crash-log'
+import { crashReportText, saveCrashReport } from './crash-report-save'
+import { activityTrail, noteActivity, tabChangeActions, tabCounts } from './activity-trail'
+import { UPDATE_LOG_FILE } from './update-log'
 import {
   capStatPaths,
   matchesExtFamily,
@@ -4667,6 +4676,52 @@ async function openFeedbackSurvey(): Promise<void> {
 }
 
 const FEEDBACK_MENU_ID = 'menu-send-feedback'
+const CRASH_REPORT_MENU_ID = 'menu-save-problem-report'
+
+/**
+ * Help → "Save problem report…": the app's own records (crash, save-failure and update
+ * records, the last actions of this run) gathered into one text file the person saves and
+ * sends themselves. What goes in is on screen before anything is asked; nothing is sent.
+ */
+async function openCrashReport(): Promise<void> {
+  const lang = currentLang()
+  const dataFolder = app.getPath('userData')
+  const read = (name: string): string => {
+    try {
+      return readFileSync(join(dataFolder, name), 'utf8')
+    } catch {
+      return ''
+    }
+  }
+  const win = shellWindow ?? BrowserWindow.getFocusedWindow()
+  await saveCrashReport({
+    lang,
+    downloadsDir: app.getPath('downloads'),
+    input: () => ({
+      now: new Date(),
+      version: app.getVersion(),
+      electron: process.versions.electron ?? '',
+      chrome: process.versions.chrome ?? '',
+      os: `${platformLabel(process.platform)} ${release()}`,
+      arch: process.arch,
+      language: lang,
+      uptimeS: activityTrail.uptimeS(),
+      tabs: tabCounts(tabManager?.list() ?? []),
+      trail: activityTrail.recent(),
+      crashLog: read(CRASH_LOG_FILE),
+      saveFailureLog: read('sheets-save-failures.jsonl'),
+      updateLog: read(UPDATE_LOG_FILE),
+    }),
+    showMessageBox: (options) =>
+      win ? dialog.showMessageBox(win, options) : dialog.showMessageBox(options),
+    showSaveDialog: (options) =>
+      win ? dialog.showSaveDialog(win, options) : dialog.showSaveDialog(options),
+    showItemInFolder: (path) => shell.showItemInFolder(path),
+    writeFile: async (path, text) => {
+      writeFileSync(path, text, 'utf8')
+    },
+  })
+}
 
 /**
  * Put the manual and the feedback entry in whatever menu is currently installed.
@@ -4693,6 +4748,11 @@ function withHelpItems(): void {
     label: feedbackText(currentLang(), 'menuLabel'),
     click: () => void openFeedbackSurvey(),
   }
+  const crashReport: MenuItemConstructorOptions = {
+    id: CRASH_REPORT_MENU_ID,
+    label: crashReportText(currentLang(), 'menuLabel'),
+    click: () => void openCrashReport(),
+  }
   const help = menu.items.find((item) => item.role === 'help')
   // Slides and Sheets build a File/Edit/View template with no Help menu at
   // all, so there is nothing to insert into — one is created instead. Without
@@ -4703,7 +4763,7 @@ function withHelpItems(): void {
         {
           role: 'help',
           label: tm('menuHelp'),
-          submenu: [userGuide, { type: 'separator' }, feedback],
+          submenu: [userGuide, { type: 'separator' }, feedback, crashReport],
         },
       ]).items[0]!,
     )
@@ -4720,8 +4780,15 @@ function withHelpItems(): void {
   // silently regressing if Electron's rule ever changes again.
   const hasUserGuide = submenu.items.some((i) => i.accelerator === 'F1')
   const template: MenuItemConstructorOptions[] = hasUserGuide
-    ? [feedback, { type: 'separator' }, { role: 'undo' }]
-    : [userGuide, { type: 'separator' }, feedback, { type: 'separator' }, { role: 'undo' }]
+    ? [feedback, crashReport, { type: 'separator' }, { role: 'undo' }]
+    : [
+        userGuide,
+        { type: 'separator' },
+        feedback,
+        crashReport,
+        { type: 'separator' },
+        { role: 'undo' },
+      ]
   const items = Menu.buildFromTemplate(template).items.filter((i) => i.role !== 'undo')
   items.forEach((item, index) => submenu.insert(index, item))
 }
@@ -4965,10 +5032,15 @@ function createShellWindow(): void {
     tabManager?.focusActiveView()
   })
 
+  let trailTabs = new Map<string, string>()
   const manager = new TabManager(
     win,
     () => {
       win.webContents.send(TABS_CHANNELS.changed, manager.list())
+      // the action trail names only the editor kind of a tab that opened or closed
+      const change = tabChangeActions(trailTabs, manager.list())
+      trailTabs = change.next
+      for (const action of change.actions) noteActivity(action)
       publishOpenDocumentsIfOwner([...manager.openFilePaths(), ...detachedFilePaths()])
       refreshDocumentLinkMenu()
       pushHwpRecoveryTitles(manager)
@@ -9922,9 +9994,11 @@ app.whenReady().then(async () => {
       aiStreams: activeAiStreamCount,
       cliChildren: trackedSubscriptionChildCount,
     })
+  noteActivity('app-start')
   startCrashWatch({
     prompt: headlessArgv.kind === 'none',
     memory: crashMemory,
+    tabs: () => tabCounts(tabManager?.list() ?? []),
     editorOf: (wc) => {
       if (shellWindow && !shellWindow.isDestroyed() && shellWindow.webContents.id === wc.id) {
         return 'home'
@@ -9968,6 +10042,30 @@ app.whenReady().then(async () => {
   })
   // a PC that runs short of memory during an AI request leaves a line too
   startLowMemoryWatch({ aiStreams: activeAiStreamCount, memory: crashMemory })
+  if (headlessArgv.kind === 'none') {
+    // an error that breaks a screen but leaves its process alive (React unmounting an editor)
+    // leaves a `renderer-error` line with the error's class, React number and top frames
+    startRendererErrorWatch({
+      editorOf: (wc) => {
+        if (shellWindow && !shellWindow.isDestroyed() && shellWindow.webContents.id === wc.id) {
+          return 'home'
+        }
+        return (
+          tabManager?.describeWebContents(wc.id)?.kind ??
+          detachedDocumentFor(wc.id)?.kind ??
+          'other'
+        )
+      },
+    })
+    // the AI request count is the docs module's; the trail only needs to see it start and stop
+    let aiWasRunning = false
+    setInterval(() => {
+      const running = activeAiStreamCount() > 0
+      if (running === aiWasRunning) return
+      aiWasRunning = running
+      noteActivity(running ? 'ai-start' : 'ai-end')
+    }, 2000).unref()
+  }
   // resource watchdog: a renderer that stays hot for minutes gets diagnostics
   // recorded and the user an offer to close the document (headless exports
   // are short-lived and unattended)
@@ -10046,6 +10144,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  noteActivity('app-quit')
   // "Restart & Install": the tabs as they are now come back after the update,
   // whatever the closing windows report on the way out
   if (updateRestartRequested()) holdSessionTabsForUpdateRestart()

@@ -511,10 +511,25 @@ Nothing in this list is uploaded by the app.
   Chromium reports (such as `crashed` or `oom`), the exit code, which editor it
   was (such as `docs`), and memory figures in whole megabytes: the app's own
   memory use, the PC's free and total memory, and how many AI requests and AI
-  programs were running. It holds no document text, file names, paths or
-  error messages, and it is kept under
+  programs were running. A line also says how long the app had been running,
+  how many tabs of each editor were open (counts only), and the last actions of
+  that run as fixed words such as `tab-open:docs`, `ai-start` or
+  `update-check`, never a title or a file name. When a page of the app breaks
+  without its process ending (a screen that goes blank), one line holds the
+  error's class name, its React error number, and the function names and
+  script file names of its top frames in the app's own code; the error's
+  message is dropped because it can quote your document. It holds no document
+  text, file names, paths or error messages, and it is kept under
   64 KB by dropping the oldest lines. The app never sends it anywhere; if you
   report a problem, you can attach it yourself. No crash dumps are written.
+- **The problem report** (Help → "Save problem report…"): a text file you save
+  yourself, to a place you choose, and send yourself. It gathers the records
+  above that stay on this PC: the app's version, the system, how long the app
+  ran, how many tabs of each editor were open, the last actions of this run,
+  and the newest lines of the crash record, the spreadsheet save-failure
+  record and the update record. The name of your user folder is hidden
+  wherever a record quotes a path. The app shows what it holds before it asks
+  where to save, and sends nothing; nothing is saved unless you choose a place.
 - **The spreadsheet save-failure record** (`sheets-save-failures.jsonl` in
   the data folder): one line each time a spreadsheet save could not be opened
   back and your file was therefore left as it was. A line holds the time, the

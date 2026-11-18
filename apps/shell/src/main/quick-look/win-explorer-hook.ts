@@ -3,6 +3,7 @@ import { existsSync, mkdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { app } from 'electron'
+import { noteActivity } from '../activity-trail'
 
 export interface ExplorerQuickLookEvents {
   onSpace: (filePath: string) => void
@@ -90,6 +91,8 @@ export class WinExplorerQuickLookHook {
     if (process.platform !== 'win32') return
     if (this.enabled === enabled) return
     this.enabled = enabled
+    // the helper holds a system-wide keyboard hook: a crash report should say when it ran
+    noteActivity(enabled ? 'quicklook-hook-on' : 'quicklook-hook-off')
     if (enabled) {
       this.start()
     } else {

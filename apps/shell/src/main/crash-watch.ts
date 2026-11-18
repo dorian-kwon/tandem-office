@@ -1,10 +1,12 @@
-import { app, dialog } from 'electron'
+import { app, dialog, webContents } from 'electron'
 import type { BrowserWindow, RenderProcessGoneDetails, WebContents } from 'electron'
 import { freemem, totalmem } from 'node:os'
 import { join } from 'node:path'
+import { activityTrail } from './activity-trail'
 import { appendCrashLog, CRASH_LOG_FILE, errorReason } from './crash-log'
 import type { CrashEntry, CrashMemory } from './crash-log'
 import { wasReleasedRenderer } from './renderer-disposal'
+import { createErrorLimiter, RENDERER_ERROR_HOOK, rendererErrorEntry } from './renderer-errors'
 
 /**
  * Records abnormal process ends in `<userData>/crash-log.jsonl` (see
@@ -51,7 +53,12 @@ export interface CrashWatchOptions {
   prompt: boolean
   /** memory figures written with every entry (see `memoryFigures`) */
   memory?: () => CrashMemory
+  /** open tabs per editor family, written with every entry */
+  tabs?: () => Record<string, number>
 }
+
+/** how many of the session's last actions a crash line carries */
+const TRAIL_IN_LINE = 24
 
 /** a normal exit is not a failure */
 const NOT_A_CRASH = new Set(['clean-exit'])
@@ -66,6 +73,7 @@ export function crashLogPath(): string {
 }
 
 let memoryOf: (() => CrashMemory) | undefined
+let tabsOf: (() => Record<string, number>) | undefined
 
 function record(entry: CrashEntry): void {
   let memory: CrashMemory = {}
@@ -74,7 +82,19 @@ function record(entry: CrashEntry): void {
   } catch {
     /* the line goes out without figures */
   }
-  appendCrashLog(crashLogPath(), { ...memory, ...entry })
+  let tabs: Record<string, number> | undefined
+  try {
+    tabs = tabsOf?.()
+  } catch {
+    /* the line goes out without tab counts */
+  }
+  appendCrashLog(crashLogPath(), {
+    ...memory,
+    uptimeS: activityTrail.uptimeS(),
+    trail: activityTrail.recent(TRAIL_IN_LINE),
+    ...(tabs ? { tabs } : {}),
+    ...entry,
+  })
 }
 
 const MB = 1024 * 1024
@@ -145,8 +165,56 @@ export function startLowMemoryWatch(options: LowMemoryWatchOptions): () => void 
   return () => clearInterval(timer)
 }
 
+/**
+ * Watch the pages for errors that leave the process alive. A small script put in each page
+ * reports uncaught errors and rejections on the console with a tag; the tagged line becomes a
+ * `renderer-error` entry (class name, React number, top frames, never the message). A render
+ * loop throws the same error many times a second, so repeats are let through once a minute.
+ */
+export function startRendererErrorWatch(options: { editorOf: (wc: WebContents) => string }): void {
+  const allow = createErrorLimiter()
+  const install = (wc: WebContents): void => {
+    try {
+      if (wc.isDestroyed() || wc.getURL().startsWith('devtools://')) return
+      void wc.executeJavaScript(RENDERER_ERROR_HOOK).catch(() => {
+        /* a page that went away or refuses scripts is not worth a line */
+      })
+    } catch {
+      /* the same */
+    }
+  }
+  const attach = (wc: WebContents): void => {
+    wc.on('dom-ready', () => install(wc))
+    wc.on('console-message', (event) => {
+      try {
+        const message = (event as unknown as { message?: unknown }).message
+        if (typeof message !== 'string') return
+        let editor = 'other'
+        try {
+          editor = options.editorOf(wc)
+        } catch {
+          /* keep 'other' */
+        }
+        const entry = rendererErrorEntry(message, editor)
+        if (entry && allow(entry)) record(entry)
+      } catch {
+        /* a crash record must not make things worse */
+      }
+    })
+  }
+  app.on('web-contents-created', (_event, wc) => attach(wc))
+  // Pages opened before the watch started may be past `dom-ready` yet still loading (the
+  // shell's first page is, at startup), so the script goes in at once whatever their state;
+  // it runs once per document, and `dom-ready` puts it into the next one.
+  for (const wc of webContents.getAllWebContents()) {
+    attach(wc)
+    install(wc)
+  }
+}
+
 export function startCrashWatch(options: CrashWatchOptions): void {
   memoryOf = options.memory
+  tabsOf = options.tabs
   // the *Monitor* event only observes: Electron's own uncaught-exception
   // handling (an error box, the app keeps running) stays exactly as it was
   process.on('uncaughtExceptionMonitor', (error) => {
