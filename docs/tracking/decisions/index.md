@@ -110,3 +110,4 @@
 | [0109](0109-problem-report-saved-by-the-person.md)            | 크래시 기록을 식별자 꼴로만 더 자세히 하고, 도움말 메뉴의 "문제 보고서 저장…"으로 사람이 파일을 저장해 직접 보낸다                | 2026-11-18 |
 | [0110](0110-spare-sheets-view-follows-free-memory.md)         | 미리 띄운 엑셀 화면은 PC의 남은 메모리를 읽어 넉넉할 때만 만들고, 모자라지면 닫는다                                               | 2026-11-18 |
 | [0111](0111-hidden-source-pane-released-when-memory-short.md) | 번역 화면에서 숨긴 원본 칸은 메모리가 넉넉하지 않으면 내려 두고, 칸을 보일 때 파일에서 다시 연다                                  | 2026-11-18 |
+| [0112](0112-isolate-html-conversion-window.md)                | HTML을 Word로 바꾸는 숨은 창은 따로 떼어 둔 세션에서 허락한 것만 불러온다(이음오피스 결정 0142에서 옮김, 보안 수정)               | 2026-11-18 |
