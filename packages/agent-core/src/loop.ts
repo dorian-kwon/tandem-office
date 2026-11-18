@@ -39,6 +39,8 @@ export interface AgentLoopEvents<TSnapshot> {
   /** a tool is about to execute (UI shows a live "running" indicator; onToolExecuted always follows) */
   onToolStart?(call: AgentToolCall): void
   onToolExecuted?(event: ToolExecutedEvent<TSnapshot>): void
+  /** Raw executor lifetime: false is emitted after settlement even if cancel/reset already ended the run. */
+  onToolPending?(call: AgentToolCall, pending: boolean): void
   /** a turn requested tools and they ran; the loop is going back to the model */
   onTurnEnd?(): void
   /** tokens the provider billed for the turn that just streamed (per model call; compaction summary turns are not reported) */
@@ -1293,10 +1295,17 @@ export class AgentLoop<TSnapshot = unknown> {
       const snapshot = !this.mutationSeen ? captureSnapshot?.() : undefined
       let raced: ToolExecution | typeof TOOL_ABORTED
       try {
-        raced = await awaitToolOrAbort(
-          skill.executeTool(call, this.abortController?.signal),
-          this.abortController?.signal,
-        )
+        // Cancellation stops waiting immediately, but an executor may still be
+        // applying edits. Report its actual lifetime independently of the run.
+        const execute = async (): Promise<ToolExecution> => {
+          try {
+            events?.onToolPending?.(call, true)
+            return await skill.executeTool(call, this.abortController?.signal)
+          } finally {
+            events?.onToolPending?.(call, false)
+          }
+        }
+        raced = await awaitToolOrAbort(execute(), this.abortController?.signal)
       } catch (e) {
         raced = {
           output: e instanceof Error ? e.message : String(e),

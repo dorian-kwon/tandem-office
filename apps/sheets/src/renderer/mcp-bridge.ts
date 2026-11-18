@@ -1,3 +1,4 @@
+import { acquireEditorAiWork } from '@genoffice/ui'
 import { z } from 'zod'
 import type { McpCommandMessage } from '../shared/desktop-api'
 import {
@@ -78,7 +79,11 @@ export function installSheetsMcpBridge(handlers: McpSheetHandlers): () => void {
   readyTimer = setTimeout(announceWhenMounted, READY_POLL_MS)
 
   const off = api.onMcpCommand((message: McpCommandMessage) => {
-    queue = queue.then(() => runCommand(message)).catch(() => undefined)
+    const release = acquireEditorAiWork()
+    queue = queue
+      .then(() => runCommand(message))
+      .catch(() => undefined)
+      .finally(release)
   })
 
   return () => {

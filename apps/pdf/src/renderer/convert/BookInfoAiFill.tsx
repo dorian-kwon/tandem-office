@@ -16,6 +16,8 @@ import {
   AiConnectPrompt,
   AiFirstConnectionNotice,
   useAiSendGate,
+  acquireEditorAiWork,
+  useEditorAiBusy,
   type AiModelPickerBridge,
 } from '@genoffice/ui'
 import type { TFunc } from '../i18n/locale'
@@ -56,6 +58,8 @@ export function BookInfoAiFill({
   onSuggest: (suggestion: BookInfoSuggestion) => void
   onStateChange: (state: BookInfoFillState) => void
 }): ReactElement {
+  // Keep the suggested metadata available until the conversion dialog is settled.
+  useEditorAiBusy(true)
   const connection = useSubscriptionConnection()
   const [settings, setSettings] = useState<AiSettings | null>(null)
   const runningRef = useRef(false)
@@ -96,6 +100,7 @@ export function BookInfoAiFill({
     report({ kind: 'running' })
     const abort = new AbortController()
     abortRef.current = abort
+    const releaseWork = acquireEditorAiWork()
     try {
       const text = await collect()
       if (abort.signal.aborted) return
@@ -134,6 +139,7 @@ export function BookInfoAiFill({
         report({ kind: 'error', message: err instanceof Error ? err.message : String(err) })
       }
     } finally {
+      releaseWork()
       runningRef.current = false
       if (abortRef.current === abort) abortRef.current = null
     }

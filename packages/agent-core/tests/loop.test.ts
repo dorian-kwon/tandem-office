@@ -533,6 +533,41 @@ describe('AgentLoop', () => {
     expect(loop.busy).toBe(false)
   })
 
+  it.each(['cancel', 'reset'] as const)(
+    'tracks raw tool work after %s until the executor settles',
+    async (action) => {
+      const transport = scriptedTransport([
+        (cb) => {
+          cb.onToolCall({ id: 't1', name: 'do_thing', input: {} })
+          cb.onDone()
+        },
+      ])
+      let finish!: (value: ToolExecution) => void
+      const skill = makeSkill()
+      skill.executeTool = () =>
+        new Promise<ToolExecution>((resolve) => {
+          finish = resolve
+        })
+      const onDone = vi.fn()
+      const onToolPending = vi.fn()
+      const loop = new AgentLoop({ transport, skill, events: { onDone, onToolPending } })
+      loop.run('edit')
+      await flush()
+      expect(onToolPending).toHaveBeenCalledTimes(1)
+      expect(onToolPending.mock.calls[0][1]).toBe(true)
+      loop[action]()
+      await flush()
+      expect(loop.busy).toBe(false)
+      if (action === 'cancel')
+        expect(onDone).toHaveBeenCalledWith({ text: '', cancelled: true, turnLimit: false })
+      expect(onToolPending).toHaveBeenCalledTimes(1)
+      finish({ output: 'late edit', summary: 'done', mutated: true })
+      await flush()
+      expect(onToolPending).toHaveBeenCalledTimes(2)
+      expect(onToolPending.mock.calls[1]).toEqual([onToolPending.mock.calls[0][0], false])
+    },
+  )
+
   it('settles the run on stop even when a long tool never checks the signal', async () => {
     const transport = scriptedTransport([
       (cb) => {

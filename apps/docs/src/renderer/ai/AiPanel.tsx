@@ -1,3 +1,4 @@
+import { useChatWindow, EarlierChatMessages } from '@genoffice/ui'
 import { OcrChatPreview, ocrDisplayOf, type OcrChatDisplay } from '@genoffice/ui'
 import {
   aiPanelWidthAtPointer,
@@ -715,6 +716,8 @@ export function AiPanel({
   const writerEpochRef = useRef(0)
   /** Past conversation restored from JSONL (read-only transcript, not fed to the model) */
   const [historicChat, setHistoricChat] = useState<ChatEntry[]>([])
+  const chatWindow = useChatWindow(chat, busy, historicChat)
+
   const [trackChanges, setTrackChanges] = useState(
     () => localStorage.getItem(TRACK_CHANGES_KEY) === '1',
   )
@@ -2012,10 +2015,11 @@ export function AiPanel({
       </div>
 
       <div ref={logRef} className="ai-chat" onScroll={onLogScroll}>
+        <EarlierChatMessages hidden={chatWindow.hidden} expand={chatWindow.expand} lang={lang} />
         {/* past conversation (read-only transcript, not fed to the model), shown continuously with the current turn */}
-        {historicChat.length > 0 && (
+        {chatWindow.history.length > 0 && (
           <>
-            {historicChat.map((entry, i) => (
+            {chatWindow.history.map(({ entry, index: i }) => (
               <div key={`h${i}`} className={`ai-msg ai-msg-${entry.role} ai-msg-historic`}>
                 {entry.role === 'user' && entry.scope && <AiScopeQuote scope={entry.scope} />}
                 {entry.role === 'user' && (
@@ -2096,7 +2100,7 @@ export function AiPanel({
             </div>
           </div>
         )}
-        {chat.map((entry, i) => {
+        {chatWindow.chat.map(({ entry, index: i }) => {
           if (
             entry.role === 'assistant' &&
             !entry.text &&

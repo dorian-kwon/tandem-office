@@ -2,6 +2,15 @@ import { app, dialog, webContents } from 'electron'
 import type { BrowserWindow, ProcessMetric, WebContents } from 'electron'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { readMemory, type MemoryReading } from './spare-view-policy'
+import {
+  deferredRendererReopen,
+  editorAiBusy,
+  rendererMemoryHot,
+  rendererMemoryMB,
+  watchdogActions,
+  type WatchdogReopenResult,
+} from './renderer-watchdog-policy'
 
 /**
  * Renderer resource watchdog. A document renderer that keeps a core busy or
@@ -19,7 +28,14 @@ export interface WatchdogDocumentInfo {
   filePath?: string
 }
 
-export type WatchdogStringKey = 'watchdogTitle' | 'watchdogBody' | 'watchdogWait' | 'watchdogClose'
+export type WatchdogStringKey =
+  | 'watchdogTitle'
+  | 'watchdogBody'
+  | 'watchdogWait'
+  | 'watchdogClose'
+  | 'watchdogReopen'
+  | 'watchdogReopenAfterAi'
+  | 'watchdogAiBusy'
 
 export interface RendererWatchdogOptions {
   /** the document a renderer shows; null for chrome (Home) renderers, which are logged but never prompted */
@@ -27,6 +43,10 @@ export interface RendererWatchdogOptions {
   parentWindow: (wc: WebContents) => BrowserWindow | null
   /** close through the regular close path (save prompt included) */
   closeDocument: (wc: WebContents) => Promise<void> | void
+  /** replaces the renderer through its regular save/close guard */
+  reopenDocument: (wc: WebContents) => Promise<WatchdogReopenResult | void>
+  isAiBusy?: (wc: WebContents) => Promise<boolean>
+  readMemory?: () => MemoryReading
   t: (key: WatchdogStringKey, params?: Record<string, string | number>) => string
   sampleMs?: number
   memoryLimitMB?: number
@@ -55,6 +75,7 @@ interface RendererState {
   /** cumulative CPU seconds at the previous sample (absent on the first) */
   cpuSeconds?: number
   sampledAt?: number
+  reopen?: ReturnType<typeof deferredRendererReopen>
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
@@ -93,6 +114,7 @@ export function startRendererWatchdog(options: RendererWatchdogOptions): () => v
     all: ProcessMetric[],
     memoryMB: number,
     cpu: number,
+    systemMemory: MemoryReading,
   ): Promise<void> => {
     const info = opts.describe(wc)
     const stamp = Date.now()
@@ -109,6 +131,7 @@ export function startRendererWatchdog(options: RendererWatchdogOptions): () => v
             url: wc.getURL(),
             memoryMB: Math.round(memoryMB),
             cpuPercent: Math.round(cpu),
+            systemMemory,
             metric,
             appMetrics: all,
           },
@@ -127,15 +150,28 @@ export function startRendererWatchdog(options: RendererWatchdogOptions): () => v
     state.prompting = true
     try {
       const parent = opts.parentWindow(wc)
+      const aiBusy = await (opts.isAiBusy ?? editorAiBusy)(wc)
+      const actions = watchdogActions(Boolean(info.filePath))
       const dialogOptions = {
         type: 'warning' as const,
         message: opts.t('watchdogTitle'),
-        detail: opts.t('watchdogBody', {
-          title: info.title,
-          memory: Math.round(memoryMB),
-          cpu: Math.round(cpu),
-        }),
-        buttons: [opts.t('watchdogWait'), opts.t('watchdogClose')],
+        detail:
+          opts.t('watchdogBody', {
+            title: info.title,
+            memory: Math.round(memoryMB),
+            cpu: Math.round(cpu),
+          }) + (aiBusy ? `\n\n${opts.t('watchdogAiBusy')}` : ''),
+        buttons: actions.map((action) =>
+          opts.t(
+            action === 'wait'
+              ? 'watchdogWait'
+              : action === 'close'
+                ? 'watchdogClose'
+                : aiBusy
+                  ? 'watchdogReopenAfterAi'
+                  : 'watchdogReopen',
+          ),
+        ),
         defaultId: 0,
         cancelId: 0,
       }
@@ -143,7 +179,21 @@ export function startRendererWatchdog(options: RendererWatchdogOptions): () => v
         parent && !parent.isDestroyed()
           ? await dialog.showMessageBox(parent, dialogOptions)
           : await dialog.showMessageBox(dialogOptions)
-      if (response === 1 && !wc.isDestroyed()) await opts.closeDocument(wc)
+      if (wc.isDestroyed()) return
+      const action = actions[response]
+      if (action === 'close') {
+        state.reopen?.cancel()
+        await opts.closeDocument(wc)
+      }
+      if (action === 'reopen') {
+        state.reopen = deferredRendererReopen({
+          exists: () => !wc.isDestroyed() && Boolean(opts.describe(wc)?.filePath),
+          busy: () => (opts.isAiBusy ?? editorAiBusy)(wc),
+          reopen: () => opts.reopenDocument(wc),
+        })
+        state.reopen.request()
+        await state.reopen.check()
+      }
     } catch {
       /* a failed prompt only means the renderer keeps running */
     } finally {
@@ -158,15 +208,16 @@ export function startRendererWatchdog(options: RendererWatchdogOptions): () => v
     } catch {
       return
     }
+    const systemMemory = (opts.readMemory ?? readMemory)()
     const seen = new Set<number>()
     for (const metric of metrics) {
       if (metric.type !== 'Tab') continue
       const wc = rendererFor(metric.pid)
       if (!wc) continue
       seen.add(wc.id)
-      // workingSetSize is reported in kilobytes
-      const memoryMB = metric.memory.workingSetSize / 1024
-      const state = states.get(wc.id) ?? { hot: 0, reportedAt: 0, prompting: false }
+      const memoryMB = rendererMemoryMB(metric.memory)
+      const state: RendererState = states.get(wc.id) ?? { hot: 0, reportedAt: 0, prompting: false }
+      void state.reopen?.check()
       states.set(wc.id, state)
       // percentCPUUsage is normalized differently per platform (a full core
       // read 10% on a 10-core Mac): derive one-core percent from the
@@ -184,23 +235,32 @@ export function startRendererWatchdog(options: RendererWatchdogOptions): () => v
         state.cpuSeconds = cpuSeconds
         state.sampledAt = now
       }
-      const hot = memoryMB > opts.memoryLimitMB || cpu > opts.cpuLimitPercent
+      const hot =
+        rendererMemoryHot(memoryMB, systemMemory, opts.memoryLimitMB) || cpu > opts.cpuLimitPercent
       state.hot = hot ? state.hot + 1 : 0
       if (
         state.hot >= opts.hotSamplesBeforeReport &&
         !state.prompting &&
+        !state.reopen?.pending &&
         Date.now() - state.reportedAt >= opts.reportCooldownMs
       ) {
         state.reportedAt = Date.now()
         state.hot = 0
-        void report(wc, metric, metrics, memoryMB, cpu)
+        void report(wc, metric, metrics, memoryMB, cpu, systemMemory)
       }
     }
-    for (const id of states.keys()) if (!seen.has(id)) states.delete(id)
+    for (const [id, state] of states)
+      if (!seen.has(id)) {
+        state.reopen?.cancel()
+        states.delete(id)
+      }
   }
 
   const timer = setInterval(sample, opts.sampleMs)
   // a pending sample must never keep the app alive at quit
   timer.unref?.()
-  return () => clearInterval(timer)
+  return () => {
+    clearInterval(timer)
+    for (const state of states.values()) state.reopen?.cancel()
+  }
 }

@@ -1,3 +1,4 @@
+import { acquireEditorAiWork } from '@genoffice/ui'
 import type { Editor } from '@tiptap/react'
 import { BLANK_BULLET_NUM_ID, BLANK_ORDERED_NUM_ID } from '@genoffice/docx-engine'
 import type { McpCommandMessage, McpEditorCommand } from '../shared/ipc'
@@ -241,18 +242,21 @@ export function installMcpBridge(deps: McpBridgeDeps): () => void {
   let queue: Promise<void> = Promise.resolve()
   const unsubscribe = desktop.onMcpCommand((message: McpCommandMessage) => {
     if (!message || typeof message.requestId !== 'string') return
-    queue = queue.then(async () => {
-      try {
-        const result = await runCommand(deps, message.command, message.payload)
-        desktop.reportMcpResult({ requestId: message.requestId, ok: true, result })
-      } catch (error) {
-        desktop.reportMcpResult({
-          requestId: message.requestId,
-          ok: false,
-          error: error instanceof Error ? error.message : String(error),
-        })
-      }
-    })
+    const release = acquireEditorAiWork()
+    queue = queue
+      .then(async () => {
+        try {
+          const result = await runCommand(deps, message.command, message.payload)
+          desktop.reportMcpResult({ requestId: message.requestId, ok: true, result })
+        } catch (error) {
+          desktop.reportMcpResult({
+            requestId: message.requestId,
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+      })
+      .finally(release)
   })
   // Let the shell know this tab can accept commands (device for targeted routing).
   void announceWhenLoaded(

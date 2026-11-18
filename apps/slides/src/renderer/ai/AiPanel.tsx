@@ -1,3 +1,4 @@
+import { useChatWindow, EarlierChatMessages } from '@genoffice/ui'
 import {
   aiPanelWidthAtPointer,
   AiPanelSideButton,
@@ -613,6 +614,8 @@ export function AiPanel({
   const [chat, setChat] = useState<ChatEntry[]>([])
   /** Past conversation restored from JSONL (read-only transcript, not fed to the model) */
   const [historicChat, setHistoricChat] = useState<ChatEntry[]>([])
+  const chatWindow = useChatWindow(chat, busy, historicChat)
+
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
   const [attachments, setAttachments] = useState<AttachmentMeta[]>([])
   const [attachNotice, setAttachNotice] = useState<string | null>(null)
@@ -2651,10 +2654,11 @@ export function AiPanel({
       </div>
 
       <div ref={logRef} className="ai-chat" onScroll={onLogScroll}>
+        <EarlierChatMessages hidden={chatWindow.hidden} expand={chatWindow.expand} lang={lang} />
         {/* Past conversation (read-only transcript, not fed to the model), displayed continuously with the current turn */}
-        {historicChat.length > 0 && (
+        {chatWindow.history.length > 0 && (
           <>
-            {historicChat.map((entry, i) => (
+            {chatWindow.history.map(({ entry, index: i }) => (
               <div key={`h${i}`} className={`ai-msg ai-msg-${entry.role} ai-msg-historic`}>
                 {entry.role === 'user' && entry.scope && <AiScopeQuote scope={entry.scope} />}
                 {entry.role === 'user' && (
@@ -2710,7 +2714,7 @@ export function AiPanel({
             {deckEmpty && <TemplateStartGallery />}
           </div>
         )}
-        {chat.map((entry, i) => {
+        {chatWindow.chat.map(({ entry, index: i }) => {
           if (
             entry.role === 'assistant' &&
             !entry.text &&

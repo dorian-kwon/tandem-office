@@ -1,3 +1,4 @@
+import { useEditorAiBusy, withEditorAiWork } from '@genoffice/ui'
 /**
  * AI highlights in the PDF editor (reading-assist spec 4.6), app side: the
  * start window, the job, its progress strip and the report after it.
@@ -124,6 +125,7 @@ export const AiHighlights = forwardRef<AiHighlightsHandle, AiHighlightsProps>(
       () => session.list(),
     )
     const snap = useSyncExternalStore(suggestions.subscribe, suggestions.snapshot)
+    useEditorAiBusy(dialog !== null || views.some((job) => job.state === 'running'))
     const propsRef = useRef(props)
     propsRef.current = props
     const docHashRef = useRef<string | null>(null)
@@ -163,115 +165,119 @@ export const AiHighlights = forwardRef<AiHighlightsHandle, AiHighlightsProps>(
       setDialog({ key: ++dialogSeq.current, initial })
 
     /** the file was saved while the job ran: its results follow the saved file */
-    const carry = async (from: string): Promise<void> => {
-      const p = propsRef.current
-      if (!p.api || !p.filePath) return
-      const now = await p.api.store.docHash(p.filePath).catch(() => null)
-      if (!now?.ok || now.docHash === from) return
-      const out = await p.api.store
-        .migrate({
-          path: p.filePath,
-          oldDocHash: from,
-          ...(p.password !== undefined ? { password: p.password } : {}),
-        })
-        .catch(() => null)
-      if (!out?.ok) return
-      carryJobPages(from, out.docHash)
-      p.session.adopt(from, out.docHash)
-      if (aliveRef.current) setDocHash(out.docHash)
-    }
-
-    const ended = async (_view: DocumentJobView, from: string): Promise<void> => {
-      await carry(from)
-      if (!aliveRef.current) return
-      await propsRef.current.suggestions.load()
-      if (aliveRef.current) propsRef.current.onRunEnded?.()
-    }
-
-    const start = async (request: HighlightStartRequest): Promise<HighlightStartAnswer> => {
-      const p = propsRef.current
-      if (!p.api) return { ok: false, error: p.t('hlUnavailable') }
-      if (p.readOnly) return { ok: false, error: p.t('hlReadOnly') }
-      const { docHash: hash, route } = request
-      const tabRun = session.list().find((job) => job.state === 'running')
-      const here = session.running(hash) ?? (tabRun ? { progress: tabRun } : null)
-      if (here) return { ok: false, busy: { done: here.progress.done, total: here.progress.total } }
-      const records = await p.api.store.unfinishedJobs(hash).catch(() => null)
-      const elsewhere = records?.ok ? session.runningElsewhere(hash, records.jobs) : undefined
-      if (elsewhere) return { ok: false, busy: elsewhere.progress ?? { done: 0, total: 0 } }
-
-      // the person chose to delete the suggestions of other labels
-      for (const runId of request.deleteRunIds) {
+    const carry = async (from: string): Promise<void> =>
+      withEditorAiWork(async () => {
+        const p = propsRef.current
+        if (!p.api || !p.filePath) return
+        const now = await p.api.store.docHash(p.filePath).catch(() => null)
+        if (!now?.ok || now.docHash === from) return
         const out = await p.api.store
-          .write({ kind: 'deleteHighlightRun', docHash: hash, runId })
+          .migrate({
+            path: p.filePath,
+            oldDocHash: from,
+            ...(p.password !== undefined ? { password: p.password } : {}),
+          })
           .catch(() => null)
-        if (!out?.ok) return { ok: false, error: p.t('hlDeleteFailed') }
-      }
+        if (!out?.ok) return
+        carryJobPages(from, out.docHash)
+        p.session.adopt(from, out.docHash)
+        if (aliveRef.current) setDocHash(out.docHash)
+      })
 
-      const run: HighlightRun = {
-        runId: request.runId,
-        presetId: request.presetId,
-        labels: request.labels,
-        pages: request.pages ?? Array.from({ length: p.pageCount }, (_, i) => i + 1),
-        provider: route.provider,
-        model: route.model,
-        createdAt: Date.now(),
-      }
-      const ask = createModelCall({
-        settings: () => route.settings,
-        lang: () => propsRef.current.lang,
-        // the run's own id: every page of it shares one confirmation
-        runId: run.runId,
-        guard: async () => {
-          const statuses = await attemptSubscription((s) => s.statuses())
-          const current = await window.pdfApi?.getAiSettings().catch(() => null)
-          return jobRouteRefusal(route, current ?? null, statuses)
-        },
+    const ended = async (_view: DocumentJobView, from: string): Promise<void> =>
+      withEditorAiWork(async () => {
+        await carry(from)
+        if (!aliveRef.current) return
+        await propsRef.current.suggestions.load()
+        if (aliveRef.current) propsRef.current.onRunEnded?.()
       })
-      // a system prompt and one user turn of document data; no tools
-      const send: HighlightSend = (req, signal) =>
-        ask(
-          { system: req.system, messages: [{ role: 'user', text: req.prompt }], tools: [] },
-          signal,
-        )
-      const parts = highlightJobParts(request.tree, {
-        labels: request.labels,
-        send,
-        ...(request.pages ? { pages: request.pages } : {}),
-      })
-      const tally: RunCounts = { runId: run.runId, received: 0, dropped: 0, suggestions: 0 }
-      const outcome = session.start<HighlightJobItem<TextUnit>[]>({
-        docHash: hash,
-        kind: 'highlight',
-        runId: run.runId,
-        provider: route.provider,
-        ...(request.aiLabel ? { aiLabel: request.aiLabel } : {}),
-        launch: ({ signal, registry, onProgress }) =>
-          startHighlightJob({
-            docHash: hash,
-            run,
-            ...parts,
-            store: createIpcHighlightStore(p.api!.store),
+
+    const start = async (request: HighlightStartRequest): Promise<HighlightStartAnswer> =>
+      withEditorAiWork(async () => {
+        const p = propsRef.current
+        if (!p.api) return { ok: false, error: p.t('hlUnavailable') }
+        if (p.readOnly) return { ok: false, error: p.t('hlReadOnly') }
+        const { docHash: hash, route } = request
+        const tabRun = session.list().find((job) => job.state === 'running')
+        const here = session.running(hash) ?? (tabRun ? { progress: tabRun } : null)
+        if (here)
+          return { ok: false, busy: { done: here.progress.done, total: here.progress.total } }
+        const records = await p.api.store.unfinishedJobs(hash).catch(() => null)
+        const elsewhere = records?.ok ? session.runningElsewhere(hash, records.jobs) : undefined
+        if (elsewhere) return { ok: false, busy: elsewhere.progress ?? { done: 0, total: 0 } }
+
+        // the person chose to delete the suggestions of other labels
+        for (const runId of request.deleteRunIds) {
+          const out = await p.api.store
+            .write({ kind: 'deleteHighlightRun', docHash: hash, runId })
+            .catch(() => null)
+          if (!out?.ok) return { ok: false, error: p.t('hlDeleteFailed') }
+        }
+
+        const run: HighlightRun = {
+          runId: request.runId,
+          presetId: request.presetId,
+          labels: request.labels,
+          pages: request.pages ?? Array.from({ length: p.pageCount }, (_, i) => i + 1),
+          provider: route.provider,
+          model: route.model,
+          createdAt: Date.now(),
+        }
+        const ask = createModelCall({
+          settings: () => route.settings,
+          lang: () => propsRef.current.lang,
+          // the run's own id: every page of it shares one confirmation
+          runId: run.runId,
+          guard: async () => {
+            const statuses = await attemptSubscription((s) => s.statuses())
+            const current = await window.pdfApi?.getAiSettings().catch(() => null)
+            return jobRouteRefusal(route, current ?? null, statuses)
+          },
+        })
+        // a system prompt and one user turn of document data; no tools
+        const send: HighlightSend = (req, signal) =>
+          ask(
+            { system: req.system, messages: [{ role: 'user', text: req.prompt }], tools: [] },
             signal,
-            registry,
-            onProgress,
-            onStored: (c) => {
-              tally.received += c.received
-              tally.dropped += c.dropped
-              tally.suggestions += c.suggestions
-              if (aliveRef.current) setCountsRev((v) => v + 1)
-            },
-          }),
-        pageOf: (batch) => batch[0]?.block.page ?? null,
-        onEnd: (view) => void ended(view, hash),
+          )
+        const parts = highlightJobParts(request.tree, {
+          labels: request.labels,
+          send,
+          ...(request.pages ? { pages: request.pages } : {}),
+        })
+        const tally: RunCounts = { runId: run.runId, received: 0, dropped: 0, suggestions: 0 }
+        const outcome = session.start<HighlightJobItem<TextUnit>[]>({
+          docHash: hash,
+          kind: 'highlight',
+          runId: run.runId,
+          provider: route.provider,
+          ...(request.aiLabel ? { aiLabel: request.aiLabel } : {}),
+          launch: ({ signal, registry, onProgress }) =>
+            startHighlightJob({
+              docHash: hash,
+              run,
+              ...parts,
+              store: createIpcHighlightStore(p.api!.store),
+              signal,
+              registry,
+              onProgress,
+              onStored: (c) => {
+                tally.received += c.received
+                tally.dropped += c.dropped
+                tally.suggestions += c.suggestions
+                if (aliveRef.current) setCountsRev((v) => v + 1)
+              },
+            }),
+          pageOf: (batch) => batch[0]?.block.page ?? null,
+          onEnd: (view) => void ended(view, hash),
+        })
+        if (!outcome.ok) return { ok: false, busy: outcome.running.progress }
+        counts.current.set(outcome.view.id, tally)
+        setDialog(null)
+        // the old run's suggestions are gone from the preview and the panel
+        if (request.deleteRunIds.length > 0) void p.suggestions.load()
+        return { ok: true }
       })
-      if (!outcome.ok) return { ok: false, busy: outcome.running.progress }
-      counts.current.set(outcome.view.id, tally)
-      setDialog(null)
-      // the old run's suggestions are gone from the preview and the panel
-      if (request.deleteRunIds.length > 0) void p.suggestions.load()
-      return { ok: true }
-    }
 
     useImperativeHandle(ref, () => ({
       requestOpen() {

@@ -3,7 +3,8 @@
  *  - generatedPageRange / mergeQcPages: which pages a landing marks for QC (incl. insert_at shifting)
  *  - createSlideFixSkill: tool allowlist wraps the full slides skill without losing the executor
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+import * as slidesSkill from '../src/renderer/ai/slides-skill'
 import type { AgentStreamRequest, AgentTransport } from '@genoffice/agent-core'
 import {
   generatedPageRange,
@@ -210,4 +211,65 @@ describe('vision capability fallback', () => {
     expect(request?.system).toContain('NO rendered screenshot is attached')
     expect(message?.role === 'user' ? message.text : '').toContain('No image is attached')
   })
+})
+
+it('keeps QC raw tool work busy after Stop until its document mutation settles', async () => {
+  let finish!: () => void
+  let started!: () => void
+  const began = new Promise<void>((resolve) => {
+    started = resolve
+  })
+  const pending = new Promise<void>((resolve) => {
+    finish = resolve
+  })
+  const original = slidesSkill.createSlidesSkill(access)
+  const spy = vi.spyOn(slidesSkill, 'createSlidesSkill').mockReturnValue({
+    ...original,
+    tools: [
+      {
+        name: 'execute_slide_script',
+        description: 'test mutation',
+        inputSchema: { type: 'object' },
+      },
+    ],
+    executeTool: async () => {
+      started()
+      await pending
+      return { output: 'done', summary: 'done', mutated: true }
+    },
+  })
+  try {
+    const controller = new AbortController()
+    const running = qcSlidePage({
+      access: {
+        ...access,
+        getSlides: () => [{ widthPx: 1280, heightPx: 720, nodes: [] } as never],
+      },
+      settings: defaultAiSettings,
+      pageIndex: 0,
+      screenshot: { mimeType: 'image/png', data: 'fake' } as never,
+      signal: controller.signal,
+      transport: {
+        stream: (_request, callbacks) => {
+          queueMicrotask(() => {
+            callbacks.onToolCall({ id: 'qc', name: 'execute_slide_script', input: {} })
+            callbacks.onDone()
+          })
+          return { cancel: () => {} }
+        },
+      },
+    })
+    await began
+    expect(window.__tandemEditorAiBusy).toBe(true)
+    controller.abort()
+    await running
+    expect(window.__tandemEditorAiBusy).toBe(true)
+    finish()
+    await pending
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(window.__tandemEditorAiBusy).toBe(false)
+  } finally {
+    spy.mockRestore()
+  }
 })

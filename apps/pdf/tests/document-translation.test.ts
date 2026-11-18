@@ -725,6 +725,32 @@ describe('translation window: confirmation', () => {
 })
 
 describe('translation: the job', () => {
+  it('keeps reopening blocked after the model finishes until result writing finishes', async () => {
+    const m = await mount()
+    const originalWrite = m.channels.api.writeBack
+    let finishWrite!: () => void
+    const gate = new Promise<void>((resolve) => {
+      finishWrite = resolve
+    })
+    const write = vi.fn(async (...args: Parameters<typeof originalWrite>) => {
+      await gate
+      return originalWrite(...args)
+    })
+    m.channels.api.writeBack = write
+    expect(window.__tandemEditorAiBusy).toBe(false)
+    await openToConfirm(m, { lang: 'de', pages: null })
+    expect(window.__tandemEditorAiBusy).toBe(true)
+    await click(m.el, '[data-action="start"]')
+    await until(() => bridge.starts.length === 1, 'the model call')
+    await act(async () => bridge.answerAll())
+    await until(() => write.mock.calls.length === 1, 'the final write')
+    expect(m.session.list().some((job) => job.state === 'running')).toBe(false)
+    expect(window.__tandemEditorAiBusy).toBe(true)
+    await act(async () => finishWrite())
+    await until(() => q(m.el, '.pdf-translate-report') !== null, 'the report')
+    expect(window.__tandemEditorAiBusy).toBe(false)
+  })
+
   it('after Start: save targets first, one batch per call without tools, then the files and the report', async () => {
     const m = await mount({ lang: 'ko' })
     await openWindow(m, { lang: 'de', pages: null })

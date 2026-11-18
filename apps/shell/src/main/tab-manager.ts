@@ -1,3 +1,4 @@
+import type { WatchdogReopenResult } from './renderer-watchdog-policy'
 import { basename, join } from 'node:path'
 import { realpathSync } from 'node:fs'
 import { BrowserWindow, shell, WebContentsView } from 'electron'
@@ -1597,7 +1598,8 @@ export class TabManager {
         return
       }
       if (hiddenPaneVerdict(readMemory()) !== 'release') return
-      this.releaseReadOnlyView(tab)
+      this.releaseView(tab)
+      noteActivity('source-pane-released')
       this.stopWatchingHiddenSourcePane()
     }, HIDDEN_PANE_RECHECK_MS)
     watch.unref?.()
@@ -1610,14 +1612,12 @@ export class TabManager {
   }
 
   /**
-   * End the renderer of a read-only tab but keep the tab, its place in the strip and in the
-   * split: it turns into an unloaded tab whose opener reads the file as it is on disk. There
-   * is nothing to lose (a read-only tab holds no edits). The view is taken down the way a
-   * closed tab's is.
+   * End a renderer but keep its tab/strip/split position for a fresh file open.
+   * Callers must first settle unsaved changes, or pass a read-only tab.
    */
-  private releaseReadOnlyView(tab: TabRecord): void {
+  private releaseView(tab: TabRecord): void {
     const view = tab.view
-    if (!view || !tab.readOnly) return
+    if (!view) return
     dropGenerateHandoff(view.webContents.id)
     view.setVisible(false)
     this.shellWindow.contentView.removeChildView(view)
@@ -1632,7 +1632,6 @@ export class TabManager {
     tab.lazy = undefined
     tab.opener = plainTabOpener
     tab.released = true
-    noteActivity('source-pane-released')
     this.onChanged()
   }
 
@@ -1963,6 +1962,29 @@ export class TabManager {
       if (!(await this.confirmClose(member))) return
     }
     for (const member of members) this.removeTab(member.id)
+  }
+
+  /** Reopen the saved file in the same tab/position, after the normal save guard. */
+  async reopenTab(id: string, idle: () => Promise<boolean>): Promise<WatchdogReopenResult> {
+    const tab = this.tabs.find((entry) => entry.id === id)
+    if (!tab?.filePath || !tab.view) return 'closed'
+    const view = tab.view
+    const stillHere = () => this.tabs.includes(tab) && tab.view === view && Boolean(tab.filePath)
+    if (this.closingIds.has(id) || !(await idle())) return 'busy'
+    if (!stillHere()) return 'closed'
+    if (!(await this.confirmClose(tab))) return 'cancelled'
+    // A new run or a tab close may have happened while the save dialog was open.
+    if (!stillHere()) return 'closed'
+    if (!(await idle())) return 'busy'
+    if (!stillHere()) return 'closed'
+    this.releaseView(tab)
+    if (!this.loadTab(tab)) return 'closed'
+    this.layout()
+    this.refreshActiveTargets()
+    if (this.activeId === id) this.focusActiveView()
+    this.onChanged()
+    this.notifySplitChanged()
+    return 'reopened'
   }
 
   /** run the tab's unsaved-changes prompt; false when the person cancelled */

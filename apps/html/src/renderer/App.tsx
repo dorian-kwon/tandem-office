@@ -1,3 +1,4 @@
+import { withEditorAiWork } from '@genoffice/ui'
 import {
   type CSSProperties,
   useCallback,
@@ -1825,7 +1826,7 @@ export default function App() {
       const text = textRef.current
       const name =
         derivePageTitleName(text) || provisionalNameRef.current || deriveAutoFileName(text)
-      if (name) void doSave('save', name)
+      if (name) void withEditorAiWork(() => doSave('save', name))
     },
     clearHighlights: () => editorRef.current?.clearHighlights(),
     onBriefConfirmed: (brief) => {

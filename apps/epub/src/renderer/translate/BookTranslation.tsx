@@ -1,3 +1,4 @@
+import { useEditorAiBusy, withEditorAiWork } from '@genoffice/ui'
 /**
  * Book translation in the EPUB editor (spec §8), the app side: the window
  * (choices and confirmation), the job, its progress strip with "Stop", the
@@ -162,6 +163,7 @@ export const BookTranslation = forwardRef<BookTranslationHandle, BookTranslation
       useCallback((listener: () => void) => session.subscribe(listener), [session]),
       () => session.view(),
     )
+    useEditorAiBusy(dialog !== null || writing !== null || view?.state === 'running')
     const propsRef = useRef(props)
     propsRef.current = props
     const writingRef = useRef<Writing | null>(null)
@@ -234,79 +236,83 @@ export const BookTranslation = forwardRef<BookTranslationHandle, BookTranslation
     }
 
     /** write the chosen result books from the stored translation (finished blocks; the rest in the source) */
-    const writeResults = async (run: TranslationRun, partial: boolean): Promise<void> => {
-      const p = propsRef.current
-      if (!p.api || writingRef.current) return
-      const outputs: BookResultTarget[] = []
-      const failures: string[] = []
-      const reports: EpubTranslationReport[] = []
-      const failed = (path: string, reason: string) =>
-        failures.push(p.t('btWriteFailed', { name: baseName(path), reason }))
-      const hash = await attempt(() => p.api!.documentHash())
-      for (const target of run.targets) {
-        if (!aliveRef.current) return
-        if (!hash?.ok) {
-          failed(target.path, p.t('btWriteOther'))
-          continue
-        }
-        const now: Writing = { kind: target.kind, path: target.path }
-        writingRef.current = now
-        setWriting(now)
-        try {
-          const out = await p.api.writeTranslated({
-            kind: target.kind,
-            lang: run.lang,
-            ...(run.chapters ? { chapters: run.chapters } : {}),
-            path: target.path,
-            docHash: hash.docHash,
-          })
-          if (!out.ok) {
-            failed(target.path, writeFailureText(out, p.t))
+    const writeResults = async (run: TranslationRun, partial: boolean): Promise<void> =>
+      withEditorAiWork(async () => {
+        const p = propsRef.current
+        if (!p.api || writingRef.current) return
+        const outputs: BookResultTarget[] = []
+        const failures: string[] = []
+        const reports: EpubTranslationReport[] = []
+        const failed = (path: string, reason: string) =>
+          failures.push(p.t('btWriteFailed', { name: baseName(path), reason }))
+        const hash = await attempt(() => p.api!.documentHash())
+        for (const target of run.targets) {
+          if (!aliveRef.current) return
+          if (!hash?.ok) {
+            failed(target.path, p.t('btWriteOther'))
             continue
           }
-          outputs.push({ kind: target.kind, path: out.path })
-          reports.push(out.report)
-        } catch {
-          failed(target.path, p.t('btWriteOther'))
+          const now: Writing = { kind: target.kind, path: target.path }
+          writingRef.current = now
+          setWriting(now)
+          try {
+            const out = await p.api.writeTranslated({
+              kind: target.kind,
+              lang: run.lang,
+              ...(run.chapters ? { chapters: run.chapters } : {}),
+              path: target.path,
+              docHash: hash.docHash,
+            })
+            if (!out.ok) {
+              failed(target.path, writeFailureText(out, p.t))
+              continue
+            }
+            outputs.push({ kind: target.kind, path: out.path })
+            reports.push(out.report)
+          } catch {
+            failed(target.path, p.t('btWriteOther'))
+          }
         }
-      }
-      writingRef.current = null
-      if (!aliveRef.current) return
-      setWriting(null)
-      setReport({ lang: run.lang, report: combineReports(reports), outputs, failures, partial })
-    }
+        writingRef.current = null
+        if (!aliveRef.current) return
+        setWriting(null)
+        setReport({ lang: run.lang, report: combineReports(reports), outputs, failures, partial })
+      })
 
-    const ended = async (last: BookJobView, run: TranslationRun): Promise<void> => {
-      try {
-        if (last.state === 'complete' && run.targets.length > 0 && aliveRef.current) {
-          await writeResults(run, false)
+    const ended = async (last: BookJobView, run: TranslationRun): Promise<void> =>
+      withEditorAiWork(async () => {
+        try {
+          if (last.state === 'complete' && run.targets.length > 0 && aliveRef.current) {
+            await writeResults(run, false)
+          }
+        } finally {
+          await unlock()
         }
-      } finally {
-        await unlock()
-      }
-    }
+      })
 
     /** "Export what is translated so far" after a stop: the result books, the rest in the source */
-    const exportPartial = async (): Promise<void> => {
-      const run = runRef.current
-      if (!run || writingRef.current) return
-      session.dismiss()
-      const locked = await propsRef.current.lock(true).catch(() => false)
-      try {
-        if (locked) await writeResults(run, true)
-      } finally {
-        await unlock()
-      }
-    }
+    const exportPartial = async (): Promise<void> =>
+      withEditorAiWork(async () => {
+        const run = runRef.current
+        if (!run || writingRef.current) return
+        session.dismiss()
+        const locked = await propsRef.current.lock(true).catch(() => false)
+        try {
+          if (locked) await writeResults(run, true)
+        } finally {
+          await unlock()
+        }
+      })
 
     /** Start from the confirmation; never rejects (a failure is the answer). */
-    const start = async (request: BookTranslateStartRequest): Promise<BookTranslateStartAnswer> => {
-      try {
-        return await begin(request)
-      } catch (err) {
-        return { ok: false, error: propsRef.current.t('btFailed', { reason: errorText(err) }) }
-      }
-    }
+    const start = async (request: BookTranslateStartRequest): Promise<BookTranslateStartAnswer> =>
+      withEditorAiWork(async () => {
+        try {
+          return await begin(request)
+        } catch (err) {
+          return { ok: false, error: propsRef.current.t('btFailed', { reason: errorText(err) }) }
+        }
+      })
 
     const begin = async (request: BookTranslateStartRequest): Promise<BookTranslateStartAnswer> => {
       const p = propsRef.current

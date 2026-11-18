@@ -77,3 +77,32 @@ describe('mcp bridge apply_ops validation', () => {
     expect(reply.ok).toBe(true)
   })
 })
+
+it('keeps queued MCP edits busy through apply and the final save response', async () => {
+  let finishApply!: (value: unknown) => void
+  let finishSave!: (value: { ok: boolean }) => void
+  const apply = new Promise<unknown>((resolve) => {
+    finishApply = resolve
+  })
+  const save = new Promise<{ ok: boolean }>((resolve) => {
+    finishSave = resolve
+  })
+  const saveTo = vi.fn(() => save)
+  const uninstall = installSheetsMcpBridge(bridgeWith({ applyOps: () => apply, saveTo }))
+  commandListener!({
+    requestId: 11,
+    command: 'apply_ops',
+    payload: {
+      ops: [{ op: 'set_cell', sheetId: 'sheet-1', address: 'A1', value: 'x' }],
+    },
+  })
+  commandListener!({ requestId: 12, command: 'save_sheet', payload: { path: '/tmp/sheet.xlsx' } })
+  expect(window.__tandemEditorAiBusy).toBe(true)
+  finishApply({ ok: true })
+  await vi.waitFor(() => expect(saveTo).toHaveBeenCalledTimes(1))
+  expect(window.__tandemEditorAiBusy).toBe(true)
+  finishSave({ ok: true })
+  await vi.waitFor(() => expect(window.__tandemEditorAiBusy).toBe(false))
+  expect(reportMcpResult).toHaveBeenCalledTimes(2)
+  uninstall()
+})

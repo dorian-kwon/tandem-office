@@ -1,3 +1,4 @@
+import { useChatWindow, EarlierChatMessages } from '@genoffice/ui'
 /**
  * The mind map's AI panel: the same parts and rules as the other editors'
  * panels (the send gate, the connect prompt, the first-connection notice, the
@@ -423,6 +424,8 @@ export function AiPanel({
   const [prompt, setPrompt] = useState('')
   const [busy, setBusy] = useState(false)
   const runStatus = useAiRunStatus(busy)
+  const chatWindow = useChatWindow(chat, busy)
+
   // the shared ask_choice question card: the answer starts the next run
   const choice = useAiChoice({
     lang,
@@ -1798,6 +1801,7 @@ export function AiPanel({
       </header>
 
       <div className="ai-chat" ref={chatRef} onScroll={onChatScroll}>
+        <EarlierChatMessages hidden={chatWindow.hidden} expand={chatWindow.expand} lang={lang} />
         {chat.length === 0 && (
           <div className="ai-chat-empty">
             <div className="ai-chat-empty-title">{t('aiEmptyTitle')}</div>
@@ -1819,7 +1823,7 @@ export function AiPanel({
             </div>
           </div>
         )}
-        {chat.map((entry, i) => {
+        {chatWindow.chat.map(({ entry, index: i }) => {
           if (entry.role === 'user') {
             return (
               <div key={i} className="ai-msg ai-msg-user">

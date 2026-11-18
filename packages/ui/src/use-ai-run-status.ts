@@ -1,10 +1,7 @@
+import { acquireEditorAiWork, useEditorAiBusy } from './editor-ai-busy'
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
-import type { AgentLoopEvents } from '@genoffice/agent-core'
-import {
-  IDLE_RUN_STATUS,
-  reduceRunStatus,
-  type RunStatusState,
-} from './ai-run-status'
+import type { AgentLoopEvents, AgentToolCall } from '@genoffice/agent-core'
+import { IDLE_RUN_STATUS, reduceRunStatus, type RunStatusState } from './ai-run-status'
 
 /** How long "Finished" / "Stopped" stay on the line. Waiting and error stay until the next run. */
 export const RUN_STATUS_DONE_MS = 4000
@@ -26,6 +23,7 @@ export interface AiRunStatusController {
  */
 export function useAiRunStatus(busy: boolean): AiRunStatusController {
   const [state, dispatch] = useReducer(reduceRunStatus, IDLE_RUN_STATUS)
+  useEditorAiBusy(busy || state.awaiting || !state.ended)
 
   useEffect(() => {
     dispatch(busy ? { type: 'begin', at: Date.now() } : { type: 'idle' })
@@ -42,8 +40,11 @@ export function useAiRunStatus(busy: boolean): AiRunStatusController {
 
   // dispatch is stable, so the wrapped events stay valid inside a loop created once
   const dispatchRef = useRef(dispatch)
+  // Call object identity distinguishes overlapping runs even if model call IDs repeat.
+  // Do not release on reset/unmount: an aborted tool may still be writing.
+  const toolWork = useRef(new WeakMap<AgentToolCall, () => void>())
   const wrap = useCallback(
-    <S,>(events: AgentLoopEvents<S>): AgentLoopEvents<S> => ({
+    <S>(events: AgentLoopEvents<S>): AgentLoopEvents<S> => ({
       ...events,
       onText: (text) => {
         dispatchRef.current({ type: 'text' })
@@ -52,6 +53,15 @@ export function useAiRunStatus(busy: boolean): AiRunStatusController {
       onToolStart: (call) => {
         dispatchRef.current({ type: 'tool-start', name: call.name })
         events.onToolStart?.(call)
+      },
+      onToolPending: (call, pending) => {
+        if (pending) {
+          if (!toolWork.current.has(call)) toolWork.current.set(call, acquireEditorAiWork())
+        } else {
+          toolWork.current.get(call)?.()
+          toolWork.current.delete(call)
+        }
+        events.onToolPending?.(call, pending)
       },
       onToolExecuted: (event) => {
         dispatchRef.current({

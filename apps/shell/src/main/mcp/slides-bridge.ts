@@ -1,3 +1,4 @@
+import { withMainEditorWork } from '../renderer-watchdog-policy'
 import { existsSync } from 'node:fs'
 import { extname, isAbsolute } from 'node:path'
 import { webContents } from 'electron'
@@ -252,7 +253,7 @@ export function createSlidesControl(deps: SlidesBridgeDeps): SlidesControl {
         throw new Error(`file already exists: ${targetPath} (pass overwrite:true to replace it)`)
       }
       const session = requireSession(wcId)
-      await saveSessionDeckTo(session, targetPath)
+      await withMainEditorWork(wcId, () => saveSessionDeckTo(session, targetPath))
       return { path: targetPath }
     },
   }

@@ -1,3 +1,4 @@
+import { useEditorAiBusy, withEditorAiWork } from '@genoffice/ui'
 /**
  * Document translation in the PDF editor (spec §8, §9), app side: the window
  * (choices and confirmation), the job, its progress strip, the choices after
@@ -163,6 +164,9 @@ export const DocumentTranslation = forwardRef<DocumentTranslationHandle, Documen
       useCallback((listener: () => void) => session.subscribe(listener), [session]),
       () => session.list(),
     )
+    useEditorAiBusy(
+      dialog !== null || writing !== null || views.some((job) => job.state === 'running'),
+    )
     const propsRef = useRef(props)
     propsRef.current = props
     const docHashRef = useRef<string | null>(null)
@@ -257,181 +261,184 @@ export const DocumentTranslation = forwardRef<DocumentTranslationHandle, Documen
     }
 
     /** write the chosen files from the stored translation (finished blocks; the rest in the source) */
-    const writeOutputs = async (run: TranslationRun): Promise<void> => {
-      const p = propsRef.current
-      if (!p.api || !p.filePath || writingRef.current) return
-      if (!(await p.prepare()) || !aliveRef.current) return
-      const outputs: ReportState['outputs'] = []
-      const failures: string[] = []
-      const reports: Array<TranslationResultReport | null> = []
-      const source = p.filePath
-      const common = {
-        path: source,
-        ...(p.password !== undefined ? { password: p.password } : {}),
-        ...(run.pages ? { pages: run.pages } : {}),
-      }
-      for (const { format, path } of run.targets) {
-        if (!aliveRef.current) return
-        const jobId = newJobId()
-        const now: Writing = { jobId, format, done: 0, total: 0 }
-        writingRef.current = now
-        setWriting(now)
-        const off = p.api.onProgress((progress) => {
-          if (progress.jobId !== jobId || !aliveRef.current) return
-          setWriting((w) =>
-            w && w.jobId === jobId ? { ...w, done: progress.done, total: progress.total } : w,
-          )
-        })
-        const failed = (reason: string) =>
-          failures.push(p.t('trWriteFailed', { format: FORMAT_NAME[format], reason }))
-        try {
-          if (format === 'md' && !(await p.api.releaseTarget({ source, path }))) {
-            failed(p.t('cvErrTargetOpen'))
-            continue
-          }
-          if (format === 'pdf') {
-            const out = await p.api.writeBack({
-              jobId,
-              ...common,
-              outPath: path,
-              payload: { lang: run.lang, ...(run.bilingual ? { bilingual: true } : {}) },
-            })
-            if (!out.ok) {
-              failed(structureFailureText(out, p.t))
-              continue
-            }
-            const r = out.report as Partial<PdfTranslatedPdfReport> | null
-            reports.push(mergeTranslationReport(r?.translation ?? null, r?.writer ?? null))
-          } else {
-            const stem = p.fileName.replace(/\.pdf$/i, '') || 'document'
-            const out = await p.api.convert({
-              jobId,
-              ...common,
-              format,
-              outPath: path,
-              translation: { lang: run.lang, bilingual: run.bilingual },
-              ...(format === 'epub'
-                ? {
-                    epub: {
-                      title: p.docInfo.title?.trim() || stem,
-                      ...(p.docInfo.author?.trim() ? { author: p.docInfo.author.trim() } : {}),
-                      cover: true,
-                      // a bilingual book carries both languages; the writer guesses the source
-                      ...(run.bilingual ? {} : { language: run.lang }),
-                      uiLanguage: p.lang,
-                      pageImageAlt: p.t('cvPageImageAlt'),
-                    },
-                  }
-                : {}),
-            })
-            if (!out.ok) {
-              failed(structureFailureText(out, p.t))
-              continue
-            }
-            reports.push(mergeTranslationReport(out.translation ?? null, null))
-          }
-          outputs.push({ format, path })
-        } catch (err) {
-          failed(String(err))
-        } finally {
-          off()
+    const writeOutputs = async (run: TranslationRun): Promise<void> =>
+      withEditorAiWork(async () => {
+        const p = propsRef.current
+        if (!p.api || !p.filePath || writingRef.current) return
+        if (!(await p.prepare()) || !aliveRef.current) return
+        const outputs: ReportState['outputs'] = []
+        const failures: string[] = []
+        const reports: Array<TranslationResultReport | null> = []
+        const source = p.filePath
+        const common = {
+          path: source,
+          ...(p.password !== undefined ? { password: p.password } : {}),
+          ...(run.pages ? { pages: run.pages } : {}),
         }
-      }
-      writingRef.current = null
-      if (!aliveRef.current) return
-      setWriting(null)
-      setReport({ lang: run.lang, report: combineReports(reports), outputs, failures })
-    }
-
-    const ended = async (view: DocumentJobView, run: TranslationRun): Promise<void> => {
-      await carry(run.docHash)
-      if (!aliveRef.current) return
-      if (view.state === 'complete' && run.targets.length > 0) await writeOutputs(run)
-    }
-
-    const start = async (request: TranslateStartRequest): Promise<TranslateStartAnswer> => {
-      const p = propsRef.current
-      if (!p.api) return { ok: false, error: p.t('trUnavailable') }
-      const { docHash: hash, lang: target, route } = request
-      const here = session.running(hash) ?? tabJob()
-      if (here) return { ok: false, busy: here.progress }
-      // a job another process runs on the same file (the terminal, another window)
-      const records = await p.api.store.unfinishedJobs(hash).catch(() => null)
-      const elsewhere = records?.ok ? session.runningElsewhere(hash, records.jobs) : undefined
-      if (elsewhere) return { ok: false, busy: elsewhere.progress ?? { done: 0, total: 0 } }
-
-      const targets = await pickTargets(request)
-      if (!targets) return { ok: false, cancelled: true }
-      const run: TranslationRun = {
-        docHash: hash,
-        lang: target,
-        pages: request.pages,
-        bilingual: request.bilingual,
-        targets,
-      }
-      if (request.mode === 'export' || !route) {
-        setDialog(null)
-        if (targets.length > 0) void writeOutputs(run)
-        return { ok: true }
-      }
-
-      rememberJobPages(
-        hash,
-        'translate',
-        target,
-        request.pages ?? Array.from({ length: p.pageCount }, (_, i) => i + 1),
-      )
-      const ask = createModelCall({
-        settings: () => route.settings,
-        lang: () => propsRef.current.lang,
-        // one id for this job's calls: a large document is confirmed once, not per batch
-        runId: crypto.randomUUID(),
-        guard: async () => {
-          const statuses = await attemptSubscription((s) => s.statuses())
-          const current = await window.pdfApi?.getAiSettings().catch(() => null)
-          return jobRouteRefusal(route, current ?? null, statuses)
-        },
+        for (const { format, path } of run.targets) {
+          if (!aliveRef.current) return
+          const jobId = newJobId()
+          const now: Writing = { jobId, format, done: 0, total: 0 }
+          writingRef.current = now
+          setWriting(now)
+          const off = p.api.onProgress((progress) => {
+            if (progress.jobId !== jobId || !aliveRef.current) return
+            setWriting((w) =>
+              w && w.jobId === jobId ? { ...w, done: progress.done, total: progress.total } : w,
+            )
+          })
+          const failed = (reason: string) =>
+            failures.push(p.t('trWriteFailed', { format: FORMAT_NAME[format], reason }))
+          try {
+            if (format === 'md' && !(await p.api.releaseTarget({ source, path }))) {
+              failed(p.t('cvErrTargetOpen'))
+              continue
+            }
+            if (format === 'pdf') {
+              const out = await p.api.writeBack({
+                jobId,
+                ...common,
+                outPath: path,
+                payload: { lang: run.lang, ...(run.bilingual ? { bilingual: true } : {}) },
+              })
+              if (!out.ok) {
+                failed(structureFailureText(out, p.t))
+                continue
+              }
+              const r = out.report as Partial<PdfTranslatedPdfReport> | null
+              reports.push(mergeTranslationReport(r?.translation ?? null, r?.writer ?? null))
+            } else {
+              const stem = p.fileName.replace(/\.pdf$/i, '') || 'document'
+              const out = await p.api.convert({
+                jobId,
+                ...common,
+                format,
+                outPath: path,
+                translation: { lang: run.lang, bilingual: run.bilingual },
+                ...(format === 'epub'
+                  ? {
+                      epub: {
+                        title: p.docInfo.title?.trim() || stem,
+                        ...(p.docInfo.author?.trim() ? { author: p.docInfo.author.trim() } : {}),
+                        cover: true,
+                        // a bilingual book carries both languages; the writer guesses the source
+                        ...(run.bilingual ? {} : { language: run.lang }),
+                        uiLanguage: p.lang,
+                        pageImageAlt: p.t('cvPageImageAlt'),
+                      },
+                    }
+                  : {}),
+              })
+              if (!out.ok) {
+                failed(structureFailureText(out, p.t))
+                continue
+              }
+              reports.push(mergeTranslationReport(out.translation ?? null, null))
+            }
+            outputs.push({ format, path })
+          } catch (err) {
+            failed(String(err))
+          } finally {
+            off()
+          }
+        }
+        writingRef.current = null
+        if (!aliveRef.current) return
+        setWriting(null)
+        setReport({ lang: run.lang, report: combineReports(reports), outputs, failures })
       })
-      // the translation request is a system prompt and one user turn of document data; no tools
-      const send: TranslationSend = (req, signal) =>
-        ask(
-          { system: req.system, messages: [{ role: 'user', text: req.prompt }], tools: [] },
-          signal,
+
+    const ended = async (view: DocumentJobView, run: TranslationRun): Promise<void> =>
+      withEditorAiWork(async () => {
+        await carry(run.docHash)
+        if (!aliveRef.current) return
+        if (view.state === 'complete' && run.targets.length > 0) await writeOutputs(run)
+      })
+
+    const start = async (request: TranslateStartRequest): Promise<TranslateStartAnswer> =>
+      withEditorAiWork(async () => {
+        const p = propsRef.current
+        if (!p.api) return { ok: false, error: p.t('trUnavailable') }
+        const { docHash: hash, lang: target, route } = request
+        const here = session.running(hash) ?? tabJob()
+        if (here) return { ok: false, busy: here.progress }
+        // a job another process runs on the same file (the terminal, another window)
+        const records = await p.api.store.unfinishedJobs(hash).catch(() => null)
+        const elsewhere = records?.ok ? session.runningElsewhere(hash, records.jobs) : undefined
+        if (elsewhere) return { ok: false, busy: elsewhere.progress ?? { done: 0, total: 0 } }
+
+        const targets = await pickTargets(request)
+        if (!targets) return { ok: false, cancelled: true }
+        const run: TranslationRun = {
+          docHash: hash,
+          lang: target,
+          pages: request.pages,
+          bilingual: request.bilingual,
+          targets,
+        }
+        if (request.mode === 'export' || !route) {
+          setDialog(null)
+          if (targets.length > 0) void writeOutputs(run)
+          return { ok: true }
+        }
+
+        rememberJobPages(
+          hash,
+          'translate',
+          target,
+          request.pages ?? Array.from({ length: p.pageCount }, (_, i) => i + 1),
         )
-      const parts = translationJobParts(request.tree, {
-        lang: target,
-        send,
-        ...(request.pages ? { pages: request.pages } : {}),
-      })
-      const store = createIpcJobStore(p.api.store)
-      const outcome = session.start<TranslationJobItem<TextUnit>[]>({
-        docHash: hash,
-        kind: 'translate',
-        lang: target,
-        provider: route.provider,
-        ...(request.aiLabel ? { aiLabel: request.aiLabel } : {}),
-        launch: ({ signal, registry, onProgress }) =>
-          startTranslationJob({
-            docHash: hash,
-            lang: target,
-            ...parts,
-            model: { provider: route.provider, model: route.model },
-            store,
-            ...(request.mode === 'restart'
-              ? { restart: true, ...(request.keepEdited ? { keepEdited: true } : {}) }
-              : {}),
+        const ask = createModelCall({
+          settings: () => route.settings,
+          lang: () => propsRef.current.lang,
+          // one id for this job's calls: a large document is confirmed once, not per batch
+          runId: crypto.randomUUID(),
+          guard: async () => {
+            const statuses = await attemptSubscription((s) => s.statuses())
+            const current = await window.pdfApi?.getAiSettings().catch(() => null)
+            return jobRouteRefusal(route, current ?? null, statuses)
+          },
+        })
+        // the translation request is a system prompt and one user turn of document data; no tools
+        const send: TranslationSend = (req, signal) =>
+          ask(
+            { system: req.system, messages: [{ role: 'user', text: req.prompt }], tools: [] },
             signal,
-            registry,
-            onProgress,
-          }),
-        pageOf: (batch) => batch[0]?.block.page ?? null,
-        onEnd: (view) => void ended(view, run),
+          )
+        const parts = translationJobParts(request.tree, {
+          lang: target,
+          send,
+          ...(request.pages ? { pages: request.pages } : {}),
+        })
+        const store = createIpcJobStore(p.api.store)
+        const outcome = session.start<TranslationJobItem<TextUnit>[]>({
+          docHash: hash,
+          kind: 'translate',
+          lang: target,
+          provider: route.provider,
+          ...(request.aiLabel ? { aiLabel: request.aiLabel } : {}),
+          launch: ({ signal, registry, onProgress }) =>
+            startTranslationJob({
+              docHash: hash,
+              lang: target,
+              ...parts,
+              model: { provider: route.provider, model: route.model },
+              store,
+              ...(request.mode === 'restart'
+                ? { restart: true, ...(request.keepEdited ? { keepEdited: true } : {}) }
+                : {}),
+              signal,
+              registry,
+              onProgress,
+            }),
+          pageOf: (batch) => batch[0]?.block.page ?? null,
+          onEnd: (view) => void ended(view, run),
+        })
+        if (!outcome.ok) return { ok: false, busy: outcome.running.progress }
+        runs.current.set(outcome.view.id, run)
+        setDialog(null)
+        return { ok: true }
       })
-      if (!outcome.ok) return { ok: false, busy: outcome.running.progress }
-      runs.current.set(outcome.view.id, run)
-      setDialog(null)
-      return { ok: true }
-    }
 
     useImperativeHandle(ref, () => ({
       requestOpen({ lang: target, pages }) {

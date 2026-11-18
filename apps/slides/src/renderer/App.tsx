@@ -1,3 +1,4 @@
+import { useEditorAiBusy } from '@genoffice/ui'
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type {
   GroupRenderNode,
@@ -661,6 +662,8 @@ export function App() {
   const [animPainter, setAnimPainter] = useState<AnimPainterState | null>(null)
 
   const slide = slides[current]
+  // Reading/sorter modes do not mount the AI panel; keep a readiness owner here.
+  useEditorAiBusy(!aiSettings || !slide)
   // Rail multi-selection: stale entries (page deleted, anchor moved elsewhere) collapse to the anchor
   const selectedSlides = useMemo(
     () => normalizeSelection(slideSelRaw, current, slides.length),

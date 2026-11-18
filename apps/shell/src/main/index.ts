@@ -432,6 +432,7 @@ import {
 } from '@genoffice/ai-provider/subscription'
 import { showErrorDialog } from './error-dialog'
 import { startRendererWatchdog } from './renderer-watchdog'
+import { editorAiBusy } from './renderer-watchdog-policy'
 import {
   memoryFigures,
   startCrashWatch,
@@ -1155,6 +1156,9 @@ const tMain = createI18n({
     watchdogBody:
       '“{title}” 已持续数分钟占用大量内存或 CPU（内存 {memory} MB，CPU {cpu}%）。可以继续等待，或关闭这个文档（有未保存的改动会先询问是否保存）。诊断信息已记录。', // public-hygiene: allow
     watchdogWait: '继续等待',
+    watchdogReopen: '重新打开文档',
+    watchdogReopenAfterAi: 'AI 完成后重新打开',
+    watchdogAiBusy: 'AI 仍在处理此文档。重新打开会等到 AI 的全部工作完成后再询问是否保存。',
     watchdogClose: '关闭文档',
     crashTitle: '文档意外停止',
     crashBody: '“{title}” 意外停止。上次保存后的改动可能已丢失。',
@@ -1302,6 +1306,10 @@ const tMain = createI18n({
     watchdogBody:
       '"{title}" has been using a lot of memory or CPU for several minutes ({memory} MB, {cpu}% CPU). You can keep waiting, or close the document (you will be asked to save unsaved changes first). Diagnostics have been recorded.',
     watchdogWait: 'Keep Waiting',
+    watchdogReopen: 'Reopen document',
+    watchdogReopenAfterAi: 'Reopen when AI finishes',
+    watchdogAiBusy:
+      'AI is still working on this document. Reopening will wait until all of its work finishes, then ask about saving changes.',
     watchdogClose: 'Close Document',
     crashTitle: 'A document stopped unexpectedly',
     crashBody: '"{title}" stopped unexpectedly. Changes made since it was last saved may be lost.',
@@ -1457,6 +1465,10 @@ const tMain = createI18n({
     watchdogBody:
       '"{title}" đã dùng nhiều bộ nhớ hoặc CPU trong vài phút ({memory} MB, {cpu}% CPU). Bạn có thể tiếp tục chờ hoặc đóng tài liệu này (sẽ hỏi lưu các thay đổi chưa lưu trước). Thông tin chẩn đoán đã được ghi lại.',
     watchdogWait: 'Tiếp tục chờ',
+    watchdogReopen: 'Mở lại tài liệu',
+    watchdogReopenAfterAi: 'Mở lại khi AI hoàn tất',
+    watchdogAiBusy:
+      'AI vẫn đang xử lý tài liệu này. Việc mở lại sẽ chờ AI hoàn tất toàn bộ công việc, rồi hỏi về việc lưu thay đổi.',
     watchdogClose: 'Đóng tài liệu',
     crashTitle: 'Tài liệu dừng đột ngột',
     crashBody: '"{title}" đã dừng đột ngột. Những thay đổi sau lần lưu gần nhất có thể đã bị mất.',
@@ -1612,6 +1624,10 @@ const tMain = createI18n({
     watchdogBody:
       '「{title}」が数分間にわたり大量のメモリまたは CPU を使用しています（メモリ {memory} MB、CPU {cpu}%）。そのまま待つか、このドキュメントを閉じることができます（未保存の変更がある場合は保存を確認します）。診断情報を記録しました。',
     watchdogWait: '待つ',
+    watchdogReopen: '文書を開き直す',
+    watchdogReopenAfterAi: 'AI の完了後に開き直す',
+    watchdogAiBusy:
+      'AI がこの文書で作業中です。すべての作業が終わってから、変更を保存するか確認して開き直します。',
     watchdogClose: 'ドキュメントを閉じる',
     crashTitle: 'ドキュメントが予期せず停止しました',
     crashBody:
@@ -1769,6 +1785,10 @@ const tMain = createI18n({
     watchdogBody:
       '"{title}"이(가) 몇 분 동안 많은 메모리 또는 CPU를 사용하고 있습니다(메모리 {memory} MB, CPU {cpu}%). 계속 기다리거나 이 문서를 닫을 수 있습니다(저장되지 않은 변경 사항이 있으면 먼저 저장 여부를 묻습니다). 진단 정보가 기록되었습니다.',
     watchdogWait: '계속 기다리기',
+    watchdogReopen: '문서 다시 열기',
+    watchdogReopenAfterAi: 'AI가 끝나면 다시 열기',
+    watchdogAiBusy:
+      'AI가 이 문서에서 작업 중입니다. AI의 모든 작업이 끝날 때까지 기다린 뒤, 변경 사항을 저장할지 확인하고 다시 엽니다.',
     watchdogClose: '문서 닫기',
     crashTitle: '문서가 예기치 않게 멈췄습니다',
     crashBody:
@@ -1924,6 +1944,10 @@ const tMain = createI18n({
     watchdogBody:
       '« {title} » utilise beaucoup de mémoire ou de processeur depuis plusieurs minutes ({memory} Mo, {cpu} % CPU). Vous pouvez continuer à attendre ou fermer ce document (il vous sera d’abord demandé d’enregistrer les modifications non sauvegardées). Les diagnostics ont été enregistrés.',
     watchdogWait: 'Continuer d’attendre',
+    watchdogReopen: 'Rouvrir le document',
+    watchdogReopenAfterAi: 'Rouvrir quand l’IA a terminé',
+    watchdogAiBusy:
+      'L’IA travaille encore sur ce document. La réouverture attendra la fin de toutes ses tâches, puis proposera d’enregistrer les modifications.',
     watchdogClose: 'Fermer le document',
     crashTitle: 'Un document s’est arrêté de façon inattendue',
     crashBody:
@@ -2082,6 +2106,10 @@ const tMain = createI18n({
     watchdogBody:
       '„{title}“ belegt seit mehreren Minuten viel Arbeitsspeicher oder CPU ({memory} MB, {cpu} % CPU). Sie können weiter warten oder das Dokument schließen (bei ungespeicherten Änderungen werden Sie zuerst zum Speichern gefragt). Diagnosedaten wurden aufgezeichnet.',
     watchdogWait: 'Weiter warten',
+    watchdogReopen: 'Dokument erneut öffnen',
+    watchdogReopenAfterAi: 'Nach Abschluss der KI erneut öffnen',
+    watchdogAiBusy:
+      'Die KI arbeitet noch an diesem Dokument. Das erneute Öffnen wartet auf den Abschluss aller Aufgaben und fragt dann nach dem Speichern der Änderungen.',
     watchdogClose: 'Dokument schließen',
     crashTitle: 'Ein Dokument wurde unerwartet beendet',
     crashBody:
@@ -2240,6 +2268,10 @@ const tMain = createI18n({
     watchdogBody:
       '«{title}» lleva varios minutos usando mucha memoria o CPU ({memory} MB, {cpu} % de CPU). Puedes seguir esperando o cerrar el documento (antes se te pedirá guardar los cambios sin guardar). Se ha registrado el diagnóstico.',
     watchdogWait: 'Seguir esperando',
+    watchdogReopen: 'Volver a abrir el documento',
+    watchdogReopenAfterAi: 'Volver a abrir cuando termine la IA',
+    watchdogAiBusy:
+      'La IA sigue trabajando en este documento. Se esperará a que termine todo el trabajo y luego se preguntará si desea guardar los cambios antes de volver a abrirlo.',
     watchdogClose: 'Cerrar documento',
     crashTitle: 'Un documento se detuvo inesperadamente',
     crashBody:
@@ -2398,6 +2430,10 @@ const tMain = createI18n({
     watchdogBody:
       '"{title}" ใช้หน่วยความจำหรือ CPU จำนวนมากติดต่อกันหลายนาที (หน่วยความจำ {memory} MB, CPU {cpu}%) คุณสามารถรอต่อไปหรือปิดเอกสารนี้ได้ (หากมีการเปลี่ยนแปลงที่ยังไม่บันทึกจะถามให้บันทึกก่อน) บันทึกข้อมูลวินิจฉัยแล้ว',
     watchdogWait: 'รอต่อไป',
+    watchdogReopen: 'เปิดเอกสารอีกครั้ง',
+    watchdogReopenAfterAi: 'เปิดอีกครั้งเมื่อ AI ทำงานเสร็จ',
+    watchdogAiBusy:
+      'AI ยังทำงานกับเอกสารนี้อยู่ การเปิดอีกครั้งจะรอจนงานทั้งหมดเสร็จ แล้วถามว่าต้องการบันทึกการเปลี่ยนแปลงหรือไม่',
     watchdogClose: 'ปิดเอกสาร',
     crashTitle: 'เอกสารหยุดทำงานโดยไม่คาดคิด',
     crashBody: '"{title}" หยุดทำงานโดยไม่คาดคิด การเปลี่ยนแปลงหลังการบันทึกครั้งล่าสุดอาจสูญหาย',
@@ -2550,6 +2586,10 @@ const tMain = createI18n({
     watchdogBody:
       '"{title}" telah menggunakan banyak memori atau CPU selama beberapa menit ({memory} MB, CPU {cpu}%). Anda dapat terus menunggu atau menutup dokumen ini (perubahan yang belum disimpan akan ditanyakan lebih dulu). Diagnostik telah dicatat.',
     watchdogWait: 'Terus Menunggu',
+    watchdogReopen: 'Buka ulang dokumen',
+    watchdogReopenAfterAi: 'Buka ulang setelah AI selesai',
+    watchdogAiBusy:
+      'AI masih mengerjakan dokumen ini. Dokumen akan dibuka ulang setelah seluruh pekerjaannya selesai, lalu Anda akan ditanya tentang menyimpan perubahan.',
     watchdogClose: 'Tutup Dokumen',
     crashTitle: 'Dokumen berhenti secara tak terduga',
     crashBody:
@@ -2707,6 +2747,10 @@ const tMain = createI18n({
     watchdogBody:
       '«{title}» уже несколько минут использует много памяти или процессора ({memory} МБ, {cpu}% CPU). Можно подождать ещё или закрыть документ (при несохранённых изменениях сначала будет предложено сохранить). Диагностика записана.',
     watchdogWait: 'Подождать',
+    watchdogReopen: 'Открыть документ заново',
+    watchdogReopenAfterAi: 'Открыть после завершения ИИ',
+    watchdogAiBusy:
+      'ИИ ещё работает с этим документом. Повторное открытие дождётся завершения всей работы, затем появится вопрос о сохранении изменений.',
     watchdogClose: 'Закрыть документ',
     crashTitle: 'Документ неожиданно остановился',
     crashBody:
@@ -2864,6 +2908,10 @@ const tMain = createI18n({
     watchdogBody:
       'يستهلك "{title}" قدرًا كبيرًا من الذاكرة أو المعالج منذ عدة دقائق (الذاكرة {memory} م.ب، المعالج {cpu}%). يمكنك مواصلة الانتظار أو إغلاق هذا المستند (سيُطلب حفظ التغييرات غير المحفوظة أولًا). تم تسجيل بيانات التشخيص.',
     watchdogWait: 'مواصلة الانتظار',
+    watchdogReopen: 'إعادة فتح المستند',
+    watchdogReopenAfterAi: 'إعادة الفتح عند انتهاء الذكاء الاصطناعي',
+    watchdogAiBusy:
+      'لا يزال الذكاء الاصطناعي يعمل على هذا المستند. ستنتظر إعادة الفتح حتى انتهاء جميع أعماله، ثم يُطلب منك حفظ التغييرات.',
     watchdogClose: 'إغلاق المستند',
     crashTitle: 'توقف مستند بشكل غير متوقع',
     crashBody: 'توقف "{title}" بشكل غير متوقع. ربما فُقدت التغييرات التي أُجريت منذ آخر حفظ.',
@@ -3016,6 +3064,10 @@ const tMain = createI18n({
     watchdogBody:
       '"{title}" está a usar muita memória ou CPU há vários minutos ({memory} MB, {cpu}% de CPU). Pode continuar a aguardar ou fechar o documento (será pedido para guardar alterações não guardadas primeiro). O diagnóstico foi registado.',
     watchdogWait: 'Continuar a aguardar',
+    watchdogReopen: 'Reabrir documento',
+    watchdogReopenAfterAi: 'Reabrir quando a IA terminar',
+    watchdogAiBusy:
+      'A IA ainda está trabalhando neste documento. A reabertura aguardará o fim de todo o trabalho e depois perguntará sobre salvar as alterações.',
     watchdogClose: 'Fechar documento',
     crashTitle: 'Um documento parou inesperadamente',
     crashBody:
@@ -3173,6 +3225,10 @@ const tMain = createI18n({
     watchdogBody:
       '"{title}" sta usando molta memoria o CPU da diversi minuti ({memory} MB, {cpu}% CPU). Puoi continuare ad attendere o chiudere il documento (ti verrà chiesto prima di salvare le modifiche non salvate). La diagnostica è stata registrata.',
     watchdogWait: 'Continua ad attendere',
+    watchdogReopen: 'Riapri documento',
+    watchdogReopenAfterAi: 'Riapri quando l’IA ha finito',
+    watchdogAiBusy:
+      'L’IA sta ancora lavorando su questo documento. La riapertura attenderà la fine di tutte le attività, poi chiederà se salvare le modifiche.',
     watchdogClose: 'Chiudi documento',
     crashTitle: 'Un documento si è interrotto inaspettatamente',
     crashBody:
@@ -3330,6 +3386,10 @@ const tMain = createI18n({
     watchdogBody:
       '„{title}” od kilku minut zużywa dużo pamięci lub procesora ({memory} MB, {cpu}% CPU). Możesz dalej czekać albo zamknąć dokument (najpierw pojawi się pytanie o zapisanie niezapisanych zmian). Dane diagnostyczne zostały zapisane.',
     watchdogWait: 'Czekaj dalej',
+    watchdogReopen: 'Otwórz dokument ponownie',
+    watchdogReopenAfterAi: 'Otwórz ponownie po zakończeniu AI',
+    watchdogAiBusy:
+      'AI nadal pracuje nad tym dokumentem. Ponowne otwarcie poczeka na zakończenie wszystkich zadań, a następnie pojawi się pytanie o zapisanie zmian.',
     watchdogClose: 'Zamknij dokument',
     crashTitle: 'Dokument nieoczekiwanie przestał działać',
     crashBody:
@@ -3487,6 +3547,10 @@ const tMain = createI18n({
     watchdogBody:
       '„{title}“ už několik minut využívá hodně paměti nebo procesoru ({memory} MB, {cpu} % CPU). Můžete dál čekat, nebo dokument zavřít (u neuložených změn se nejdřív zeptáme na uložení). Diagnostika byla zaznamenána.',
     watchdogWait: 'Dál čekat',
+    watchdogReopen: 'Znovu otevřít dokument',
+    watchdogReopenAfterAi: 'Znovu otevřít po dokončení AI',
+    watchdogAiBusy:
+      'AI stále pracuje na tomto dokumentu. Opětovné otevření počká na dokončení všech úkolů a poté se zeptá na uložení změn.',
     watchdogClose: 'Zavřít dokument',
     crashTitle: 'Dokument se neočekávaně zastavil',
     crashBody: '„{title}“ se neočekávaně zastavil. Změny od posledního uložení mohly být ztraceny.',
@@ -3641,6 +3705,10 @@ const tMain = createI18n({
     watchdogBody:
       '"{title}" gebruikt al enkele minuten veel geheugen of CPU ({memory} MB, {cpu}% CPU). U kunt blijven wachten of het document sluiten (bij niet-opgeslagen wijzigingen wordt eerst gevraagd of u wilt opslaan). Diagnostische gegevens zijn vastgelegd.',
     watchdogWait: 'Blijven wachten',
+    watchdogReopen: 'Document opnieuw openen',
+    watchdogReopenAfterAi: 'Opnieuw openen als AI klaar is',
+    watchdogAiBusy:
+      'AI werkt nog aan dit document. Het opnieuw openen wacht totdat al het werk klaar is en vraagt daarna of u de wijzigingen wilt opslaan.',
     watchdogClose: 'Document sluiten',
     crashTitle: 'Een document is onverwacht gestopt',
     crashBody:
@@ -3799,6 +3867,10 @@ const tMain = createI18n({
     watchdogBody:
       '"{title}" telah menggunakan banyak memori atau CPU selama beberapa minit ({memory} MB, CPU {cpu}%). Anda boleh terus menunggu atau menutup dokumen ini (perubahan yang belum disimpan akan ditanya dahulu). Diagnostik telah direkodkan.',
     watchdogWait: 'Terus Menunggu',
+    watchdogReopen: 'Buka semula dokumen',
+    watchdogReopenAfterAi: 'Buka semula selepas AI selesai',
+    watchdogAiBusy:
+      'AI masih mengerjakan dokumen ini. Pembukaan semula akan menunggu sehingga semua kerjanya selesai, kemudian bertanya tentang menyimpan perubahan.',
     watchdogClose: 'Tutup Dokumen',
     crashTitle: 'Dokumen berhenti secara tidak dijangka',
     crashBody:
@@ -3955,6 +4027,10 @@ const tMain = createI18n({
     watchdogBody:
       '"{title}" משתמש בהרבה זיכרון או מעבד כבר כמה דקות (זיכרון {memory} MB, מעבד {cpu}%). אפשר להמשיך לחכות או לסגור את המסמך (אם יש שינויים שלא נשמרו, תתבקשו לשמור קודם). נתוני האבחון נרשמו.',
     watchdogWait: 'להמשיך לחכות',
+    watchdogReopen: 'פתיחת המסמך מחדש',
+    watchdogReopenAfterAi: 'פתיחה מחדש כשהבינה המלאכותית תסיים',
+    watchdogAiBusy:
+      'הבינה המלאכותית עדיין עובדת על המסמך הזה. הפתיחה מחדש תמתין לסיום כל העבודה, ואז תישאלו אם לשמור שינויים.',
     watchdogClose: 'סגירת המסמך',
     crashTitle: 'מסמך נעצר באופן בלתי צפוי',
     crashBody: '"{title}" נעצר באופן בלתי צפוי. ייתכן ששינויים שנעשו מאז השמירה האחרונה אבדו.',
@@ -4108,6 +4184,10 @@ const tMain = createI18n({
     watchdogBody:
       '"{title}" कई मिनटों से बहुत अधिक मेमोरी या CPU इस्तेमाल कर रहा है (मेमोरी {memory} MB, CPU {cpu}%)। आप इंतज़ार जारी रख सकते हैं या यह दस्तावेज़ बंद कर सकते हैं (बिना सहेजे बदलाव होने पर पहले सहेजने के लिए पूछा जाएगा)। निदान जानकारी दर्ज कर ली गई है।',
     watchdogWait: 'इंतज़ार जारी रखें',
+    watchdogReopen: 'दस्तावेज़ फिर से खोलें',
+    watchdogReopenAfterAi: 'AI का काम पूरा होने पर फिर खोलें',
+    watchdogAiBusy:
+      'AI अभी इस दस्तावेज़ पर काम कर रहा है। दोबारा खोलने से पहले उसका पूरा काम समाप्त होने तक प्रतीक्षा की जाएगी, फिर बदलाव सहेजने के बारे में पूछा जाएगा।',
     watchdogClose: 'दस्तावेज़ बंद करें',
     crashTitle: 'दस्तावेज़ अचानक बंद हो गया',
     crashBody:
@@ -4265,6 +4345,9 @@ const tMain = createI18n({
     watchdogBody:
       '「{title}」已持續數分鐘佔用大量記憶體或 CPU（記憶體 {memory} MB，CPU {cpu}%）。可以繼續等待，或關閉這個文件（有未儲存的變更會先詢問是否儲存）。診斷資訊已記錄。', // public-hygiene: allow
     watchdogWait: '繼續等待',
+    watchdogReopen: '重新開啟文件',
+    watchdogReopenAfterAi: 'AI 完成後重新開啟',
+    watchdogAiBusy: 'AI 仍在處理此文件。重新開啟會等到 AI 的所有工作完成後，再詢問是否儲存變更。',
     watchdogClose: '關閉文件',
     crashTitle: '文件意外停止',
     crashBody: '「{title}」意外停止。上次儲存後的變更可能已遺失。',
@@ -4697,6 +4780,7 @@ async function openCrashReport(): Promise<void> {
   await saveCrashReport({
     lang,
     downloadsDir: app.getPath('downloads'),
+    userDataDir: dataFolder,
     input: () => ({
       now: new Date(),
       version: app.getVersion(),
@@ -10077,6 +10161,11 @@ app.whenReady().then(async () => {
         const id = tabManager?.tabIdForWebContents(wc.id)
         if (id && tabManager) await tabManager.closeTab(id)
         else BrowserWindow.fromWebContents(wc)?.close()
+      },
+      reopenDocument: async (wc) => {
+        const id = tabManager?.tabIdForWebContents(wc.id)
+        if (id && tabManager) return tabManager.reopenTab(id, async () => !(await editorAiBusy(wc)))
+        return 'closed'
       },
       t: (key, params) => tm(key, params),
     })

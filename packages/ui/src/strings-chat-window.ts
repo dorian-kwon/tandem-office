@@ -1,0 +1,25 @@
+import type { Lang } from '@genoffice/i18n'
+
+export const CHAT_WINDOW_STRINGS: Record<Lang, string> = {
+  zh: '显示之前的 {count} 条消息',
+  en: 'Show {count} earlier messages',
+  ja: '以前のメッセージ {count} 件を表示',
+  ko: '이전 메시지 {count}개 보기',
+  fr: 'Afficher les {count} messages précédents',
+  de: '{count} frühere Nachrichten anzeigen',
+  es: 'Mostrar {count} mensajes anteriores',
+  th: 'แสดงข้อความก่อนหน้า {count} ข้อความ',
+  id: 'Tampilkan {count} pesan sebelumnya',
+  ru: 'Показать предыдущие сообщения: {count}',
+  ar: 'عرض {count} من الرسائل السابقة',
+  pt: 'Mostrar {count} mensagens anteriores',
+  it: 'Mostra {count} messaggi precedenti',
+  pl: 'Pokaż {count} wcześniejszych wiadomości',
+  cs: 'Zobrazit {count} předchozích zpráv',
+  nl: '{count} eerdere berichten tonen',
+  ms: 'Tunjukkan {count} mesej terdahulu',
+  he: 'הצגת {count} הודעות קודמות',
+  hi: 'पिछले {count} संदेश दिखाएँ',
+  'zh-TW': '顯示先前的 {count} 則訊息',
+  vi: 'Hiện {count} tin nhắn trước',
+}

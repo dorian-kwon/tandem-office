@@ -625,3 +625,6 @@ export type { ProjectChatStringKey } from './strings-project-chat'
 export { useScrollWindow } from './scroll-window'
 
 export { OcrChatPreview, ocrDisplayOf, type OcrChatDisplay } from './OcrChatPreview'
+
+export { useChatWindow, EarlierChatMessages, recentChatStart } from './chat-window'
+export { useEditorAiBusy, acquireEditorAiWork, withEditorAiWork } from './editor-ai-busy'

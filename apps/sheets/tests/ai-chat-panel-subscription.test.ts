@@ -321,3 +321,22 @@ describe('sheets AI entry label', () => {
     expect(host.querySelector('.ai-panel-resizer')!.getAttribute('aria-label')).toBe(title)
   })
 })
+
+it('collapses old messages, expands them, and preserves the failed message retry index', () => {
+  const chat: AiChatMessage[] = Array.from({ length: 60 }, (_, i) =>
+    i % 2 ? { role: 'assistant', text: `reply ${i}`, tools: [] } : user(`question ${i}`),
+  )
+  const p = panel({
+    chat,
+    prompt: '',
+    aiBusy: false,
+    subscription: subscriptionOf(settings(), statuses('ready', 'not-installed')),
+  })
+  expect(host.querySelectorAll('.ai-msg')).toHaveLength(30)
+  act(() => (host.querySelector('.ai-retry-btn') as HTMLButtonElement).click())
+  expect(p.onSend).toHaveBeenCalledWith('question 30', [], 30)
+  act(() => (host.querySelector('.ai-history-more') as HTMLButtonElement).click())
+  expect(host.querySelectorAll('.ai-msg')).toHaveLength(60)
+  p.set({ aiBusy: true })
+  expect(host.querySelectorAll('.ai-msg')).toHaveLength(30)
+})

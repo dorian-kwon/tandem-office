@@ -1,3 +1,4 @@
+import { useEditorAiBusy, withEditorAiWork } from '@genoffice/ui'
 /**
  * AI page reading in the PDF editor (spec §7, §9), app side: the window
  * (picker and confirmation), the job, its progress strip, the resume offer,
@@ -132,6 +133,7 @@ export const AiPageReading = forwardRef<AiPageReadingHandle, AiPageReadingProps>
       useCallback((listener: () => void) => session.subscribe(listener), [session]),
       () => session.list(),
     )
+    useEditorAiBusy(dialog !== null || views.some((job) => job.state === 'running'))
     const propsRef = useRef(props)
     propsRef.current = props
     const docHashRef = useRef<string | null>(null)
@@ -202,88 +204,90 @@ export const AiPageReading = forwardRef<AiPageReadingHandle, AiPageReadingProps>
       setDialog({ key: ++dialogSeq.current, pages, startAtConfirm })
 
     /** carry results from `from` to the file's current hash (spec §6) */
-    const migrate = async (from: string): Promise<string | null> => {
-      const p = propsRef.current
-      if (!p.api || !p.filePath) return null
-      const out = await p.api.store
-        .migrate({
-          path: p.filePath,
-          oldDocHash: from,
-          ...(p.password !== undefined ? { password: p.password } : {}),
+    const migrate = async (from: string): Promise<string | null> =>
+      withEditorAiWork(async () => {
+        const p = propsRef.current
+        if (!p.api || !p.filePath) return null
+        const out = await p.api.store
+          .migrate({
+            path: p.filePath,
+            oldDocHash: from,
+            ...(p.password !== undefined ? { password: p.password } : {}),
+          })
+          .catch(() => null)
+        if (!out?.ok) return null
+        carryJobPages(from, out.docHash)
+        p.session.adopt(from, out.docHash)
+        // the carried jobs were this tab's to offer already: reading the hash again does not reoffer them
+        if (offered.current.has(from)) offered.current.add(out.docHash)
+        return out.docHash
+      })
+
+    const start = async (request: AiReadStartRequest): Promise<AiReadStartAnswer> =>
+      withEditorAiWork(async () => {
+        const p = propsRef.current
+        if (!p.api) return { ok: false, error: t('arUnavailable') }
+        const { docHash: hash, pages, route } = request
+        const here = session.running(hash) ?? tabJob()
+        if (here) return { ok: false, busy: here.progress }
+        // a job another process runs on the same file (the terminal, another window)
+        const records = await p.api.store.unfinishedJobs(hash).catch(() => null)
+        const elsewhere = records?.ok ? session.runningElsewhere(hash, records.jobs) : undefined
+        if (elsewhere) return { ok: false, busy: elsewhere.progress ?? { done: 0, total: 0 } }
+
+        rememberJobPages(
+          hash,
+          'ai-read',
+          undefined,
+          pages.map((r) => r.page),
+        )
+        let renderer: Promise<PageRenderer> | null = null
+        const ask = createModelCall({
+          settings: () => route.settings,
+          lang: () => propsRef.current.lang,
+          // one id for this job's calls: a large page is confirmed once, not per call
+          runId: crypto.randomUUID(),
+          guard: async () => {
+            const statuses = await attemptSubscription((s) => s.statuses())
+            const current = await window.pdfApi?.getAiSettings().catch(() => null)
+            return jobRouteRefusal(route, current ?? null, statuses)
+          },
         })
-        .catch(() => null)
-      if (!out?.ok) return null
-      carryJobPages(from, out.docHash)
-      p.session.adopt(from, out.docHash)
-      // the carried jobs were this tab's to offer already: reading the hash again does not reoffer them
-      if (offered.current.has(from)) offered.current.add(out.docHash)
-      return out.docHash
-    }
-
-    const start = async (request: AiReadStartRequest): Promise<AiReadStartAnswer> => {
-      const p = propsRef.current
-      if (!p.api) return { ok: false, error: t('arUnavailable') }
-      const { docHash: hash, pages, route } = request
-      const here = session.running(hash) ?? tabJob()
-      if (here) return { ok: false, busy: here.progress }
-      // a job another process runs on the same file (the terminal, another window)
-      const records = await p.api.store.unfinishedJobs(hash).catch(() => null)
-      const elsewhere = records?.ok ? session.runningElsewhere(hash, records.jobs) : undefined
-      if (elsewhere) return { ok: false, busy: elsewhere.progress ?? { done: 0, total: 0 } }
-
-      rememberJobPages(
-        hash,
-        'ai-read',
-        undefined,
-        pages.map((r) => r.page),
-      )
-      let renderer: Promise<PageRenderer> | null = null
-      const ask = createModelCall({
-        settings: () => route.settings,
-        lang: () => propsRef.current.lang,
-        // one id for this job's calls: a large page is confirmed once, not per call
-        runId: crypto.randomUUID(),
-        guard: async () => {
-          const statuses = await attemptSubscription((s) => s.statuses())
-          const current = await window.pdfApi?.getAiSettings().catch(() => null)
-          return jobRouteRefusal(route, current ?? null, statuses)
-        },
+        const callModel = createAiReadCallModel<AiReadPageRef>({
+          renderPage: async (page, signal) =>
+            (await (renderer ??= p.openPageRenderer())).render(page.page, signal),
+          ask: (req, signal) => ask(req, signal),
+        })
+        const outcome = session.start<AiReadJobUnit<AiReadPageRef>>({
+          docHash: hash,
+          kind: 'ai-read',
+          provider: route.provider,
+          ...(request.aiLabel ? { aiLabel: request.aiLabel } : {}),
+          launch: ({ signal, registry, onProgress }) =>
+            startAiReadJob({
+              docHash: hash,
+              pages,
+              model: { provider: route.provider, model: route.model },
+              store: createIpcJobStore(p.api!.store),
+              callModel,
+              signal,
+              registry,
+              onProgress,
+            }),
+          pageOf: (unit) => unit.pages[0]?.page ?? null,
+          onEnd: () => {
+            void renderer?.then((r) => r.close()).catch(() => {})
+            propsRef.current.onStoredChange?.()
+            // the file was saved while the job ran: its results follow the saved file
+            const now = docHashRef.current
+            if (now && now !== hash) void migrate(hash)
+          },
+        })
+        if (!outcome.ok) return { ok: false, busy: outcome.running.progress }
+        setDialog(null)
+        setResume((jobs) => jobs.filter((j) => j.kind !== 'ai-read'))
+        return { ok: true }
       })
-      const callModel = createAiReadCallModel<AiReadPageRef>({
-        renderPage: async (page, signal) =>
-          (await (renderer ??= p.openPageRenderer())).render(page.page, signal),
-        ask: (req, signal) => ask(req, signal),
-      })
-      const outcome = session.start<AiReadJobUnit<AiReadPageRef>>({
-        docHash: hash,
-        kind: 'ai-read',
-        provider: route.provider,
-        ...(request.aiLabel ? { aiLabel: request.aiLabel } : {}),
-        launch: ({ signal, registry, onProgress }) =>
-          startAiReadJob({
-            docHash: hash,
-            pages,
-            model: { provider: route.provider, model: route.model },
-            store: createIpcJobStore(p.api!.store),
-            callModel,
-            signal,
-            registry,
-            onProgress,
-          }),
-        pageOf: (unit) => unit.pages[0]?.page ?? null,
-        onEnd: () => {
-          void renderer?.then((r) => r.close()).catch(() => {})
-          propsRef.current.onStoredChange?.()
-          // the file was saved while the job ran: its results follow the saved file
-          const now = docHashRef.current
-          if (now && now !== hash) void migrate(hash)
-        },
-      })
-      if (!outcome.ok) return { ok: false, busy: outcome.running.progress }
-      setDialog(null)
-      setResume((jobs) => jobs.filter((j) => j.kind !== 'ai-read'))
-      return { ok: true }
-    }
 
     /** carry the stored results from the hash read last to the file's hash now */
     const carryToFile = async (): Promise<string | null> => {

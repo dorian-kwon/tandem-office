@@ -1,3 +1,4 @@
+import { withEditorAiWork } from '@genoffice/ui'
 import {
   Fragment,
   useCallback,
@@ -8157,15 +8158,16 @@ export default function App() {
    * (isUntitled is false for them, and the main process would refuse the rename
    * anyway); their normal autosave still follows the toggle.
    */
-  const autoSaveAfterAiRun = async () => {
-    if (!autoSave || !filePath || readOnly) return
-    try {
-      if (!(await window.pdfApi.isUntitled(filePath))) return
-    } catch {
-      return
-    }
-    void save(true)
-  }
+  const autoSaveAfterAiRun = async () =>
+    withEditorAiWork(async () => {
+      if (!autoSave || !filePath || readOnly) return
+      try {
+        if (!(await window.pdfApi.isUntitled(filePath))) return
+      } catch {
+        return
+      }
+      await save(true)
+    })
 
   /** Internal destination of a Link annotation → jump to that page */
   // ── Bookmark editing (embedded outlines only; fail-closed on named dests) ──

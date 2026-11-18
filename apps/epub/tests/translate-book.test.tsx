@@ -345,6 +345,31 @@ describe('the confirmation', () => {
 })
 
 describe('a run', () => {
+  it('keeps reopening blocked through the result write after translation ends', async () => {
+    const b = await backend()
+    const originalWrite = b.api.writeTranslated
+    let finishWrite!: () => void
+    const gate = new Promise<void>((resolve) => {
+      finishWrite = resolve
+    })
+    const write = vi.fn(async (...args: Parameters<typeof originalWrite>) => {
+      await gate
+      return originalWrite(...args)
+    })
+    b.api.writeTranslated = write
+    const m = await mount(b)
+    expect(window.__tandemEditorAiBusy).toBe(false)
+    await openWindow(m, 'ko')
+    expect(window.__tandemEditorAiBusy).toBe(true)
+    await toConfirm(m)
+    await click(q(m.el, '[data-action="start"]'))
+    await until(() => write.mock.calls.length === 1, 'the final result write')
+    expect(window.__tandemEditorAiBusy).toBe(true)
+    await act(async () => finishWrite())
+    await until(() => !!q(m.el, '[data-action="close-report"]'), 'the report')
+    expect(window.__tandemEditorAiBusy).toBe(false)
+  })
+
   it('saves first, locks, translates, writes the results, unlocks and reports', async () => {
     const b = await backend()
     const m = await mount(b, { dirty: true })

@@ -1,3 +1,4 @@
+import { withEditorAiWork } from '@genoffice/ui'
 import {
   captureMarkdownSource,
   roundTripMarkdownEnabled,
@@ -1331,7 +1332,7 @@ export default function App() {
       // AI wrote into a never-saved document → name it from the content and save silently
       if (!mutated || filePathRef.current || !editorRef.current) return
       const name = deriveAutoFileName(editorRef.current)
-      if (name) void doSave('save', name)
+      if (name) void withEditorAiWork(() => doSave('save', name))
     },
   }
 

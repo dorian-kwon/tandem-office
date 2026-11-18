@@ -152,3 +152,5 @@
 - Windows에서 변경과 무관하게 실패하는 테스트: `tests/headless-export.test.ts`(16건, `/docs/a.docx` 같은 POSIX 경로를 전제로 한다)와 `tests/default-app.test.ts`의 Linux 사례 한 건. `tests/update-resume.test.ts`와 `tests/third-party-notices.test.ts`는 부하가 큰 PC에서 가끔 실패하므로 단독으로 다시 돌려 확인한다.
 - E2E(`npm run test:e2e`, 저장소 루트의 `e2e/`)는 전체 빌드가 필요하다. 실행기(`e2e/helpers.ts`)는 `ai-settings.json`에 `{ providers: {}, subscriptionNoticeSeen: true }`를 미리 써서, Claude·Codex에 로그인된 PC에서 첫 연결 안내이 화면을 가리지 않게 한다(`providers`가 없으면 파일 전체가 기본값으로 읽힌다).
 - 실제 릴리스에서의 업데이트 내려받기·설치, 설치 프로그램 자체는 자동 테스트로 확인하지 못한다. 실제 빌드로 확인한다.
+
+- 렌더러 감시는 메모리 수치와 PC 압박을 함께 본다(결정 0115, `renderer-watchdog-policy.ts`). 사용자가 고른 다시 열기는 편집기 작업 표시와 메인 MCP 저장 소유권이 모두 풀린 뒤 `TabManager.reopenTab`의 보통 저장 확인을 거친다. 확인 전후에 다시 검사하며 같은 탭·분할·자리를 유지한다. 진단 보고서의 감시 기록은 `watchdog-diagnostics.ts`의 허용 목록으로 숫자·편집기 종류만 남긴 최근 3개 JSON이고 CPU 프로필을 읽지 않는다.

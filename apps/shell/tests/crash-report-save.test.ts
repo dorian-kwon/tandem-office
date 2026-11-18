@@ -185,3 +185,37 @@ describe('the words', () => {
     }
   })
 })
+
+it('includes recent resource diagnostics after consent without private metadata or CPU profiles', async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const folder = mkdtempSync(join(tmpdir(), 'report-watchdog-'))
+  try {
+    writeFileSync(
+      join(folder, 'renderer-watchdog-1000000000000.json'),
+      JSON.stringify({
+        memoryMB: 2000,
+        document: { kind: 'docs', title: 'secret-title', filePath: '/private/secret.docx' },
+        metric: { memory: { privateBytes: 2048000 } },
+      }),
+    )
+    writeFileSync(join(folder, 'renderer-watchdog-1000000000001.cpuprofile'), 'secret-profile')
+    const writeFile = vi.fn(async (_path: string, _text: string) => {})
+    await saveCrashReport({
+      lang: 'en',
+      downloadsDir: folder,
+      userDataDir: folder,
+      input: () => INPUT,
+      showMessageBox: async () => ({ response: 0 }),
+      showSaveDialog: async () => ({ canceled: false, filePath: join(folder, 'report.txt') }),
+      showItemInFolder: () => {},
+      writeFile,
+    })
+    const report = writeFile.mock.calls[0]![1]
+    expect(report).toContain('2000')
+    expect(report).toContain('privateBytes')
+    expect(report).not.toMatch(/secret-title|secret\.docx|secret-profile|\/private/)
+  } finally {
+    rmSync(folder, { recursive: true, force: true })
+  }
+})

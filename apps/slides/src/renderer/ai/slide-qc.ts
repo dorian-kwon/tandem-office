@@ -1,3 +1,4 @@
+import { withEditorAiWork } from '@genoffice/ui'
 /**
  * Post-generation layout QC: each generated page gets one focused pass. Vision-capable
  * models receive screenshot + element inventory; text-only models receive deterministic
@@ -162,7 +163,7 @@ export function createSlideFixSkill(access: DeckAccess, hasScreenshot = true): A
     id: 'slides-qc',
     systemPrompt: hasScreenshot ? qcVisualPrompt : qcGeometryPrompt,
     tools: full.tools.filter((tool) => QC_TOOL_ALLOWLIST.has(tool.name)),
-    executeTool: full.executeTool,
+    executeTool: (call, signal) => withEditorAiWork(() => full.executeTool(call, signal)),
   }
 }
 

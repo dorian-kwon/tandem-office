@@ -1,3 +1,4 @@
+import { withMainEditorWork } from '../renderer-watchdog-policy'
 import type { WebContents } from 'electron'
 import type { OpenDocumentTab } from '../../shared/tabs-api'
 import type { OpenDocumentsControl } from './tools/open-documents-tools'
@@ -153,7 +154,7 @@ export function createOpenTargetResolver(
 
 export function createOpenDocumentsControl(deps: OpenDocumentsBridgeDeps): OpenDocumentsControl {
   /** save one document to `filePath` through its family's own writer */
-  const saveTo = async (tab: OpenDocumentTab, filePath: string): Promise<void> => {
+  const saveContentsTo = async (tab: OpenDocumentTab, filePath: string): Promise<void> => {
     switch (tab.kind) {
       case 'docs': {
         if (!deps.docs) throw new Error('the Word editor is unavailable in this build')
@@ -203,6 +204,11 @@ export function createOpenDocumentsControl(deps: OpenDocumentsBridgeDeps): OpenD
       default:
         throw new Error(`cannot save a ${tab.kind} tab`)
     }
+  }
+
+  const saveTo = async (tab: OpenDocumentTab, filePath: string): Promise<void> => {
+    const contents = await requireContents(tab, deps)
+    await withMainEditorWork(contents.id, () => saveContentsTo(tab, filePath))
   }
 
   const readDocument = async (tab: OpenDocumentTab): Promise<unknown> => {

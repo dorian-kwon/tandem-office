@@ -1,3 +1,4 @@
+import { useChatWindow, EarlierChatMessages } from '@genoffice/ui'
 import { OcrChatPreview, type OcrChatDisplay } from '@genoffice/ui'
 import {
   aiPanelWidthAtPointer,
@@ -55,7 +56,13 @@ import type { AiBlockedRun } from './subscription-state'
 import type { ChangePlan } from '@genoffice/xlsx-gateway/domain/workbook.types'
 import { ATTACHMENT_IMAGE_EXTS, type AttachmentMeta } from '../../shared/desktop-api'
 import { useI18n, type TFunc } from '../i18n/locale'
-import { AiRunStatusLine, choiceBubbleText, createFileNav, Markdown, type RunStatusState } from '@genoffice/ui'
+import {
+  AiRunStatusLine,
+  choiceBubbleText,
+  createFileNav,
+  Markdown,
+  type RunStatusState,
+} from '@genoffice/ui'
 import { SHEET_NAV_SCHEME } from './sheet-nav'
 import sendEnterOn from '../assets/send-enter-on.png'
 import sendEnterOff from '../assets/send-enter-off.png'
@@ -454,6 +461,7 @@ export function AiChatPanel({
   // A reply that stopped because its connection cannot go on: the queue is paused, so the next
   // message does not run into the same wall. Declared ahead of the queue so that it runs before
   // the queue's own settle pump when both land in one commit.
+  const chatWindow = useChatWindow(chat, aiBusy, historicChat)
   const msgQueueRef = useRef<ChatRunQueue<QueuedMeta> | null>(null)
   const lastEntry = chat.at(-1)
   const lastReplyBlocked = lastEntry?.role === 'assistant' && lastEntry.blocked !== undefined
@@ -789,10 +797,11 @@ export function AiChatPanel({
       </header>
 
       <div className="ai-chat" ref={chatRef} onScroll={onChatScroll}>
+        <EarlierChatMessages hidden={chatWindow.hidden} expand={chatWindow.expand} lang={lang} />
         {/* Past conversation (read-only transcript), shown continuously with the current turn */}
-        {historicChat.length > 0 && (
+        {chatWindow.history.length > 0 && (
           <>
-            {historicChat.map((entry, i) => (
+            {chatWindow.history.map(({ entry, index: i }) => (
               <div key={`h${i}`} className={`ai-msg ai-msg-${entry.role} ai-msg-historic`}>
                 {entry.role === 'user' && entry.scope && <AiScopeQuote scope={entry.scope} />}
                 {entry.role === 'user' && (
@@ -833,7 +842,7 @@ export function AiChatPanel({
             </div>
           </div>
         )}
-        {chat.map((entry, index) => (
+        {chatWindow.chat.map(({ entry, index }) => (
           <div
             key={index}
             className={`ai-msg ai-msg-${entry.role}${entry.isError && !entry.blocked ? ' ai-msg-error' : ''}${entry.role === 'assistant' && entry.streaming ? ' ai-msg-streaming' : ''}`}

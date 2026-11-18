@@ -1462,3 +1462,96 @@ describe('detach / attach (Open in New Window, tear-off, dock)', () => {
     expect(manager.list()).toHaveLength(1)
   })
 })
+
+describe('watchdog reopen', () => {
+  it('runs the normal save guard and replaces the renderer in the same tab position', async () => {
+    manager.openDocsTab('/tmp/before.docx')
+    const id = manager.openDocsTab('/tmp/reopen.docx')
+    const old = lastCreatedView(createDocsView)
+    manager.openDocsTab('/tmp/after.docx')
+    docsQueryDirty.mockResolvedValue(true)
+    const order = manager.list().map((tab) => tab.id)
+    expect(await manager.reopenTab(id, async () => true)).toBe('reopened')
+    expect(requestDocsClose).toHaveBeenCalledWith(old.webContents, shellWindow)
+    expect(releaseClosedRenderer).toHaveBeenCalledWith(old.webContents)
+    expect(manager.list().map((tab) => tab.id)).toEqual(order)
+    expect(createDocsView).toHaveBeenLastCalledWith('/tmp/reopen.docx')
+    expect(manager.tabIdForWebContents(lastCreatedView(createDocsView).webContents.id)).toBe(id)
+  })
+  it('leaves changes and renderer intact when save is cancelled or fails', async () => {
+    const id = manager.openDocsTab('/tmp/reopen.docx')
+    const old = lastCreatedView(createDocsView)
+    docsQueryDirty.mockResolvedValue(true)
+    requestDocsClose.mockResolvedValue(false)
+    expect(await manager.reopenTab(id, async () => true)).toBe('cancelled')
+    expect(releaseClosedRenderer).not.toHaveBeenCalled()
+    expect(manager.tabIdForWebContents(old.webContents.id)).toBe(id)
+  })
+  it('does not reopen an untitled file or interrupt AI starting during the save prompt', async () => {
+    expect(await manager.reopenTab(manager.openDocsTab(), async () => true)).toBe('closed')
+    const id = manager.openDocsTab('/tmp/reopen.docx')
+    const idle = vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+    expect(await manager.reopenTab(id, idle)).toBe('busy')
+    expect(releaseClosedRenderer).not.toHaveBeenCalled()
+  })
+  it('does not recreate a document closed while the save guard waited', async () => {
+    const id = manager.openDocsTab('/tmp/reopen.docx')
+    let answer!: (dirty: boolean) => void
+    docsQueryDirty.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve
+        }),
+    )
+    const reopening = manager.reopenTab(id, async () => true)
+    await Promise.resolve()
+    // A concurrent close may remove the tab after the async guard returns.
+    answer(false)
+    await Promise.resolve()
+    await Promise.resolve()
+    manager.closeTabWithoutPrompt(id)
+    expect(await reopening).toBe('closed')
+    expect(manager.list().some((tab) => tab.id === id)).toBe(false)
+  })
+})
+
+it('does not enter a save prompt for a tab closed during the first reopen idle probe', async () => {
+  const id = manager.openDocsTab('/tmp/reopen.docx')
+  let answer!: (idle: boolean) => void
+  const reopening = manager.reopenTab(
+    id,
+    () =>
+      new Promise((resolve) => {
+        answer = resolve
+      }),
+  )
+  manager.closeTabWithoutPrompt(id)
+  answer(true)
+  expect(await reopening).toBe('closed')
+  expect(docsQueryDirty).not.toHaveBeenCalled()
+})
+it('reopens the current saved path after Save As changes the document name', async () => {
+  const id = manager.openDocsTab('/tmp/reopen.docx')
+  const old = lastCreatedView(createDocsView)
+  docsQueryDirty.mockResolvedValue(true)
+  requestDocsClose.mockImplementation(async () => {
+    manager.setTabFileFor(old.webContents.id, '/tmp/renamed.docx')
+    return true
+  })
+  expect(await manager.reopenTab(id, async () => true)).toBe('reopened')
+  expect(createDocsView).toHaveBeenLastCalledWith('/tmp/renamed.docx')
+})
+
+it('reopens a background document without replacing a split pane or taking focus', async () => {
+  const a = manager.openDocsTab('/tmp/a.docx')
+  const b = manager.openDocsTab('/tmp/b.docx')
+  const background = manager.openDocsTab('/tmp/c.docx')
+  manager.beginSplit(a, b, 'side', 0.5, 'b')
+  const split = manager.splitState()
+  const strip = manager.list()
+  docsQueryDirty.mockResolvedValue(true)
+  expect(await manager.reopenTab(background, async () => true)).toBe('reopened')
+  expect(manager.splitState()).toEqual(split)
+  expect(manager.list()).toEqual(strip)
+  expect(lastCreatedView(createDocsView).webContents.focus).not.toHaveBeenCalled()
+})

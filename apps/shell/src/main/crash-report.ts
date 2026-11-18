@@ -1,3 +1,4 @@
+import { scrubWatchdogDiagnostic } from './watchdog-diagnostics'
 import type { TrailItem } from './crash-log'
 
 /**
@@ -29,6 +30,8 @@ export interface CrashReportInput {
   saveFailureLog: string
   /** `update-log.txt` */
   updateLog: string
+  /** newest renderer watchdog JSON records, sanitized again before export */
+  watchdogLog?: string
 }
 
 const CRASH_LINES = 40
@@ -91,6 +94,9 @@ export function buildCrashReport(input: CrashReportInput): string {
     `language: ${input.language}`,
     `running: ${formatUptime(input.uptimeS)}`,
     `open tabs: ${tabs === '' ? 'none' : tabs}`,
+    '',
+    '== Renderer resource diagnostics (newest 3, private fields removed) ==',
+    input.watchdogLog ? scrubWatchdogDiagnostic(input.watchdogLog) : '(none)',
     '',
     '== Recent actions (this run, oldest first) ==',
     trail,
