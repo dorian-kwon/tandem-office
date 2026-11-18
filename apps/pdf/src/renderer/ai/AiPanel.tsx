@@ -1,4 +1,5 @@
 import { useChatWindow, EarlierChatMessages } from '@genoffice/ui'
+import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
 import {
   aiPanelWidthAtPointer,
   AiPanelSideButton,
@@ -773,7 +774,11 @@ export function AiPanel({
         choice.skill,
         ...panelProjectSkill({ run: projectPanel.chat.run, lang: () => langRef.current }),
       ]),
-      systemSuffix: () => aiLangDirective(langRef.current),
+      systemSuffix: () =>
+        aiLangDirective(langRef.current) +
+        (aiEditUndoHistoryEnabled()
+          ? ''
+          : '\nAI edit undo history is OFF. Your document edits cannot be undone. Do not promise Ctrl+Z or a rollback button; this overrides any generic undo wording in tool descriptions.'),
       events: runStatus.wrap({
         onText: (text) => {
           setPhase('replying')

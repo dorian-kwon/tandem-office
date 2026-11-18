@@ -161,3 +161,7 @@ describe('regenerate_slide with a blocked connection', () => {
     expect(r.output).toContain('Do not call regenerate_slide again')
   })
 })
+
+vi.mock('../src/renderer/ai/ai-edit-api', () => ({
+  aiEditApi: () => window.slidesApi,
+}))

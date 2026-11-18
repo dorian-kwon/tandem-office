@@ -20,6 +20,7 @@
  * branch colours, markers, pictures and a topic's own style) is in
  * `decorate.ts`, and runs every time the library is about to draw the lines.
  */
+import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
 import MindElixir, {
   type MindElixirInstance,
   type NodeObj,
@@ -805,7 +806,10 @@ export class MapController {
    * This is the way in for edits that are not one library call: several at
    * once, or topics that are folded away and have no element.
    */
-  edit(change: (root: MapNode) => void, options: { restyled?: readonly string[] } = {}): void {
+  edit(
+    change: (root: MapNode) => void,
+    options: { restyled?: readonly string[]; aiEdit?: boolean } = {},
+  ): void {
     const mind = this.mind
     const selected = this.selectedTopicIds()
     // topics whose text format `change` set: the engine writes it only for these
@@ -816,6 +820,12 @@ export class MapController {
     // drawn again, the topics that were selected and are still there stay selected
     const again = selected.map((id) => this.#element(id)).filter((topic) => topic !== null)
     if (again.length > 0) mind.selectNodes(again)
+    if (options.aiEdit && !aiEditUndoHistoryEnabled()) {
+      this.#sync({ step: false })
+      this.#session.discardRedo(this.#key)
+      this.#host.onStateChange()
+      return
+    }
     mind.bus.fire('operation', {
       name: 'reshapeNode',
       obj: mind.nodeData,

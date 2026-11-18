@@ -778,7 +778,10 @@ export type AgentReadPictureResult =
   | { ok: false; reason: 'too_large'; bytes: number }
 
 /** What the plugin answers to, by method name (the studio's `plugins.invoke`). */
+export declare function withoutAiUndoHistory<T>(history: unknown, run: () => T): T
+
 export interface AgentPluginSurface {
+  invokeAi(method: string, args: unknown[], recordUndo: boolean): unknown
   foreignChanges(): number
   readText(): string
   listPictures(): AgentPictureList

@@ -1,3 +1,4 @@
+import { applyAiPanelPrefs } from '@genoffice/ui'
 /**
  * The AI panel's book skill (spec §7) against an in-memory book and the real
  * edit controller, with fake models only: the five tools' inputs and
@@ -6,7 +7,7 @@
  * start_book_translation handing its request to the translating screen, and
  * the per-turn context. Nothing here reaches a real `claude` or `codex`.
  */
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   AgentLoop,
   type AgentMessage,
@@ -32,6 +33,8 @@ import {
 } from '../src/renderer/ai/epub-skill'
 import type { EpubBookSummary } from '../src/shared/ipc'
 import { FakeBook, type ChapterSpec } from './helpers/edit-backend'
+
+beforeEach(() => applyAiPanelPrefs({ aiEditUndoHistory: true }))
 
 interface Setup {
   book: FakeBook
@@ -354,7 +357,7 @@ describe('edit_blocks', () => {
       ],
     })
     expect(result.isError).toBe(false)
-    expect(result.output).toContain('Applied 4 edit(s) as one step')
+    expect(result.output).toContain('Applied 4 edit(s).')
     expect(result.output).toMatch(/New block id\(s\) in chapter 1: b\d+/)
     expect(s.book.source(0)).toContain('<p>The <em>white</em> whale rose.</p>')
     expect(s.book.source(0)).toContain('<p>A <strong>new</strong> line.</p>')
@@ -645,5 +648,32 @@ describe('a run with a fake model', () => {
     await s.controller.undo()
     expect(s.book.source(0)).toBe(before)
     expect(s.controller.state().canUndo).toBe(false)
+  })
+})
+
+describe('AI undo preference', () => {
+  it('defaults off, keeps human entries, and clears redo after an AI edit', async () => {
+    applyAiPanelPrefs({})
+    const s = setup(THREE)
+    const chapter = await s.book.readChapter(0)
+    if (!chapter.ok || chapter.broken) throw new Error('chapter unavailable')
+    const blockId = chapter.blocks[0]!.id
+    const humanChapter = await s.book.readChapter(1)
+    if (!humanChapter.ok || humanChapter.broken) throw new Error('chapter unavailable')
+    await s.controller.applyEdits(1, [
+      { op: 'replace', blockId: humanChapter.blocks[0]!.id, text: 'Human' },
+    ])
+    expect(s.controller.state().canUndo).toBe(true)
+    const result = await s.run('edit_blocks', {
+      ops: [{ op: 'replace', chapter: 1, blockId, text: 'AI' }],
+    })
+    expect(result.isError).toBe(false)
+    expect(result.output).toContain('cannot be undone')
+    await s.controller.undo()
+    expect(s.controller.state().canUndo).toBe(false)
+    expect(s.controller.state().canRedo).toBe(true)
+    await s.run('edit_blocks', { ops: [{ op: 'replace', chapter: 1, blockId, text: 'AI again' }] })
+    expect(s.controller.state().canUndo).toBe(false)
+    expect(s.controller.state().canRedo).toBe(false)
   })
 })

@@ -296,3 +296,7 @@ describe('apply_ops', () => {
     expect(spy).not.toHaveBeenCalled()
   })
 })
+
+vi.mock('../src/renderer/ai/ai-edit-api', () => ({
+  aiEditApi: () => window.slidesApi,
+}))

@@ -29,6 +29,7 @@ import type {
   StructuralChange,
 } from '@genoffice/xlsx-gateway/domain/workbook.types'
 import { pushBulkFillUndo } from './bulk-fill-undo'
+import { createAiUndoScope } from './ai-undo-scope'
 import {
   journalCellContentAt,
   plainCellValue,
@@ -56,7 +57,7 @@ import {
   structuralDeleteFormulaError,
   type StreamedRefSheet,
 } from './plan-operations'
-import { aiBulkUndoGate, journalSuppression } from './univer-state'
+import { aiBulkUndoGate, aiUndoHistory, journalSuppression } from './univer-state'
 import { isVeryHiddenSheet } from './very-hidden-sheets'
 import { effectiveSheetProtection, mergeSheetProtectionAllow } from './sheet-protection'
 import {
@@ -153,6 +154,7 @@ interface OpRun {
   /// call really is "unchanged".
   readonly markApplied: () => void
   readonly userFacing: boolean
+  readonly commit: <T>(run: () => T) => T
 }
 
 export interface ApplyPlanOptions {
@@ -164,6 +166,15 @@ export interface ApplyPlanOptions {
   /** Ribbon/dialog caller: gate refusals show their localized string instead
    * of the model-facing reason. */
   userFacing?: boolean
+  /** The apply originates from the AI (chat apply, translation view, MCP
+   * bridge), not from a ribbon click or dialog. While the "AI edit undo
+   * history" setting is off such an apply keeps no undo entry. */
+  aiEdit?: boolean
+}
+
+/** True when this apply must leave no undo entry (AI edit, history setting off). */
+export function shouldDropUndoBatch(options: ApplyPlanOptions): boolean {
+  return options.aiEdit === true && !aiUndoHistory.enabled
 }
 
 export function richCellText(cell: unknown): string | null {
@@ -306,6 +317,7 @@ export function beginUndoBatch(runtime: UniverRuntime): { settle(): void } {
   aiBulkUndoGate.dropped = false
   aiBulkUndoGate.cells = 0
   aiBulkUndoGate.pushed = 0
+  aiBulkUndoGate.dropAll = false
   let settled = false
   return {
     settle() {
@@ -392,6 +404,10 @@ async function applyChangePlanNow(
   ctx: OpExecutorContext,
   options: ApplyPlanOptions,
 ): Promise<ApplyOutcome> {
+  const aiScope = shouldDropUndoBatch(options) ? createAiUndoScope() : null
+  // Only facade methods carry the source; the original runtime stays available
+  // to listeners and deferred UI work installed by the apply.
+  ctx = { ...ctx, workbook: aiScope?.wrap(ctx.workbook) ?? ctx.workbook }
   const { runtime, workbook, state, lazyWorkbookRef, setMessage, setPendingEdits } = ctx
   const plannedOps = plan.structuralChanges.map((structural) => structural.op)
   const notices: string[] = []
@@ -412,7 +428,9 @@ async function applyChangePlanNow(
   }
   const stale = options.verifyBeforeApply?.()
   if (stale) return stale
-  const undoBatch = beginUndoBatch(runtime)
+  const undoBatch = aiScope ?? beginUndoBatch(runtime)
+  const commit = aiScope?.run ?? (<T>(run: () => T): T => run())
+  const dropped = () => aiScope?.dropped ?? aiBulkUndoGate.dropped
   let anyApplied = false
   try {
     // Structural and layout changes go through the same facade commands as
@@ -453,13 +471,14 @@ async function applyChangePlanNow(
         anyApplied = true
       },
       userFacing: options.userFacing ?? false,
+      commit,
     }
     // Checked for the whole batch BEFORE anything applies — a mid-loop
     // throw would leave earlier ops committed.
     if (workbookStructureLocked(state) && plannedOps.some((op) => SHEET_LIFECYCLE_OPS.has(op.op))) {
       throw new Error(t('appWorkbookStructureLocked'))
     }
-    for (const op of plannedOps) await executeOp(op, run)
+    for (const op of plannedOps) await commit(() => executeOp(op, run))
     setPendingEdits(journalSize(state.editJournal))
     // Streaming mode: formulas in this batch may reference file cells the
     // engine does not hold — load & pin them first so the formulas compute
@@ -523,9 +542,11 @@ async function applyChangePlanNow(
       setMessage(options.successMessage ?? t('appAppliedJournaled'))
     }
     undoBatch.settle()
-    if (aiBulkUndoGate.dropped) {
+    if (dropped()) {
       notices.push(
-        'this change is too large for the undo history — the [Undo] button and ⌘Z will not revert it',
+        aiScope
+          ? 'undo history for AI edits is turned off in the settings — the [Undo] button and ⌘Z will not revert this change'
+          : 'this change is too large for the undo history — the [Undo] button and ⌘Z will not revert it',
       )
     }
     return notices.length > 0 ? { ok: true, notices } : { ok: true }
@@ -536,7 +557,7 @@ async function applyChangePlanNow(
     // and a budget-dropped batch must not advertise the ⌘Z rollback.
     undoBatch.settle()
     return anyApplied
-      ? { ok: false, reason, partiallyApplied: true, undoDropped: aiBulkUndoGate.dropped }
+      ? { ok: false, reason, partiallyApplied: true, undoDropped: dropped() }
       : { ok: false, reason }
   } finally {
     undoBatch.settle()
@@ -646,22 +667,22 @@ async function executeOp(op: PlannedOp, run: OpRun): Promise<void> {
       (candidate) => candidate.id === op.visualId || candidate.chartPath === op.visualId,
     )
     if (!visual) throw new Error(`Unknown visual: ${op.visualId}`)
-    ctx.shapeEditRef.current(visual.id, { remove: true })
+    run.commit(() => ctx.shapeEditRef.current(visual.id, { remove: true }))
   } else if (op.op === 'delete_table') {
     if (!removeTableAdd(state.editJournal, op.sheetId, op.tableName)) {
       throw new Error(t('appTableNotDeletable', { name: op.tableName }))
     }
     setPendingEdits(journalSize(state.editJournal))
   } else if (op.op === 'add_chart') {
-    await insertAiChartVisual(ctx.visualContext(), runtime, state, op)
+    await insertAiChartVisual(ctx.visualContext(), runtime, state, op, run.commit)
   } else if (op.op === 'add_shape') {
-    insertAiShapeVisual(ctx.visualContext(), runtime, state, op)
+    run.commit(() => insertAiShapeVisual(ctx.visualContext(), runtime, state, op))
   } else if (op.op === 'edit_shape') {
-    applyAiShapeEdit(ctx.visualContext(), runtime, state, op)
+    run.commit(() => applyAiShapeEdit(ctx.visualContext(), runtime, state, op))
   } else if (op.op === 'add_image') {
     const image = imageData.get(op.path)
     if (!image) throw new Error(t('appImageNotLoaded', { path: op.path }))
-    insertAiImageVisual(ctx.visualContext(), runtime, state, op, image)
+    run.commit(() => insertAiImageVisual(ctx.visualContext(), runtime, state, op, image))
   } else if (op.op === 'add_table') {
     applyAiTableAdd(runtime, state, op)
   } else if (op.op === 'add_table_row') {
@@ -971,38 +992,42 @@ async function executeOp(op: PlannedOp, run: OpRun): Promise<void> {
         void loadVisibleRange(runtime, lazyWorkbookRef, active, setMessage)
       }
       if (targetIsInsertedThisSession) {
-        pushBulkFillUndo(
-          runtime,
-          fill,
-          purgedCells,
-          ({ fill: carriedFill, purgedCells: carriedPurged, direction }) => {
-            const current = lazyWorkbookRef.current
-            if (!current) return false
-            if (direction === 'undo') {
-              removeBulkConstantFill(current.editJournal, carriedFill)
-              restoreJournalCells(current.editJournal, carriedFill.sheetId, carriedPurged)
-            } else {
-              recordBulkConstantFill(current.editJournal, carriedFill)
-            }
-            refresh(direction === 'undo' ? 'undo' : 'apply')
-            return true
-          },
+        run.commit(() =>
+          pushBulkFillUndo(
+            runtime,
+            fill,
+            purgedCells,
+            ({ fill: carriedFill, purgedCells: carriedPurged, direction }) => {
+              const current = lazyWorkbookRef.current
+              if (!current) return false
+              if (direction === 'undo') {
+                removeBulkConstantFill(current.editJournal, carriedFill)
+                restoreJournalCells(current.editJournal, carriedFill.sheetId, carriedPurged)
+              } else {
+                recordBulkConstantFill(current.editJournal, carriedFill)
+              }
+              refresh(direction === 'undo' ? 'undo' : 'apply')
+              return true
+            },
+          ),
         )
       } else {
         // Existing columns need their prior values to undo. Keep the
         // in-session closure path; undo-carry intentionally truncates it
         // at Save rather than pretending the old values are recoverable.
-        pushVisualUndo(runtime, {
-          undo: () => {
-            removeBulkConstantFill(lazyState.editJournal, fill)
-            restoreJournalCells(lazyState.editJournal, fill.sheetId, purgedCells)
-            refresh('undo')
-          },
-          redo: () => {
-            recordBulkConstantFill(lazyState.editJournal, fill)
-            refresh()
-          },
-        })
+        run.commit(() =>
+          pushVisualUndo(runtime, {
+            undo: () => {
+              removeBulkConstantFill(lazyState.editJournal, fill)
+              restoreJournalCells(lazyState.editJournal, fill.sheetId, purgedCells)
+              refresh('undo')
+            },
+            redo: () => {
+              recordBulkConstantFill(lazyState.editJournal, fill)
+              refresh()
+            },
+          }),
+        )
       }
       ctx.queueChartDataSync(op.sheetId, dst)
       refresh()
@@ -1581,10 +1606,8 @@ async function executeOp(op: PlannedOp, run: OpRun): Promise<void> {
       })
     }
   } else {
-    ctx.chartEditRef.current(
-      op.chartPath,
-      await buildAiChartEdit(ctx.visualContext(), state, workbook, op),
-    )
+    const edit = await buildAiChartEdit(ctx.visualContext(), state, workbook, op)
+    run.commit(() => ctx.chartEditRef.current(op.chartPath, edit))
   }
   run.markApplied()
 }

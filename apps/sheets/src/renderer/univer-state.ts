@@ -259,7 +259,24 @@ export const AI_UNDO_CELL_BUDGET = 100_000
 /// Raised around an AI plan apply. Batching merges each command's small item
 /// into the stack-top entry, so the budget must be tracked cumulatively over
 /// the activation; `dropped` reports the batch entry was discarded.
-export const aiBulkUndoGate = { active: false, dropped: false, cells: 0, pushed: 0 }
+/// `dropAll` discards the batch from its first item regardless of size: it is
+/// raised for AI applies while the "AI edit undo history" setting is off.
+export const aiBulkUndoGate = {
+  active: false,
+  dropped: false,
+  cells: 0,
+  pushed: 0,
+  dropAll: false,
+}
+
+/// Mirror of the shell's "AI edit undo history" preference (default off, like
+/// the stored default). main.tsx feeds it from the shell prefs channel before
+/// the first render; AI applies read it when they open their undo batch.
+export const aiUndoHistory = { enabled: false }
+
+export function setAiEditUndoHistory(enabled: boolean): void {
+  aiUndoHistory.enabled = enabled
+}
 
 export interface UndoRedoItemLike {
   readonly unitID: string
@@ -302,8 +319,10 @@ export function installJournalSuppressionUndoFilter(): void {
     if (journalSuppression.active) return
     if (aiBulkUndoGate.active) {
       if (aiBulkUndoGate.dropped) return
-      aiBulkUndoGate.cells += undoPayloadCells(item, AI_UNDO_CELL_BUDGET + 1)
-      if (aiBulkUndoGate.cells > AI_UNDO_CELL_BUDGET) {
+      if (!aiBulkUndoGate.dropAll) {
+        aiBulkUndoGate.cells += undoPayloadCells(item, AI_UNDO_CELL_BUDGET + 1)
+      }
+      if (aiBulkUndoGate.dropAll || aiBulkUndoGate.cells > AI_UNDO_CELL_BUDGET) {
         aiBulkUndoGate.dropped = true
         // Chunks already merged into the stack-top batch entry must go too —
         // keeping them would make undo revert only part of the operation.

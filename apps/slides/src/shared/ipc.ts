@@ -154,6 +154,16 @@ export interface DesktopFilesApi {
   getPathForFile(file: File): string
 }
 
+/**
+ * Options of a history batch an AI run opens. With the "AI edit undo history" switch off the
+ * panel asks for `dropUndo`: the run's edits leave no undo step and no rollback point.
+ * `keepRollback` (QC pass) keeps an internal rollback point without an undo step.
+ */
+export interface HistoryBatchRequest {
+  dropUndo?: boolean
+  keepRollback?: boolean
+}
+
 /** A raw op transaction from the AI batch surface (ops are validated by the registry; coordinates are document-space EMU). */
 export interface ApplyTxnOp {
   ops: unknown[]
@@ -1330,7 +1340,20 @@ export type ReadUrlResult =
     }
   | { ok: false; error: string; errorCode: string }
 
+export type AiEditMethod =
+  | 'applyTxn'
+  | 'applyEditScript'
+  | 'editChart'
+  | 'insertImageUrl'
+  | 'replacePictureUrl'
+  | 'landGeneratedPages'
+
 export interface SlidesApi {
+  aiEdit<K extends AiEditMethod>(
+    method: K,
+    args: Parameters<SlidesApi[K]>,
+    recordUndo: boolean,
+  ): ReturnType<SlidesApi[K]>
   /** current UI language (persisted by the shell in app-settings.json) */
   getLanguage: () => Promise<
     'zh' | 'en' | 'ja' | 'ko' | 'fr' | 'de' | 'es' | 'th' | 'id' | 'ru' | 'ar'
@@ -1678,7 +1701,7 @@ export interface SlidesApi {
   nativeClipboard: (op: 'cut' | 'copy' | 'paste') => Promise<void>
   /** Nestable history transaction; all edits between begin/end become one undo step.
       The outermost end registers an AI rollback point and returns its id (null when nothing changed). */
-  beginHistoryBatch: () => Promise<boolean>
+  beginHistoryBatch: (options?: HistoryBatchRequest) => Promise<boolean>
   endHistoryBatch: () => Promise<number | null>
   /** Apply an edit script's collected primitives as ONE atomic op transaction (the executor rolls back on any failure); returns the rebuilt slide or a guided error */
   applyEditScript: (
@@ -1687,7 +1710,12 @@ export interface SlidesApi {
   /** AI batch surface: apply raw ops as one transaction (atomic/per_op, dry-run supported) */
   applyTxn: (op: ApplyTxnOp) => Promise<ApplyTxnResult | null>
   /** Roll the deck back to an AI rollback point; returns the restored full RenderSlide array, null when the id is unknown */
-  aiSnapshotRestore: (id: number) => Promise<RenderSlide[] | null>
+  aiSnapshotRestore: (
+    id: number,
+    options?: { recordUndo?: boolean },
+  ) => Promise<RenderSlide[] | null>
+  /** Free an internal rollback point that turned out not to be needed */
+  aiSnapshotRelease: (id: number) => Promise<void>
   /** Undo/redo (main-process snapshot history): returns the restored full RenderSlide array, null when nothing to undo */
   undo: () => Promise<RenderSlide[] | null>
   redo: () => Promise<RenderSlide[] | null>

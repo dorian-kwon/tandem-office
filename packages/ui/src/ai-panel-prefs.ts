@@ -28,6 +28,10 @@ export interface AiPanelPrefs {
    * one that was already open (for users who want a plain editor without a
    * broken Ask-AI) */
   readonly showAiSidebar: boolean
+  /** Off: AI edits retain no undo entries or chat rollback snapshots.
+   * Temporary snapshots needed to recover failed edits remain permitted.
+   * Human edits always keep their normal undo history. */
+  readonly aiEditUndoHistory: boolean
 }
 
 /** What the AI panel should do when a document view starts. */
@@ -41,6 +45,7 @@ export const DEFAULT_AI_PANEL_PREFS: AiPanelPrefs = {
   spellcheck: true,
   openInNewDocs: true,
   showAiSidebar: true,
+  aiEditUndoHistory: false,
 }
 
 /** The one choice the settings screen shows, read from the two switches it stores. */
@@ -87,7 +92,8 @@ export function sameAiPanelPrefs(a: AiPanelPrefs, b: AiPanelPrefs): boolean {
     a.customFontSize === b.customFontSize &&
     a.spellcheck === b.spellcheck &&
     a.openInNewDocs === b.openInNewDocs &&
-    a.showAiSidebar === b.showAiSidebar
+    a.showAiSidebar === b.showAiSidebar &&
+    a.aiEditUndoHistory === b.aiEditUndoHistory
   )
 }
 
@@ -109,5 +115,9 @@ export function normalizeAiPanelPrefs(raw: unknown): AiPanelPrefs {
       typeof obj.showAiSidebar === 'boolean'
         ? obj.showAiSidebar
         : DEFAULT_AI_PANEL_PREFS.showAiSidebar,
+    aiEditUndoHistory:
+      typeof obj.aiEditUndoHistory === 'boolean'
+        ? obj.aiEditUndoHistory
+        : DEFAULT_AI_PANEL_PREFS.aiEditUndoHistory,
   }
 }

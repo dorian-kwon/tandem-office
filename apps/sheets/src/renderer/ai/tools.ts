@@ -1419,7 +1419,7 @@ export function executeWorkbookTool(
             ? `Apply failed MID-BATCH — operations before the failing one were already committed: ${reason}. ` +
                 'Read the affected ranges to see the current state before continuing; ' +
                 (applied.undoDropped
-                  ? 'the committed part is too large for the undo history — ⌘Z will NOT revert it.'
+                  ? 'the committed part is not in the undo history (too large, or undo history for AI edits is turned off in the settings) — ⌘Z will NOT revert it.'
                   : 'the whole partial batch is one undo step (⌘Z / [Undo]).')
             : `Apply failed — the workbook is UNCHANGED: ${reason}. ` +
                 'Do not tell the user the changes were made; adjust the operations and retry, or explain the failure.',

@@ -172,7 +172,22 @@ const subscriptionApi: SubscriptionApi = {
   },
 }
 
+const AI_EDIT_CHANNELS = {
+  applyTxn: 'slides:apply-txn',
+  applyEditScript: 'slides:apply-edit-script',
+  editChart: 'slides:edit-chart',
+  insertImageUrl: 'ai:insert-image-url',
+  replacePictureUrl: 'ai:replace-picture-url',
+  landGeneratedPages: 'slides:land-generated-pages',
+} as const
 const api: SlidesApi = {
+  aiEdit: (method, args, recordUndo) => {
+    const channel = AI_EDIT_CHANNELS[method]
+    if (!channel) throw new Error('unknown AI edit method')
+    return ipcRenderer.invoke(`${channel}:ai-edit`, args, recordUndo) as ReturnType<
+      SlidesApi[typeof method]
+    >
+  },
   getLanguage: () => ipcRenderer.invoke('app:get-language'),
   fontFamilyInfo: (families) => ipcRenderer.invoke('app:font-family-info', families),
   onLanguageChanged: (handler) => {
@@ -403,11 +418,13 @@ const api: SlidesApi = {
   deleteComment: (op) => ipcRenderer.invoke('slides:delete-comment', op),
   nativeClipboard: (op: 'cut' | 'copy' | 'paste') =>
     ipcRenderer.invoke('slides:native-clipboard', op),
-  beginHistoryBatch: () => ipcRenderer.invoke('slides:history-batch-begin'),
+  beginHistoryBatch: (options) => ipcRenderer.invoke('slides:history-batch-begin', options),
   endHistoryBatch: () => ipcRenderer.invoke('slides:history-batch-end'),
   applyEditScript: (op: ApplyEditScriptOp) => ipcRenderer.invoke('slides:apply-edit-script', op),
   applyTxn: (op: ApplyTxnOp) => ipcRenderer.invoke('slides:apply-txn', op),
-  aiSnapshotRestore: (id: number) => ipcRenderer.invoke('slides:ai-snapshot-restore', id),
+  aiSnapshotRestore: (id: number, options) =>
+    ipcRenderer.invoke('slides:ai-snapshot-restore', id, options),
+  aiSnapshotRelease: (id: number) => ipcRenderer.invoke('slides:ai-snapshot-release', id),
   undo: () => ipcRenderer.invoke('slides:undo'),
   redo: () => ipcRenderer.invoke('slides:redo'),
   pickExportDir: () => ipcRenderer.invoke('slides:pick-export-dir'),

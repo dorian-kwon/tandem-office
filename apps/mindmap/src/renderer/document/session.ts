@@ -195,6 +195,13 @@ export class DocumentSession {
     return result
   }
 
+  /** Discard redo after an unrecorded AI edit, keeping every earlier human step. */
+  discardRedo(key: string): void {
+    const { entry } = this.#at(key)
+    entry.snapshots.splice(entry.cursor + 1)
+    entry.stale = true
+  }
+
   canUndo(key: string): boolean {
     const entry = this.#entries.find((candidate) => candidate.key === key)
     return !!entry && entry.cursor > 0

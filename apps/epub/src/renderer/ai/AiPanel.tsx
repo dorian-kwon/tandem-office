@@ -1,4 +1,5 @@
 import { useChatWindow, EarlierChatMessages } from '@genoffice/ui'
+import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
 /**
  * The EPUB editor's AI panel (spec §7): the same parts and rules as the other
  * editors' panels (the send gate, the connect prompt, the first-connection
@@ -776,7 +777,11 @@ export function AiPanel({ host, filePath, onCollapse }: AiPanelProps): ReactElem
         choice.skill,
         ...panelProjectSkill({ run: projectChat.run, lang: () => langRef.current }),
       ]),
-      systemSuffix: () => aiLangDirective(langRef.current),
+      systemSuffix: () =>
+        aiLangDirective(langRef.current) +
+        (aiEditUndoHistoryEnabled()
+          ? ''
+          : '\nAI edit undo history is OFF. Your document edits cannot be undone. Do not promise Ctrl+Z or a rollback button; this overrides any generic undo wording in tool descriptions.'),
       events: runStatus.wrap({
         onText: (text) => patchLast({ text }),
         onToolStart: (call) => {

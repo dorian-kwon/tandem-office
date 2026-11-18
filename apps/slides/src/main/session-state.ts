@@ -6,6 +6,7 @@
  */
 import { BrowserWindow, webContents } from 'electron'
 import type { WebContents } from 'electron'
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { RecoveryIdentity, SaveDiskState } from '@genoffice/electron-utils'
@@ -87,7 +88,15 @@ export interface Session {
   historyBatch?: {
     depth: number
     undoStart: number
-    before: HistorySnapshot
+    /** null while a drop batch has no use for a pre-run copy of the deck */
+    before: HistorySnapshot | null
+    /** AI run with the "AI edit undo history" switch off: the run leaves no undo entry */
+    dropUndo?: boolean
+    /** drop batch only: keep `before` as an internal rollback point (the QC pass reverts a worse fix) */
+    keepRollback?: boolean
+    /** drop batch only: oldest undo entries the 50-step cap evicted while the batch was open */
+    trimmed: number
+    edited?: boolean
   }
   /** Rollback points for the AI panel's Snapshots list, keyed by id (one per AI run that edited the deck). */
   aiSnapshots?: Map<number, HistorySnapshot>
@@ -284,24 +293,72 @@ export function scheduleDeckBroadcast(session: Session): void {
   })
 }
 
+/** Per-request AI source, preserved across async image fetches without capturing UI edits. */
+const aiHistorySource = new AsyncLocalStorage<Map<HistorySnapshot[], Set<HistorySnapshot>>>()
+
+export async function withoutAiUndo<T>(run: () => T | Promise<T>): Promise<T> {
+  const pending = new Map<HistorySnapshot[], Set<HistorySnapshot>>()
+  return aiHistorySource.run(pending, async () => {
+    try {
+      return await run()
+    } finally {
+      for (const [stack, entries] of pending) {
+        for (let i = stack.length - 1; i >= 0; i--) {
+          if (entries.has(stack[i]!)) stack.splice(i, 1)
+        }
+      }
+    }
+  })
+}
+
 /** Call before an edit operation: push onto the undo stack and clear the redo stack. */
 export function pushHistory(session: Session): void {
-  session.undoStack.push(takeSnapshot(session))
-  trimHistory(session.undoStack)
+  const snapshot = takeSnapshot(session)
+  session.undoStack.push(snapshot)
+  const pending = aiHistorySource.getStore()
+  if (pending) {
+    const entries = pending.get(session.undoStack) ?? new Set<HistorySnapshot>()
+    entries.add(snapshot)
+    pending.set(session.undoStack, entries)
+    if (session.historyBatch) session.historyBatch.edited = true
+  } else {
+    const lengthBeforeTrim = session.undoStack.length
+    trimHistory(session.undoStack)
+    if (session.historyBatch)
+      session.historyBatch.trimmed += lengthBeforeTrim - session.undoStack.length
+  }
   session.redoStack = []
   scheduleHistoryNotify(session)
 }
 
+export interface HistoryBatchOptions {
+  /**
+   * The batch is an AI run and the "AI edit undo history" switch is off: its edits are
+   * discarded from the undo stack when the outermost batch ends, so the run leaves no undo
+   * step (and no rollback point). Edit handlers still push and pop their own snapshots while
+   * the batch is open, so the stack stays consistent for their failure paths. The outermost
+   * batch decides: a nested request never changes how an open batch ends.
+   */
+  dropUndo?: boolean
+  /** With `dropUndo`: still return the pre-run snapshot at the end (an internal rollback, not an undo step). */
+  keepRollback?: boolean
+}
+
 /** Begin a nestable transaction. Individual edit handlers keep their normal rollback behavior. */
-export function beginHistoryBatch(session: Session): void {
+export function beginHistoryBatch(session: Session, options: HistoryBatchOptions = {}): void {
   if (session.historyBatch) {
     session.historyBatch.depth += 1
     return
   }
+  const dropUndo = options.dropUndo === true
+  const keepRollback = dropUndo && options.keepRollback === true
   session.historyBatch = {
     depth: 1,
     undoStart: session.undoStack.length,
-    before: takeSnapshot(session),
+    before: dropUndo && !keepRollback ? null : takeSnapshot(session),
+    ...(dropUndo ? { dropUndo: true } : {}),
+    ...(keepRollback ? { keepRollback: true } : {}),
+    trimmed: 0,
   }
 }
 
@@ -317,12 +374,18 @@ export function endHistoryBatch(session: Session): HistorySnapshot | null {
   batch.depth -= 1
   if (batch.depth > 0) return null
   session.historyBatch = undefined
+  if (batch.dropUndo) {
+    // Each AI request removes only its own temporary failure-rollback entries.
+    // Human edits made while the model was waiting stay on the stack.
+    scheduleHistoryNotify(session)
+    return batch.edited && batch.keepRollback ? batch.before : null
+  }
   if (session.undoStack.length <= batch.undoStart) return null
   session.undoStack.splice(batch.undoStart)
-  session.undoStack.push(batch.before)
+  session.undoStack.push(batch.before as HistorySnapshot)
   trimHistory(session.undoStack)
   scheduleHistoryNotify(session)
-  return batch.before
+  return batch.before as HistorySnapshot
 }
 
 /** Preserve the old deck and its history when AI replaces the entire presentation. */
@@ -339,6 +402,11 @@ export function carryHistoryForReplacement(
   scheduleHistoryNotify(replacement)
 }
 
+/** Free a rollback point nobody will use (an internal rollback point that was kept). */
+export function releaseAiSnapshot(session: Session, id: number): void {
+  session.aiSnapshots?.delete(id)
+}
+
 const MAX_AI_SNAPSHOTS = 20
 let nextAiSnapshotId = 1
 
@@ -352,10 +420,16 @@ export function registerAiSnapshot(session: Session, snap: HistorySnapshot): num
 }
 
 /** Roll the deck back to a registered AI snapshot; the pre-rollback state becomes one undo step. */
-export function restoreAiSnapshot(session: Session, id: number): boolean {
+export function restoreAiSnapshot(
+  session: Session,
+  id: number,
+  options: { recordUndo?: boolean } = {},
+): boolean {
   const snap = session.aiSnapshots?.get(id)
   if (!snap) return false
-  pushHistory(session)
+  // An internal rollback (QC reverting its own worse fix with the undo switch off) must not
+  // leave an undo step that would bring the reverted AI edit back.
+  if (options.recordUndo !== false) pushHistory(session)
   restoreSnapshot(session, snap)
   session.aiSnapshots?.delete(id)
   return true
@@ -583,7 +657,7 @@ export function pruneMediaSources(session: Session): void {
     ...session.undoStack,
     ...session.redoStack,
     ...(session.previewRedo ?? []),
-    ...(session.historyBatch ? [session.historyBatch.before] : []),
+    ...(session.historyBatch?.before ? [session.historyBatch.before] : []),
     ...(session.aiSnapshots?.values() ?? []),
   ]
   const retained = new Set(session.opened.archive.entries.values())

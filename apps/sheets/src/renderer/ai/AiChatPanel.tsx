@@ -1,4 +1,5 @@
 import { useChatWindow, EarlierChatMessages } from '@genoffice/ui'
+import { useAiPanelPrefs } from '@genoffice/ui'
 import { OcrChatPreview, type OcrChatDisplay } from '@genoffice/ui'
 import {
   aiPanelWidthAtPointer,
@@ -457,6 +458,7 @@ export function AiChatPanel({
   /** the project folder parts; absent: the panel shows none */
   readonly project?: AiPanelProject | undefined
 }): React.JSX.Element {
+  const undoHistoryOn = useAiPanelPrefs().aiEditUndoHistory
   const { t, lang } = useI18n()
   // A reply that stopped because its connection cannot go on: the queue is paused, so the next
   // message does not run into the same wall. Declared ahead of the queue so that it runs before
@@ -916,7 +918,7 @@ export function AiChatPanel({
                     {/* undoSteps 0 = the batch exceeded the undo budget and
                         kept no stack entry; a forced 1-step undo would revert
                         the user's own previous action instead. */}
-                    {(entry.autoApplied.undoSteps ?? 1) > 0 && (
+                    {undoHistoryOn && (entry.autoApplied.undoSteps ?? 1) > 0 && (
                       <button
                         className="ai-undo-btn"
                         onClick={() => onUndo(Math.max(1, entry.autoApplied?.undoSteps ?? 1))}

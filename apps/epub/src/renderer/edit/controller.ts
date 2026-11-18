@@ -24,6 +24,7 @@
  * Everything that talks to the main process runs one after the other.
  */
 import type { BlockEdit, ChapterBlock, OpenChapter, RangeReplacement } from '@genoffice/epub-engine'
+import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
 import type { Params } from '@genoffice/i18n'
 import type {
   EpubApplyEditsRequest,
@@ -1052,7 +1053,7 @@ export class EpubEditController {
    */
   async applyEditGroups(
     groups: readonly EditGroup[],
-    options: { atomic?: boolean } = {},
+    options: { atomic?: boolean; aiEdit?: boolean } = {},
   ): Promise<EditGroupsOutcome> {
     if (this.locked) {
       return {
@@ -1083,7 +1084,11 @@ export class EpubEditController {
         this.note(result)
         results.push(result)
       }
-      this.push(this.partsOf(results))
+      if (options.aiEdit && !aiEditUndoHistoryEnabled()) {
+        if (results.some((result) => result.replacements.length > 0)) this.redoStack = []
+      } else {
+        this.push(this.partsOf(results))
+      }
       this.show(results, false)
       this.host.changed()
       return failed ? { ok: false, ...failed, results } : { ok: true, results }

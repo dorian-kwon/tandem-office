@@ -2718,7 +2718,7 @@ describe('file-level page operations', () => {
     expect(result.isError).toBeUndefined()
     expect(result.mutated).toBe(true)
     expect(result.output).toContain('page 3')
-    expect(result.output).toContain('undoable')
+    expect(result.output).toContain('AI undo is off')
     expect(result.output).toContain('original page number, 5')
   })
 

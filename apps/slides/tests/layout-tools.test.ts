@@ -327,3 +327,7 @@ describe('execute_layout_script tool', () => {
     expect(r.output).toContain('(1 px = 7143.75 EMU)')
   })
 })
+
+vi.mock('../src/renderer/ai/ai-edit-api', () => ({
+  aiEditApi: () => window.slidesApi,
+}))

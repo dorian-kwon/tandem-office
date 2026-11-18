@@ -1,9 +1,11 @@
+import { createAiUndoScope } from '../src/renderer/ai-undo-scope'
 import { LocalUndoRedoService } from '@univerjs/core'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import {
   AI_UNDO_CELL_BUDGET,
   aiBulkUndoGate,
+  aiUndoHistory,
   installJournalSuppressionUndoFilter,
   undoPayloadCells,
 } from '../src/renderer/univer-state'
@@ -15,7 +17,11 @@ function setRangeItem(cells: number) {
     for (let c = 0; c < 10 && r * 10 + c < cells; c++) row[c] = { v: 1 }
     cellValue[r] = row
   }
-  return { unitID: 'wb', undoMutations: [], redoMutations: [{ params: { cellValue } }] }
+  return {
+    unitID: 'wb',
+    undoMutations: [],
+    redoMutations: [{ id: 'sheet.mutation.set-range-values', params: { cellValue } }],
+  }
 }
 
 /// The real Univer service internals the patched pushUndoRedo touches.
@@ -36,6 +42,8 @@ describe('AI bulk-apply undo budget', () => {
     aiBulkUndoGate.dropped = false
     aiBulkUndoGate.cells = 0
     aiBulkUndoGate.pushed = 0
+    aiBulkUndoGate.dropAll = false
+    aiUndoHistory.enabled = false
   })
 
   it('counts payload cells with a bounded walk', () => {
@@ -100,5 +108,100 @@ describe('AI bulk-apply undo budget', () => {
       setRangeItem(AI_UNDO_CELL_BUDGET + 10),
     )
     expect(stack.length).toBe(1)
+  })
+
+  describe('AI edit undo history setting off', () => {
+    const pusher = (stack: unknown[], redoStack: unknown[] = []) => {
+      const service = fakeService(stack, redoStack)
+      return (item: unknown) =>
+        (LocalUndoRedoService.prototype.pushUndoRedo as (i: unknown) => void).call(service, item)
+    }
+
+    it('keeps no entry for a small AI batch and clears stale redo', () => {
+      const stack: unknown[] = []
+      const redoStack: unknown[] = [setRangeItem(5)]
+      const push = pusher(stack, redoStack)
+      aiBulkUndoGate.active = true
+      aiBulkUndoGate.dropAll = true
+      push(setRangeItem(3))
+      push(setRangeItem(3))
+      expect(stack.length).toBe(0)
+      expect(redoStack.length).toBe(0)
+      expect(aiBulkUndoGate.dropped).toBe(true)
+    })
+
+    it('leaves the human entries beneath untouched', () => {
+      const human = setRangeItem(2)
+      const stack: unknown[] = [human]
+      const push = pusher(stack)
+      aiBulkUndoGate.active = true
+      aiBulkUndoGate.dropAll = true
+      push(setRangeItem(3))
+      expect(stack).toEqual([human])
+    })
+
+    it('does not drop anything once the gate is no longer active', () => {
+      const stack: unknown[] = []
+      const push = pusher(stack)
+      aiBulkUndoGate.dropAll = true
+      push(setRangeItem(3))
+      expect(stack.length).toBe(1)
+    })
+  })
+
+  it('keeps a small AI batch when the history setting is on (dropAll false)', () => {
+    const stack: unknown[] = []
+    const service = fakeService(stack)
+    aiBulkUndoGate.active = true
+    aiBulkUndoGate.dropAll = false
+    ;(LocalUndoRedoService.prototype.pushUndoRedo as (i: unknown) => void).call(
+      service,
+      setRangeItem(3),
+    )
+    expect(stack.length).toBe(1)
+    expect(aiBulkUndoGate.dropped).toBe(false)
+  })
+})
+
+describe('AI source scope across asynchronous loads', () => {
+  it('keeps manual history between AI facade calls and restores scope after failure', async () => {
+    installJournalSuppressionUndoFilter()
+    aiBulkUndoGate.active = false
+    const stack: unknown[] = []
+    const redo: unknown[] = [setRangeItem(1)]
+    const service = fakeService(stack, redo)
+    const sheet = {
+      edit() {
+        LocalUndoRedoService.prototype.pushUndoRedo.call(service as never, setRangeItem(1))
+      },
+    }
+    const scope = createAiUndoScope()
+    const workbook = scope.wrap({ getSheet: () => sheet })
+    const aiSheet = workbook.getSheet()
+    let resume!: () => void
+    const pending = (async () => {
+      aiSheet.edit()
+      await new Promise<void>((resolve) => {
+        resume = resolve
+      })
+      aiSheet.edit()
+    })()
+    expect(aiBulkUndoGate.active).toBe(false)
+    sheet.edit()
+    expect(stack).toHaveLength(1)
+    resume()
+    await pending
+    expect(stack).toHaveLength(1)
+    expect(redo).toHaveLength(0)
+    expect(scope.dropped).toBe(true)
+    expect(() =>
+      scope.run(() => {
+        throw new Error('failed')
+      }),
+    ).toThrow('failed')
+    expect(aiBulkUndoGate.active).toBe(false)
+    scope.settle()
+    aiSheet.edit()
+    expect(stack).toHaveLength(2)
   })
 })

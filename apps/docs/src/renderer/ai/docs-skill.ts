@@ -1,4 +1,5 @@
 import { placeholderInstruction } from './redact'
+import { withAiEdit } from './ai-history-gate'
 import { redactLabelsOf } from './redact-view'
 import type { Editor } from '@tiptap/core'
 import { attachedImageNote, type AgentSkill } from '@genoffice/agent-core'
@@ -125,20 +126,23 @@ export function createDocsSkill(
       // a tool the profile withheld is refused even when the model calls it anyway
       const refusal = profileToolRefusal(profile(), call.name)
       if (refusal) return { output: refusal, isError: true, mutated: false, summary: call.name }
-      return executeTool(
-        getEditor(),
-        call,
-        getNumIds(),
-        getTrack?.(),
-        signal,
-        frozen,
-        getComments?.(),
-        getHf?.(),
-        getWriter?.(),
-        getPageSetup?.(),
-        getExtras?.(),
-        getNotes?.(),
-        getAttachments?.(),
+      // Synchronous adapter callbacks share the AI source; delayed editor writes use aiEditor.
+      return withAiEdit(() =>
+        executeTool(
+          getEditor(),
+          call,
+          getNumIds(),
+          getTrack?.(),
+          signal,
+          frozen,
+          getComments?.(),
+          getHf?.(),
+          getWriter?.(),
+          getPageSetup?.(),
+          getExtras?.(),
+          getNotes?.(),
+          getAttachments?.(),
+        ),
       )
     },
   }

@@ -1,4 +1,5 @@
 import { useChatWindow, EarlierChatMessages } from '@genoffice/ui'
+import { aiEditUndoHistoryEnabled, useAiPanelPrefs } from '@genoffice/ui'
 /**
  * The mind map's AI panel: the same parts and rules as the other editors'
  * panels (the send gate, the connect prompt, the first-connection notice, the
@@ -773,6 +774,13 @@ export function AiPanel({
   const lastSkillUseRef = useRef<SkillUse>(NO_SKILL_USE)
   /** the undo point of the run in flight */
   const turnRef = useRef<MapTurn | null>(null)
+  const undoHistoryOn = useAiPanelPrefs().aiEditUndoHistory
+  useEffect(() => {
+    if (!undoHistoryOn) {
+      turnRef.current = null
+      setTurns([])
+    }
+  }, [undoHistoryOn])
   /** an untitled map was already given a name from a request */
   const namedRef = useRef(false)
   /** tool activity of the whole run, for the saved transcript */
@@ -867,9 +875,9 @@ export function AiPanel({
     })
   }
 
-  const loopRef = useRef<AgentLoop<MapTurn> | null>(null)
+  const loopRef = useRef<AgentLoop<MapTurn | undefined> | null>(null)
   if (!loopRef.current) {
-    loopRef.current = new AgentLoop<MapTurn>({
+    loopRef.current = new AgentLoop<MapTurn | undefined>({
       transport: transportRef.current,
       // a local model that reported no tool support answers in text only
       toolsAllowed: () =>
@@ -877,7 +885,7 @@ export function AiPanel({
       skill: composeWithDrive('mindmap+search', '', () => loopRef.current?.messages ?? [], [
         createMindmapSkill({
           host: () => hostRef.current,
-          turn: () => turnRef.current,
+          turn: () => (aiEditUndoHistoryEnabled() ? turnRef.current : null),
           imageGenAvailable: () => imageGenAvailableRef.current,
           // the model names an attachment; only files the panel shows can be found
           attachmentPath: (name) =>
@@ -910,8 +918,13 @@ export function AiPanel({
         ...panelProjectSkill({ run: projectChat.run, lang: () => langRef.current }),
       ]),
       // the run's one undo point: the loop hands it back with the first tool that changed the map
-      captureSnapshot: () => (turnRef.current ??= new MapTurn()),
-      systemSuffix: () => aiLangDirective(langRef.current),
+      captureSnapshot: () =>
+        aiEditUndoHistoryEnabled() ? (turnRef.current ??= new MapTurn()) : undefined,
+      systemSuffix: () =>
+        aiLangDirective(langRef.current) +
+        (aiEditUndoHistoryEnabled()
+          ? ''
+          : '\nAI edit undo history is OFF. Your document edits cannot be undone. Do not promise Ctrl+Z or a rollback button; this overrides any generic undo wording in tool descriptions.'),
       events: runStatus.wrap({
         onText: (text) => patchLast({ text }),
         onToolStart: (call) => {
@@ -923,7 +936,7 @@ export function AiPanel({
           }))
         },
         onToolExecuted: ({ call, execution, snapshotBefore }) => {
-          if (snapshotBefore !== undefined) {
+          if (aiEditUndoHistoryEnabled() && snapshotBefore !== undefined) {
             const label = runInstructionRef.current.slice(0, 40)
             const time = new Date().toLocaleTimeString([], {
               hour: '2-digit',
@@ -1182,7 +1195,7 @@ export function AiPanel({
     }
     stickToBottomRef.current = true
     runInstructionRef.current = instruction
-    turnRef.current = new MapTurn()
+    turnRef.current = aiEditUndoHistoryEnabled() ? new MapTurn() : null
     runToolsRef.current = []
     runUsageRef.current = undefined
     // an untitled map takes its tab name from the first request
@@ -1929,7 +1942,7 @@ export function AiPanel({
         <McpPermissionCard lang={lang} />
       </div>
 
-      {(turns.length > 0 || rollbackNote) && (
+      {undoHistoryOn && (turns.length > 0 || rollbackNote) && (
         <div className="ai-versions" data-ai-turns={turns.length}>
           <div className="ai-versions-title">
             <IconClock />

@@ -618,3 +618,7 @@ describe('AI entry label (slides)', () => {
     expect(container.querySelector('.ai-panel-resizer')!.getAttribute('aria-label')).toBe(title)
   })
 })
+
+vi.mock('../src/renderer/ai/ai-edit-api', () => ({
+  aiEditApi: () => window.slidesApi,
+}))

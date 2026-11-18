@@ -240,3 +240,7 @@ describe('brief provenance gate (regenerate_slide / generate_deck)', () => {
     expect(r.output).toContain('dataSource')
   })
 })
+
+vi.mock('../src/renderer/ai/ai-edit-api', () => ({
+  aiEditApi: () => window.slidesApi,
+}))

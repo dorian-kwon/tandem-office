@@ -615,7 +615,7 @@ export async function editMap(
     const restyled = outcomes
       .filter((outcome) => outcome.ok && outcome.op === 'set_format' && outcome.id)
       .map((outcome) => outcome.id!)
-    controller.edit((root) => takeTree(root, data.nodeData), { restyled })
+    controller.edit((root) => takeTree(root, data.nodeData), { restyled, aiEdit: true })
     confirmApplied(session, key, outcomes, edits)
   }
   const done = outcomes.filter((outcome) => outcome.ok).length
@@ -823,7 +823,7 @@ export async function setTopicPicture(
       }
     }
     turn?.noteEdit(session, key)
-    controller.edit((root) => takeTree(root, data.nodeData))
+    controller.edit((root) => takeTree(root, data.nodeData), { aiEdit: true })
 
     const shown = topicInView(session.view(key).root, topicId)
     if (entryName !== null && shown?.image?.entryName !== entryName) {
@@ -954,7 +954,7 @@ export async function writeMap(
     if (!controller) return fail('the new sheet could not be opened for writing')
     const nodes = nodesOf(sheet, controller.layout === 'both')
     if (fill) turn?.noteEdit(session, key)
-    controller.edit((root) => takeTree(root, nodes))
+    controller.edit((root) => takeTree(root, nodes), { aiEdit: true })
     if (fill && typeof sheet.title === 'string' && sheet.title !== session.tabs()[0]!.title) {
       turn?.noteRename(key, session.tabs()[0]!.title)
       session.renameSheet(key, sheet.title)

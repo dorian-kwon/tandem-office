@@ -1239,6 +1239,23 @@ export function patchTargets(name, file) {
  */
 export const pluginHooks = [
   {
+    file: 'src/engine/history.ts',
+    needles: [
+      'private redoStack: EditCommand[] = []',
+      'execute(command: EditCommand, wasm: WasmBridge)',
+      'if (command.isNoOp?.())',
+      'command.discard?.(wasm)',
+    ],
+  },
+  {
+    file: 'src/engine/input-handler.ts',
+    needles: [
+      'private history: CommandHistory',
+      'const newPos = this.history.execute(cmd, this.wasm)',
+      'if (cmd.isNoOp()) break',
+    ],
+  },
+  {
     file: 'src/engine/cursor.ts',
     needles: [
       'hasSelection(): boolean',

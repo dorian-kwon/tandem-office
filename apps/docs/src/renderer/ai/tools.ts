@@ -1,3 +1,4 @@
+import { aiEditor, originalAiEditor, withAiEdit } from './ai-history-gate'
 import type { Editor } from '@tiptap/core'
 import type { Mark, Node as ProseMirrorNode } from '@tiptap/pm/model'
 import type { ChartDisplay, CommentInfo, NewChart, NoteInfo } from '@genoffice/docx-engine'
@@ -1056,16 +1057,17 @@ const REVISION_MARK_TYPES = new Set(['ins', 'del'])
 const docBaseline = new WeakMap<Editor, ProseMirrorNode>()
 
 export function markDocSeen(editor: Editor): void {
-  docBaseline.set(editor, editor.state.doc)
+  docBaseline.set(originalAiEditor(editor), editor.state.doc)
 }
 
 /** A streamed load tail is not a user edit: appending at the end keeps every block index the model saw valid. */
 export function carryDocSeen(editor: Editor, before: ProseMirrorNode): void {
-  if (docBaseline.get(editor) === before) docBaseline.set(editor, editor.state.doc)
+  if (docBaseline.get(originalAiEditor(editor)) === before)
+    docBaseline.set(originalAiEditor(editor), editor.state.doc)
 }
 
 function editedExternally(editor: Editor): boolean {
-  const seen = docBaseline.get(editor)
+  const seen = docBaseline.get(originalAiEditor(editor))
   return seen !== undefined && seen !== editor.state.doc
 }
 
@@ -1625,20 +1627,22 @@ export function executeTool(
   const odtRefusal = odtToolRefusal(call)
   if (odtRefusal) return fail(t('appOdtOff'), odtRefusal)
   startOdtToolCall()
-  const result = executeToolUnguarded(
-    editor,
-    call,
-    numIds,
-    track,
-    signal,
-    frozen,
-    comments,
-    hf,
-    writer,
-    pageSetup,
-    extras,
-    notes,
-    attachments,
+  const result = withAiEdit(() =>
+    executeToolUnguarded(
+      aiEditor(editor),
+      call,
+      numIds,
+      track,
+      signal,
+      frozen,
+      comments,
+      hf,
+      writer,
+      pageSetup,
+      extras,
+      notes,
+      attachments,
+    ),
   )
   const settleOdt = (exec: ToolExecution): ToolExecution => {
     const refused = odtGuardRefusalText()

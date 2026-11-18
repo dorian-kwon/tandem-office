@@ -11,6 +11,7 @@ import { EditorView } from '@codemirror/view'
 import { redo, redoDepth, undo, undoDepth } from '@codemirror/commands'
 import { External, buildExtensions } from './cm-setup'
 import { addAiRanges, clearAiRanges } from './cm-highlight'
+import { sourceEditAnnotations } from './ai-history'
 import { cmFindTarget } from './find-target'
 import { useI18n } from '../i18n/locale'
 import type { FindTarget } from '@genoffice/ui'
@@ -26,9 +27,11 @@ export interface SourceRange {
 export interface SourceEditorHandle {
   /** replace the whole document without touching the undo history (file load) */
   setDoc(text: string): void
-  /** replace the whole document as one undoable step (AI rewrite, rollback) */
+  /** replace the whole document as one undoable step (AI rewrite, rollback); an AI rewrite
+   * (`highlight`) keeps no undo step while the "AI edit undo history" setting is off */
   replaceDoc(text: string, highlight: boolean): void
-  /** apply validated patches as one undoable step; returns the post-edit ranges */
+  /** apply validated patches as one undoable step; returns the post-edit ranges. AI patches
+   * (`highlight`) keep no undo step while the "AI edit undo history" setting is off */
   applyPatches(patches: readonly Patch[], highlight: boolean): Array<[number, number]>
   clearHighlights(): void
   /** select and scroll a source range into view; focus only when the user asked for the editor */
@@ -196,7 +199,7 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
       const len = view.state.doc.length
       view.dispatch({
         changes: { from: 0, to: len, insert: text },
-        annotations: [External.of(true)],
+        annotations: sourceEditAnnotations(highlight),
         effects: highlight
           ? [clearAiRanges.of(null), addAiRanges.of([[0, text.length]])]
           : [clearAiRanges.of(null)],
@@ -214,7 +217,7 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
       }
       view.dispatch({
         changes: sorted.map((p) => ({ from: p.from, to: p.to, insert: p.text })),
-        annotations: [External.of(true)],
+        annotations: sourceEditAnnotations(highlight),
         effects: highlight ? [addAiRanges.of(ranges)] : [],
       })
       return ranges

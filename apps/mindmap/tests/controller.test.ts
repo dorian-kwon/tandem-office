@@ -1,3 +1,4 @@
+import { applyAiPanelPrefs } from '@genoffice/ui'
 /**
  * The map on screen, with the real drawing library in jsdom: what the user
  * does reaches the source tree, what the file holds is never read as markup,
@@ -1287,5 +1288,47 @@ describe('when the screen and the file disagree', () => {
     expect(attached()[3]!.id).toMatch(UUID)
     controller.undo()
     expect(doc.sheets[0]).toEqual(before)
+  })
+})
+
+describe('AI undo preference', () => {
+  it('skips AI steps and retains manual steps before and after them', async () => {
+    applyAiPanelPrefs({})
+    const { controller, root } = await mount([plainSheet()])
+    const original = root().title
+    controller.edit((node) => {
+      node.topic = 'Human before'
+    })
+    controller.edit(
+      (node) => {
+        node.topic = 'AI'
+      },
+      { aiEdit: true },
+    )
+    controller.edit((node) => {
+      node.topic = 'Human after'
+    })
+    controller.undo()
+    expect(root().title).toBe('AI')
+    controller.undo()
+    expect(root().title).toBe(original)
+    expect(controller.canUndo).toBe(false)
+    controller.edit(
+      (node) => {
+        node.topic = 'AI after undo'
+      },
+      { aiEdit: true },
+    )
+    expect(controller.canRedo).toBe(false)
+    applyAiPanelPrefs({ aiEditUndoHistory: true })
+    controller.edit(
+      (node) => {
+        node.topic = 'Recorded AI'
+      },
+      { aiEdit: true },
+    )
+    controller.undo()
+    expect(root().title).toBe('AI after undo')
+    applyAiPanelPrefs({})
   })
 })

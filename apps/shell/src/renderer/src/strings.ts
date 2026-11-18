@@ -204,6 +204,8 @@ export const strings = {
     aiFontSizeXLarge: '特大',
     aiFontSizeCustom: '自定义',
     setAiSpellcheck: 'AI 对话拼写检查',
+    setAiUndoHistory: 'AI 修改撤销记录',
+    setAiUndoHistoryDesc: '关闭后，AI 所做的修改无法用 Ctrl+Z 或 [撤销] 还原，但会占用更少内存。',
     setDefaultApp: '设为 Office 文档默认程序',
     setDefaultAppDesc: '双击 .docx、.xlsx、.pptx 文件时用 GenOffice 打开。',
     setDefaultAppIs: 'GenOffice 已是默认程序。',
@@ -774,6 +776,9 @@ export const strings = {
     aiFontSizeXLarge: 'Extra large',
     aiFontSizeCustom: 'Custom',
     setAiSpellcheck: 'Spell check in AI chat',
+    setAiUndoHistory: 'AI edit undo history',
+    setAiUndoHistoryDesc:
+      'When off, changes made by the AI cannot be reverted with Ctrl+Z or [Undo], and less memory is used.',
     setDefaultApp: 'Default app for Office documents',
     setDefaultAppDesc: 'Open .docx, .xlsx and .pptx files in GenOffice when double-clicked.',
     setDefaultAppIs: 'GenOffice is already the default.',
@@ -1367,6 +1372,9 @@ export const strings = {
     aiFontSizeXLarge: 'Rất lớn',
     aiFontSizeCustom: 'Tùy chỉnh',
     setAiSpellcheck: 'Kiểm tra chính tả trong trò chuyện AI',
+    setAiUndoHistory: 'Lịch sử hoàn tác chỉnh sửa của AI',
+    setAiUndoHistoryDesc:
+      'Khi tắt, các thay đổi do AI thực hiện không thể hoàn tác bằng Ctrl+Z hoặc [Hoàn tác], và tốn ít bộ nhớ hơn.',
     setDefaultApp: 'Ứng dụng mặc định cho tài liệu Office',
     setDefaultAppDesc: 'Mở các tệp .docx, .xlsx và .pptx bằng GenOffice khi bấm đúp.',
     setDefaultAppIs: 'GenOffice đã là ứng dụng mặc định.',
@@ -1969,6 +1977,9 @@ export const strings = {
     aiFontSizeXLarge: '特大',
     aiFontSizeCustom: 'カスタム',
     setAiSpellcheck: 'AI チャットのスペルチェック',
+    setAiUndoHistory: 'AI 編集の元に戻す履歴',
+    setAiUndoHistoryDesc:
+      'オフにすると、AI が行った変更は Ctrl+Z や [元に戻す] で戻せなくなり、メモリ使用量が減ります。',
     setDefaultApp: 'Office 文書の既定のアプリ',
     setDefaultAppDesc:
       '.docx、.xlsx、.pptx ファイルをダブルクリックしたとき GenOffice で開きます。',
@@ -2576,6 +2587,9 @@ export const strings = {
     aiFontSizeXLarge: '더 크게',
     aiFontSizeCustom: '사용자 지정',
     setAiSpellcheck: 'AI 채팅 맞춤법 검사',
+    setAiUndoHistory: 'AI 수정 되돌리기 기록',
+    setAiUndoHistoryDesc:
+      '끄면 AI가 고친 내용은 Ctrl+Z나 [되돌리기]로 되돌릴 수 없고, 메모리를 덜 씁니다.',
     setDefaultApp: 'Office 문서 기본 앱',
     setDefaultAppDesc: '.docx, .xlsx, .pptx 파일을 두 번 클릭하면 GenOffice로 엽니다.',
     setDefaultAppIs: 'GenOffice가 이미 기본 앱입니다.',
@@ -3173,6 +3187,9 @@ export const strings = {
     aiFontSizeXLarge: 'Très grande',
     aiFontSizeCustom: 'Personnalisé',
     setAiSpellcheck: 'Correction orthographique dans le chat IA',
+    setAiUndoHistory: 'Historique d’annulation des modifications de l’IA',
+    setAiUndoHistoryDesc:
+      'Si désactivé, les modifications faites par l’IA ne peuvent pas être annulées avec Ctrl+Z ni [Annuler], et moins de mémoire est utilisée.',
     setDefaultApp: 'Application par défaut pour les documents Office',
     setDefaultAppDesc: 'Ouvrir les fichiers .docx, .xlsx et .pptx dans GenOffice par double-clic.',
     setDefaultAppIs: 'GenOffice est déjà l’application par défaut.',
@@ -3791,6 +3808,9 @@ export const strings = {
     aiFontSizeXLarge: 'Sehr groß',
     aiFontSizeCustom: 'Benutzerdefiniert',
     setAiSpellcheck: 'Rechtschreibprüfung im KI-Chat',
+    setAiUndoHistory: 'Rückgängig-Verlauf für KI-Änderungen',
+    setAiUndoHistoryDesc:
+      'Wenn deaktiviert, lassen sich Änderungen der KI nicht mit Strg+Z oder [Rückgängig] zurücknehmen, dafür wird weniger Arbeitsspeicher belegt.',
     setDefaultApp: 'Standard-App für Office-Dokumente',
     setDefaultAppDesc: '.docx-, .xlsx- und .pptx-Dateien per Doppelklick in GenOffice öffnen.',
     setDefaultAppIs: 'GenOffice ist bereits die Standard-App.',
@@ -4412,6 +4432,9 @@ export const strings = {
     aiFontSizeXLarge: 'Muy grande',
     aiFontSizeCustom: 'Personalizado',
     setAiSpellcheck: 'Corrección ortográfica en el chat de IA',
+    setAiUndoHistory: 'Historial de deshacer de las ediciones de la IA',
+    setAiUndoHistoryDesc:
+      'Si se desactiva, los cambios que haga la IA no se podrán revertir con Ctrl+Z ni con [Deshacer], y se usará menos memoria.',
     setDefaultApp: 'App predeterminada para documentos de Office',
     setDefaultAppDesc: 'Abrir archivos .docx, .xlsx y .pptx en GenOffice al hacer doble clic.',
     setDefaultAppIs: 'GenOffice ya es la app predeterminada.',
@@ -5017,6 +5040,9 @@ export const strings = {
     aiFontSizeXLarge: 'ใหญ่มาก',
     aiFontSizeCustom: 'กำหนดเอง',
     setAiSpellcheck: 'ตรวจการสะกดในแชท AI',
+    setAiUndoHistory: 'ประวัติการเลิกทำการแก้ไขของ AI',
+    setAiUndoHistoryDesc:
+      'เมื่อปิด การแก้ไขที่ AI ทำจะเลิกทำด้วย Ctrl+Z หรือ [เลิกทำ] ไม่ได้ และใช้หน่วยความจำน้อยลง',
     setDefaultApp: 'แอปเริ่มต้นสำหรับเอกสาร Office',
     setDefaultAppDesc: 'เปิดไฟล์ .docx, .xlsx และ .pptx ด้วย GenOffice เมื่อดับเบิลคลิก',
     setDefaultAppIs: 'GenOffice เป็นแอปเริ่มต้นอยู่แล้ว',
@@ -5614,6 +5640,9 @@ export const strings = {
     aiFontSizeXLarge: 'Sangat besar',
     aiFontSizeCustom: 'Kustom',
     setAiSpellcheck: 'Pemeriksaan ejaan di obrolan AI',
+    setAiUndoHistory: 'Riwayat urungkan untuk suntingan AI',
+    setAiUndoHistoryDesc:
+      'Jika dimatikan, perubahan yang dibuat AI tidak dapat dibatalkan dengan Ctrl+Z atau [Urungkan], dan memori yang dipakai lebih sedikit.',
     setDefaultApp: 'Aplikasi default untuk dokumen Office',
     setDefaultAppDesc: 'Buka file .docx, .xlsx, dan .pptx di GenOffice saat diklik dua kali.',
     setDefaultAppIs: 'GenOffice sudah menjadi aplikasi default.',
@@ -6221,6 +6250,9 @@ export const strings = {
     aiFontSizeXLarge: 'Очень крупный',
     aiFontSizeCustom: 'Другой',
     setAiSpellcheck: 'Проверка орфографии в чате ИИ',
+    setAiUndoHistory: 'История отмены правок ИИ',
+    setAiUndoHistoryDesc:
+      'Если выключить, изменения, внесённые ИИ, нельзя будет отменить с помощью Ctrl+Z или [Отменить], зато будет использоваться меньше памяти.',
     setDefaultApp: 'Приложение по умолчанию для документов Office',
     setDefaultAppDesc: 'Открывать файлы .docx, .xlsx и .pptx в GenOffice по двойному щелчку.',
     setDefaultAppIs: 'GenOffice уже является приложением по умолчанию.',
@@ -6827,6 +6859,9 @@ export const strings = {
     aiFontSizeXLarge: 'كبير جدًا',
     aiFontSizeCustom: 'مخصص',
     setAiSpellcheck: 'التدقيق الإملائي في محادثة الذكاء الاصطناعي',
+    setAiUndoHistory: 'سجل التراجع عن تعديلات الذكاء الاصطناعي',
+    setAiUndoHistoryDesc:
+      'عند الإيقاف، لا يمكن التراجع عن التغييرات التي يجريها الذكاء الاصطناعي باستخدام Ctrl+Z أو [تراجع]، ويُستخدم قدر أقل من الذاكرة.',
     setDefaultApp: 'التطبيق الافتراضي لمستندات Office',
     setDefaultAppDesc: 'فتح ملفات .docx و.xlsx و.pptx في GenOffice عند النقر المزدوج.',
     setDefaultAppIs: 'GenOffice هو التطبيق الافتراضي بالفعل.',
@@ -7418,6 +7453,9 @@ export const strings = {
     aiFontSizeXLarge: 'Muito grande',
     aiFontSizeCustom: 'Personalizado',
     setAiSpellcheck: 'Verificação ortográfica no chat de IA',
+    setAiUndoHistory: 'Histórico de desfazer das edições da IA',
+    setAiUndoHistoryDesc:
+      'Se desativado, as alterações feitas pela IA não podem ser revertidas com Ctrl+Z nem [Desfazer], e menos memória é usada.',
     setDefaultApp: 'App padrão para documentos do Office',
     setDefaultAppDesc: 'Abrir arquivos .docx, .xlsx e .pptx no GenOffice ao clicar duas vezes.',
     setDefaultAppIs: 'O GenOffice já é o app padrão.',
@@ -8021,6 +8059,9 @@ export const strings = {
     aiFontSizeXLarge: 'Molto grande',
     aiFontSizeCustom: 'Personalizzato',
     setAiSpellcheck: 'Controllo ortografico nella chat IA',
+    setAiUndoHistory: 'Cronologia annullamenti delle modifiche dell’IA',
+    setAiUndoHistoryDesc:
+      'Se disattivata, le modifiche fatte dall’IA non si possono annullare con Ctrl+Z né con [Annulla], e si usa meno memoria.',
     setDefaultApp: 'App predefinita per i documenti Office',
     setDefaultAppDesc: 'Apri i file .docx, .xlsx e .pptx in GenOffice con un doppio clic.',
     setDefaultAppIs: 'GenOffice è già l’app predefinita.',
@@ -8624,6 +8665,9 @@ export const strings = {
     aiFontSizeXLarge: 'Bardzo duży',
     aiFontSizeCustom: 'Niestandardowy',
     setAiSpellcheck: 'Sprawdzanie pisowni w czacie AI',
+    setAiUndoHistory: 'Historia cofania zmian wprowadzanych przez AI',
+    setAiUndoHistoryDesc:
+      'Po wyłączeniu zmian wprowadzonych przez AI nie można cofnąć za pomocą Ctrl+Z ani [Cofnij], ale zużywa się mniej pamięci.',
     setDefaultApp: 'Domyślna aplikacja dla dokumentów Office',
     setDefaultAppDesc: 'Otwieraj pliki .docx, .xlsx i .pptx w GenOffice po dwukrotnym kliknięciu.',
     setDefaultAppIs: 'GenOffice jest już aplikacją domyślną.',
@@ -9513,6 +9557,9 @@ export const strings = {
     aiFontSizeXLarge: 'Extra velké',
     aiFontSizeCustom: 'Vlastní',
     setAiSpellcheck: 'Kontrola pravopisu v chatu AI',
+    setAiUndoHistory: 'Historie vrácení úprav od AI',
+    setAiUndoHistoryDesc:
+      'Když je vypnuto, změny provedené AI nelze vrátit pomocí Ctrl+Z ani [Zpět], ale spotřebuje se méně paměti.',
     setDefaultApp: 'Výchozí aplikace pro dokumenty Office',
     setDefaultAppDesc: 'Otevírat soubory .docx, .xlsx a .pptx v GenOffice poklepáním.',
     setDefaultAppIs: 'GenOffice už je výchozí aplikací.',
@@ -9816,6 +9863,9 @@ export const strings = {
     aiFontSizeXLarge: 'Extra groot',
     aiFontSizeCustom: 'Aangepast',
     setAiSpellcheck: 'Spellingcontrole in AI-chat',
+    setAiUndoHistory: 'Ongedaan-maakgeschiedenis voor AI-wijzigingen',
+    setAiUndoHistoryDesc:
+      'Als dit uit staat, kunnen wijzigingen die de AI aanbrengt niet ongedaan worden gemaakt met Ctrl+Z of [Ongedaan maken], en wordt er minder geheugen gebruikt.',
     setDefaultApp: 'Standaardapp voor Office-documenten',
     setDefaultAppDesc: '.docx-, .xlsx- en .pptx-bestanden in GenOffice openen bij dubbelklikken.',
     setDefaultAppIs: 'GenOffice is al de standaardapp.',
@@ -10415,6 +10465,9 @@ export const strings = {
     aiFontSizeXLarge: 'Sangat besar',
     aiFontSizeCustom: 'Tersuai',
     setAiSpellcheck: 'Semakan ejaan dalam sembang AI',
+    setAiUndoHistory: 'Sejarah buat asal untuk suntingan AI',
+    setAiUndoHistoryDesc:
+      'Jika dimatikan, perubahan yang dibuat AI tidak boleh dibuat asal dengan Ctrl+Z atau [Buat asal], dan lebih sedikit memori digunakan.',
     setDefaultApp: 'Apl lalai untuk dokumen Office',
     setDefaultAppDesc: 'Buka fail .docx, .xlsx dan .pptx dalam GenOffice apabila diklik dua kali.',
     setDefaultAppIs: 'GenOffice sudah menjadi apl lalai.',
@@ -11012,6 +11065,9 @@ export const strings = {
     aiFontSizeXLarge: 'גדול מאוד',
     aiFontSizeCustom: 'מותאם אישית',
     setAiSpellcheck: 'בדיקת איות בצ׳אט ה-AI',
+    setAiUndoHistory: 'היסטוריית ביטול של עריכות AI',
+    setAiUndoHistoryDesc:
+      'כשהאפשרות כבויה, לא ניתן לבטל באמצעות Ctrl+Z או [בטל] שינויים ש-AI מבצע, ונעשה שימוש בפחות זיכרון.',
     setDefaultApp: 'אפליקציית ברירת המחדל למסמכי Office',
     setDefaultAppDesc: 'פתיחת קובצי .docx‏, .xlsx ו‑.pptx ב‑GenOffice בלחיצה כפולה.',
     setDefaultAppIs: 'GenOffice היא כבר ברירת המחדל.',
@@ -11592,6 +11648,9 @@ export const strings = {
     aiFontSizeXLarge: 'बहुत बड़ा',
     aiFontSizeCustom: 'कस्टम',
     setAiSpellcheck: 'AI चैट में वर्तनी जाँच',
+    setAiUndoHistory: 'AI संपादन का पूर्ववत इतिहास',
+    setAiUndoHistoryDesc:
+      'बंद होने पर, AI द्वारा किए गए बदलाव Ctrl+Z या [पूर्ववत करें] से वापस नहीं किए जा सकते, और कम मेमोरी इस्तेमाल होती है।',
     setDefaultApp: 'Office दस्तावेज़ों के लिए डिफ़ॉल्ट ऐप',
     setDefaultAppDesc: '.docx, .xlsx और .pptx फ़ाइलें डबल-क्लिक करने पर GenOffice में खोलें।',
     setDefaultAppIs: 'GenOffice पहले से डिफ़ॉल्ट ऐप है।',
@@ -12175,6 +12234,8 @@ export const strings = {
     aiFontSizeXLarge: '特大',
     aiFontSizeCustom: '自訂',
     setAiSpellcheck: 'AI 對話拼字檢查',
+    setAiUndoHistory: 'AI 修改復原記錄',
+    setAiUndoHistoryDesc: '關閉後，AI 所做的修改無法用 Ctrl+Z 或 [復原] 還原，但會佔用較少記憶體。',
     setDefaultApp: '設為 Office 文件預設程式',
     setDefaultAppDesc: '雙擊 .docx、.xlsx、.pptx 檔案時用 GenOffice 開啟。',
     setDefaultAppIs: 'GenOffice 已是預設程式。',

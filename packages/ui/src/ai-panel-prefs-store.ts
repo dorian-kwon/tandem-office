@@ -59,6 +59,16 @@ export function rememberAiPanelOpen(storageKey: string, open: boolean): void {
   localStorage.setItem(storageKey, open ? '1' : '0')
 }
 
+/**
+ * Whether an editor should keep undo entries for the edits the AI applies
+ * (the shell's "AI edit undo history" switch, default off). Editors read it at
+ * the moment an AI edit lands, not once at start-up, because the switch can be
+ * flipped in Settings while a document is open.
+ */
+export function aiEditUndoHistoryEnabled(): boolean {
+  return current.aiEditUndoHistory
+}
+
 export function useAiPanelPrefs(): AiPanelPrefs {
   return useSyncExternalStore(
     subscribe,

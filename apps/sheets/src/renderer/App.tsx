@@ -1,3 +1,5 @@
+import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
+import { withAdapterAiHistory } from './adapter-ai-history'
 import { focusWorksheet } from './sheet-focus'
 import {
   activateFormulaClosure,
@@ -4081,8 +4083,10 @@ export function App({
     // Non-lazy path: apply the passed plan directly (setPreview is async, so we
     // cannot rely on the preview state within the same tick).
     try {
-      const receipt = adapterRef.current.apply(plan)
-      const prunedRevision = pruneEmptyDefaultSheet(plan)
+      const { receipt, prunedRevision } = withAdapterAiHistory(adapterRef.current, () => ({
+        receipt: adapterRef.current.apply(plan),
+        prunedRevision: pruneEmptyDefaultSheet(plan),
+      }))
       // Row/column shifts and new sheets can't be patched cell-by-cell into
       // the existing Univer grid — rebuild the demo workbook from the snapshot.
       if (plan.structuralChanges.length > 0 || prunedRevision !== null) {
@@ -4144,7 +4148,7 @@ export function App({
         ...entry,
         autoApplied: {
           opCount: (entry.autoApplied?.opCount ?? 0) + opCount,
-          undoSteps: (entry.autoApplied?.undoSteps ?? 0) + 1,
+          undoSteps: (entry.autoApplied?.undoSteps ?? 0) + (aiEditUndoHistoryEnabled() ? 1 : 0),
         },
       }))
       return Promise.resolve({ ok: true })
@@ -4192,6 +4196,9 @@ export function App({
       stored.plan,
       opExecutorContext(runtime, workbook, state),
       {
+        // In-app AI apply (chat auto-apply, translation view): undo follows
+        // the "AI edit undo history" setting.
+        aiEdit: true,
         verifyBeforeApply: () => {
           if (lazyPreviewRef.current !== stored || lazyWorkbookRef.current !== state) {
             verified = { ok: false, reason: t('appApplyTxFailed') }
@@ -4227,6 +4234,7 @@ export function App({
   function runUiOps(
     ops: readonly WorkbookOperation[],
     successMessage?: string | null,
+    aiEdit = false,
   ): Promise<ApplyOutcome> {
     const runtime = univerRef.current
     const state = lazyWorkbookRef.current
@@ -4244,6 +4252,7 @@ export function App({
     }
     return applyChangePlan(plan, opExecutorContext(runtime, workbook, state), {
       userFacing: true,
+      ...(aiEdit ? { aiEdit: true } : {}),
       ...(successMessage === undefined ? {} : { successMessage }),
       // The apply queues behind in-flight applies; the file may be closed or
       // replaced meanwhile — drop the click silently rather than mutate the
@@ -5274,7 +5283,8 @@ export function App({
           return { ok: false, reason: error instanceof Error ? error.message : String(error) }
         }
       }
-      const outcome = await runUiOps(ops)
+      // The MCP bridge is an AI source: undo follows the AI edit setting.
+      const outcome = await runUiOps(ops, undefined, true)
       if (!outcome.ok) return outcome
       // A formula's text lands synchronously but its result is computed
       // asynchronously, so an immediate read of the cells this batch targeted

@@ -178,3 +178,7 @@ describe('the cloud generation route is gone', () => {
     expect(skill).toContain('generatePageLocal')
   })
 })
+
+vi.mock('../src/renderer/ai/ai-edit-api', () => ({
+  aiEditApi: () => window.slidesApi,
+}))

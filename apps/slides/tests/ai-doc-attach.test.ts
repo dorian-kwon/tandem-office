@@ -131,3 +131,7 @@ describe('slides AI panel: attach from a document', () => {
     }
   })
 })
+
+vi.mock('../src/renderer/ai/ai-edit-api', () => ({
+  aiEditApi: () => window.slidesApi,
+}))

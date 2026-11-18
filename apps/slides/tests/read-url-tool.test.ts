@@ -128,3 +128,7 @@ describe('the read_url tool', () => {
     expect(r.summary).toBeTruthy()
   })
 })
+
+vi.mock('../src/renderer/ai/ai-edit-api', () => ({
+  aiEditApi: () => window.slidesApi,
+}))

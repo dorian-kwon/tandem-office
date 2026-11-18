@@ -1,6 +1,6 @@
 import ReactDOM from 'react-dom/client'
 import { htmlDir, htmlLang, type Lang } from '@genoffice/i18n'
-import { applyAiPanelPrefs, installScreenTips } from '@genoffice/ui'
+import { applyAiPanelPrefs, installScreenTips, normalizeAiPanelPrefs } from '@genoffice/ui'
 
 import '@genoffice/ui/tokens.css'
 import '@genoffice/ui/screentip.css'
@@ -23,6 +23,7 @@ import {
 } from './cell-font-fallback'
 import { LocaleProvider, setModuleLang } from './i18n/locale'
 import { registerTemplateFonts } from './template-fonts'
+import { setAiEditUndoHistory } from './univer-state'
 import type { DocTheme, UiTheme } from '../shared/desktop-api'
 import './styles.css'
 
@@ -94,11 +95,16 @@ async function bootstrap(): Promise<void> {
   const queuedWorkbookAtBoot = await window.desktopApi?.hasQueuedWorkbook?.().catch(() => false)
   window.desktopApi?.onThemeChanged(applyTheme)
   window.desktopApi?.onDocumentThemeChanged?.(applyDocumentTheme)
+  // The apply path reads the "AI edit undo history" switch from univer-state.
+  const applyPrefs = (raw: unknown): void => {
+    applyAiPanelPrefs(raw)
+    setAiEditUndoHistory(normalizeAiPanelPrefs(raw).aiEditUndoHistory)
+  }
   await window.desktopApi
     ?.getAiPanelPrefs?.()
-    .then(applyAiPanelPrefs)
+    .then(applyPrefs)
     .catch(() => {})
-  window.desktopApi?.onAiPanelPrefsChanged?.(applyAiPanelPrefs)
+  window.desktopApi?.onAiPanelPrefsChanged?.(applyPrefs)
   ReactDOM.createRoot(root!).render(
     <LocaleProvider initial={lang}>
       <App queuedWorkbookAtBoot={queuedWorkbookAtBoot === true} />

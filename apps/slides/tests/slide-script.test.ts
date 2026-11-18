@@ -841,3 +841,7 @@ describe('execute_slide_script tool', () => {
     expect(r.output).toContain('style 1 item(s)')
   })
 })
+
+vi.mock('../src/renderer/ai/ai-edit-api', () => ({
+  aiEditApi: () => window.slidesApi,
+}))

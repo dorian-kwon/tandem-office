@@ -17,6 +17,7 @@ import {
   type FileActionContext,
 } from './file-actions'
 import { parseDocxOffThread } from './parse-off-thread'
+import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
 
 /**
  * OCR text into the Word document on screen. The chat's `document_ocr` hands over the pictures read
@@ -27,7 +28,8 @@ import { parseDocxOffThread } from './parse-off-thread'
  * Undo: the swap changes the save baseline along with the content, so the editor's own history
  * cannot step back over it. The state before the swap is kept instead, and undo (when the editor
  * has nothing left to undo) and redo bring it back and forward. A save, or opening another
- * document, ends it.
+ * document, ends it. With AI edit undo history off (decision 0114), a temporary before-state
+ * still restores a failed swap, but no before/after document copies remain as undo history.
  */
 
 export { clearOcrHistory }
@@ -130,13 +132,17 @@ export async function placeOcrIntoOpenDocument(
   if (!stillHere() || !ctx.doc || !ctx.editor)
     return { ok: false, reason: 'the document changed while the text was placed' }
   const editor = ctx.editor
+  const keepHistory = aiEditUndoHistoryEnabled()
   const before: OcrSnapshot = {
     pm: editor.getJSON() as PmNode,
     doc: ctx.doc,
     dirty: ctx.dirtyRef.current,
   }
   // set before the swap: the buttons that follow the editor's transactions see undo is possible
-  const history: OcrHistory = { before, after: null, applied: true, restored: null }
+  const history: OcrHistory | null = keepHistory
+    ? { before, after: null, applied: true, restored: null }
+    : null
+  // an earlier OCR undo would now return to a document older than this swap
   setOcrHistory(history)
   // the translation lock is let go for the moment of the swap and put back as it was
   const relock = !editor.isEditable
@@ -144,10 +150,12 @@ export async function placeOcrIntoOpenDocument(
   try {
     swapDocumentContent(ctx, reparsed)
     ctx.dirtyRef.current = true
-    history.after = {
-      pm: editor.getJSON() as PmNode,
-      doc: { ...before.doc, parsed: reparsed },
-      dirty: true,
+    if (history) {
+      history.after = {
+        pm: editor.getJSON() as PmNode,
+        doc: { ...before.doc, parsed: reparsed },
+        dirty: true,
+      }
     }
   } catch (err) {
     setOcrHistory(null)

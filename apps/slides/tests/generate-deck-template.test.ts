@@ -695,3 +695,7 @@ describe('the three tools (6.6)', () => {
     })
   })
 })
+
+vi.mock('../src/renderer/ai/ai-edit-api', () => ({
+  aiEditApi: () => window.slidesApi,
+}))

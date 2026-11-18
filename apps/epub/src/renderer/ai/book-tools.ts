@@ -1,3 +1,4 @@
+import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
 /**
  * What the AI's five book tools do (spec §7): read_book, read_chapter,
  * find_text, edit_blocks and start_book_translation.
@@ -39,7 +40,7 @@ export interface BookAiEditor {
   flush(): Promise<void>
   applyEditGroups(
     groups: readonly EditGroup[],
-    options?: { atomic?: boolean },
+    options?: { atomic?: boolean; aiEdit?: boolean },
   ): Promise<EditGroupsOutcome>
 }
 
@@ -594,7 +595,7 @@ export class BookTools {
         opOf.push([i])
       }
     }
-    const outcome = await editor.applyEditGroups(groups, { atomic: true })
+    const outcome = await editor.applyEditGroups(groups, { atomic: true, aiEdit: true })
     if (!outcome.ok) {
       const failure = outcome.failure
       const opIndex = opOf[outcome.index]?.[failure.index ?? 0] ?? opOf[outcome.index]?.[0] ?? 0
@@ -613,7 +614,7 @@ export class BookTools {
 
   private appliedText(count: number, results: readonly OkEdit[]): string {
     const lines = [
-      `Applied ${count} edit(s) as one step; the user can take the whole call back with Ctrl+Z. The book is not saved until the user saves it.`,
+      `Applied ${count} edit(s). ${aiEditUndoHistoryEnabled() ? 'The user can take the whole call back with Ctrl+Z.' : 'AI edit undo history is off; this call cannot be undone.'} The book is not saved until the user saves it.`,
     ]
     for (const result of results) {
       if (result.created.length > 0) {

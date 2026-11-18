@@ -1,3 +1,4 @@
+import { aiEditApi } from './ai-edit-api'
 import { attachedImageNote, type AgentSkill, type ToolDisplay } from '@genoffice/agent-core'
 import type {
   GroupRenderNode,
@@ -1652,7 +1653,7 @@ async function executeTool(
       // ── Dispatch: the whole script is ONE transaction — the collected primitives go
       //   to the main process in a single IPC and apply atomically through the op
       //   executor (any failure rolls the deck back there and returns a guided error).
-      const applied = await window.slidesApi.applyEditScript({
+      const applied = await aiEditApi().applyEditScript({
         slideIndex: idx,
         fitWidthPx: access.fitWidthPx,
         boxes: r.ops,
@@ -1831,7 +1832,7 @@ async function executeTool(
         if (!/^(https?|file):\/\//.test(url)) return fail(t('aiFailInsertImage'), 'Invalid url')
         payload = { url }
       }
-      const r = await window.slidesApi.insertImageUrl({
+      const r = await aiEditApi().insertImageUrl({
         slideIndex: idx,
         ...payload,
         xPx: Number(call.input.x),
@@ -1883,7 +1884,7 @@ async function executeTool(
         if (!/^(https?|file):\/\//.test(url)) return fail(t(failKey), 'Invalid url')
         payload = { url }
       }
-      const updated = await window.slidesApi.replacePictureUrl({
+      const updated = await aiEditApi().replacePictureUrl({
         slideIndex: idx,
         sourceId,
         ...payload,
@@ -2846,7 +2847,7 @@ async function executeTool(
       if (typeof call.input.dataLabels === 'boolean') op.dataLabels = call.input.dataLabels
       if (typeof call.input.gridlines === 'boolean') op.gridlines = call.input.gridlines
       if (call.input.switchRowCol === true) op.switchRowCol = true
-      const updated = await window.slidesApi.editChart(op)
+      const updated = await aiEditApi().editChart(op)
       if (!updated)
         return fail(
           t('aiFailChartEdit'),
@@ -2867,7 +2868,7 @@ async function executeTool(
         return fail(t('aiFailApplyOps'), 'ops must be a non-empty array')
       const pre = preflightOps(opsIn, slides, state)
       if (!('ops' in pre)) return pre
-      const r = await window.slidesApi.applyTxn?.({
+      const r = await aiEditApi().applyTxn?.({
         ops: pre.ops,
         ...(call.input.dry_run === true ? { dryRun: true } : {}),
         ...(call.input.isolation === 'per_op' ? { isolation: 'per_op' as const } : {}),

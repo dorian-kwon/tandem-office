@@ -70,3 +70,27 @@ describe('AI panel side', () => {
     expect(sameAiPanelPrefs(right, normalizeAiPanelPrefs({ side: 'right' }))).toBe(true)
   })
 })
+
+describe('AI edit undo history', () => {
+  it('is off by default, including for settings files written before the toggle existed', () => {
+    expect(DEFAULT_AI_PANEL_PREFS.aiEditUndoHistory).toBe(false)
+    expect(normalizeAiPanelPrefs({}).aiEditUndoHistory).toBe(false)
+    expect(normalizeAiPanelPrefs(undefined).aiEditUndoHistory).toBe(false)
+    expect(normalizeAiPanelPrefs({ aiEditUndoHistory: 'yes' }).aiEditUndoHistory).toBe(false)
+  })
+
+  it('accepts an explicit boolean and keeps the other fields untouched', () => {
+    expect(normalizeAiPanelPrefs({ aiEditUndoHistory: true })).toEqual({
+      ...DEFAULT_AI_PANEL_PREFS,
+      aiEditUndoHistory: true,
+    })
+    expect(normalizeAiPanelPrefs({ aiEditUndoHistory: false }).aiEditUndoHistory).toBe(false)
+  })
+
+  it('does not discard a history-only preference change', () => {
+    const off = normalizeAiPanelPrefs({ aiEditUndoHistory: false })
+    const on = normalizeAiPanelPrefs({ aiEditUndoHistory: true })
+    expect(sameAiPanelPrefs(off, on)).toBe(false)
+    expect(sameAiPanelPrefs(on, normalizeAiPanelPrefs({ aiEditUndoHistory: true }))).toBe(true)
+  })
+})

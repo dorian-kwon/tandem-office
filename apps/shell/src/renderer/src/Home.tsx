@@ -855,7 +855,8 @@ function GroupPicker({ groups, count, onCancel, onPick, onCreate, onRemove }: Gr
 // ── Settings entry (bottom-left) ─────────────────────────
 // Shows where the AI subscription connection stands. Clicking it opens the
 // settings modal (SettingsModal.tsx) on its AI section, where the connect
-// cards live; the other preferences (language, theme, save location, update
+// cards live; the gear beside it opens the same modal on its General section.
+// The other preferences (language, theme, save location, update
 // channel) are one click away in the same dialog.
 
 function AccountEntry({
@@ -951,7 +952,7 @@ function AccountEntry({
               ? t('settings')
               : aiSubscriptionText(lang, 'connectTitle')
         }
-        aria-label={t('settings')}
+        aria-label={t('setSecAi')}
       >
         <span className={`account-avatar${summary.state === 'connected' ? ' logged-in' : ''}`}>
           <AiMark size={16} />
@@ -978,6 +979,24 @@ function AccountEntry({
             strokeLinecap="round"
             strokeLinejoin="round"
           />
+        </svg>
+      </button>
+      <button
+        className="account-gear"
+        onClick={() => openSettings({ section: 'general' })}
+        aria-haspopup="dialog"
+        aria-expanded={settingsOpen}
+        data-tip={t('settings')}
+        aria-label={t('settings')}
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path
+            d="M6.7 1.8h2.6l.4 1.7c.4.1.8.3 1.1.6l1.6-.6 1.3 2.2-1.3 1.2c.1.4.1.8 0 1.2l1.3 1.2-1.3 2.2-1.6-.6c-.3.3-.7.5-1.1.6l-.4 1.7H6.7l-.4-1.7c-.4-.1-.8-.3-1.1-.6l-1.6.6-1.3-2.2 1.3-1.2a3.4 3.4 0 0 1 0-1.2L2.3 5.7l1.3-2.2 1.6.6c.3-.3.7-.5 1.1-.6l.4-1.7Z"
+            stroke="currentColor"
+            strokeWidth="1.2"
+            strokeLinejoin="round"
+          />
+          <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.2" />
         </svg>
       </button>
     </div>

@@ -11,7 +11,7 @@ import type {
   AiSubscriptionStatus,
   SubscriptionStatusMap,
 } from '@genoffice/ai-provider/browser'
-import { aiSubscriptionText } from '@genoffice/ui'
+import { DEFAULT_AI_PANEL_PREFS, aiSubscriptionText } from '@genoffice/ui'
 import type { HomeApi } from '../src/shared/home-api'
 import type { SubscriptionApi } from '../src/shared/subscription-api'
 import { Home } from '../src/renderer/src/Home'
@@ -48,6 +48,7 @@ function installHome(): void {
     getAutoSaveDefault: async () => ({ on: false, updatedAt: 0 }),
     getDefaultAppStatus: async () => ({ state: 'unsupported', others: [], manualOnly: false }),
     getAiPanelPrefs: async () => ({ fontSize: 'default', customFontSize: 14, spellcheck: true }),
+    getAuthorName: async () => ({ value: '', fallback: '' }),
     getUpdateChannel: async () => 'stable',
     getAppVersion: async () => '1.0.0',
     getCodexModels: async () => ({ models: [], defaultModel: '' }),
@@ -190,6 +191,54 @@ describe('home settings entry', () => {
     await click(host.querySelector('.set-close'))
     expect(host.querySelector('.set-sub-cards')).toBeNull()
     expect(refresh).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('home settings gear', () => {
+  const gear = (): HTMLButtonElement =>
+    host.querySelector<HTMLButtonElement>('.account-entry .account-gear')!
+
+  it('sits next to the account button with a localized label', async () => {
+    await renderHome(statuses({ state: 'ready' }, { state: 'signed-out' }))
+    expect(gear()).toBeTruthy()
+    expect(gear().getAttribute('aria-label')).toBe('Settings')
+    expect(entry().getAttribute('aria-label')).toBe('AI')
+    expect(gear().dataset.tip).toBe('Settings')
+    expect(gear().parentElement).toBe(entry().parentElement)
+  })
+
+  it('opens Settings on the General section, leaving the account button on AI', async () => {
+    const refresh = vi.fn()
+    await renderHome(statuses({ state: 'signed-out' }, { state: 'signed-out' }), { refresh })
+    await click(gear())
+    expect(host.querySelector('.set-nav-item.active')?.textContent).toContain('General')
+    expect(host.querySelector('.set-sub-cards')).toBeNull()
+    expect(host.querySelector('[role="switch"][aria-label="AI edit undo history"]')).toBeTruthy()
+
+    await click(host.querySelector('.set-close'))
+    expect(refresh).toHaveBeenCalledTimes(1)
+
+    await click(entry())
+    expect(host.querySelector('.set-nav-item.active')?.textContent).toContain('AI')
+  })
+
+  it('shows the AI edit undo history switch off by default and persists a toggle', async () => {
+    const setAiPanelPrefs = vi.fn(async (patch: Record<string, unknown>) => ({
+      ...DEFAULT_AI_PANEL_PREFS,
+      ...patch,
+    }))
+    ;(window.aiOffice as unknown as Record<string, unknown>).getAiPanelPrefs = async () =>
+      DEFAULT_AI_PANEL_PREFS
+    ;(window.aiOffice as unknown as Record<string, unknown>).setAiPanelPrefs = setAiPanelPrefs
+    await renderHome(statuses({ state: 'ready' }, { state: 'ready' }))
+    await click(gear())
+    const toggle = host.querySelector<HTMLButtonElement>(
+      '[role="switch"][aria-label="AI edit undo history"]',
+    )!
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
+    await click(toggle)
+    expect(setAiPanelPrefs).toHaveBeenCalledWith({ aiEditUndoHistory: true })
+    expect(toggle.getAttribute('aria-checked')).toBe('true')
   })
 })
 

@@ -129,7 +129,7 @@ import {
 } from './run-state'
 import { useSubscriptionConnection } from './subscription-client'
 import { useI18n, t as tModule, aiLangDirective, type StringKey } from '../i18n/locale'
-import { createFileNav, Markdown } from '@genoffice/ui'
+import { aiEditUndoHistoryEnabled, createFileNav, Markdown, useAiPanelPrefs } from '@genoffice/ui'
 import {
   AiComposer,
   AiScopeQuote,
@@ -1235,7 +1235,11 @@ export function AiPanel({
     })
     loopRef.current = new AgentLoop<ProseMirrorNode>({
       transport: transportRef.current,
-      systemSuffix: aiLangDirective,
+      systemSuffix: () =>
+        aiLangDirective() +
+        (aiEditUndoHistoryEnabled()
+          ? ''
+          : '\nAI edit undo history is OFF. Do not promise Ctrl+Z or a rollback button for your document edits.'),
       get pastToolOutputLimits() {
         return aiProfileRef.current === 'translation'
           ? TRANSLATION_PAST_TOOL_OUTPUT_LIMITS
@@ -1309,7 +1313,12 @@ export function AiPanel({
           openDocument: ocrOpenDocument,
         }),
       ]),
-      captureSnapshot: () => captureRollbackSnapshot(editorRef.current),
+      // no roll-back point (and so no [Roll back] button) while AI edit undo history is off
+      // (the loop types the snapshot as a node; an absent one only skips `snapshotBefore`)
+      captureSnapshot: () =>
+        (aiEditUndoHistoryEnabled()
+          ? captureRollbackSnapshot(editorRef.current)
+          : undefined) as ProseMirrorNode,
       events: runStatus.wrap({
         onText: (text) => queueAssistantText(text),
         onToolStart: (call) => {
@@ -1323,7 +1332,9 @@ export function AiPanel({
         },
         onToolExecuted: ({ call, execution, snapshotBefore }) => {
           // The run's first pre-edit state wins so one roll-back undoes the whole run
-          if (snapshotBefore && !runSnapshotRef.current) runSnapshotRef.current = snapshotBefore
+          if (aiEditUndoHistoryEnabled() && snapshotBefore && !runSnapshotRef.current) {
+            runSnapshotRef.current = snapshotBefore
+          }
           if (execution.mutated) {
             // tracking off: accept immediately (same tick, so the yellow never paints);
             // tracking on: revisions stay pending, handled in the Review tab
@@ -1892,6 +1903,19 @@ export function AiPanel({
     if (!next) acceptChanges()
   }
 
+  // Switching the history off drops the roll-back points already kept (each holds a document
+  // version alive) and hides their buttons
+  const undoHistoryOn = useAiPanelPrefs().aiEditUndoHistory
+  useEffect(() => {
+    if (undoHistoryOn) return
+    runSnapshotRef.current = null
+    setChat((prev) =>
+      prev.some((e) => e.snapshot)
+        ? prev.map((e) => (e.snapshot ? { ...e, snapshot: undefined } : e))
+        : prev,
+    )
+  }, [undoHistoryOn])
+
   const rollback = (entryIdx: number, snapshot: ProseMirrorNode) => {
     restoreRollbackSnapshot(editor, snapshot)
     // The document rewound to before this turn, so this and every later
@@ -2247,7 +2271,7 @@ export function AiPanel({
                       </svg>
                     </button>
                   )}
-                  {entry.snapshot && (
+                  {entry.snapshot && undoHistoryOn && (
                     <>
                       {/* hairline between reply actions (icons) and the document action (icon+label);
                           CSS shows it only when an icon button actually precedes it */}

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { Editor } from '@tiptap/core'
 import { undoDepth } from '@tiptap/pm/history'
+import { applyAiPanelPrefs } from '@genoffice/ui'
 import { buildExtensions } from '../src/renderer/editor/extensions'
 import {
   buildDocWriterRequest,
@@ -15,6 +16,7 @@ import { MARKDOWN_RULES } from '../src/renderer/ai/markdown-skill'
 const editors: Editor[] = []
 afterEach(() => {
   for (const e of editors.splice(0)) e.destroy()
+  applyAiPanelPrefs({ aiEditUndoHistory: false })
 })
 
 function createEditor(md = ''): Editor {
@@ -127,6 +129,8 @@ describe('write_document tool', () => {
   })
 
   it('lands the streamed markdown as one regular insert on a blank document', async () => {
+    // undo history for AI edits is opt-in (decision 0114)
+    applyAiPanelPrefs({ aiEditUndoHistory: true })
     const editor = createEditor()
     const exec = await executeTool(
       editor,

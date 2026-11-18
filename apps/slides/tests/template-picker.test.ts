@@ -518,3 +518,7 @@ describe('in the AI panel', () => {
     expect(props.applySlide).not.toHaveBeenCalled()
   })
 })
+
+vi.mock('../src/renderer/ai/ai-edit-api', () => ({
+  aiEditApi: () => window.slidesApi,
+}))

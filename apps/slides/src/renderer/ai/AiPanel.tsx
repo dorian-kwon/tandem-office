@@ -1,4 +1,5 @@
 import { useChatWindow, EarlierChatMessages } from '@genoffice/ui'
+import { aiEditApi } from './ai-edit-api'
 import {
   aiPanelWidthAtPointer,
   AiPanelSideButton,
@@ -122,11 +123,13 @@ import {
   AiUsageChip,
   Markdown,
   addTokenUsage,
+  aiEditUndoHistoryEnabled,
   useAiPanelPrefs,
   useChatRunQueue,
   type AiScopeQuoteData,
   type AiTokenUsageView,
 } from '@genoffice/ui'
+import { aiHistoryBatchRequest } from '../history-batch'
 import sendEnterOn from '../assets/send-enter-on.png'
 import sendEnterOff from '../assets/send-enter-off.png'
 import sendStop from '../assets/send-stop.png'
@@ -535,7 +538,7 @@ export function AiPanel({
   const [input, setInput] = useState('')
   // Shared AI panel pref (Settings → General): the bespoke slides composer
   // must honor it like the shared AiComposer does.
-  const { spellcheck } = useAiPanelPrefs()
+  const { spellcheck, aiEditUndoHistory: undoHistoryOn } = useAiPanelPrefs()
   const [busy, setBusy] = useState(false)
   const runStatus = useAiRunStatus(busy)
   // the shared ask_choice question card: the answer starts the next run
@@ -1108,6 +1111,10 @@ export function AiPanel({
     historyBatchActiveRef.current = false
     const id = await window.slidesApi.endHistoryBatch()
     if (typeof id !== 'number') return
+    if (!aiEditUndoHistoryEnabled()) {
+      await window.slidesApi.aiSnapshotRelease(id)
+      return
+    }
     runSnapshotIdRef.current = id
     patchLastAssistant({ snapshotId: id })
   }
@@ -1329,7 +1336,7 @@ export function AiPanel({
         insertAt?: number,
       ) => {
         try {
-          const res = await window.slidesApi.landGeneratedPages(
+          const res = await aiEditApi().landGeneratedPages(
             pageMarkers,
             fitWidthPx,
             mode,
@@ -1381,7 +1388,7 @@ export function AiPanel({
       },
       regenerateSlide: async (slideIndex: number, marker: string) => {
         try {
-          const res = await window.slidesApi.landGeneratedPages(
+          const res = await aiEditApi().landGeneratedPages(
             [marker],
             fitWidthPx,
             'replace_at',
@@ -1707,7 +1714,11 @@ export function AiPanel({
     accessRef.current = access
     loopRef.current = new AgentLoop({
       transport: createElectronTransport(() => settingsRef.current, transportHooksRef.current),
-      systemSuffix: aiLangDirective,
+      systemSuffix: () =>
+        aiLangDirective() +
+        (aiEditUndoHistoryEnabled()
+          ? ''
+          : '\nAI edit undo history is OFF. Do not promise Ctrl+Z or a rollback button for your document edits.'),
       // a local model that reported no tool support answers in text only
       toolsAllowed: () => localModelCapabilities(settingsRef.current).tools !== false,
       skill: composeWithDrive('slides+files', '', () => loopRef.current?.messages ?? [], [
@@ -2158,7 +2169,12 @@ export function AiPanel({
         // Clear the flag before run: loop.run sets running synchronously, leaving no re-entry window
         runStartingRef.current = false
         await onBeforeRunRef.current?.()
-        if (await window.slidesApi.beginHistoryBatch()) historyBatchActiveRef.current = true
+        if (
+          await window.slidesApi.beginHistoryBatch(
+            aiHistoryBatchRequest(aiEditUndoHistoryEnabled()),
+          )
+        )
+          historyBatchActiveRef.current = true
         // the chosen project's context for this request (after the send gate, right before the run)
         await projectPanelRef.current.prepareSend()
         loop.run(modelInstruction, images)
@@ -2201,7 +2217,9 @@ export function AiPanel({
       setBusy(true)
       queueRunResolverRef.current = resolve
       void Promise.resolve(onBeforeRunRef.current?.())
-        .then(() => window.slidesApi.beginHistoryBatch())
+        .then(() =>
+          window.slidesApi.beginHistoryBatch(aiHistoryBatchRequest(aiEditUndoHistoryEnabled())),
+        )
         .then(async (ok) => {
           if (ok) historyBatchActiveRef.current = true
           runStartingRef.current = false
@@ -2330,14 +2348,20 @@ export function AiPanel({
           if (slidesRef.current[page]) lines.push(tGlobal('aiQcPageSkipped', { n: page + 1 }))
           continue
         }
-        const batchOpened = await window.slidesApi.beginHistoryBatch()
+        // switch off: this page's batch is no undo step; it keeps only its own rollback point
+        const qcRequest = aiHistoryBatchRequest(aiEditUndoHistoryEnabled(), true)
+        const batchOpened = await window.slidesApi.beginHistoryBatch(qcRequest)
         let result = await qcSlidePage({
           access,
           transport,
           settings: () => settingsRef.current,
           pageIndex: page,
           screenshot: shot,
-          systemSuffix: aiLangDirective,
+          systemSuffix: () =>
+            aiLangDirective() +
+            (aiEditUndoHistoryEnabled()
+              ? ''
+              : '\nAI edit undo history is OFF. Do not promise Ctrl+Z or a rollback button for your document edits.'),
           signal: controller.signal,
         })
         if (shot && result.error && isUnsupportedImageInputError(result.error)) {
@@ -2348,7 +2372,11 @@ export function AiPanel({
             settings: () => settingsRef.current,
             pageIndex: page,
             screenshot: null,
-            systemSuffix: aiLangDirective,
+            systemSuffix: () =>
+              aiLangDirective() +
+              (aiEditUndoHistoryEnabled()
+                ? ''
+                : '\nAI edit undo history is OFF. Do not promise Ctrl+Z or a rollback button for your document edits.'),
             signal: controller.signal,
           })
         }
@@ -2362,7 +2390,10 @@ export function AiPanel({
         } else if (result.edited && result.postIssues > result.preIssues) {
           // The fix made the deterministic audit worse — undo this page's batch
           if (typeof batchId === 'number') {
-            const restored = await window.slidesApi.aiSnapshotRestore(batchId)
+            const restored = await window.slidesApi.aiSnapshotRestore(
+              batchId,
+              qcRequest ? { recordUndo: false } : undefined,
+            )
             if (restored)
               applyDeckRef.current(restored, Math.min(currentRef.current, restored.length - 1))
           }
@@ -2373,7 +2404,11 @@ export function AiPanel({
               ? result.reply
               : tGlobal('aiQcPageFixedDefault')
           lines.push(tGlobal('aiQcPageFixed', { n: page + 1, summary }))
-          if (typeof batchId === 'number' && qcSnapshotId == null) qcSnapshotId = batchId
+          if (typeof batchId === 'number') {
+            // an internal rollback point is never offered to the person: free it
+            if (qcRequest) void window.slidesApi.aiSnapshotRelease(batchId)
+            else if (qcSnapshotId == null) qcSnapshotId = batchId
+          }
         } else {
           lines.push(tGlobal('aiQcPageOk', { n: page + 1 }))
         }
@@ -2845,7 +2880,7 @@ export function AiPanel({
                       </svg>
                     </button>
                   )}
-                  {entry.snapshotId != null && (
+                  {entry.snapshotId != null && undoHistoryOn && (
                     <>
                       {/* hairline between reply actions (icons) and the document action (icon+label);
                           CSS shows it only when an icon button actually precedes it */}

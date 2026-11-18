@@ -298,3 +298,7 @@ describe('slides AI panel: project folder', () => {
     ])
   })
 })
+
+vi.mock('../src/renderer/ai/ai-edit-api', () => ({
+  aiEditApi: () => window.slidesApi,
+}))

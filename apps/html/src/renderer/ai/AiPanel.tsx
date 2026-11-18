@@ -103,6 +103,8 @@ import {
   createFileNav,
   Markdown,
   useChatRunQueue,
+  aiEditUndoHistoryEnabled,
+  useAiPanelPrefs,
   type AiScopeQuoteData,
   type AiTokenUsageView,
 } from '@genoffice/ui'
@@ -628,6 +630,11 @@ export function AiPanel({
   busyRef.current = busy
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
   const [snapshots, setSnapshots] = useState<Snapshot[]>([])
+  // "AI edit undo history" off: no rollback list, and no source copy kept for one
+  const keepAiUndo = useAiPanelPrefs().aiEditUndoHistory
+  useEffect(() => {
+    if (!keepAiUndo) setSnapshots((prev) => (prev.length > 0 ? [] : prev))
+  }, [keepAiUndo])
   /** questionnaire / brief cards docked in the composer slot while a tool waits for the user */
   const [activeClarify, setActiveClarify] = useState<ClarifyQuestion[] | null>(null)
   const clarifyResolverRef = useRef<((r: { answers: string; cancelled?: boolean }) => void) | null>(
@@ -1087,9 +1094,9 @@ export function AiPanel({
   const runBriefWriterRef = useRef(runBriefWriter)
   runBriefWriterRef.current = runBriefWriter
 
-  const loopRef = useRef<AgentLoop<DocSnapshot> | null>(null)
+  const loopRef = useRef<AgentLoop<DocSnapshot | undefined> | null>(null)
   if (!loopRef.current) {
-    loopRef.current = new AgentLoop<DocSnapshot>({
+    loopRef.current = new AgentLoop<DocSnapshot | undefined>({
       transport: transportRef.current,
       // a local model that reported no tool support answers in text only
       toolsAllowed: () =>
@@ -1154,8 +1161,13 @@ export function AiPanel({
         choice.skill,
         ...panelProjectSkill({ run: projectChat.run, lang: () => langRef.current }),
       ]),
-      captureSnapshot: () => depsRef.current.getSnapshot(),
-      systemSuffix: () => aiLangDirective(langRef.current),
+      captureSnapshot: () =>
+        aiEditUndoHistoryEnabled() ? depsRef.current.getSnapshot() : undefined,
+      systemSuffix: () =>
+        aiLangDirective(langRef.current) +
+        (aiEditUndoHistoryEnabled()
+          ? ''
+          : '\nAI edit undo history is OFF. Do not promise Ctrl+Z or a rollback button for your document edits.'),
       events: runStatus.wrap({
         onText: (text) => patchLast({ text }),
         onToolStart: (call) => {
@@ -1169,7 +1181,7 @@ export function AiPanel({
         },
         onToolExecuted: ({ call, execution, snapshotBefore }) => {
           if (execution.mutated) runMutatedRef.current = true
-          if (snapshotBefore !== undefined) {
+          if (snapshotBefore !== undefined && aiEditUndoHistoryEnabled()) {
             const label = runInstructionRef.current.slice(0, 40)
             const time = new Date().toLocaleTimeString([], {
               hour: '2-digit',
@@ -2364,7 +2376,7 @@ export function AiPanel({
         <McpPermissionCard lang={lang} />
       </div>
 
-      {snapshots.length > 0 && (
+      {keepAiUndo && snapshots.length > 0 && (
         <div className="ai-versions">
           <div className="ai-versions-title">
             <IconClock />

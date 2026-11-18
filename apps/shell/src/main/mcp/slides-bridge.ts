@@ -197,6 +197,8 @@ export interface SlidesBridgeDeps {
   openBlankTab: () => number
   /** close a blank tab whose session never became ready, so a failed create_session leaves no orphan */
   abandonBlankTab?: (wcId: number) => void
+  /** the "AI edit undo history" setting; omitted = keep undo (the pre-setting behaviour) */
+  aiEditUndoHistory?: () => boolean
 }
 
 export function createSlidesControl(deps: SlidesBridgeDeps): SlidesControl {
@@ -213,7 +215,10 @@ export function createSlidesControl(deps: SlidesBridgeDeps): SlidesControl {
     },
     runTxn: async (wcId: number, req: SlidesTxnRequest) => {
       const session = requireSession(wcId)
-      const result = applySessionTxn(session, req as Parameters<typeof applySessionTxn>[1])
+      // An MCP transaction is an AI edit: with the setting off it leaves no undo step.
+      const result = applySessionTxn(session, req as Parameters<typeof applySessionTxn>[1], {
+        dropUndo: deps.aiEditUndoHistory ? !deps.aiEditUndoHistory() : false,
+      })
       if (!result) throw new Error('the deck session is gone — call create_session again')
       // The ordinary `slides:apply-txn` path has an originating renderer that
       // applies its own IPC return value; MCP runs in the main process, so the

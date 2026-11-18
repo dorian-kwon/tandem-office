@@ -3505,6 +3505,42 @@ function withPortableWidths(doc, fn) {
   }
 }
 
+/** Run a synchronous plugin transaction without retaining its successful undo command.
+ * The pinned studio still creates its temporary snapshot for atomic failure rollback.
+ * Only our command is intercepted; normal typing and memo commands keep their history.
+ */
+export function withoutAiUndoHistory(history, run) {
+  if (!history || typeof history.execute !== 'function' || !Array.isArray(history.redoStack)) {
+    throw new Error('the editor does not expose the AI undo history adapter')
+  }
+  const execute = history.execute
+  history.execute = function (command, wasm) {
+    if (!command.type?.startsWith('snapshot:plugin:ieum-agent:')) {
+      return execute.call(this, command, wasm)
+    }
+    const isNoOp = command.isNoOp
+    command.isNoOp = function () {
+      if (!isNoOp?.call(this)) {
+        for (const redo of history.redoStack) redo.discard?.(wasm)
+        history.redoStack = []
+      }
+      return true
+    }
+    try {
+      // The normal no-op branch frees the snapshot without pushing or evicting a human step.
+      return execute.call(this, command, wasm)
+    } finally {
+      // InputHandler checks the real result after execute to refresh and mark the document dirty.
+      command.isNoOp = isNoOp
+    }
+  }
+  try {
+    return run()
+  } finally {
+    history.execute = execute
+  }
+}
+
 export const agentPlugin = {
   id: AGENT_PLUGIN_ID,
   apiVersion: 1,
@@ -4360,6 +4396,21 @@ export const agentPlugin = {
      * given `approvedMemoIds` may take only those memos: when the document changed while the
      * user was asked and the change would now take another one, it is refused again.
      */
+    let skipAiHistory = false
+    let transactionHistory = null
+    host.automation.registerCommand?.({
+      id: 'ext:ieum-ai-history',
+      label: 'Read the AI transaction history adapter',
+      execute: (services) => {
+        transactionHistory = services.getInputHandler()?.history ?? null
+      },
+    })
+    const transact = (label, fn) => {
+      if (!skipAiHistory || MEMO_CHANGES.has(label)) return host.transaction(label, fn)
+      transactionHistory = null
+      host.automation.execute('ext:ieum-ai-history')
+      return withoutAiUndoHistory(transactionHistory, () => host.transaction(label, fn))
+    }
     const change = (label, fn, options) => {
       const allowMemoRemoval = options?.allowMemoRemoval === true || options?.memoPolicy === 'allow'
       const approvedMemos = Array.isArray(options?.approvedMemoIds)
@@ -4373,7 +4424,7 @@ export const agentPlugin = {
       try {
         let done
         try {
-          done = host.transaction(label, (tx) => {
+          done = transact(label, (tx) => {
             tx.deferPagination()
             const doc = tx.doc()
             const before = paragraphCounts(doc)
@@ -4524,6 +4575,22 @@ export const agentPlugin = {
       })
 
     const api = {
+      invokeAi: (method, args, recordUndo) => {
+        if (
+          method === 'invokeAi' ||
+          !Object.hasOwn(api, method) ||
+          typeof api[method] !== 'function'
+        ) {
+          throw new Error('unknown AI editor method')
+        }
+        const previous = skipAiHistory
+        skipAiHistory = recordUndo !== true
+        try {
+          return api[method](...args)
+        } finally {
+          skipAiHistory = previous
+        }
+      },
       foreignChanges: () => foreign,
 
       /** The whole document as plain text, table cells included, in reading order. */

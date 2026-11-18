@@ -1,4 +1,5 @@
 import { useChatWindow, EarlierChatMessages } from '@genoffice/ui'
+import { aiEditUndoHistoryEnabled, useAiPanelPrefs } from '@genoffice/ui'
 import {
   AI_QUEUE_LABELS,
   AiBlockedNotice,
@@ -653,6 +654,7 @@ export function AiPanel({
   const runInstructionRef = useRef('')
   /** document changes of the in-flight run, in the order they were made */
   const runChangesRef = useRef<HwpChange[]>([])
+  const runUndoableRef = useRef(true)
   /** foreign-change count read when the in-flight run began; null when it could not be read */
   const runForeignRef = useRef<number | null>(null)
   /** the user took the previous run back: the model is told with the next message */
@@ -675,7 +677,8 @@ export function AiPanel({
     if (items.length === 0) return {}
     // the plugin marked each change on the pages as it made it
     setMarksShown(true)
-    const foreign = runForeignRef.current
+    const foreign = runUndoableRef.current ? runForeignRef.current : null
+    runUndoableRef.current = true
     // a run whose starting point is unknown cannot be checked, so it is not offered for undo
     return {
       changes: { items, foreign: foreign ?? -1, state: foreign === null ? 'refused' : 'applied' },
@@ -722,11 +725,15 @@ export function AiPanel({
     skillRef.current = createHwpSkill({
       // through the ref: the editor behind the bridge may be replaced while the panel lives
       bridge: new Proxy({} as AgentBridge, {
-        get: (_target, method: keyof AgentBridge) => bridgeRef.current[method],
+        get:
+          (_target, method: keyof AgentBridge) =>
+          (...args: unknown[]) =>
+            bridgeRef.current.invokeAi(method, args, aiEditUndoHistoryEnabled()),
       }),
       label: tGlobal,
       onChange: (change) => {
         runChangesRef.current.push(change)
+        if (!aiEditUndoHistoryEnabled()) runUndoableRef.current = false
         // the view follows the work: a change far down the document would go unseen
         if (change.place) void bridgeRef.current.reveal(change.place).catch(() => {})
       },
@@ -775,7 +782,11 @@ export function AiPanel({
         choice.skill,
         ...panelProjectSkill({ run: project.chat.run, lang: () => langRef.current }),
       ]),
-      systemSuffix: () => aiLangDirective(langRef.current),
+      systemSuffix: () =>
+        aiLangDirective(langRef.current) +
+        (aiEditUndoHistoryEnabled()
+          ? ''
+          : '\nAI edit undo history is OFF. Your document edits cannot be undone. Do not promise Ctrl+Z or a rollback button; this overrides any generic undo wording in tool descriptions.'),
       events: runStatus.wrap({
         onText: (text) => patchLast({ text }),
         onToolStart: (call) => {
@@ -1071,7 +1082,9 @@ export function AiPanel({
 
   // The editor's history is one stack: only the newest run still in the document can be
   // taken back, and a run that could not be taken back whole blocks the ones under it.
+  const undoHistoryOn = useAiPanelPrefs().aiEditUndoHistory
   const revertableIdx = (() => {
+    if (!undoHistoryOn) return -1
     for (let i = chat.length - 1; i >= 0; i--) {
       const state = chat[i]!.changes?.state
       if (state === 'applied') return i
@@ -1427,6 +1440,7 @@ export function AiPanel({
                 <RunChangesCard
                   changes={entry.changes}
                   canRevert={i === revertableIdx && !busy && !reverting}
+                  showRevert={undoHistoryOn}
                   onRevert={() => revert(i)}
                   onClearMarks={i === revertableIdx && marksShown ? clearMarks : null}
                   onShow={(place) => void bridgeRef.current.reveal(place).catch(() => {})}
@@ -1667,12 +1681,14 @@ export function AiPanel({
 function RunChangesCard({
   changes,
   canRevert,
+  showRevert,
   onRevert,
   onClearMarks,
   onShow,
 }: {
   changes: RunChanges
   canRevert: boolean
+  showRevert: boolean
   onRevert: () => void
   /** set while the editor marks these changes on the pages */
   onClearMarks: (() => void) | null
@@ -1691,7 +1707,7 @@ function RunChangesCard({
             {t('aiClearMarks')}
           </button>
         )}
-        {changes.state === 'applied' && (
+        {changes.state === 'applied' && showRevert && (
           <button className="ai-changes-revert" disabled={!canRevert} onClick={onRevert}>
             {t('aiRevert')}
           </button>

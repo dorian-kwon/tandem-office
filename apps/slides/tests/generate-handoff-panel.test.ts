@@ -511,3 +511,7 @@ describe('the deck a create flow handed over goes into the project (spec 6)', ()
     expect(onHandedRunDone).not.toHaveBeenCalled()
   })
 })
+
+vi.mock('../src/renderer/ai/ai-edit-api', () => ({
+  aiEditApi: () => window.slidesApi,
+}))

@@ -38,6 +38,8 @@ Word 문서(.docx)와 ODT(.odt) 에디터다. 그리고 배포되는 앱 전체�
 
 ## 이 모듈의 방식
 
+- AI 되돌리기 기록은 설정(기본 꺼짐)을 따른다(결정 0114). 공용 `executeTool`은 AI 편집기 facade를 쓴다. 명령·체인·dispatch의 동기 실행만 `addToHistory: false`로 표시하므로 비동기 AI를 기다리는 동안의 사람 타자·리본은 기록된다. MCP도 같은 실행기를 지난다. OCR과 채팅의 별도 AI 사본도 설정을 따른다.
+
 - 메인 코드는 shell 번들에 들어간다. shell이 `../../../docs/src/main/docs-main`을 상대 경로로 import하므로 `src/main`을 고친 뒤에는 shell을 다시 빌드해야 변경이 실행된다. 단독 실행(`src/main/index.ts` → `startDocsStandalone`)은 개발용이다.
 - **발표 모드는 읽기 모드를 전체화면으로 쓴다.** F5는 읽기 모드 + HTML 전체화면(셸 탭 줄까지 덮인다) + 쪽 맞춤, Ctrl+F5는 전체화면 없이 읽기 모드만, F5·Esc는 끝낸다. 키 판정은 `@genoffice/ui`의 `presentationKeyOf` 하나이고, 발표 중에는 `.presentation-mode`가 상태 표시줄을 숨긴다. 전체화면이 OS에서 풀려도(`fullscreenchange`) 읽기 모드까지 끝낸다.
 - 채널 이름으로 소유를 구분한다. `ai:*`는 앱 전체가 공유하고 여기서 한 번 등록된다. 다른 에디터와 겹칠 수 있는 것은 `docs:` 접두사를 붙인다(`docs:analyze-media`, `docs:ai-generate-image`). 슬라이드가 같은 프로세스에서 자기 `ai:generate-image`·`ai:analyze-media`를 등록하기 때문이다.

@@ -1,3 +1,4 @@
+import { handleAiEditable } from './ai-edit-history'
 /**
  * GenOffice Slides main process — pptx parsing/render-tree building/edit application/saving all live
  * here (Node side). The renderer only gets plain-data RenderSlide; edit intents are sent back
@@ -258,6 +259,7 @@ import type {
   MoveSlideOp,
   ApplyEditScriptOp,
   ApplyTxnOp,
+  HistoryBatchRequest,
   ApplyTxnResult,
   AnimationItem,
   ShapeKey,
@@ -289,6 +291,7 @@ import {
   readSlideMedia,
   rebuildSlideWithReparse,
   registerAiSnapshot,
+  releaseAiSnapshot,
   restoreAiSnapshot,
   restoreSnapshot,
   settleStaleHistoryBatch,
@@ -1343,7 +1346,26 @@ function journaledTxn(
  * errors), the executor owns atomicity/rollback/journal; dry-run rehearses the
  * plan without touching the deck or its history.
  */
-export function applySessionTxn(session: Session, req: ApplyTxnOp): ApplyTxnResult | null {
+export function applySessionTxn(
+  session: Session,
+  req: ApplyTxnOp,
+  /**
+   * `dropUndo`: the caller is an AI source that runs with the "AI edit undo history" switch off
+   * (the shell's MCP bridge); the applied transaction leaves no undo step. Inside an open history
+   * batch the batch decides, so this only trims the step this call pushed itself.
+   */
+  options: { dropUndo?: boolean } = {},
+): ApplyTxnResult | null {
+  if (options.dropUndo) {
+    const undo = session.undoStack
+    session.undoStack = []
+    try {
+      return applySessionTxn(session, req)
+    } finally {
+      session.undoStack = undo
+      scheduleHistoryNotify(session)
+    }
+  }
   const ops = Array.isArray(req?.ops) ? (req.ops as Parameters<typeof runTxn>[1]['ops']) : []
   if (ops.length === 0 || ops.length > 50) {
     return {
@@ -2111,7 +2133,7 @@ export function registerSlidesIpc(): void {
   // AI batch surface: raw ops arrive as one transaction — the shared core in
   // applySessionTxn (validation, atomicity/rollback/journal, autofit render pass)
   // is the same code the shell's MCP slides bridge drives.
-  ipcMain.handle('slides:apply-txn', (e, req: ApplyTxnOp): ApplyTxnResult | null => {
+  handleAiEditable('slides:apply-txn', (e, req: ApplyTxnOp): ApplyTxnResult | null => {
     const session = sessions.get(e.sender.id)
     if (!session) return null
     return applySessionTxn(session, req)
@@ -2121,7 +2143,7 @@ export function registerSlidesIpc(): void {
   // single IPC, compile to ops (script-map), and apply atomically — the executor
   // owns validation, rollback and the journal. Autofit is a render concern and
   // stays here, mirroring the per-op shims the script used to fan out to.
-  ipcMain.handle('slides:apply-edit-script', (e, op: ApplyEditScriptOp) => {
+  handleAiEditable('slides:apply-edit-script', (e, op: ApplyEditScriptOp) => {
     const session = sessions.get(e.sender.id)
     if (!session) return null
     const ops = mapScriptOps(session.opened, op)
@@ -2210,7 +2232,7 @@ export function registerSlidesIpc(): void {
     },
   )
 
-  ipcMain.handle(
+  handleAiEditable(
     'slides:land-generated-pages',
     async (
       e,
@@ -3572,7 +3594,7 @@ export function registerSlidesIpc(): void {
     return { slide: rebuilt, sourceId: newId }
   })
 
-  ipcMain.handle('slides:edit-chart', async (e, op: EditChartOp) => {
+  handleAiEditable('slides:edit-chart', async (e, op: EditChartOp) => {
     const session = sessions.get(e.sender.id)
     if (!session) return null
     const slide = session.opened.deck.slides[op.slideIndex]
@@ -4800,10 +4822,15 @@ export function registerSlidesIpc(): void {
     else e.sender.paste()
   })
 
-  ipcMain.handle('slides:history-batch-begin', (e) => {
+  ipcMain.handle('slides:history-batch-begin', (e, options?: HistoryBatchRequest) => {
     const session = sessions.get(e.sender.id)
     if (!session) return false
-    beginHistoryBatch(session)
+    // Only the AI panel asks for a drop batch (the "AI edit undo history" switch is off)
+    const dropUndo = options?.dropUndo === true
+    beginHistoryBatch(session, {
+      dropUndo,
+      keepRollback: dropUndo && options?.keepRollback === true,
+    })
     return true
   })
 
@@ -4814,13 +4841,22 @@ export function registerSlidesIpc(): void {
     return before ? registerAiSnapshot(session, before) : null
   })
 
-  ipcMain.handle('slides:ai-snapshot-restore', (e, id: number) => {
+  ipcMain.handle('slides:ai-snapshot-release', (e, id: number) => {
     const session = sessions.get(e.sender.id)
-    if (!session || session.masterEdit || session.historyBatch) return null
-    if (!restoreAiSnapshot(session, id)) return null
-    scheduleDeckBroadcast(session)
-    return buildAllRenderSlides(session.opened, session.fitWidthPx)
+    if (session) releaseAiSnapshot(session, id)
   })
+
+  ipcMain.handle(
+    'slides:ai-snapshot-restore',
+    (e, id: number, options?: { recordUndo?: boolean }) => {
+      const session = sessions.get(e.sender.id)
+      if (!session || session.masterEdit || session.historyBatch) return null
+      if (!restoreAiSnapshot(session, id, { recordUndo: options?.recordUndo !== false }))
+        return null
+      scheduleDeckBroadcast(session)
+      return buildAllRenderSlides(session.opened, session.fitWidthPx)
+    },
+  )
 
   ipcMain.handle('slides:undo', (e) => {
     const session = sessions.get(e.sender.id)

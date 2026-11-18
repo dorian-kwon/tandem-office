@@ -16,6 +16,7 @@ export type AgentBridge = {
 export type AgentBridgeEditor = Pick<RhwpEditor, 'plugins'>
 
 const METHODS = [
+  'invokeAi',
   'foreignChanges',
   'readText',
   'listPictures',

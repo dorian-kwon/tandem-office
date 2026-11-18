@@ -213,3 +213,7 @@ describe('attachment:// references (r182 family: embed the original file, never 
     expect(api().replacePictureUrl).not.toHaveBeenCalled()
   })
 })
+
+vi.mock('../src/renderer/ai/ai-edit-api', () => ({
+  aiEditApi: () => window.slidesApi,
+}))

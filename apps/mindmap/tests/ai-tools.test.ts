@@ -1,3 +1,6 @@
+import { applyAiPanelPrefs } from '@genoffice/ui'
+import { beforeEach } from 'vitest'
+beforeEach(() => applyAiPanelPrefs({ aiEditUndoHistory: true }))
 /**
  * The AI's tools against the real editor: a real session and real
  * controllers (the drawing library in jsdom), so every AI edit goes the way a

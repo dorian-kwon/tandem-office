@@ -12,6 +12,7 @@ import {
   carryHistoryForReplacement,
   endHistoryBatch,
   pushHistory,
+  withoutAiUndo,
   registerAiSnapshot,
   restoreAiSnapshot,
   restoreSnapshot,
@@ -266,5 +267,64 @@ describe('Slides main-process history batching', () => {
         ) as PictureElement
       ).mediaRef,
     ).toBe(newMedia)
+  })
+})
+
+describe('AI undo history switched off', () => {
+  it('does not record AI requests, even across async work, and preserves manual history', async () => {
+    const session = sessionWith('before')
+    pushHistory(session)
+    setValue(session, 'human before')
+    const human = session.undoStack[0]
+    beginHistoryBatch(session, { dropUndo: true })
+    let release!: () => void
+    const barrier = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const pending = withoutAiUndo(async () => {
+      await barrier
+      for (let i = 0; i < 60; i++) {
+        pushHistory(session)
+        setValue(session, `AI ${i}`)
+      }
+    })
+    pushHistory(session)
+    setValue(session, 'human during')
+    release()
+    await pending
+    expect(endHistoryBatch(session)).toBeNull()
+    expect(session.undoStack).toHaveLength(2)
+    expect(session.undoStack[0]).toBe(human)
+    expect(session.redoStack).toHaveLength(0)
+  })
+
+  it('keeps only the QC rollback point and can restore it without adding undo', async () => {
+    const session = sessionWith('before')
+    beginHistoryBatch(session, { dropUndo: true, keepRollback: true })
+    await withoutAiUndo(() => {
+      pushHistory(session)
+      setValue(session, 'QC')
+    })
+    const before = endHistoryBatch(session)
+    expect(before).not.toBeNull()
+    const id = registerAiSnapshot(session, before!)
+    expect(restoreAiSnapshot(session, id, { recordUndo: false })).toBe(true)
+    expect(valueOf(session)).toBe('before')
+    expect(session.undoStack).toHaveLength(0)
+  })
+
+  it('releases temporary snapshots after errors and preserves a replacement deck history', async () => {
+    const previous = sessionWith('old')
+    pushHistory(previous)
+    const replacement = sessionWith('new')
+    await withoutAiUndo(() => carryHistoryForReplacement(previous, replacement))
+    expect(replacement.undoStack).toHaveLength(1)
+    await expect(
+      withoutAiUndo(() => {
+        pushHistory(replacement)
+        throw new Error('failed')
+      }),
+    ).rejects.toThrow('failed')
+    expect(replacement.undoStack).toHaveLength(1)
   })
 })

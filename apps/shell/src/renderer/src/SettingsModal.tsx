@@ -1981,6 +1981,21 @@ export function SettingsModal({
                 <div className="set-field">
                   <div className="set-field-text">
                     <div className="set-field-stack">
+                      <div className="set-field-label">{t('setAiUndoHistory')}</div>
+                      <div className="set-field-desc">{t('setAiUndoHistoryDesc')}</div>
+                    </div>
+                  </div>
+                  <button
+                    className="set-switch"
+                    role="switch"
+                    aria-checked={aiPrefs.aiEditUndoHistory}
+                    aria-label={t('setAiUndoHistory')}
+                    onClick={() => updateAiPrefs({ aiEditUndoHistory: !aiPrefs.aiEditUndoHistory })}
+                  />
+                </div>
+                <div className="set-field">
+                  <div className="set-field-text">
+                    <div className="set-field-stack">
                       <div className="set-field-label">{t('setAiPanelStart')}</div>
                       <div className="set-field-desc">{t('setAiPanelStartDesc')}</div>
                     </div>

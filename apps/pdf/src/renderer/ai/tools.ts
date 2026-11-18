@@ -1,3 +1,4 @@
+import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import type { AgentToolCall, AgentToolDef, ToolExecution } from '@genoffice/agent-core'
 import type { OutlineNode } from '../OutlinePanel'
@@ -2102,7 +2103,7 @@ async function insertBlankPageTool(
   const r = deps.insertBlankPage(afterOrig)
   if (!r.ok) return err(r.error, summary)
   return {
-    output: `Inserted a blank page as page ${pos} (pending until the user saves; undoable). Like every pending edit it is addressed by its original page number, ${r.pageIndex + 1}; existing pages keep their original numbers.`,
+    output: `Inserted a blank page as page ${pos} (pending until the user saves; ${aiEditUndoHistoryEnabled() ? 'undoable' : 'AI undo is off'}). Like every pending edit it is addressed by its original page number, ${r.pageIndex + 1}; existing pages keep their original numbers.`,
     mutated: true,
     summary,
   }
@@ -2620,7 +2621,7 @@ async function addFormMarkTool(
   deps.gotoPage(r.origIdx + 1)
   const placed = box ? `fitted to the ${fmt(rect[2] - rect[0])} pt printed box` : `${fmt(size)} pt`
   return {
-    output: `Placed a ${kind === 'check' ? 'check mark' : 'cross'} on page ${r.origIdx + 1}: ${placed} at x=${fmt(tx)}, y=${fmt(ty)} (unsaved; the user can drag/resize it, undo with ⌘Z, save with ⌘S).`,
+    output: `Placed a ${kind === 'check' ? 'check mark' : 'cross'} on page ${r.origIdx + 1}: ${placed} at x=${fmt(tx)}, y=${fmt(ty)} (unsaved; the user can drag/resize it, ${aiEditUndoHistoryEnabled() ? 'undo with ⌘Z' : 'AI undo is off'}, save with ⌘S).`,
     mutated: true,
     summary,
   }
@@ -2787,7 +2788,7 @@ async function insertTextTool(
   // report the position list_inserted_text/move_inserted_text will use, not the wrap box
   const [px, py] = insertDispTopLeft(geom, { id, input: record })
   return {
-    output: `Inserted ${lines.length} line(s) of text on page ${r.origIdx + 1} at x=${fmt(px)}, y=${fmt(py)}, ${fontSize} pt as T${id} (unsaved; the user can drag/edit it, undo with ⌘Z, save with ⌘S; edit_inserted_text / move_inserted_text / delete_inserted_text take this id until saved).`,
+    output: `Inserted ${lines.length} line(s) of text on page ${r.origIdx + 1} at x=${fmt(px)}, y=${fmt(py)}, ${fontSize} pt as T${id} (unsaved; the user can drag/edit it, ${aiEditUndoHistoryEnabled() ? 'undo with ⌘Z' : 'AI undo is off'}, save with ⌘S; edit_inserted_text / move_inserted_text / delete_inserted_text take this id until saved).`,
     mutated: true,
     summary,
   }
@@ -2973,7 +2974,7 @@ function deleteInsertedTextTool(deps: PdfAiDeps, input: Record<string, unknown>)
   if ('bad' in r) return err(r.bad, summary)
   deps.deleteTextInsert(r.ins.id)
   return {
-    output: `Removed inserted text T${r.ins.id} from page ${r.ins.input.pageIndex + 1} (unsaved; undo with ⌘Z).`,
+    output: `Removed inserted text T${r.ins.id} from page ${r.ins.input.pageIndex + 1} (unsaved; ${aiEditUndoHistoryEnabled() ? 'undo with ⌘Z' : 'AI undo is off'}).`,
     mutated: true,
     summary,
   }
@@ -3209,7 +3210,7 @@ async function insertImageTool(
   return {
     output: `Inserted the image on page ${r.origIdx + 1}: ${fmt(w)} × ${fmt(h)} pt at x=${fmt(tx)}, y=${fmt(ty)}, ${
       layer === 'aboveText' ? 'above' : 'below'
-    } the text (unsaved; the user can drag/resize it, undo with ⌘Z, save with ⌘S).`,
+    } the text (unsaved; the user can drag/resize it, ${aiEditUndoHistoryEnabled() ? 'undo with ⌘Z' : 'AI undo is off'}, save with ⌘S).`,
     mutated: true,
     summary,
   }
@@ -3474,7 +3475,7 @@ async function bakeImageTool(
     detail = `now ${fmt(kept.width)} × ${fmt(kept.height)} pt at x=${fmt(kept.left)}, y=${fmt(kept.top)}; z-order kept`
   }
   return {
-    output: `${parsed.what} ${where} in place; ${detail} (unsaved; the user can undo with ⌘Z and saves with ⌘S).`,
+    output: `${parsed.what} ${where} in place; ${detail} (unsaved; the user can ${aiEditUndoHistoryEnabled() ? 'undo with ⌘Z' : 'AI undo is off'} and saves with ⌘S).`,
     mutated: true,
     summary,
   }
@@ -3497,7 +3498,7 @@ async function deleteImageTool(
   deps.deleteImage(ref)
   deps.gotoPage(r.origIdx + 1)
   return {
-    output: `Deleted image ${Number(input.image_number)} on page ${r.origIdx + 1} (unsaved; the user can undo with ⌘Z and saves with ⌘S).`,
+    output: `Deleted image ${Number(input.image_number)} on page ${r.origIdx + 1} (unsaved; the user can ${aiEditUndoHistoryEnabled() ? 'undo with ⌘Z' : 'AI undo is off'} and saves with ⌘S).`,
     mutated: true,
     summary,
   }
@@ -3801,7 +3802,7 @@ async function applyOpsTool(
     details.push(`Document properties (written on save): ${describeMetadata(deps.metadata())}`)
   return {
     output:
-      `Applied ${plan.ops.length} op(s) as one undo step: ${names} (unsaved; the user saves with ⌘S, undoes with ⌘Z).` +
+      `Applied ${plan.ops.length} op(s) as one batch: ${names} (unsaved; the user saves with ⌘S, ${aiEditUndoHistoryEnabled() ? 'undoes with ⌘Z' : 'AI undo is off'}).` +
       (details.length > 0 ? ` ${details.join(' ')}` : ''),
     mutated: true,
     summary: plan.ops.length === 1 ? singleOpSummary(plan.ops[0]!, current) : summary,

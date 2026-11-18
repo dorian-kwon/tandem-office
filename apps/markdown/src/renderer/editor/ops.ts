@@ -1,6 +1,7 @@
 import type { Editor, ChainedCommands, SingleCommands } from '@tiptap/core'
 import type { Node as PmNode } from '@tiptap/pm/model'
 import { NodeSelection, TextSelection, type Transaction } from '@tiptap/pm/state'
+import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
 import { checkPlaceholders, collectPlaceholders, modelTextOf } from './redact'
 import type { Mapping } from '@tiptap/pm/transform'
 import { createTable } from '@tiptap/extension-table'
@@ -552,6 +553,17 @@ function resolveAnchor(exec: Exec, after: InsertAnchor): { pos: number; replace?
   return { pos: mapPos(exec, origPos, 1) }
 }
 
+/**
+ * Every transaction an op dispatches goes through here (or the `chain`
+ * command below): an AI edit keeps no undo entry while the "AI edit undo
+ * history" setting is off, a person's own edit always does. The history plugin
+ * maps the entries beneath through such a transaction, so earlier undos stay
+ * valid.
+ */
+function applyHistoryPolicy(exec: Exec, tr: Transaction): void {
+  if (exec.ctx.source === 'ai' && !aiEditUndoHistoryEnabled()) tr.setMeta('addToHistory', false)
+}
+
 /** invert a dispatched transaction step by step (highlights inside it fall away with the content) */
 function rollback(exec: Exec, applied: Transaction): void {
   const tr = exec.editor.state.tr
@@ -559,6 +571,7 @@ function rollback(exec: Exec, applied: Transaction): void {
     tr.step(applied.steps[i]!.invert(applied.docs[i]!))
   }
   tr.setMeta(OP_META, { ...exec.meta, rollback: true })
+  applyHistoryPolicy(exec, tr)
   exec.editor.view.dispatch(tr)
 }
 
@@ -568,6 +581,7 @@ function nodesSize(nodes: PmNode[]): number {
 
 function dispatch(exec: Exec, tr: Transaction): void {
   tr.setMeta(OP_META, exec.meta)
+  applyHistoryPolicy(exec, tr)
   exec.editor.view.dispatch(exec.ctx.source === 'ui' ? tr.scrollIntoView() : tr)
 }
 
@@ -610,6 +624,7 @@ function selectTarget(exec: Exec, target: BlockTarget, range: Range): void {
 function chain(exec: Exec): ChainedCommands {
   const c = exec.editor.chain().command(({ tr }) => {
     tr.setMeta(OP_META, exec.meta)
+    applyHistoryPolicy(exec, tr)
     return true
   })
   return exec.ctx.source === 'ui' ? c.focus() : c

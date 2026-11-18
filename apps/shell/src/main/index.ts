@@ -1129,6 +1129,7 @@ function currentAiPanelPrefs(): AiPanelPrefs {
     spellcheck: saved.aiPanelSpellcheck,
     openInNewDocs: saved.aiPanelOpenInNewDocs,
     showAiSidebar: saved.aiPanelShowSidebar,
+    aiEditUndoHistory: saved.aiEditUndoHistory,
   })
   return cachedAiPanelPrefs
 }
@@ -6772,6 +6773,8 @@ function registerHomeIpc(): void {
       spellcheck: 'spellcheck' in raw ? raw.spellcheck : prev.spellcheck,
       openInNewDocs: 'openInNewDocs' in raw ? raw.openInNewDocs : prev.openInNewDocs,
       showAiSidebar: 'showAiSidebar' in raw ? raw.showAiSidebar : prev.showAiSidebar,
+      aiEditUndoHistory:
+        'aiEditUndoHistory' in raw ? raw.aiEditUndoHistory : prev.aiEditUndoHistory,
     })
     if (sameAiPanelPrefs(next, prev)) return prev
     cachedAiPanelPrefs = next
@@ -6782,6 +6785,7 @@ function registerHomeIpc(): void {
       aiPanelSpellcheck: next.spellcheck,
       aiPanelOpenInNewDocs: next.openInNewDocs,
       aiPanelShowSidebar: next.showAiSidebar,
+      aiEditUndoHistory: next.aiEditUndoHistory,
     })
     for (const wc of webContents.getAllWebContents()) wc.send('app:ai-panel-prefs-changed', next)
     return next
@@ -9818,6 +9822,7 @@ app.whenReady().then(async () => {
     abandonBlankTab: (wcId) => {
       if (tabManager) abandonBlankTabForMcp(tabManager.slidesTabs(), wcId)
     },
+    aiEditUndoHistory: () => currentAiPanelPrefs().aiEditUndoHistory,
   })
   const mcpSheetsControl = createSheetsControl({
     openBlankTab: () => openBlankSheetsTabForMcp(),

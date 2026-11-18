@@ -1,4 +1,6 @@
 import { withEditorAiWork } from '@genoffice/ui'
+import { recordEditHistory } from './edit-ops/history'
+import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
 import {
   Fragment,
   useCallback,
@@ -2722,7 +2724,10 @@ export default function App() {
    * (coalesceKey folds repeats). Post-save reload, undo/redo restore and async
    * display metadata (validated bounds, ghost PNGs) are the only direct writes left.
    */
-  const applyEditOps = (ops: Op[], opts?: { coalesceKey?: string }): PlanResult => {
+  const applyEditOps = (
+    ops: Op[],
+    opts?: { coalesceKey?: string; aiEdit?: boolean },
+  ): PlanResult => {
     const structuralIndex = ops.findIndex(
       (op) => op.op === 'rotatePages' || op.op === 'deletePage' || op.op === 'setPageOrder',
     )
@@ -2738,7 +2743,14 @@ export default function App() {
     }
     const plan = planEditOps(ops, editOpContext(), newId)
     if (plan.failures.length > 0 || plan.ops.length === 0) return plan
-    pushUndo(opts?.coalesceKey)
+    recordEditHistory(
+      opts?.aiEdit === true,
+      () => pushUndo(opts?.coalesceKey),
+      () => {
+        coalesceKeyRef.current = null
+        setRedoStack([])
+      },
+    )
     const base = snapshot()
     const { ops: planned, touched } = plan
     const reduce = <K extends Bucket>(bucket: K, prev: EditSnapshot[K]) =>
@@ -6551,6 +6563,7 @@ export default function App() {
     image: string,
     rect: [number, number, number, number],
     fill: StaticFormFillKind | null,
+    aiEdit = false,
   ) => {
     const id = newId()
     const staticFill: StaticFormFillRecord | undefined = fill
@@ -6569,21 +6582,24 @@ export default function App() {
             : {}),
         }
       : undefined
-    applyEditOpsRef.current([
-      {
-        op: 'addImageEdit',
-        id,
-        input: {
-          kind: 'insertImage',
-          pageIndex: origIdx,
-          image,
-          rect,
-          layer: fill ? 'aboveText' : 'belowText',
-          rotate: ((pageGeom(origIdx).rot % 360) + 360) % 360,
+    applyEditOpsRef.current(
+      [
+        {
+          op: 'addImageEdit',
+          id,
+          input: {
+            kind: 'insertImage',
+            pageIndex: origIdx,
+            image,
+            rect,
+            layer: fill ? 'aboveText' : 'belowText',
+            rotate: ((pageGeom(origIdx).rot % 360) + 360) % 360,
+          },
+          staticFill,
         },
-        staticFill,
-      },
-    ])
+      ],
+      { aiEdit },
+    )
   }
 
   /** Committed move/resize of a pending image op */
@@ -6665,28 +6681,32 @@ export default function App() {
     rect: [number, number, number, number],
     layer?: ImageLayer,
     quarterTurns?: number,
+    aiEdit = false,
   ) => {
     setSelected(null)
     const id = newId()
     const cached = existingPngs.get(`${ref.pageIndex}:${imageRectKey(ref.rect)}`) ?? null
     const savedStaticFill = savedStaticFillForRef(ref)
-    const plan = applyEditOps([
-      {
-        op: 'addImageEdit',
-        id,
-        input: {
-          kind: 'transformImage',
-          pageIndex: ref.pageIndex,
-          oldRect: ref.rect,
-          rect,
-          ...(layer ? { layer } : {}),
-          ...(quarterTurns ? { quarterTurns } : {}),
+    const plan = applyEditOps(
+      [
+        {
+          op: 'addImageEdit',
+          id,
+          input: {
+            kind: 'transformImage',
+            pageIndex: ref.pageIndex,
+            oldRect: ref.rect,
+            rect,
+            ...(layer ? { layer } : {}),
+            ...(quarterTurns ? { quarterTurns } : {}),
+          },
+          png: cached,
+          origAbove: ref.aboveText,
+          staticFill: savedStaticFill ? { ...savedStaticFill, rect } : undefined,
         },
-        png: cached,
-        origAbove: ref.aboveText,
-        staticFill: savedStaticFill ? { ...savedStaticFill, rect } : undefined,
-      },
-    ])
+      ],
+      { aiEdit },
+    )
     if (cached || plan.failures.length > 0) return
     void window.pdfApi
       .pageImagePng({ path: filePath, pageIndex: ref.pageIndex, rect: ref.rect })
@@ -6780,22 +6800,30 @@ export default function App() {
   }
 
   /** Queue an in-place pixel swap of an existing image (footprint/z-order kept) */
-  const replaceExisting = (ref: PageImageRef, png: string, staticFill?: StaticFormFillRecord) => {
+  const replaceExisting = (
+    ref: PageImageRef,
+    png: string,
+    staticFill?: StaticFormFillRecord,
+    aiEdit = false,
+  ) => {
     setSelected(null)
-    applyEditOps([
-      {
-        op: 'addImageEdit',
-        input: {
-          kind: 'replaceImage',
-          pageIndex: ref.pageIndex,
-          oldRect: ref.rect,
-          rect: ref.rect,
-          image: png,
+    applyEditOps(
+      [
+        {
+          op: 'addImageEdit',
+          input: {
+            kind: 'replaceImage',
+            pageIndex: ref.pageIndex,
+            oldRect: ref.rect,
+            rect: ref.rect,
+            image: png,
+          },
+          origAbove: ref.aboveText,
+          staticFill,
         },
-        origAbove: ref.aboveText,
-        staticFill,
-      },
-    ])
+      ],
+      { aiEdit },
+    )
   }
 
   // ── Baked pixel edits (flip / transparency / crop / cutout / replace) ──
@@ -6909,24 +6937,28 @@ export default function App() {
     png: string,
     crop?: CropFractions,
     opacityBase?: string,
+    aiEdit = false,
   ): boolean => {
     if (target.kind === 'existing') {
       const ref = target.ref
       if (isImageClaimedNow(ref)) return false
-      const plan = applyEditOpsRef.current([
-        {
-          op: 'addImageEdit',
-          input: {
-            kind: 'replaceImage',
-            pageIndex: ref.pageIndex,
-            oldRect: ref.rect,
-            rect: crop ? cropRect(ref.rect, crop) : ref.rect,
-            image: png,
+      const plan = applyEditOpsRef.current(
+        [
+          {
+            op: 'addImageEdit',
+            input: {
+              kind: 'replaceImage',
+              pageIndex: ref.pageIndex,
+              oldRect: ref.rect,
+              rect: crop ? cropRect(ref.rect, crop) : ref.rect,
+              image: png,
+            },
+            origAbove: ref.aboveText,
+            opacityBase,
           },
-          origAbove: ref.aboveText,
-          opacityBase,
-        },
-      ])
+        ],
+        { aiEdit },
+      )
       return plan.failures.length === 0
     }
     const cur = imageEditsRef.current.find((x) => x.id === target.id)
@@ -6937,9 +6969,10 @@ export default function App() {
       : cur.input.kind === 'insertImage'
         ? cropRectDisplay(cur.input.pageIndex, cur.input.rect, crop)
         : cropRect(cur.input.rect, crop)
-    const plan = applyEditOpsRef.current([
-      { op: 'bakeImageEdit', id: target.id, image: png, rect, opacityBase },
-    ])
+    const plan = applyEditOpsRef.current(
+      [{ op: 'bakeImageEdit', id: target.id, image: png, rect, opacityBase }],
+      { aiEdit },
+    )
     return plan.failures.length === 0
   }
 
@@ -6969,6 +7002,7 @@ export default function App() {
       out,
       op.kind === 'crop' ? op.crop : undefined,
       op.kind === 'opacity' ? src : undefined,
+      true,
     )
     if (landed) setSelected(null)
     return landed
@@ -7398,32 +7432,41 @@ export default function App() {
     )
 
   /** Append a reply to a thread's root (flat, WPS-style threads: /IRT → root) */
-  const replyToNote = (origIdx: number, root: NoteThreadItem, text: string, author?: string) => {
-    applyEditOpsRef.current([
-      {
-        op: 'addDrawing',
-        drawing: {
-          kind: 'note',
-          pageIndex: origIdx,
-          color: root.color ?? drawColor,
-          at: root.at,
-          contents: text,
-          author: author ?? (noteAuthor || undefined),
-          createdMs: Date.now(),
-          ...(root.saved
-            ? {
-                replyToSaved: {
-                  objNum: root.saved.objNum,
-                  rect: root.saved.rect,
-                  contents: root.saved.contents,
-                },
-              }
-            : root.pendingId !== null
-              ? { replyToLocalId: root.pendingId }
-              : {}),
+  const replyToNote = (
+    origIdx: number,
+    root: NoteThreadItem,
+    text: string,
+    author?: string,
+    aiEdit = false,
+  ) => {
+    applyEditOpsRef.current(
+      [
+        {
+          op: 'addDrawing',
+          drawing: {
+            kind: 'note',
+            pageIndex: origIdx,
+            color: root.color ?? drawColor,
+            at: root.at,
+            contents: text,
+            author: author ?? (noteAuthor || undefined),
+            createdMs: Date.now(),
+            ...(root.saved
+              ? {
+                  replyToSaved: {
+                    objNum: root.saved.objNum,
+                    rect: root.saved.rect,
+                    contents: root.saved.contents,
+                  },
+                }
+              : root.pendingId !== null
+                ? { replyToLocalId: root.pendingId }
+                : {}),
+          },
         },
-      },
-    ])
+      ],
+      { aiEdit },
+    )
   }
 
   /** Ops rewriting one comment's text: pending notes mutate the drawing in place;
@@ -7471,15 +7514,18 @@ export default function App() {
   }
 
   /** Delete a comment and everything under it (saved → pending annotDeletes; pending → dropped) */
-  const deleteNoteItem = (item: NoteThreadItem) => {
+  const deleteNoteItem = (item: NoteThreadItem, aiEdit = false) => {
     const { saved, pendingIds } = threadSubtree(item)
-    applyEditOps([
-      ...saved.map((annot): Op => ({ op: 'deleteSavedAnnot', annot })),
-      ...pendingIds.map((id): Op => ({ op: 'removeDrawing', id })),
-    ])
+    applyEditOps(
+      [
+        ...saved.map((annot): Op => ({ op: 'deleteSavedAnnot', annot })),
+        ...pendingIds.map((id): Op => ({ op: 'removeDrawing', id })),
+      ],
+      { aiEdit },
+    )
     if (activeNote && item.key === activeNote.rootKey) setActiveNote(null)
     // "deleted · undo" toast — a mistaken trash tap stays reversible before autosave
-    showDeletedToast()
+    if (!aiEdit || aiEditUndoHistoryEnabled()) showDeletedToast()
   }
 
   /** Extract/insert work on the file on disk — flush unsaved changes first; undefined = the save failed */
@@ -7613,6 +7659,7 @@ export default function App() {
   /** Pending edit like a new slide in Slides: shows up at once, drags, undoes, lands in the file on save. -1 / null = first page */
   const insertBlankPage = (
     afterOrigIdx: number | null,
+    aiEdit = false,
   ): { ok: true; pageIndex: number } | { ok: false; error: string } => {
     const after = afterOrigIdx !== null && afterOrigIdx >= 0 ? afterOrigIdx : null
     const neighbor = after ?? visListOf(orderRef.current)[0]
@@ -7621,9 +7668,10 @@ export default function App() {
         ? geomDispSize(pageGeomRef.current(neighbor))
         : { width: 595.28, height: 841.89 }
     const pageIndex = sizes.length + blankPagesRef.current.length
-    const plan = applyEditOpsRef.current([
-      { op: 'insertBlankPage', after, pageIndex, width: size.width, height: size.height },
-    ])
+    const plan = applyEditOpsRef.current(
+      [{ op: 'insertBlankPage', after, pageIndex, width: size.width, height: size.height }],
+      { aiEdit },
+    )
     if (plan.failures.length > 0) {
       const error = plan.failures[0]!.error
       opFailed(error)
@@ -7877,6 +7925,8 @@ export default function App() {
     return `The document has ${bits.join(' and ')}; use read_annotations to read them.`
   }
 
+  const applyAiEditOps = (ops: Op[]): PlanResult => applyEditOpsRef.current(ops, { aiEdit: true })
+
   const aiApi: PdfAppDeps = {
     doc: () => doc,
     fileName: () => fileName,
@@ -7934,17 +7984,17 @@ export default function App() {
         (a) => savedNums.has(a.objNum) && !pendingDeleted.has(a.objNum),
       )
       if (pendingIds.size === 0 && saved.length === 0) return
-      applyEditOpsRef.current([
+      applyAiEditOps([
         ...markupsRef.current
           .filter((m) => m.pageIndex === origIdx && pendingIds.has(m.id))
           .map((m): Op => ({ op: 'removeMarkup', id: m.id })),
         ...saved.map((annot): Op => ({ op: 'deleteSavedAnnot', annot })),
       ])
     },
-    deleteNoteThread: (_origIdx, root) => deleteNoteItem(root),
+    deleteNoteThread: (_origIdx, root) => deleteNoteItem(root, true),
     addNote: (origIdx, at, contents, color) => {
       const id = newId()
-      const plan = applyEditOpsRef.current([
+      const plan = applyAiEditOps([
         {
           op: 'addDrawing',
           id,
@@ -7966,10 +8016,10 @@ export default function App() {
     findNoteRoot: async (origIdx, rootKey) =>
       (await noteThreadsFor(origIdx)).find((r) => r.key === rootKey) ?? null,
     replyToThread: (origIdx, root, contents) =>
-      replyToNote(origIdx, root, contents, 'AI Assistant'),
+      replyToNote(origIdx, root, contents, 'AI Assistant', true),
     editNote: (_origIdx, item, contents) => {
       const ops = noteEditOps(item, contents)
-      if (ops) applyEditOpsRef.current(ops)
+      if (ops) applyAiEditOps(ops)
     },
     outline: () => outline,
     searchIndex: getSearchIndex,
@@ -7987,7 +8037,7 @@ export default function App() {
     },
     addMarkup: (type, origIdx, rects, color) => {
       const quads = rects.map((r) => [r[0], r[3], r[2], r[3], r[0], r[1], r[2], r[1]])
-      applyEditOpsRef.current([
+      applyAiEditOps([
         {
           op: 'addMarkup',
           markup: {
@@ -8017,7 +8067,7 @@ export default function App() {
       const te: LocalTextEdit = { id: newId(), input, cover, moveBy }
       const gone = new Set(replaces.map((e) => e.id))
       const prev = textEditsRef.current
-      const plan = applyEditOpsRef.current(textEditListOps(prev, patchPendingEdits(prev, te, gone)))
+      const plan = applyAiEditOps(textEditListOps(prev, patchPendingEdits(prev, te, gone)))
       return plan.failures[0]?.error ?? null
     },
     moveTextBlock: async (origIdx, block, d) => {
@@ -8050,7 +8100,7 @@ export default function App() {
         return { reason: 'the pending edits changed while the move was validated; retry' }
       }
       const prev = textEditsRef.current
-      const result = applyEditOpsRef.current(
+      const result = applyAiEditOps(
         textEditListOps(
           prev,
           patchPendingEdits(prev, te, plan.remove, plan.kind === 'move' ? 'upsert' : 'replace'),
@@ -8061,30 +8111,30 @@ export default function App() {
     },
     insertText: (input) => {
       const id = newId()
-      const plan = applyEditOpsRef.current([{ op: 'addTextInsert', id, input }])
+      const plan = applyAiEditOps([{ op: 'addTextInsert', id, input }])
       return plan.failures.length > 0 ? { error: plan.failures[0]!.error } : { id }
     },
     textInserts: () => textInsertsRef.current,
     updateTextInsert: (id, edit) => {
-      applyEditOpsRef.current([{ op: 'patchTextInsert', id, input: edit }])
+      applyAiEditOps([{ op: 'patchTextInsert', id, input: edit }])
     },
     moveTextInsert: (id, origin) => {
-      applyEditOpsRef.current([{ op: 'patchTextInsert', id, input: { origin } }])
+      applyAiEditOps([{ op: 'patchTextInsert', id, input: { origin } }])
     },
     deleteTextInsert: (id) => {
-      applyEditOpsRef.current([{ op: 'removeTextInsert', id }])
+      applyAiEditOps([{ op: 'removeTextInsert', id }])
       setSelected((sel) => (sel?.kind === 'textInsert' && sel.id === id ? null : sel))
     },
     addFormMark: (origIdx, kind, rect) => {
       const image = renderStaticFormMark(kind, Math.max(rect[2] - rect[0], rect[3] - rect[1]))
-      if (image) commitPlacedImage(origIdx, image.image, rect, kind)
+      if (image) commitPlacedImage(origIdx, image.image, rect, kind, true)
     },
     formWidgets: (origIdx) => liveFormCatalog?.byPage.get(origIdx) ?? [],
     pageBoxes: pageBoxShapes,
     editFonts: () => editFonts,
     formEdits: () => formEdits,
     applyOps: (ops, opts) =>
-      opts?.dryRun ? planEditOps(ops, editOpContext(), newId) : applyEditOpsRef.current(ops),
+      opts?.dryRun ? planEditOps(ops, editOpContext(), newId) : applyAiEditOps(ops),
     metadata: () => metadataRef.current ?? docInfo,
     pageOrder: () => visListOf(orderRef.current),
     pageGeom: (origIdx) =>
@@ -8092,7 +8142,7 @@ export default function App() {
     listImages: () => (filePath ? window.pdfApi.listPageImages(filePath) : Promise.resolve([])),
     isImageClaimed: isImageClaimedNow,
     insertImage: (origIdx, png, rect, layer) => {
-      applyEditOpsRef.current([
+      applyAiEditOps([
         {
           op: 'addImageEdit',
           input: {
@@ -8107,11 +8157,11 @@ export default function App() {
       ])
     },
     transformImage: (ref, rect, layer, quarterTurns) =>
-      transformExisting(ref, rect, layer, quarterTurns),
-    replaceImage: (ref, png) => replaceExisting(ref, png),
+      transformExisting(ref, rect, layer, quarterTurns, true),
+    replaceImage: (ref, png) => replaceExisting(ref, png, undefined, true),
     bakeImage: bakeExisting,
     deleteImage: (ref) => {
-      applyEditOpsRef.current([
+      applyAiEditOps([
         {
           op: 'addImageEdit',
           input: { kind: 'deleteImage', pageIndex: ref.pageIndex, oldRect: ref.rect },
@@ -8137,10 +8187,10 @@ export default function App() {
     },
     stamps: () => stampRef.current,
     setStamps: (cfg) => {
-      applyEditOpsRef.current([{ op: 'setStamps', cfg }])
+      applyAiEditOps([{ op: 'setStamps', cfg }])
     },
     createDocument: (request) => window.pdfApi.createDocument(request),
-    insertBlankPage,
+    insertBlankPage: (after) => insertBlankPage(after, true),
     setPageSize: resizePages,
     cropPages: cropPagesOnDisk,
     replacePages: replacePagesOnDisk,

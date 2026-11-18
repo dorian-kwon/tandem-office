@@ -137,3 +137,7 @@ describe('AiPanel collapse (slides)', () => {
     }
   })
 })
+
+vi.mock('../src/renderer/ai/ai-edit-api', () => ({
+  aiEditApi: () => window.slidesApi,
+}))

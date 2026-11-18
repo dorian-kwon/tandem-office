@@ -12,6 +12,8 @@ import {
   AiToolsUnsupportedNotice,
   AiSubscriptionUsageLine,
   aiSubscriptionText,
+  aiEditUndoHistoryEnabled,
+  useAiPanelPrefs,
   useAiSendGate,
 } from '@genoffice/ui'
 import { useEffect, useRef, useState } from 'react'
@@ -347,6 +349,11 @@ export function AiPanel({
   const lastSkillUseRef = useRef<SkillUse>(NO_SKILL_USE)
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
   const [snapshots, setSnapshots] = useState<Snapshot[]>([])
+  // rollback points exist only while the "AI edit undo history" setting is on
+  const undoHistoryOn = useAiPanelPrefs().aiEditUndoHistory
+  useEffect(() => {
+    if (!undoHistoryOn) setSnapshots([])
+  }, [undoHistoryOn])
   // bumped on selection/doc changes so the scope chip & queue rows stay fresh
   const [, setScopeTick] = useState(0)
   /** the scope chip's expandable preview of the selected text */
@@ -674,9 +681,9 @@ export function AiPanel({
   )
 
   // The loop is built once; every mutable value goes through a ref getter
-  const loopRef = useRef<AgentLoop<DocSnapshot> | null>(null)
+  const loopRef = useRef<AgentLoop<DocSnapshot | undefined> | null>(null)
   if (!loopRef.current) {
-    loopRef.current = new AgentLoop<DocSnapshot>({
+    loopRef.current = new AgentLoop<DocSnapshot | undefined>({
       transport: transportRef.current,
       // a local model that reported no tool support answers in text only
       toolsAllowed: () =>
@@ -714,8 +721,14 @@ export function AiPanel({
         choice.skill,
         ...panelProjectSkill({ run: projectPanel.chat.run, lang: () => langRef.current }),
       ]),
-      captureSnapshot: () => depsRef.current.getSnapshot(),
-      systemSuffix: () => aiLangDirective(langRef.current),
+      // no rollback point while the "AI edit undo history" setting is off
+      captureSnapshot: () =>
+        aiEditUndoHistoryEnabled() ? depsRef.current.getSnapshot() : undefined,
+      systemSuffix: () =>
+        aiLangDirective(langRef.current) +
+        (aiEditUndoHistoryEnabled()
+          ? ''
+          : '\nAI edit undo history is OFF. Do not promise Ctrl+Z or a rollback button for your document edits.'),
       events: runStatus.wrap({
         onText: (text) => patchLast({ text }),
         onToolStart: (call) => {
@@ -729,7 +742,7 @@ export function AiPanel({
         },
         onToolExecuted: ({ call, execution, snapshotBefore }) => {
           if (execution.mutated) runMutatedRef.current = true
-          if (snapshotBefore !== undefined) {
+          if (aiEditUndoHistoryEnabled() && snapshotBefore !== undefined) {
             const label = runInstructionRef.current.slice(0, 40)
             const time = new Date().toLocaleTimeString([], {
               hour: '2-digit',
@@ -1545,7 +1558,7 @@ export function AiPanel({
         {projectPanel.notices}
       </div>
 
-      {snapshots.length > 0 && (
+      {undoHistoryOn && snapshots.length > 0 && (
         <div className="ai-versions">
           <div className="ai-versions-title">
             <IconClock />

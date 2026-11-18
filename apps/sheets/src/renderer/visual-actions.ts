@@ -607,6 +607,7 @@ export async function insertAiChartVisual(
   runtime: UniverRuntime,
   state: LazyWorkbookState,
   op: AddChartOperation,
+  commit: <T>(run: () => T) => T = (run) => run(),
 ): Promise<void> {
   const workbook = runtime.univerAPI.getActiveWorkbook()
   const target = workbook?.getSheetBySheetId(op.sheetId)
@@ -622,7 +623,7 @@ export async function insertAiChartVisual(
     anchorCell: op.anchorCell,
     values,
   })
-  pushVisualAddUndo(ctx, runtime, state, visual)
+  commit(() => pushVisualAddUndo(ctx, runtime, state, visual))
   queueCtxVisualInstall(ctx, runtime)
 }
 

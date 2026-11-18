@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Editor } from '@tiptap/core'
+import { applyAiPanelPrefs } from '@genoffice/ui'
 import JSZip from 'jszip'
 import { parseDocx, saveDocx } from '@genoffice/docx-engine'
 import { buildDocx } from '../../../packages/docx-engine/tests/helpers/build-docx'
@@ -131,10 +132,13 @@ beforeEach(() => {
   // the editor window has CSS.escape; the test environment does not
   vi.stubGlobal('CSS', { escape: (value: string) => value })
   clearOcrHistory()
+  // undo of the OCR text exists only while "AI edit undo history" is on (decision 0114)
+  applyAiPanelPrefs({ aiEditUndoHistory: true })
 })
 afterEach(() => {
   live.splice(0).forEach((e) => e.destroy())
   vi.unstubAllGlobals()
+  applyAiPanelPrefs({ aiEditUndoHistory: false })
 })
 
 describe('putting OCR text into the document on screen', () => {
@@ -381,6 +385,49 @@ describe('undo and redo of the OCR text', () => {
     await open()
     expect(ocrUndoAvailable(editor)).toBe(false)
     expect(tryOcrUndo(ctx)).toBe(false)
+  })
+})
+
+describe('with AI edit undo history off', () => {
+  it('restores the document after a swap fails after changing its body', async () => {
+    applyAiPanelPrefs({ aiEditUndoHistory: false })
+    await open()
+    unsavedEdit()
+    const before = editor.getJSON()
+    const parsed = ctx.doc!.parsed
+    ctx.setDocCss = vi.fn().mockImplementationOnce(() => {
+      expect(editor.getJSON()).not.toEqual(before)
+      throw new Error('failed after replacing content')
+    })
+    const result = await place()
+    expect(result).toEqual({ ok: false, reason: 'failed after replacing content' })
+    expect(editor.getJSON()).toEqual(before)
+    expect(ctx.doc!.parsed).toBe(parsed)
+    expect(ctx.dirtyRef.current).toBe(true)
+    expect(ocrUndoAvailable(editor)).toBe(false)
+    expect(tryOcrUndo(ctx)).toBe(false)
+  })
+
+  it('puts the OCR text in without keeping any undo of it', async () => {
+    applyAiPanelPrefs({ aiEditUndoHistory: false })
+    await open()
+    unsavedEdit()
+    const result = await place()
+    expect(result).toEqual({ ok: true, placed: [1], skipped: [] })
+    expect(boxTexts()).toEqual(['Shop name', 'Opening hours'])
+    expect(ctx.dirtyRef.current).toBe(true)
+    expect(ocrUndoAvailable(editor)).toBe(false)
+    expect(tryOcrUndo(ctx)).toBe(false)
+    expect(boxTexts()).toEqual(['Shop name', 'Opening hours'])
+  })
+
+  it('forgets an earlier OCR undo, which would now return to an older document', async () => {
+    await open()
+    await place()
+    expect(ocrUndoAvailable(editor)).toBe(true)
+    applyAiPanelPrefs({ aiEditUndoHistory: false })
+    await place()
+    expect(ocrUndoAvailable(editor)).toBe(false)
   })
 })
 

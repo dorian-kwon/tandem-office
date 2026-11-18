@@ -148,3 +148,7 @@ describe('anti hand-building from scratch', () => {
     expect(r.isError).toBeUndefined()
   })
 })
+
+vi.mock('../src/renderer/ai/ai-edit-api', () => ({
+  aiEditApi: () => window.slidesApi,
+}))

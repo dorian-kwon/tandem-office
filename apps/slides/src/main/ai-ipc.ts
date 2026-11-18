@@ -1,3 +1,4 @@
+import { handleAiEditable } from './ai-edit-history'
 /**
  * AI IPC for the slides main process, extracted from slides-main.ts:
  * settings persistence, the streaming proxy (main process does the networking
@@ -364,7 +365,7 @@ export function registerSlidesOnlyAiIpc(): void {
   }
 
   // Download an image from a URL and insert it into the given page (image search -> insert in one step; download in the main process avoids CORS)
-  ipcMain.handle(
+  handleAiEditable(
     'ai:insert-image-url',
     async (
       e,
@@ -442,7 +443,7 @@ export function registerSlidesOnlyAiIpc(): void {
 
   // Download an image from a URL and swap it into an existing picture in place
   // (frame/z-order/effects survive). Same URL hardening as ai:insert-image-url.
-  ipcMain.handle(
+  handleAiEditable(
     'ai:replace-picture-url',
     async (
       e,

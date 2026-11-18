@@ -188,3 +188,7 @@ describe('regenerate_slide', () => {
     expect((window as any).slidesApi.applyTxn).toHaveBeenCalledOnce()
   })
 })
+
+vi.mock('../src/renderer/ai/ai-edit-api', () => ({
+  aiEditApi: () => window.slidesApi,
+}))

@@ -217,6 +217,9 @@ export function withChangeNotes<T extends object>(bridge: T, onChange: () => voi
     noted[name] =
       typeof call === 'function' && !READING_CALLS.has(name)
         ? (...args: unknown[]) => {
+            if (name === 'invokeAi' && typeof args[0] === 'string' && READING_CALLS.has(args[0])) {
+              return (call as (...rest: unknown[]) => unknown)(...args)
+            }
             onChange()
             const result: unknown = (call as (...rest: unknown[]) => unknown)(...args)
             // the edit lands when the call ends: its time counts as work, not idle
