@@ -65,3 +65,34 @@ describe('a dimension added to a sheet that had none', () => {
     expect(xml).toMatch(/<worksheet [^>]*><dimension ref="A1:D5"\/>/)
   })
 })
+
+describe('a file an earlier version saved with the dimension in front of sheetPr', () => {
+  const broken =
+    `<?xml version="1.0"?><worksheet ${NS}><dimension ref="A1:D5"/>` +
+    `<sheetPr><tabColor rgb="FFFFFF00"/></sheetPr><sheetViews><sheetView workbookViewId="0"/></sheetViews>${ROWS}</worksheet>`
+
+  it('is put in order when a cell of that sheet is saved again', async () => {
+    const xml = await savedSheet(await workbookWithSheet(broken))
+    expect(childOrder(xml, ['sheetPr', 'dimension', 'sheetViews', 'sheetData'])).toEqual([
+      'sheetPr',
+      'dimension',
+      'sheetViews',
+      'sheetData',
+    ])
+    expect(xml.match(/<dimension\b/g)).toHaveLength(1)
+  })
+
+  it('keeps its extent and the rest of the sheet as written', async () => {
+    const xml = await savedSheet(await workbookWithSheet(broken))
+    expect(xml).toContain('<sheetPr><tabColor rgb="FFFFFF00"/></sheetPr><dimension ref="A1:D5"/>')
+    expect(xml).toContain('<sheetViews><sheetView workbookViewId="0"/></sheetViews>')
+  })
+
+  it('leaves a sheet whose order is already right alone', async () => {
+    const fine =
+      `<worksheet ${NS}><sheetPr><tabColor rgb="FF00FF00"/></sheetPr><dimension ref="A1:D5"/>` +
+      `${ROWS}</worksheet>`
+    const xml = await savedSheet(await workbookWithSheet(fine))
+    expect(xml).toContain('<sheetPr><tabColor rgb="FF00FF00"/></sheetPr><dimension ref="A1:D5"/>')
+  })
+})

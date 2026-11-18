@@ -1249,9 +1249,11 @@ export async function planCellEditsToXlsx(
     // No <dimension> tag to grow in place: fall back to a full-scan rebuild.
     worksheetXmls.set(
       sheetName,
-      dimensionPatch !== null && !dimensionPatch.matched()
-        ? expandWorksheetDimensionToCells(edited)
-        : edited,
+      putDimensionAfterSheetPr(
+        dimensionPatch !== null && !dimensionPatch.matched()
+          ? expandWorksheetDimensionToCells(edited)
+          : edited,
+      ),
     )
   }
   if (dynamicArrayCm !== null) {
@@ -3172,6 +3174,21 @@ function expandWorksheetDimensionToCells(worksheetXml: string): string {
     return `${worksheetXml.slice(0, end)}<dimension ref="${reference}"/>${worksheetXml.slice(end)}`
   }
   return worksheetXml.replace(/(<worksheet\b[^>]*>)/, `$1<dimension ref="${reference}"/>`)
+}
+
+/// A file an earlier version saved with <dimension> in front of <sheetPr> (the order Excel
+/// rejects with a "load error") is put right when its sheet is written again. Only the text
+/// before <sheetData> is looked at, so a very large sheet costs nothing extra.
+function putDimensionAfterSheetPr(worksheetXml: string): string {
+  const dataAt = worksheetXml.indexOf('<sheetData')
+  if (dataAt === -1) return worksheetXml
+  const head = worksheetXml.slice(0, dataAt)
+  const dimension = /<dimension\b[^>]*?(?:\/>|>\s*<\/dimension\s*>)/.exec(head)
+  const properties = /<sheetPr\b[^>]*\/>|<sheetPr\b[^>]*>[\s\S]*?<\/sheetPr\s*>/.exec(head)
+  if (!dimension || !properties || dimension.index > properties.index) return worksheetXml
+  const without = head.slice(0, dimension.index) + head.slice(dimension.index + dimension[0].length)
+  const end = properties.index + properties[0].length - dimension[0].length
+  return `${without.slice(0, end)}${dimension[0]}${without.slice(end)}${worksheetXml.slice(dataAt)}`
 }
 
 function serializeStyledCell(

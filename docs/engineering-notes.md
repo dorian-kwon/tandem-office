@@ -85,7 +85,7 @@
 
 ## 엑셀 저장
 
-- **저장한 .xlsx를 진짜 Excel이 "내용에 문제가 있습니다. 복구하시겠습니까?"라며 열지 못한다. 복구 창은 `/xl/worksheets/sheet1.xml` "로드 오류, 1행 0열"이라고 한다.** 워크시트의 자식 요소는 정해진 순서(`sheetPr`, `dimension`, `sheetViews`, `sheetFormatPr`, `cols`, `sheetData` …)로 써야 하고 Excel은 어긋난 순서를 거부한다. 2026-11-18에 본 파일은 Open XML SDK 계열 생성기가 만든 것이라 `<dimension>`이 없고 `<sheetPr>`는 있었는데, 셀을 고쳐 저장하자 `expandWorksheetDimensionToCells`가 `<dimension>`을 `<worksheet>` 바로 뒤, 곧 `<sheetPr>` 앞에 끼워 넣었다. XML로는 정상이라 파서 검사로는 잡히지 않고, LibreOffice 같은 느슨한 프로그램은 열어 준다. → 요소를 끼울 때는 앞에 올 요소가 있는지 보고 그 뒤에 넣는다(`tests/dimension-element-order.test.ts`). 이미 저장된 파일은 `<dimension>`을 `</sheetPr>` 뒤로 옮기면 열린다. 시트에 `<sheetPr>`가 있고 `<dimension>`이 없던 파일을 고쳐 저장한 경우에만 생긴다(0.15.2까지).
+- **저장한 .xlsx를 진짜 Excel이 "내용에 문제가 있습니다. 복구하시겠습니까?"라며 열지 못한다. 복구 창은 `/xl/worksheets/sheet1.xml` "로드 오류, 1행 0열"이라고 한다.** 워크시트의 자식 요소는 정해진 순서(`sheetPr`, `dimension`, `sheetViews`, `sheetFormatPr`, `cols`, `sheetData` …)로 써야 하고 Excel은 어긋난 순서를 거부한다. 2026-11-18에 본 파일은 Open XML SDK 계열 생성기가 만든 것이라 `<dimension>`이 없고 `<sheetPr>`는 있었는데, 셀을 고쳐 저장하자 `expandWorksheetDimensionToCells`가 `<dimension>`을 `<worksheet>` 바로 뒤, 곧 `<sheetPr>` 앞에 끼워 넣었다. XML로는 정상이라 파서 검사로는 잡히지 않고, LibreOffice 같은 느슨한 프로그램은 열어 준다. → 요소를 끼울 때는 앞에 올 요소가 있는지 보고 그 뒤에 넣는다(`tests/dimension-element-order.test.ts`). 이미 저장된 파일은 `<dimension>`을 `</sheetPr>` 뒤로 옮기면 열린다. 시트에 `<sheetPr>`가 있고 `<dimension>`이 없던 파일을 고쳐 저장한 경우에만 생긴다(0.15.2까지). 0.15.3부터는 그렇게 저장된 파일도 그 시트의 셀을 고쳐 다시 저장하면 순서가 바로잡힌다(`putDimensionAfterSheetPr`). 셀을 고치지 않은 시트는 그대로다.
 
 ## ODT
 
