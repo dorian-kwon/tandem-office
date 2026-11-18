@@ -3443,6 +3443,43 @@ function markRects(doc, mark) {
   const json = JSON.stringify(path)
   const cellPara = path[path.length - 1].cellParaIndex
   const [start, end] = spanOf(mark, doc.getCellParagraphLengthByPath(sec, para, json))
+  if (end <= start) return []
+  // Unhinted cell selection visits every page for every marked cell. Use actual
+  // endpoint pages for ordinary tables; repeated headers (including nested tables)
+  // can also appear on pages outside those endpoints and must retain the full query.
+  if (
+    path.length === 1 &&
+    typeof doc.getSelectionRectsInCellByPathEx === 'function' &&
+    typeof doc.getCursorRectByPath === 'function' &&
+    typeof doc.getTableProperties === 'function'
+  ) {
+    try {
+      const properties = parse(doc.getTableProperties(sec, para, path[0].controlIndex))
+      if (properties.repeatHeader === false) {
+        const first = parse(doc.getCursorRectByPath(sec, para, json, start))
+        const last = parse(doc.getCursorRectByPath(sec, para, json, end))
+        if ([first.pageIndex, last.pageIndex].every((p) => Number.isInteger(p) && p >= 0)) {
+          return parse(
+            doc.getSelectionRectsInCellByPathEx(
+              JSON.stringify({
+                sectionIdx: sec,
+                parentParaIdx: para,
+                path: json,
+                startCellParaIdx: cellPara,
+                startCharOffset: start,
+                endCellParaIdx: cellPara,
+                endCharOffset: end,
+                startPageHint: first.pageIndex,
+                endPageHint: last.pageIndex,
+              }),
+            ),
+          )
+        }
+      }
+    } catch {
+      // Hosts without endpoint geometry still use the complete nested-cell path.
+    }
+  }
   return end > start
     ? parse(doc.getSelectionRectsInCellByPath(sec, para, json, cellPara, start, cellPara, end))
     : []
@@ -3478,6 +3515,7 @@ let stopListening = null
 let wordDragState = null
 /** Takes the marks off the page again, with what keeps them in place. */
 let stopMarking = null
+let markSettleTimer = null
 /** Takes the memo anchors off the page again, with what keeps them in place. */
 let stopMemoLayer = null
 /** Takes the input lock of an open memo modal off the editor again. */
@@ -3550,6 +3588,8 @@ export const agentPlugin = {
     stopListening = null
     if (stopMarking) stopMarking()
     stopMarking = null
+    if (markSettleTimer) clearTimeout(markSettleTimer)
+    markSettleTimer = null
     if (stopMemoLayer) stopMemoLayer()
     stopMemoLayer = null
     if (stopMemoLock) stopMemoLock()
@@ -3587,6 +3627,7 @@ export const agentPlugin = {
     let pictures = null
     // the places this plugin changed since the panel last cleared them, as they are now
     let marks = []
+    let markRectCache = null
     // the memo panel: the memos as last read, whether its anchors are shown, which one is
     // picked, and how many memos the last copy in this editor would bring with it
     let memoKnown = null
@@ -3989,6 +4030,7 @@ export const agentPlugin = {
     host.events.on('document-changed', () => {
       text = null
       pictures = null
+      markRectCache = null
       if (!own) {
         foreign += 1
         // an edit of the user's own moves text under the marks: they would point astray
@@ -4031,22 +4073,23 @@ export const agentPlugin = {
     host.events.on('document-changed', scheduleStyleList)
 
     let layer = null
-    let settle = null
-    /** Draw the marks again (a command, for the editor's own services); later once more. */
-    const refreshMarks = () => {
+    let markViewport = null
+    const redrawMarks = () => {
       try {
         host.automation.execute(MARK_COMMAND)
       } catch {
         // an editor without commands: no marks
       }
-      if (settle) clearTimeout(settle)
-      settle = setTimeout(() => {
-        settle = null
-        try {
-          host.automation.execute(MARK_COMMAND)
-        } catch {
-          // as above
-        }
+    }
+    /** Refresh page geometry once now and once after the editor's layout settles. */
+    const refreshMarks = () => {
+      markRectCache = null
+      redrawMarks()
+      if (markSettleTimer) clearTimeout(markSettleTimer)
+      markSettleTimer = setTimeout(() => {
+        markSettleTimer = null
+        markRectCache = null
+        redrawMarks()
       }, MARK_SETTLE_MS)
     }
 
@@ -4063,7 +4106,7 @@ export const agentPlugin = {
         content.appendChild(layer)
         // the content is resized when the zoom changes: the marks are placed again
         const Observer = globalThis.ResizeObserver
-        const observer = Observer ? new Observer(() => refreshMarks()) : null
+        const observer = Observer ? new Observer(() => redrawMarks()) : null
         if (observer) observer.observe(content)
         const own = layer
         stopMarking = () => {
@@ -4081,15 +4124,29 @@ export const agentPlugin = {
       if (!scroll || !viewport) return
       const zoom = viewport.getZoom()
       const width = content.clientWidth
-      const rects = host.read((doc) =>
-        marks.flatMap((mark) => {
-          try {
-            return markRects(doc, mark)
-          } catch {
-            return []
-          }
-        }),
-      )
+      const height = content.clientHeight
+      // A late layout/font update can resize the page container after the settle
+      // refresh. Zoom alone only changes placement, not the engine's page pixels.
+      if (
+        markViewport &&
+        markViewport.zoom === zoom &&
+        (markViewport.width !== width || markViewport.height !== height)
+      ) {
+        markRectCache = null
+      }
+      markViewport = { zoom, width, height }
+      const rects =
+        markRectCache ??
+        host.read((doc) =>
+          marks.flatMap((mark) => {
+            try {
+              return markRects(doc, mark)
+            } catch {
+              return []
+            }
+          }),
+        )
+      markRectCache = rects
       for (const rect of rects) {
         const box = page.createElement('div')
         const left = scroll.getPageLeftResolved(rect.pageIndex, width) + rect.x * zoom

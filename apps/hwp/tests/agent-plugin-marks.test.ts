@@ -7,7 +7,7 @@
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
-import { afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import init, { HwpDocument } from '@rhwp/core'
 import { agentPlugin, type AgentPluginHost } from '../studio-plugin/agent-plugin.mjs'
 
@@ -30,7 +30,7 @@ interface Rect {
   height: number
 }
 
-function open(lines: string[]) {
+function open(lines: string[], prepare?: (doc: HwpDocument) => void) {
   document.body.innerHTML = '<div id="scroll-container"><div id="scroll-content"></div></div>'
   const doc = HwpDocument.createEmpty()
   doc.createBlankDocument()
@@ -38,6 +38,7 @@ function open(lines: string[]) {
     if (k > 0) doc.splitParagraph(0, k - 1, doc.getParagraphLength(0, k - 1))
     doc.insertText(0, k, 0, line)
   })
+  prepare?.(doc)
   const listeners: (() => void)[] = []
   const commands = new Map<string, (services: unknown) => void>()
   const services = {
@@ -69,7 +70,7 @@ function open(lines: string[]) {
     doc.insertText(0, 0, 0, '손')
     for (const listener of listeners) listener()
   }
-  return { plugin, doc, userEdit }
+  return { plugin, doc, userEdit, redraw: () => host.automation.execute('ext:ieum-mark-changes') }
 }
 
 /** The marks on the page, as page rectangles again. */
@@ -103,9 +104,134 @@ const textOf = (doc: HwpDocument, para: number) =>
 
 afterEach(() => {
   agentPlugin.deactivate?.()
+  vi.restoreAllMocks()
+  vi.useRealTimers()
 })
 
 describe('marks of changes', () => {
+  it('reuses page geometry for redraws, but refreshes it after layout settles or text changes', () => {
+    vi.useFakeTimers()
+    const { plugin, doc, redraw } = open(['first', 'target'])
+    const geometry = vi.spyOn(doc, 'getSelectionRects')
+    plugin.replaceText('target', 'changed', null)
+    expect(geometry).toHaveBeenCalledTimes(1)
+    const before = marksOnPage()
+    for (let i = 0; i < 20; i++) redraw()
+    expect(marksOnPage()).toEqual(before)
+    expect(geometry).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(350)
+    expect(geometry).toHaveBeenCalledTimes(2)
+    // Late layout can resize the content even after the settle timer has fired.
+    Object.defineProperty(document.querySelector('#scroll-content'), 'clientHeight', {
+      value: 4000,
+      configurable: true,
+    })
+    redraw()
+    expect(geometry).toHaveBeenCalledTimes(3)
+    plugin.replaceText('changed', 'new text', null)
+    expect(geometry.mock.calls.length).toBeGreaterThan(3)
+  })
+
+  it('does not revive a removed mark layer after deactivation', () => {
+    vi.useFakeTimers()
+    const { plugin } = open(['target'])
+    plugin.replaceText('target', 'changed', null)
+    agentPlugin.deactivate?.()
+    vi.advanceTimersByTime(400)
+    expect(document.querySelector('.ieum-change-marks')).toBeNull()
+  })
+
+  it('limits cell geometry to its actual endpoint pages without changing its rectangles', () => {
+    const { plugin, doc } = open(
+      Array.from({ length: 35 }, () => 'Filler paragraph. '.repeat(12)),
+      (d) => {
+        d.pasteHtml(0, 34, 0, '<table><tr><td>target</td></tr></table>')
+      },
+    )
+    const scan = vi.spyOn(doc, 'getSelectionRectsInCellByPath')
+    const hinted = vi.spyOn(doc, 'getSelectionRectsInCellByPathEx')
+    plugin.replaceText('target', 'changed', null)
+    expect(scan).not.toHaveBeenCalled()
+    expect(hinted).toHaveBeenCalledTimes(1)
+    const query = JSON.parse(hinted.mock.calls[0][0])
+    expect(query.startPageHint).toBeGreaterThan(0)
+    const expected = JSON.parse(
+      doc.getSelectionRectsInCellByPath(
+        query.sectionIdx,
+        query.parentParaIdx,
+        query.path,
+        query.startCellParaIdx,
+        query.startCharOffset,
+        query.endCellParaIdx,
+        query.endCharOffset,
+      ),
+    ) as Rect[]
+    expect(marksOnPage()).toEqual(
+      expected.map((r) => ({
+        pageIndex: r.pageIndex,
+        x: Math.round(r.x),
+        y: Math.round(r.y),
+        width: Math.round(r.width),
+        height: Math.round(r.height),
+      })),
+    )
+  })
+
+  it.each(['repeated header', 'missing endpoint'])('keeps full path geometry for %s', (reason) => {
+    const { plugin, doc } = open([''], (d) => {
+      d.pasteHtml(0, 0, 0, '<table><tr><td>target</td></tr></table>')
+    })
+    if (reason === 'repeated header') {
+      vi.spyOn(doc, 'getTableProperties').mockReturnValue(JSON.stringify({ repeatHeader: true }))
+    } else {
+      vi.spyOn(doc, 'getCursorRectByPath').mockImplementation(() => {
+        throw new Error('unavailable')
+      })
+    }
+    const scan = vi.spyOn(doc, 'getSelectionRectsInCellByPath')
+    const hinted = vi.spyOn(doc, 'getSelectionRectsInCellByPathEx')
+    plugin.replaceText('target', 'changed', null)
+    expect(scan).toHaveBeenCalledTimes(1)
+    expect(hinted).not.toHaveBeenCalled()
+    expect(marksOnPage().length).toBeGreaterThan(0)
+  })
+
+  it('keeps every line of a marked cell spanning several pages', () => {
+    const { plugin, doc } = open(['prefix', ''], (d) => {
+      d.pasteHtml(0, 1, 0, '<table><tr><td>target</td></tr></table>')
+      d.setTableProperties(
+        0,
+        1,
+        0,
+        JSON.stringify({ pageBreak: 1, treatAsChar: false, restrictInPage: false }),
+      )
+    })
+    const hinted = vi.spyOn(doc, 'getSelectionRectsInCellByPathEx')
+    plugin.replaceText('target', 'Long cell text. '.repeat(1000), null)
+    const query = JSON.parse(hinted.mock.calls[0][0])
+    const expected = JSON.parse(
+      doc.getSelectionRectsInCellByPath(
+        query.sectionIdx,
+        query.parentParaIdx,
+        query.path,
+        query.startCellParaIdx,
+        query.startCharOffset,
+        query.endCellParaIdx,
+        query.endCharOffset,
+      ),
+    ) as Rect[]
+    expect(new Set(expected.map((r) => r.pageIndex)).size).toBeGreaterThan(1)
+    expect(marksOnPage()).toEqual(
+      expected.map((r) => ({
+        pageIndex: r.pageIndex,
+        x: Math.round(r.x),
+        y: Math.round(r.y),
+        width: Math.round(r.width),
+        height: Math.round(r.height),
+      })),
+    )
+  })
+
   it('marks the text a replacement put in', () => {
     const { plugin, doc } = open(['제출 기한은 3월 2일', '담당자: 홍길동'])
     plugin.replaceText('홍길동', '김철수', null)
