@@ -91,6 +91,7 @@ import { queueConvertedContent } from './generate/converted-tab'
 import { installReadOnlyGuard } from './read-only-guard'
 import { isTranslationOutputTab } from './translation-output'
 import { releaseClosedRenderer } from './renderer-disposal'
+import { readMemory, SPARE_RECHECK_MS, spareViewVerdict } from './spare-view-policy'
 import type { SessionStripState } from './session-record'
 
 /** a tab lifted out of the strip with its live view: what "Open in New Window",
@@ -231,9 +232,13 @@ export class TabManager {
   private readonly fullScreenTracked = new WeakSet<WebContentsView>()
   /** Sheets renderer mounted ahead of the next open: parsing its bundle and
    *  booting Univer is the bulk of a workbook's open time, and the shell hands
-   *  the path over after mount anyway. */
+   *  the path over after mount anyway. It costs about 200 MB, so it is made only
+   *  while the PC has free memory and let go when memory runs short
+   *  (spare-view-policy.ts). */
   private spareSheetsView: WebContentsView | null = null
   private spareSheetsTimer: ReturnType<typeof setTimeout> | null = null
+  /** looks at the PC's free memory while a spare exists */
+  private spareSheetsWatch: ReturnType<typeof setInterval> | null = null
   /** live two-pane split of this window (decision 0037); null = one visible document */
   private split: SplitViewState | null = null
   /** the tab shown before the current one: the "other document" a split falls
@@ -296,6 +301,11 @@ export class TabManager {
       if (this.spareSheetsView || this.shellWindow.isDestroyed() || this.split) return
       const active = this.tabs.find((t) => t.id === this.activeId)
       if (active?.kind !== 'sheets') return
+      // no room to spare: look again later, for as long as Sheets stays the active tab
+      if (spareViewVerdict(readMemory(), false) !== 'create') {
+        this.scheduleSpareSheetsView(SPARE_RECHECK_MS)
+        return
+      }
       const view = createSheetsView({ includeAiHandlers: false })
       // registering the session made the spare the menu-action target
       setActiveSheetsWebContents(active.view?.webContents ?? null)
@@ -308,21 +318,46 @@ export class TabManager {
       view.webContents.once('render-process-gone', () => {
         if (this.spareSheetsView !== view) return
         this.spareSheetsView = null
+        this.stopWatchingSpareSheetsView()
         view.webContents.close()
       })
       this.spareSheetsView = view
+      this.watchSpareSheetsView()
     }, delayMs)
+  }
+
+  /** while a spare exists, let it go as soon as the PC runs short of memory, then wait for room */
+  private watchSpareSheetsView(): void {
+    this.stopWatchingSpareSheetsView()
+    const watch = setInterval(() => {
+      if (!this.spareSheetsView) {
+        this.stopWatchingSpareSheetsView()
+        return
+      }
+      if (spareViewVerdict(readMemory(), true) !== 'drop') return
+      this.discardSpareSheetsView()
+      this.scheduleSpareSheetsView(SPARE_RECHECK_MS)
+    }, SPARE_RECHECK_MS)
+    watch.unref?.()
+    this.spareSheetsWatch = watch
+  }
+
+  private stopWatchingSpareSheetsView(): void {
+    if (this.spareSheetsWatch) clearInterval(this.spareSheetsWatch)
+    this.spareSheetsWatch = null
   }
 
   private takeSpareSheetsView(): WebContentsView | null {
     const view = this.spareSheetsView
     this.spareSheetsView = null
+    this.stopWatchingSpareSheetsView()
     return view && !view.webContents.isDestroyed() ? view : null
   }
 
   private discardSpareSheetsView(): void {
     if (this.spareSheetsTimer) clearTimeout(this.spareSheetsTimer)
     this.spareSheetsTimer = null
+    this.stopWatchingSpareSheetsView()
     const spare = this.spareSheetsView
     this.spareSheetsView = null
     if (!spare) return

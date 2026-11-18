@@ -109,6 +109,7 @@
 
 ## 이 모듈의 방식
 
+- **미리 띄운 엑셀 화면은 PC의 남은 메모리를 읽어 만들고 버린다**(결정 0110, `spare-view-policy.ts`). 엑셀 탭이 앞에 있는 동안 다음 통합 문서를 빨리 열려고 엑셀 화면 하나(약 200MB)를 미리 띄우는데, 쓸 수 있는 메모리가 3GB 이상이고 전체의 20% 이상일 때만 만들고(모자라면 30초마다 다시 본다), 만든 뒤 1.5GB 미만이거나 전체의 10% 미만이 되면 닫는다. 두 기준이 떨어져 있어 되풀이하지 않는다. 메모리는 `process.getSystemMemoryInfo()`로 읽는다(macOS에서 `os.freemem()`은 너무 낮게 읽는다). 나뉜 화면(번역의 원본·결과 두 칸)에서는 처음부터 만들지 않는다. `tests/tab-manager.test.ts`의 "spare sheets view"가 지킨다.
 - **탭 키는 껍데기가 받는다.** Ctrl+Tab·Ctrl+Shift+Tab은 탭을 순환하고 Ctrl+W(⌘W)는 활성 탭을 닫는다(`src/main/tab-shortcuts.ts`의 `tabShortcutOf`, `index.ts`의 `installTabShortcuts`). 편집기가 이미 쓰는 Ctrl+PageUp/PageDown과 Ctrl+1..9는 가져오지 않는다. Home에서는 Ctrl+W를 가로채지 않고 기존 File > Close(창 닫기)에 맡긴다. 한글(HWP) 탭의 Ctrl+Tab은 표 칸 안이면 편집기가 탭 글자를 넣고, 아니면 지금처럼 탭을 순환한다. 껍데기는 편집기 프레임에 먼저 묻고(`editorTakes`), 편집기가 맡지 않으면 순환한다.
 - 에디터의 메인 코드는 패키지가 아니라 상대 경로로 가져온다(`../../../docs/src/main/docs-main`). `electron.vite.config.ts`는 메인에 대해 아무것도 외부화하지 않고 전부 한 번들로 묶는다. 그래서 `apps/*/src/main`을 고친 뒤에는 shell을 다시 빌드해야 한다. 안 하면 변경이 조용히 실행되지 않는다. 렌더러와 preload는 각 에디터의 빌드 결과(`apps/<앱>/out`, 패키징 시 `resources/modules/`)에서 불러오므로 그쪽도 먼저 빌드되어 있어야 한다(`npm run shell`은 `build:all` 뒤에 실행한다).
 - 개발 모드에서 preload를 고쳤으면 다시 빌드한다. 낡은 preload는 렌더러를 빈 화면으로 만든다(`npm run dev`의 `predev`가 `tools/build-stale-preloads.mjs`를 돌린다).

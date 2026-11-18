@@ -210,6 +210,14 @@ vi.mock('../../epub/src/main/epub-main', () => ({
   requestEpubClose: (...args: unknown[]) => requestEpubClose(...(args as [])),
 }))
 
+// the PC's free memory decides whether a spare Sheets view is made or kept; the tests set it
+const { memory } = vi.hoisted(() => ({ memory: { freeMB: 10_000, totalMB: 16_384 } }))
+
+vi.mock('../src/main/spare-view-policy', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/main/spare-view-policy')>()
+  return { ...actual, readMemory: () => ({ ...memory }) }
+})
+
 import { helpTopicParam, helpViewUrl, TabManager } from '../src/main/tab-manager'
 import type { TabKind } from '../src/shared/tabs-api'
 
@@ -251,6 +259,8 @@ function lastCreatedView(factory: ReturnType<typeof vi.fn>): FakeView {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  memory.freeMB = 10_000
+  memory.totalMB = 16_384
   nextWebContentsId = 1
   docsQueryDirty.mockImplementation(() => Promise.resolve(false))
   requestDocsClose.mockImplementation(() => Promise.resolve(true))
@@ -536,6 +546,99 @@ describe('spare sheets view', () => {
       manager.activateTab('home')
       expect(shellWindow.contentView.removeChildView).toHaveBeenCalledWith(spare)
       expect(spare.webContents.close).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('waits while memory is tight and makes the spare once there is room', () => {
+    vi.useFakeTimers()
+    try {
+      memory.freeMB = 1_000
+      manager.openSheetsTab('/tmp/first.xlsx')
+      vi.advanceTimersByTime(3_000)
+      vi.advanceTimersByTime(60_000)
+      expect(createSheetsView).toHaveBeenCalledTimes(1)
+      memory.freeMB = 9_000
+      vi.advanceTimersByTime(30_000)
+      expect(createSheetsView).toHaveBeenCalledTimes(2)
+      expect(shellWindow.contentView.addChildView).toHaveBeenCalledWith(
+        lastCreatedView(createSheetsView),
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('lets the spare go when memory runs short, and makes one again when there is room', () => {
+    vi.useFakeTimers()
+    try {
+      manager.openSheetsTab()
+      vi.advanceTimersByTime(3_000)
+      expect(createSheetsView).toHaveBeenCalledTimes(2)
+      const spare = lastCreatedView(createSheetsView)
+
+      memory.freeMB = 1_000
+      vi.advanceTimersByTime(30_000)
+      expect(shellWindow.contentView.removeChildView).toHaveBeenCalledWith(spare)
+      expect(spare.webContents.close).toHaveBeenCalledTimes(1)
+
+      // still short: no new spare
+      vi.advanceTimersByTime(60_000)
+      expect(createSheetsView).toHaveBeenCalledTimes(2)
+
+      memory.freeMB = 9_000
+      vi.advanceTimersByTime(30_000)
+      expect(createSheetsView).toHaveBeenCalledTimes(3)
+      expect(lastCreatedView(createSheetsView)).not.toBe(spare)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps the spare while memory is between the two limits, and makes none there', () => {
+    vi.useFakeTimers()
+    try {
+      manager.openSheetsTab()
+      vi.advanceTimersByTime(3_000)
+      const spare = lastCreatedView(createSheetsView)
+      // under the 3.3 GB needed to make one, over the 1.6 GB under which it is dropped
+      memory.freeMB = 2_000
+      vi.advanceTimersByTime(120_000)
+      expect(spare.webContents.close).not.toHaveBeenCalled()
+      expect(createSheetsView).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('stops looking for room once Sheets is left', () => {
+    vi.useFakeTimers()
+    try {
+      memory.freeMB = 1_000
+      manager.openSheetsTab()
+      vi.advanceTimersByTime(3_000)
+      manager.activateTab('home')
+      memory.freeMB = 9_000
+      vi.advanceTimersByTime(120_000)
+      expect(createSheetsView).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('stops watching a spare that was handed to a tab', () => {
+    vi.useFakeTimers()
+    try {
+      manager.openSheetsTab('/tmp/first.xlsx')
+      vi.advanceTimersByTime(3_000)
+      const spare = lastCreatedView(createSheetsView)
+      manager.openSheetsTab('/tmp/budget.xlsx')
+      // the spare is now a tab; running short of memory must not close it
+      memory.freeMB = 500
+      vi.advanceTimersByTime(120_000)
+      expect(spare.webContents.close).not.toHaveBeenCalled()
+      expect(shellWindow.contentView.removeChildView).not.toHaveBeenCalledWith(spare)
     } finally {
       vi.useRealTimers()
     }

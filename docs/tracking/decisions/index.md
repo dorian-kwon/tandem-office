@@ -108,3 +108,4 @@
 | [0107](0107-update-notes-travel-in-the-feed.md)               | 업데이트 창의 릴리스 본문은 비공개 저장소 방식으로는 오지 않아, 빌드 때 `latest.yml`의 `releaseNotes`에 넣어 보낸다               | 2026-11-17 |
 | [0108](0108-translate-mixed-format-lines-whole.md)            | 서식이 섞인 줄은 서식마다 번호 태그를 달아 줄 전체를 한 문장으로 번역하고, 서식은 앱이 되입힌다                                   | 2026-11-17 |
 | [0109](0109-problem-report-saved-by-the-person.md)            | 크래시 기록을 식별자 꼴로만 더 자세히 하고, 도움말 메뉴의 "문제 보고서 저장…"으로 사람이 파일을 저장해 직접 보낸다                | 2026-11-18 |
+| [0110](0110-spare-sheets-view-follows-free-memory.md)         | 미리 띄운 엑셀 화면은 PC의 남은 메모리를 읽어 넉넉할 때만 만들고, 모자라지면 닫는다                                               | 2026-11-18 |
