@@ -85,7 +85,9 @@
 
 ## 변경마다 모든 문서 형식 검증
 
-어느 편집기를 수정했든 `npm run test:editors`를 실행한다. 이 명령은 모든 문서 편집기의 테스트와 셸의 한글 내장 그림 OCR 테스트를 실행하고 앱을 빌드한 뒤, 셸이 지원하는 각 확장자의 샘플을 실제 편집기에서 연다. HWP와 HWPX는 별도 샘플로 AI 편집의 실행 취소·다시 실행도 확인한다. 같은 기능을 여러 형식에서 제공하면 해당 형식마다 변경한 동작을 검사한다.
+일반 릴리스에서는 현재 변경을 반영한 빌드에서 `npm run test:release`를 실행한다. 새 작업 사본은 먼저 `npm run build:all`로 빌드한다. 작은 샘플로 지원 확장자별 열기, HWP·HWPX 한 단위 Undo/Redo와 업데이트 화면을 확인한다. 변경한 기능은 영향을 받는 형식마다 짧은 회귀 사례를 확인한다. 같은 빌드로 이미 통과한 검사는 릴리스 준비 때 다시 돌릴 필요가 없다.
+
+새로운 지연이나 메모리 증가를 발견했거나 변경으로 추가 부하가 예상될 때 해당 경로의 대용량 검사를 선택한다. 예를 들어 대량 번역에서 입력이 멈춘다면 해당 형식과 문서 크기로 재현한다. 전체 단위 검사(`npm test`), 전체 편집기 검사(`npm run test:editors`), 전체 CI(수동 실행의 `full_suite`)는 필요할 때 선택할 수 있다.
 
 ## 합치기 전에 통과해야 하는 검사
 
@@ -93,7 +95,7 @@
 npm run typecheck
 npm run lint
 npm run format:check
-npm test
+npm run test:release
 npm run licenses
 npm run check:theme-colors
 npm run check:english-comments

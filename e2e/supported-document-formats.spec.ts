@@ -185,7 +185,7 @@ test.afterAll(async () => {
 // Default Playwright mode keeps a single shell in the passing path and runs
 // the remaining extensions in a fresh worker if any one of them fails.
 for (const ext of Object.values(ROUTED_EXTENSIONS).flat()) {
-  test(`opens .${ext} through the shell and reads its document content`, async () => {
+  test(`@release-smoke opens .${ext} through the shell and reads its document content`, async () => {
     const { content, check } = cases[ext]
     const path = test.info().outputPath('sample.' + ext)
     await writeFile(path, await content())

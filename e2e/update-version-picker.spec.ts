@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { closeAndSaveVideo, launchShell, waitForPageWithUrl } from './helpers'
 
-test('opens the split update menu and prepares a selected version in the preview', async () => {
+test('@release-smoke opens the split update menu and prepares a selected version in the preview', async () => {
   const launched = await launchShell({
     onboardingSeen: true,
     hideUpdateWindows: true,

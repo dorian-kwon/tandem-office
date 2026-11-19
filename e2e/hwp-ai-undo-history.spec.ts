@@ -103,7 +103,7 @@ test('the built HWP studio keeps manual undo while skipping disabled AI history'
 })
 
 for (const format of ['hwp', 'hwpx'] as const) {
-  test(`opens an existing ${format.toUpperCase()} and restores its AI edit with native redo`, async () => {
+  test(`@release-smoke opens an existing ${format.toUpperCase()} and restores its AI edit with native redo`, async () => {
     test.setTimeout(120_000)
     const fixture = join(__dirname, '..', 'apps', 'hwp', 'tests', 'fixtures', 'memo.' + format)
     const file = test.info().outputPath('copy.' + format)

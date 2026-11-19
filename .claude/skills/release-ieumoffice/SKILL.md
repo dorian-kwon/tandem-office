@@ -61,7 +61,7 @@ description: tandem office의 새 버전을 내는 작업(버전 올리기, Wind
 
 ## 릴리스 전에 확인하는 것
 
-- 합치기 전 검사는 `docs/standards.md`의 목록을 따른다.
+- 일반 릴리스는 `docs/standards.md`의 빠른 검사 기준을 따른다. 현재 빌드의 `npm run test:release`와 변경 기능의 짧은 회귀 결과를 사용한다. 새 지연이나 추가 부하를 조사할 때만 해당 부하 검사를 실행한다.
 - 개발 미리보기: `GENOFFICE_FAKE_UPDATE=9.9.9 npm run dev`로 업데이트 창을 띄운다. 내용 상자, 스크롤, 두 섹션일 때 `vX.Y.Z` 머리글, "GitHub에서 전체 보기"를 본다.
 - 공개 뒤 옛 버전 설치본에서 ☰ → 업데이트 확인…으로 확인한다(releasing.ko.md 4번의 4). 문제가 보이면 10번대로 더 퍼지지 않게 막는다.
   - 새 버전 번호와 바뀐 점이 함께 보이는가

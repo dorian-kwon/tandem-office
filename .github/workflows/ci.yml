@@ -1,8 +1,8 @@
 name: CI
 
 # Test gate for every PR and push: changed-file formatting, lint, typecheck across
-# all workspaces, and the full unit-test suite (engine packages and app tests; the
-# sheets suite also runs the Rust xlsx-sidecar tests). Installers are built and
+# all workspaces, and small release smoke tests. The full suites can be run
+# manually when investigating regressions. Installers are built and
 # published by hand (docs/releasing.ko.md) — this workflow never builds or uploads
 # one, and it uses no repository secret.
 
@@ -12,6 +12,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      full_suite:
+        description: 'Run the full unit and browser suites, including large-document cases'
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -142,9 +147,15 @@ jobs:
       # pptx-engine's OOXML schema gate validates saved decks with xmllint
       # (tools/ooxml-validate); the runner image is not guaranteed to have it.
       - name: Install xmllint
+        if: inputs.full_suite
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libxml2-utils
 
-      - name: Test
+      - name: Release smoke tests
+        if: ${{ !inputs.full_suite }}
+        run: npm run test:release:unit
+
+      - name: Full unit tests
+        if: inputs.full_suite
         run: npm test
 
       # Preservation gate: a no-op-adjacent edit through the OOXML gateway must
@@ -219,6 +230,7 @@ jobs:
       # Calibri/Cambria metric-compatible faces and CJK glyphs so renders are
       # reproducible across runner images and contributor machines.
       - name: Install document fonts (visual baselines)
+        if: inputs.full_suite
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -229,15 +241,22 @@ jobs:
       # that alter the existing pixel baselines. Electron already supplies the
       # required system libraries on this runner.
       - name: Install Chromium for layout tests
+        if: inputs.full_suite
         run: npx playwright install chromium
 
       - name: Markdown browser tests
+        if: inputs.full_suite
         run: npx playwright test --config apps/markdown/playwright.config.ts
 
       # Electron needs a display server on Linux runners. DEBUG=pw:browser
       # forwards the Electron process stdout/stderr into the CI log so launch
       # failures are diagnosable.
+      - name: Release smoke tests (Electron shell)
+        if: ${{ !inputs.full_suite }}
+        run: xvfb-run --auto-servernum -- npm run test:release:e2e
+
       - name: E2E (Electron shell)
+        if: inputs.full_suite
         env:
           DEBUG: 'pw:browser'
         run: xvfb-run --auto-servernum -- npm run test:e2e
