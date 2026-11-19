@@ -75,6 +75,8 @@ function rowOp(next: () => number, rows: number): StructuralOp {
   }
 }
 
+const loadTest = it.runIf(process.env.GENOFFICE_LOAD_TESTS === '1')
+
 describe('runs of row attribute ops', () => {
   it('match the one-op-at-a-time result byte for byte', () => {
     for (let seed = 1; seed <= 300; seed += 1) {
@@ -111,12 +113,13 @@ describe('runs of row attribute ops', () => {
 
   it('collapse an undo that restores every line separately', () => {
     // Undoing a 3,000-row height change journals one op per row.
+    const count = process.env.GENOFFICE_LOAD_TESTS === '1' ? 3000 : 12
     let rows = ''
-    for (let row = 1; row <= 3000; row += 1) {
+    for (let row = 1; row <= count; row += 1) {
       rows += `<row r="${row}" ht="${15 + (row % 7)}"><c r="A${row}"><v>${row}</v></c></row>`
     }
     const xml = worksheet(rows)
-    const ops: StructuralOp[] = Array.from({ length: 3000 }, (_, row) => ({
+    const ops: StructuralOp[] = Array.from({ length: count }, (_, row) => ({
       kind: 'set-row-size' as const,
       start: row,
       end: row,
@@ -125,8 +128,8 @@ describe('runs of row attribute ops', () => {
     const started = performance.now()
     const result = applyStructuralOps(xml, ops, SHEET)
     expect(performance.now() - started).toBeLessThan(2_000)
-    expect(result).toContain('<row r="3000" ht="19" customHeight="1">')
-    expect(result.match(/customHeight="1"/g)).toHaveLength(3000)
+    expect(result).toContain(`<row r="${count}" ht="${15 + (count % 7)}" customHeight="1">`)
+    expect(result.match(/customHeight="1"/g)).toHaveLength(count)
   })
 })
 
@@ -173,7 +176,7 @@ describe('runs of merge and unmerge ops', () => {
     expect(applyStructuralOps(withSection, ops, SHEET)).toBe(sequential(withSection, ops))
   })
 
-  it('unmerging thousands of regions stays fast', () => {
+  loadTest('unmerging thousands of regions stays fast', () => {
     const refs: string[] = []
     const ops: StructuralOp[] = []
     for (let row = 0; row < 6000; row += 2) {

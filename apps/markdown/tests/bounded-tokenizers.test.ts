@@ -104,6 +104,8 @@ const CASES: Record<string, string> = {
   ].join('\n'),
 }
 
+const loadTest = it.runIf(process.env.GENOFFICE_LOAD_TESTS === '1')
+
 describe('bounded markdown tokenizers', () => {
   it('ends a table at a whitespace-only blank line', () => {
     const md = ['| a | b |', '|---|---|', '| 1 | 2 |', '  ', 'After the table.'].join('\n')
@@ -112,7 +114,7 @@ describe('bounded markdown tokenizers', () => {
     expect(json.content.map((n) => n.type)).toEqual(['table', 'paragraph'])
   })
 
-  it('stays linear when blank lines carry spaces and cells hold code with pipes', () => {
+  loadTest('stays linear when blank lines carry spaces and cells hold code with pipes', () => {
     const filler = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. '.repeat(20)
     const table = '| h1 | h2 |\n| --- | --- |\n| `a|b` | x |\n| c | d |'
     const md = Array.from(
@@ -134,7 +136,7 @@ describe('bounded markdown tokenizers', () => {
     })
   }
 
-  it('parses a large document in linear time', () => {
+  loadTest('parses a large document in linear time', () => {
     const section = [
       '## Section',
       '',

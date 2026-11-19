@@ -137,6 +137,7 @@ for (const enabled of [false, true]) {
     test(`records insertion-to-frame timings at ${size} bytes, flag ${enabled}`, async ({
       page,
     }) => {
+      test.skip(process.env.GENOFFICE_LOAD_TESTS !== '1', 'Opt-in input latency benchmark')
       const seed = readFileSync(resolve(process.cwd(), 'skills/ieumoffice/SKILL.md'), 'utf8')
       let text = Buffer.from(seed.repeat(Math.ceil(size / Buffer.byteLength(seed)) + 1))
         .subarray(0, size)

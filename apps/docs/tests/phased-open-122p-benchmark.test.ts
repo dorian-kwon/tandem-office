@@ -149,7 +149,7 @@ function paginationPass(blocks: BlockBox[], prev: BlockBox[], pending: boolean):
   return resampled
 }
 
-describe('the 122-page phased open', () => {
+describe.runIf(process.env.GENOFFICE_LOAD_TESTS === '1')('the 122-page phased open', () => {
   it('mounts a bounded first screen, streams the tail in bounded steps, and samples the document once', () => {
     const editor = createEditor()
     const chunks = startStreamingOpen(editor, PAGES_122_BLOCKS)

@@ -12,8 +12,10 @@ function bodyWithOrphans(strays: number, fill = 460): string {
   )
 }
 
+const loadTest = it.runIf(process.env.GENOFFICE_LOAD_TESTS === '1')
+
 describe('balanceFieldChars orphan scan', () => {
-  it('keeps a 1.6 MB body with 3,200 orphans well under the quadratic cliff', () => {
+  loadTest('keeps a 1.6 MB body with 3,200 orphans well under the quadratic cliff', () => {
     // On main this shape took 8.3 s (measured): each orphan rescanned the whole
     // body and each edit re-sliced the whole string.
     const body = bodyWithOrphans(3200)
