@@ -8,7 +8,11 @@ import { dirname, join } from 'node:path'
 import * as CFB from 'cfb'
 import { beforeAll, describe, expect, it } from 'vitest'
 import init, { HwpDocument } from '@rhwp/core'
-import { hasTrackedChanges, withoutTrackedChanges } from '../src/main/tracked-changes'
+import {
+  hasTrackedChanges,
+  prepareHwpForOpen,
+  withoutTrackedChanges,
+} from '../src/main/tracked-changes'
 
 const require = createRequire(import.meta.url)
 
@@ -92,6 +96,18 @@ describe('withoutTrackedChanges', () => {
     CFB.utils.cfb_add(cfb, '/ViewText/Section0', viewCopyOf('본문 지운 글'))
     return new Uint8Array(CFB.write(cfb, { type: 'buffer' }) as Buffer)
   }
+
+  it('keeps the save guard when the current body cannot be verified', () => {
+    const cfb = CFB.read(Buffer.from(tracked()), { type: 'buffer' })
+    const header = Buffer.from(CFB.find(cfb, '/FileHeader')!.content as Uint8Array)
+    header.writeUInt32LE(header.readUInt32LE(36) | 0x4, 36)
+    CFB.utils.cfb_add(cfb, '/FileHeader', header)
+    const bytes = new Uint8Array(CFB.write(cfb, { type: 'buffer' }) as Buffer)
+    const result = prepareHwpForOpen(bytes)
+    expect(result.tracking).toBe('blocked')
+    expect(result.bytes).toBe(bytes)
+    expect(result.opened).toBeNull()
+  })
 
   it('gives the body, without the view copy and the property', () => {
     const file = tracked()

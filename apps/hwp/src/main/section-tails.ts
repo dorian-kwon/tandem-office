@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { collectFieldKinds, type FieldKinds } from './field-kinds'
 import {
   CTRL_HEADER,
   DOC_INFO,
@@ -335,24 +336,46 @@ const binDataOf = (opened: OpenedHwp): string[] =>
 export function sectionTailsOf(file: Uint8Array): SectionTails | null {
   try {
     const opened = openHwp(file)
-    if (!opened) return null
+    return opened ? readSectionMetadata(opened).tails : null
+  } catch {
+    return null
+  }
+}
+
+/** Inflate and inspect each section once; only the small save-time metadata survives. */
+export function readSectionMetadata(opened: OpenedHwp): {
+  tails: SectionTails | null
+  kinds: FieldKinds | null
+} {
+  const empty = { tails: null, kinds: null }
+  try {
+    const kinds: FieldKinds = new Map()
     const sections = sectionCount(opened)
     const tails = new Map<number, TailList[]>()
     const captions = new Map<string, Caption>()
     for (let index = 0; index < sections; index++) {
       const data = streamOf(opened, SECTION(index))
       const records = data ? recordsOf(data) : null
-      if (!data || !records) return null
+      if (!data || !records) return empty
+      collectFieldKinds(data, records, kinds)
       const tail = tailOf(data, records)
       if (tail && tail.lists.length > 0) tails.set(index, tail.lists)
       captionsIn(data, records, captions)
     }
-    if (tails.size === 0 && captions.size === 0) return null
-    const ids = idsOf(opened)
-    if (!ids) return null
-    return { sections, tails, ids, binData: binDataOf(opened), captions }
+    const fields = kinds.size ? kinds : null
+    if (tails.size === 0 && captions.size === 0) return { tails: null, kinds: fields }
+    // DocInfo is needed only for tails. A bad DocInfo must not lose field kinds.
+    try {
+      const ids = idsOf(opened)
+      return {
+        tails: ids ? { sections, tails, ids, binData: binDataOf(opened), captions } : null,
+        kinds: fields,
+      }
+    } catch {
+      return { tails: null, kinds: fields }
+    }
   } catch {
-    return null
+    return empty
   }
 }
 

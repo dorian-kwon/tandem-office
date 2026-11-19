@@ -1,5 +1,13 @@
 import * as CFB from 'cfb'
-import { SECTION, openHwp, sectionCount, writeContainer } from './hwp5-file'
+import {
+  SECTION,
+  openHwp,
+  plainHwp,
+  readHwpContainer,
+  sectionCount,
+  writeContainer,
+  type OpenedHwp,
+} from './hwp5-file'
 
 const SIGNATURE = 'HWP Document File'
 /** FileHeader property: the document keeps a record of changes */
@@ -10,10 +18,9 @@ const VIEW_TEXT = /\/ViewText\//i
 type LinkedEntry = CFB.CFB$Entry & { L: number; R: number; C: number }
 
 /** The file's header and container when it is an HWP file with tracked changes, else null. */
-function trackedContainer(file: Uint8Array): { cfb: CFB.CFB$Container; header: Buffer } | null {
-  const cfb = CFB.read(Buffer.from(file.buffer, file.byteOffset, file.byteLength), {
-    type: 'buffer',
-  })
+function trackedContainer(
+  cfb: CFB.CFB$Container,
+): { cfb: CFB.CFB$Container; header: Buffer } | null {
   const header = CFB.find(cfb, '/FileHeader')
   if (!header?.content || header.content.length < 40) return null
   const bytes = Buffer.from(header.content as Uint8Array)
@@ -30,7 +37,7 @@ function trackedContainer(file: Uint8Array): { cfb: CFB.CFB$Container; header: B
  */
 export function hasTrackedChanges(file: Uint8Array): boolean {
   try {
-    return trackedContainer(file) !== null
+    return trackedContainer(readHwpContainer(file)) !== null
   } catch {
     return false
   }
@@ -51,10 +58,33 @@ export function hasTrackedChanges(file: Uint8Array): boolean {
  * throws.
  */
 export function withoutTrackedChanges(file: Uint8Array): Uint8Array | null {
+  const result = prepareHwpForOpen(file)
+  return result.tracking === 'dropped' ? result.bytes : null
+}
+
+/** The verified container belongs to the returned bytes, including after a tracked rewrite. */
+export function prepareHwpForOpen(file: Uint8Array): {
+  bytes: Uint8Array
+  opened: OpenedHwp | null
+  tracking: 'none' | 'blocked' | 'dropped'
+} {
+  const plain = { bytes: file, opened: null, tracking: 'none' as const }
   try {
-    const tracked = trackedContainer(file)
-    if (!tracked) return null
-    const { cfb, header } = tracked
+    const cfb = readHwpContainer(file)
+    const tracked = trackedContainer(cfb)
+    if (!tracked) return { ...plain, opened: plainHwp(cfb) }
+    return dropTracked(tracked) ?? { ...plain, tracking: 'blocked' }
+  } catch {
+    return plain
+  }
+}
+
+function dropTracked({ cfb, header }: { cfb: CFB.CFB$Container; header: Buffer }): {
+  bytes: Uint8Array
+  opened: OpenedHwp
+  tracking: 'dropped'
+} | null {
+  try {
     const bodies = new Map<string, Buffer>()
     for (let index = 0; ; index++) {
       const entry = CFB.find(cfb, SECTION(index))
@@ -84,7 +114,11 @@ export function withoutTrackedChanges(file: Uint8Array): Uint8Array | null {
       const entry = CFB.find(check.cfb, path)
       if (!entry?.content || !Buffer.from(entry.content as Uint8Array).equals(body)) return null
     }
-    return new Uint8Array(written.buffer, written.byteOffset, written.byteLength)
+    return {
+      bytes: new Uint8Array(written.buffer, written.byteOffset, written.byteLength),
+      opened: check,
+      tracking: 'dropped',
+    }
   } catch {
     return null
   }

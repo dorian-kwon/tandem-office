@@ -27,7 +27,6 @@ import { atomicWriteFile } from './atomic-write'
 import { readHwpDefaultFormat } from './default-format'
 import { badJob, printJobToPdf, printJobToPrinter } from './print-document'
 import { tm } from './dialog-strings'
-import { fieldKindsOf } from './field-kinds'
 import type { FieldKinds } from './field-kinds'
 import { lostMemoCountOf } from './memos'
 import {
@@ -45,10 +44,10 @@ import {
 import type { HwpRecoveryHost } from './recovery'
 import { applySaveFixes } from './save-fixes'
 import { backupPathFor, bytesMatchFormat, needsBackup, withFormatExtension } from './save-plan'
-import { sectionTailsOf } from './section-tails'
+import { readSectionMetadata } from './section-tails'
 import type { SectionTails } from './section-tails'
 import { newTabsOf } from './tab-widths'
-import { hasTrackedChanges, withoutTrackedChanges } from './tracked-changes'
+import { prepareHwpForOpen } from './tracked-changes'
 import { HWP_CHANNELS, MAX_HWP_SAVE_BYTES, hwpFormatOfPath } from '../shared/ipc'
 import type {
   BeginSaveResult,
@@ -517,20 +516,15 @@ function registerHwpIpc(): void {
     await rememberDiskState(wcId, path)
     trackedByWc.delete(wcId)
     trackingDroppedByWc.delete(wcId)
-    if (bytesMatchFormat(bytes, 'hwp') && hasTrackedChanges(bytes)) {
-      // the editor gets the document as it reads now; one that cannot be had is not saved
-      const current = withoutTrackedChanges(bytes)
-      if (current) {
-        bytes = current
-        trackingDroppedByWc.add(wcId)
-      } else {
-        trackedByWc.add(wcId)
-      }
-    }
-    const tails = bytesMatchFormat(bytes, 'hwp') ? sectionTailsOf(bytes) : null
-    if (tails) tailsByWc.set(e.sender.id, tails)
-    else tailsByWc.delete(e.sender.id)
-    const kinds = bytesMatchFormat(bytes, 'hwp') ? fieldKindsOf(bytes) : null
+    const prepared = bytesMatchFormat(bytes, 'hwp') ? prepareHwpForOpen(bytes) : null
+    if (prepared) bytes = prepared.bytes
+    if (prepared?.tracking === 'dropped') trackingDroppedByWc.add(wcId)
+    if (prepared?.tracking === 'blocked') trackedByWc.add(wcId)
+    const { tails, kinds } = prepared?.opened
+      ? readSectionMetadata(prepared.opened)
+      : { tails: null, kinds: null }
+    if (tails) tailsByWc.set(wcId, tails)
+    else tailsByWc.delete(wcId)
     if (kinds) fieldKindsByWc.set(e.sender.id, kinds)
     else fieldKindsByWc.delete(e.sender.id)
     return restored ?? bytes

@@ -61,9 +61,14 @@ export interface OpenedHwp {
 
 /** A plain HWP 5 container, or null: not one, or one whose streams are not readable here. */
 export function openHwp(file: Uint8Array): OpenedHwp | null {
-  const cfb = CFB.read(Buffer.from(file.buffer, file.byteOffset, file.byteLength), {
-    type: 'buffer',
-  })
+  return plainHwp(readHwpContainer(file))
+}
+
+export function readHwpContainer(file: Uint8Array): CFB.CFB$Container {
+  return CFB.read(Buffer.from(file.buffer, file.byteOffset, file.byteLength), { type: 'buffer' })
+}
+
+export function plainHwp(cfb: CFB.CFB$Container): OpenedHwp | null {
   const header = CFB.find(cfb, FILE_HEADER)
   if (!header?.content || header.content.length < 40) return null
   const bytes = Buffer.from(header.content as Uint8Array)

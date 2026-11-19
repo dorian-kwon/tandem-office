@@ -81,6 +81,12 @@ function unknownFieldsIn(data: Buffer, records: HwpRecord[]): FieldBegin[] {
 const digestOf = (data: Buffer, control: HwpRecord): string =>
   createHash('sha1').update(data.subarray(control.body, control.end)).digest('hex')
 
+export function collectFieldKinds(data: Buffer, records: HwpRecord[], kinds: FieldKinds): void {
+  for (const field of unknownFieldsIn(data, records)) {
+    if (field.kind !== UNKNOWN_FIELD) kinds.set(digestOf(data, field.control), field.kind)
+  }
+}
+
 /**
  * The kinds the opened file gives its unknown-kind fields in the text, where that is not
  * "unknown"; null when it has none (the common case) or cannot be read here. Never throws.
@@ -94,9 +100,7 @@ export function fieldKindsOf(file: Uint8Array): FieldKinds | null {
       const data = streamOf(opened, SECTION(sec))
       const records = data ? recordsOf(data) : null
       if (!data || !records) return null
-      for (const field of unknownFieldsIn(data, records)) {
-        if (field.kind !== UNKNOWN_FIELD) kinds.set(digestOf(data, field.control), field.kind)
-      }
+      collectFieldKinds(data, records, kinds)
     }
     return kinds.size > 0 ? kinds : null
   } catch {
