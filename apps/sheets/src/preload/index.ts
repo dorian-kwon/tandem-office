@@ -664,8 +664,9 @@ const desktopApi: DesktopApi = {
     return () => ipcRenderer.removeListener(IPC_CHANNELS.ocrPopupClosed, listener)
   },
   onOcrPopupResult(callback) {
-    const listener = (_event: unknown, result: unknown): void => {
-      if (isRecord(result) && Array.isArray(result.pages)) callback(result as never)
+    const listener = (_event: unknown, result: unknown, sessionId: unknown): void => {
+      if (typeof sessionId === 'string' && isRecord(result) && Array.isArray(result.pages))
+        callback(result as never, sessionId)
     }
     ipcRenderer.on(IPC_CHANNELS.ocrPopupResult, listener)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.ocrPopupResult, listener)

@@ -9,6 +9,7 @@ import type {
   TranslateSettingsPatch,
 } from '../../../shared/translate-api'
 import { useI18n } from '../locale'
+import { TranslationWikiButton } from './TranslationWiki'
 import type { TranslateStringKey } from '../i18n/strings-translate'
 import { normalizeProjectName } from '../../../shared/project-name'
 import { InlineName } from './InlineName'
@@ -569,6 +570,7 @@ export function ProjectDetail({
               >
                 {s('startTranslation')}
               </button>
+              <TranslationWikiButton />
             </div>
           )}
         </header>

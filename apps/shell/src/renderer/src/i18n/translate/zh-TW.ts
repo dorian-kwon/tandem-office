@@ -1,6 +1,11 @@
 import type { zh } from './zh'
 
 export const zhTW = {
+  wikiView: '檢視維基',
+  wikiSetup: '在 Obsidian 選擇「將資料夾開啟為儲存庫」，並選取下方的資料夾。完成後返回 {app}。',
+  wikiDownload: '安裝 Obsidian 後，返回 {app} 即可開啟維基。',
+  wikiUnavailable: '無法開啟維基。請確認已安裝 Obsidian，啟動一次後再試。',
+  wikiFolder: '維基資料夾',
   navTranslate: '翻譯',
   title: '翻譯專案',
   intro: '翻譯專案會把待翻譯的文件、參考資料和詞彙表放在同一個資料夾裡。',

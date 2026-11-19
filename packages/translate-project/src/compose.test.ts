@@ -385,6 +385,16 @@ describe('composeContext reference chunks', () => {
       expect(text.indexOf('Writing style')).toBeLessThan(text.indexOf('Translation choices'))
     })
 
+    it('keeps the fixed PDF and Hangul destination separate from editable placement choices', () => {
+      const cases: Record<string, string>[] = [{}, { ocrPlacement: 'column B' }]
+      for (const choices of cases) {
+        const { text } = composeContext({ ...base, project: withChoices(choices) })
+        expect(text).toMatch(
+          /new-docx[^\n]+(?:plain text|plain confirmation)|PDF, HWP or HWPX new-docx result[^\n]+plain confirmation/,
+        )
+      }
+    })
+
     it('is a small block (the context has a length cap)', () => {
       const { text } = composeContext({ ...base, project: project() })
       const block = text.slice(text.indexOf('Translation choices'))

@@ -1,6 +1,13 @@
 import type { zh } from './zh'
 
 export const ko = {
+  wikiView: '위키 보기',
+  wikiSetup:
+    'Obsidian에서 ‘폴더를 보관함으로 열기’를 선택하고 아래 폴더를 여세요. 그런 다음 {app}로 돌아오세요.',
+  wikiDownload: 'Obsidian 설치를 마친 뒤 {app}로 돌아오면 위키를 엽니다.',
+  wikiUnavailable:
+    '위키를 열 수 없습니다. Obsidian 설치 여부를 확인하고 앱을 한 번 실행한 뒤 다시 시도하세요.',
+  wikiFolder: '위키 폴더',
   navTranslate: '번역',
   title: '번역 프로젝트',
   intro: '번역 프로젝트는 번역할 문서와 참고자료, 단어집을 폴더 하나에 모아 둡니다.',

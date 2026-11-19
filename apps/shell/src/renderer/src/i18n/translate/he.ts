@@ -1,6 +1,12 @@
 import type { zh } from './zh'
 
 export const he = {
+  wikiView: 'הצגת הוויקי',
+  wikiSetup: 'ב־Obsidian יש לפתוח את התיקייה שלהלן ככספת ואז לחזור אל {app}.',
+  wikiDownload: 'לאחר סיום ההתקנה של Obsidian יש לחזור אל {app} כדי לפתוח את הוויקי.',
+  wikiUnavailable:
+    'לא ניתן לפתוח את הוויקי. יש לוודא ש־Obsidian מותקן, להפעיל אותו פעם אחת ולנסות שוב.',
+  wikiFolder: 'תיקיית הוויקי',
   navTranslate: 'תרגום',
   title: 'פרויקטי תרגום',
   intro: 'פרויקט תרגום מרכז בתיקייה אחת את המסמכים לתרגום, חומרי העזר והמילונים.',

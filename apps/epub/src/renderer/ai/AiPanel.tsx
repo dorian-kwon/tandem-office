@@ -1,3 +1,4 @@
+import { analyzingDocumentLabel } from '@genoffice/i18n'
 import { useChatWindow, EarlierChatMessages } from '@genoffice/ui'
 import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
 /**
@@ -757,6 +758,11 @@ export function AiPanel({ host, filePath, onCollapse }: AiPanelProps): ReactElem
   const loopRef = useRef<AgentLoop | null>(null)
   if (!loopRef.current) {
     loopRef.current = new AgentLoop({
+      documentTranslation: {
+        documentKey: () => filePathRef.current,
+        analyzingLabel: () => analyzingDocumentLabel[langRef.current],
+        inPlaceOnly: true,
+      },
       transport: transportRef.current,
       // a local model that reported no tool support answers in text only
       toolsAllowed: () =>
@@ -948,7 +954,10 @@ export function AiPanel({ host, filePath, onCollapse }: AiPanelProps): ReactElem
         if (applied && !loopRef.current?.busy) {
           // a reopened conversation starts with no MCP choices of another chat (user MCP spec 7.6)
           windowMcpState()?.newConversation()
-          loopRef.current?.restore(msgs.map((m) => ({ role: m.role, text: m.text })))
+          loopRef.current?.restore(
+            msgs.map((m) => ({ role: m.role, text: m.text })),
+            msgs,
+          )
           const seen = new Set(sentAttachmentsRef.current.map((a) => a.path))
           for (const a of msgs.flatMap((m) => restoredAtts(m) ?? [])) {
             if (seen.has(a.path)) continue
@@ -1215,7 +1224,10 @@ export function AiPanel({ host, filePath, onCollapse }: AiPanelProps): ReactElem
       entries.map((e) => (e.role === 'user' ? skillChipRefsOf(e.skills) : undefined)),
     )
     // the model gets each message's role and text, as with any chat opened again
-    loopRef.current?.restore(entries.map((e) => ({ role: e.role, text: e.text })))
+    loopRef.current?.restore(
+      entries.map((e) => ({ role: e.role, text: e.text })),
+      entries,
+    )
     const seen = new Set<string>()
     sentAttachmentsRef.current = shown
       .flatMap((e) => e.attachments ?? [])

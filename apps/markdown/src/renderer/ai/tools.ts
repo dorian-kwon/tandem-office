@@ -40,9 +40,12 @@ const STALE_DOC_ERROR =
 // ── staleness guard: index-addressed writes are refused after user edits ──
 
 const docBaseline = new WeakMap<Editor, PmNode>()
+const seenSelection = new WeakMap<Editor, { from: number; to: number }>()
 
 export function markDocSeen(editor: Editor): void {
   docBaseline.set(editor, editor.state.doc)
+  const { from, to } = editor.state.selection
+  seenSelection.set(editor, { from, to })
 }
 
 function editedExternally(editor: Editor): boolean {
@@ -165,6 +168,12 @@ export const AGENT_TOOLS: AgentToolDef[] = [
           type: 'array',
           description: 'Ordered list of op objects (see the op catalogue)',
           items: { type: 'object' },
+        },
+        scope: {
+          type: 'string',
+          enum: ['selection', 'document'],
+          description:
+            'For translation, a selected range is the default. Use document only when the user requests a wider translation.',
         },
         intent: {
           type: 'string',
@@ -295,27 +304,56 @@ function applyOps(
   input: unknown,
   fm?: FrontmatterAccess,
   translation = false,
+  scope?: unknown,
 ): ToolExecution {
   const label = t('aiToolApplyOps')
   const parsed = validateOps(input)
   if ('error' in parsed) return fail(parsed.error, label)
-  if (usesBlockIndexes(parsed.ops) && editedExternally(editor)) return fail(STALE_DOC_ERROR, label)
+  if ((translation || usesBlockIndexes(parsed.ops)) && editedExternally(editor))
+    return fail(STALE_DOC_ERROR, label)
+  const sel = editor.state.selection
+  const seen = seenSelection.get(editor)
+  if (
+    translation &&
+    scope !== 'document' &&
+    seen &&
+    seen.from !== seen.to &&
+    (seen.from !== sel.from || seen.to !== sel.to)
+  )
+    return fail(
+      'The selection changed. Read the current document context before translating.',
+      label,
+    )
+  if (translation && scope === 'selection' && sel.empty)
+    return fail(
+      'The selection is empty. Read the current document context before translating.',
+      label,
+    )
+  const selected = translation && scope !== 'document' && !sel.empty
+  const where = selected ? blockIndexRange(editor.state.doc, sel.from, sel.to) : null
   if (
     translation &&
     parsed.ops.some(
       (op) =>
         (op.op !== 'replaceText' && op.op !== 'replaceBlocks') ||
-        op.target === 'selection' ||
-        (op.target.end !== undefined && op.target.end !== op.target.start),
+        (selected && op.op !== 'replaceText') ||
+        (op.target === 'selection'
+          ? !where || where.startIndex !== where.endIndex
+          : op.target.end !== undefined && op.target.end !== op.target.start),
     )
   )
     return fail(
-      'A translation op must replace text in one numbered block. Send the blocks together in one batch.',
+      'Use one translation op per block. For a selection use replaceText and number each block of a multi-block selection.',
       label,
     )
   const before = editor.state.doc
   const frontmatterBefore = fm?.read()
-  const r = runOps(editor, parsed.ops, { source: 'ai', frontmatter: fm, translation })
+  const r = runOps(editor, parsed.ops, {
+    source: 'ai',
+    frontmatter: fm,
+    translation,
+    selectionOnly: selected,
+  })
   const lines = r.results.map((res, i) =>
     res.ok
       ? `ops[${i}] ${parsed.ops[i]!.op}: ${res.message}`
@@ -538,7 +576,13 @@ export function executeTool(
     }
 
     case 'apply_ops':
-      return applyOps(editor, call.input.ops, fm, call.input.intent === 'translation')
+      return applyOps(
+        editor,
+        call.input.ops,
+        fm,
+        call.input.intent === 'translation',
+        call.input.scope,
+      )
 
     case 'image_search': {
       const query = String(call.input.query ?? '').trim()

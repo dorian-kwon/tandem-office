@@ -70,6 +70,7 @@ export type OpName = MdOp['op']
 export interface OpsContext {
   source: 'ai' | 'ui'
   translation?: boolean
+  selectionOnly?: boolean
   frontmatter?: FrontmatterAccess
 }
 
@@ -799,6 +800,12 @@ function execOp(exec: Exec, op: MdOp): OpResult {
     case 'replaceText': {
       const range = resolveTarget(exec, op.target)
       const label = describeBlocks(editor.state.doc, range)
+      const selection = editor.state.selection
+      if (exec.ctx.selectionOnly) {
+        range.from = Math.max(range.from, selection.from)
+        range.to = Math.min(range.to, selection.to)
+        if (range.to <= range.from) fail('This block has no selected text.')
+      }
       const matches = matchesIn(exec, range, op.find)
       if (exec.ctx.translation && op.find === op.replace)
         return { ok: true, message: `Already matches in ${label}.` }
@@ -807,6 +814,11 @@ function execOp(exec: Exec, op: MdOp): OpResult {
       for (let i = matches.length - 1; i >= 0; i--) {
         const m = matches[i]!
         tr = op.replace ? tr.insertText(op.replace, m.from, m.to) : tr.delete(m.from, m.to)
+      }
+      if (exec.ctx.selectionOnly) {
+        const from = tr.mapping.map(selection.from, -1)
+        const to = tr.mapping.map(selection.to, 1)
+        tr.setSelection(TextSelection.between(tr.doc.resolve(from), tr.doc.resolve(to)))
       }
       dispatch(exec, tr)
       return { ok: true, message: `Replaced ${matches.length} occurrence(s) in ${label}.` }

@@ -21,6 +21,7 @@ import {
 } from '@genoffice/pdf-structure'
 import { batchEpubTranslationItems, createEpubTranslationModelCall } from './call'
 import type { EpubTranslationUnit } from './units'
+import { buildEpubOverview, epubOverviewScope } from './overview'
 
 export interface EpubTranslationJobPartsOptions {
   /** target language code */
@@ -102,6 +103,7 @@ export interface StartEpubTranslationJobOptions
     Omit<EpubTranslationPlanInput, 'store'>,
     StartDocumentJobOptions<TranslationJobItem<EpubTranslationUnit>[]> {
   store: StartTranslationJobOptions<EpubTranslationUnit>['store']
+  onAnalyzing?: () => void | Promise<void>
   /** one model call (the app's `ai:stream`, the command's provider stream) */
   send: TranslationSend
   /** resends of mismatched units; default EPUB_TRANSLATION_MAX_RESENDS */
@@ -120,6 +122,7 @@ export function startEpubTranslationJob(
   return startTranslationJob<EpubTranslationUnit>({
     ...rest,
     kind: 'translate',
+    overview: { scope: epubOverviewScope(o.docHash, units), build: () => buildEpubOverview(units) },
     ...epubTranslationJobParts(units, {
       lang: o.lang,
       send,

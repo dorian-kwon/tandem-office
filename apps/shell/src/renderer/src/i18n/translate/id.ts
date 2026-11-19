@@ -1,6 +1,12 @@
 import type { zh } from './zh'
 
 export const id = {
+  wikiView: 'Lihat wiki',
+  wikiSetup: 'Di Obsidian, buka folder di bawah sebagai vault, lalu kembali ke {app}.',
+  wikiDownload: 'Selesaikan pemasangan Obsidian, lalu kembali ke {app} untuk membuka wiki.',
+  wikiUnavailable:
+    'Wiki tidak dapat dibuka. Pastikan Obsidian terpasang, jalankan sekali, lalu coba lagi.',
+  wikiFolder: 'Folder wiki',
   navTranslate: 'Terjemahan',
   title: 'Proyek terjemahan',
   intro:

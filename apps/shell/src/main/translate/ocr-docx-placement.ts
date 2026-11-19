@@ -5,6 +5,7 @@ import { TranslateIpcError } from '../../shared/translate-api'
 import { checkOcrBoxesPayload, type OcrBox } from '../../shared/ocr-boxes'
 import { buildImageBoxParagraphsXml, inspectBoxableImage, nextDocPrId } from './ocr-boxes-docx'
 import { placeInWordTable } from './ocr-word-tables'
+import { wordPictureReferences } from './ocr-docx-pictures'
 
 /**
  * OCR text into a Word document. Nothing here needs Node: the main process uses it to write a new
@@ -31,25 +32,11 @@ const escape = (s: string) =>
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
 
-const RELATION_ID = /\br:(?:embed|id)\s*=\s*(?:"([^"]*)"|'([^']*)')/
-
-/**
- * The paragraph number of the first place each relationship id is used, counted the way the
- * picture listing counts (`<w:p>`, `blip`, `imagedata` and `fill` in order, objects left out). The
- * number is only good for the XML it was counted in.
- */
+/** First live use of each relationship in this part, in the listing's paragraph coordinates. */
 export function locatePictures(xml: string): Map<string, number> {
-  const stripped = xml.replace(/<(?:\w+:)?object\b[\s\S]*?<\/(?:\w+:)?object\s*>/g, '')
   const found = new Map<string, number>()
-  let paragraph = 0
-  for (const m of stripped.matchAll(/<(?:\w+:)?(p|blip|imagedata|fill)\b[^>]*>/g)) {
-    if (m[1] === 'p') {
-      paragraph++
-      continue
-    }
-    const id = RELATION_ID.exec(m[0])
-    const relId = id?.[1] ?? id?.[2]
-    if (relId && !found.has(relId)) found.set(relId, Math.max(1, paragraph))
+  for (const { relId, paragraph } of wordPictureReferences(xml)) {
+    if (!found.has(relId)) found.set(relId, paragraph)
   }
   return found
 }

@@ -59,6 +59,7 @@ describe('translation reads and writes', () => {
         lang: 'ko',
         provider: 'claude',
         model: 'm',
+        overview: { scope: 'chapters-1-2', text: 'Title and source excerpts' },
       }),
     ).toEqual({ ok: true })
     expect(
@@ -73,7 +74,12 @@ describe('translation reads and writes', () => {
     const read = await handlers.translation(OWNER, HASH, 'ko')
     expect(read).toMatchObject({
       ok: true,
-      translation: { lang: 'ko', provider: 'claude', model: 'm' },
+      translation: {
+        lang: 'ko',
+        provider: 'claude',
+        model: 'm',
+        overview: { scope: 'chapters-1-2', text: 'Title and source excerpts' },
+      },
     })
     expect(read.ok && read.translation?.blocks).toMatchObject([
       { status: 'translated', text: '번역' },

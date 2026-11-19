@@ -1,6 +1,13 @@
 import type { zh } from './zh'
 
 export const en = {
+  wikiView: 'View wiki',
+  wikiSetup:
+    'In Obsidian, choose “Open folder as vault” and select the folder below. Then return to {app}.',
+  wikiDownload: 'Finish installing Obsidian, then return to {app} to open the wiki.',
+  wikiUnavailable:
+    'The wiki could not be opened. Check that Obsidian is installed, launch it once and try again.',
+  wikiFolder: 'Wiki folder',
   navTranslate: 'Translation',
   title: 'Translation projects',
   intro:

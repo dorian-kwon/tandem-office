@@ -1,5 +1,10 @@
 // zh defines the key set.
 export const zh = {
+  wikiView: '查看维基',
+  wikiSetup: '在 Obsidian 中选择“打开本地仓库”，然后选择下方的文件夹。完成后返回 {app}。',
+  wikiDownload: '安装 Obsidian 后，返回 {app} 即可打开维基。',
+  wikiUnavailable: '无法打开维基。请确认 Obsidian 已安装，启动一次后重试。',
+  wikiFolder: '维基文件夹',
   navTranslate: '翻译',
   title: '翻译项目',
   intro: '翻译项目把待翻译的文档、参考资料和术语表放在同一个文件夹里。',

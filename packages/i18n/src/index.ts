@@ -47,6 +47,31 @@ export const LANGS: readonly Lang[] = [
   'vi',
 ]
 
+/** Status shown while preparing source context for a whole-document translation. */
+export const analyzingDocumentLabel: Readonly<Record<Lang, string>> = {
+  zh: '正在分析文档…',
+  en: 'Analyzing the document…',
+  ja: '文書の内容を確認中…',
+  ko: '문서를 파악하는 중…',
+  fr: 'Analyse du document…',
+  de: 'Dokument wird analysiert…',
+  es: 'Analizando el documento…',
+  th: 'กำลังวิเคราะห์เอกสาร…',
+  id: 'Menganalisis dokumen…',
+  ru: 'Анализ документа…',
+  ar: 'جارٍ تحليل المستند…',
+  pt: 'A analisar o documento…',
+  it: 'Analisi del documento…',
+  pl: 'Analizowanie dokumentu…',
+  cs: 'Probíhá analýza dokumentu…',
+  nl: 'Document wordt geanalyseerd…',
+  ms: 'Sedang menganalisis dokumen…',
+  he: 'מתבצע ניתוח המסמך…',
+  hi: 'दस्तावेज़ का विश्लेषण हो रहा है…',
+  'zh-TW': '正在分析文件…',
+  vi: 'Đang phân tích tài liệu…',
+}
+
 export function isLang(value: unknown): value is Lang {
   return typeof value === 'string' && (LANGS as readonly string[]).includes(value)
 }

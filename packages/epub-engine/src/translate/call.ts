@@ -22,6 +22,7 @@ import {
   estimateTokens,
   parseTranslationOutput,
   type BatchOptions,
+  type TranslationBatchContext,
   type TranslationBlockResult,
   type TranslationJobItem,
   type TranslationModelCallOptions,
@@ -92,12 +93,16 @@ function checkTranslation(unit: EpubTranslationCallUnit, answer: string): Checke
  */
 export function createEpubTranslationModelCall<B extends EpubTranslationCallUnit>(
   o: TranslationModelCallOptions,
-): (batch: TranslationJobItem<B>[], signal: AbortSignal) => Promise<TranslationBlockResult[]> {
+): (
+  batch: TranslationJobItem<B>[],
+  signal: AbortSignal,
+  context?: TranslationBatchContext,
+) => Promise<TranslationBlockResult[]> {
   const maxResends = o.maxResends ?? EPUB_TRANSLATION_MAX_RESENDS
   if (!Number.isInteger(maxResends) || maxResends < 0) {
     throw new RangeError(`epub translation: invalid resend count ${maxResends}`)
   }
-  return async (batch, signal) => {
+  return async (batch, signal, context) => {
     const results: (TranslationBlockResult | undefined)[] = batch.map(() => undefined)
     const reasons: EpubTranslationFailureReason[] = batch.map(() => 'missing-translation')
     let pending = batch.map((_, i) => i)
@@ -107,6 +112,7 @@ export function createEpubTranslationModelCall<B extends EpubTranslationCallUnit
       const request = buildEpubTranslationRequest(
         o.lang,
         pending.map((i) => ({ id: String(i + 1), text: batch[i]!.block.text })),
+        context,
       )
       const answer = await o.send({ ...request, lang: o.lang, attempt }, signal)
       const parsed = parseTranslationOutput(answer)

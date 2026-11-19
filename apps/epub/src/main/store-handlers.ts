@@ -11,6 +11,7 @@
  *
  * Every handler answers an outcome and never throws.
  */
+import { OVERVIEW_TEXT_LIMIT, type TranslationOverview } from '@genoffice/pdf-structure'
 import {
   StoreWriteError,
   jobKeyOf,
@@ -64,6 +65,18 @@ const isKey = (v: unknown): v is string => typeof v === 'string' && KEY.test(v)
 
 const isMeta = (v: unknown): v is string => typeof v === 'string' && v.length <= MAX_META
 
+function isOverview(value: unknown): value is TranslationOverview {
+  return (
+    isRecord(value) &&
+    typeof value.scope === 'string' &&
+    value.scope.length > 0 &&
+    value.scope.length <= 256 &&
+    typeof value.text === 'string' &&
+    value.text.length > 0 &&
+    value.text.length <= OVERVIEW_TEXT_LIMIT
+  )
+}
+
 function storeFailure(err: unknown): EpubFailure {
   if (err instanceof StoreWriteError) return fail('store-write-failed', err.message)
   if (err instanceof TypeError) return fail('invalid-request', err.message)
@@ -99,6 +112,7 @@ export function createEpubStoreHandlers(deps: EpubStoreHandlerDeps) {
             lang: stored.lang,
             provider: stored.provider,
             model: stored.model,
+            ...(stored.overview && { overview: stored.overview }),
             blocks: [...stored.blocks.values()],
           },
         }
@@ -128,13 +142,17 @@ export function createEpubStoreHandlers(deps: EpubStoreHandlerDeps) {
       const store = deps.store()
       try {
         switch (req.kind) {
-          case 'translationMeta':
+          case 'translationMeta': {
             if (!isMeta(req.provider) || !isMeta(req.model)) break
+            const overview = req.overview
+            if (overview !== undefined && !isOverview(overview)) break
             await store.writeTranslationMeta(docHash, lang, {
               provider: req.provider,
               model: req.model,
+              ...(overview && { overview }),
             })
             return { ok: true }
+          }
           case 'translationBlocks':
             if (!Array.isArray(req.blocks) || req.blocks.length > MAX_BLOCKS) break
             if (!req.blocks.every(isRecord)) break

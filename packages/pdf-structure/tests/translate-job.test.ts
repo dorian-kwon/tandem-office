@@ -5,7 +5,10 @@
  * translated / bilingual / partial builds with their report. The model is a
  * fake; nothing here reaches a real AI program.
  */
-import { describe, expect, it } from 'vitest'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { describe, expect, it, vi } from 'vitest'
 import {
   DocumentJobRegistry,
   JobUnitFailure,
@@ -14,6 +17,7 @@ import {
   type TranslationJobItem,
 } from '../src/jobs'
 import {
+  ResultStore,
   blockKeyString,
   translationBlockKeys,
   type JobRecordInput,
@@ -31,6 +35,7 @@ import {
   translationJobParts,
   translationReport,
   translationUnits,
+  type TranslationBatchContext,
   type TranslationModelRequest,
 } from '../src/translate'
 import { textOf } from './helpers/tree'
@@ -458,6 +463,162 @@ function runJob(
 }
 
 describe('translation job', () => {
+  it('resumes with the cached source overview, recent pairs and a distant human-edited match', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'pdf-translation-context-'))
+    try {
+      const tree = sampleTree()
+      tree.info.title = 'River study'
+      tree.blocks.push({ ...at(2), id: 'p2.6', kind: 'paragraph', runs: t('Title') })
+      tree.blocks.push({
+        ...at(2),
+        id: 'p2.7',
+        kind: 'paragraph',
+        runs: t('Independent final point'),
+      })
+      const original = structuredClone(tree)
+      const hash = newDoc()
+      const analyze = vi.fn()
+      const data = (req: TranslationModelRequest) =>
+        JSON.parse(/<document_blocks>\n([\s\S]*)\n<\/document_blocks>/.exec(req.prompt)![1]!) as {
+          reference: TranslationBatchContext
+          blocks: SentBlock[]
+        }
+      const run = (
+        store: ResultStore,
+        send: (req: TranslationModelRequest) => Promise<string>,
+        pages?: number[],
+      ) => {
+        const parts = translationJobParts(tree, {
+          lang: 'ko',
+          send,
+          maxTokens: 1,
+          ...(pages ? { pages } : {}),
+        })
+        return startTranslationJob({
+          ...parts,
+          lang: 'ko',
+          docHash: hash,
+          model: CLAUDE,
+          store,
+          registry: new DocumentJobRegistry(),
+          onAnalyzing: analyze,
+          ...FAST,
+        }).result
+      }
+      const first = new ResultStore(dir)
+      let sent = 0
+      expect(
+        (
+          await run(first, async (req) => {
+            if (++sent === 3) throw new FakeRunError('rate-limit')
+            return goodModel()(req)
+          })
+        ).state,
+      ).toBe('stopped')
+      const initial = await first.readTranslation(hash, 'ko')
+      expect(initial?.overview?.text).toContain('River study')
+      await first.writeEditedTranslationBlock(
+        hash,
+        'ko',
+        translationBlockKeys(translationUnits(tree))[0]!,
+        'Human heading',
+      )
+
+      const reopened = new ResultStore(dir)
+      const calls: TranslationModelRequest[] = []
+      expect((await run(reopened, goodModel(calls))).state).toBe('complete')
+      expect(analyze).toHaveBeenCalledTimes(1)
+      expect(calls[0]!.sourceText).toBe('An item')
+      expect(data(calls[0]!).reference.previous[0]).toEqual({
+        source: 'Title',
+        target: 'Human heading',
+      })
+      const repeated = data(calls.find((req) => req.sourceText === 'Title')!)
+      expect(repeated.reference.previous.map((p) => p.source)).not.toContain('Title')
+      expect(repeated.reference.matches).toEqual([
+        { source: 'Title', target: 'Human heading', page: 1, unit: 1 },
+      ])
+      const saved = await reopened.readTranslation(hash, 'ko')
+      expect(saved?.overview).toEqual(initial?.overview)
+      const bilingual = buildBilingualTree(tree, 'ko', saved)
+      expect(bilingual.blocks.find((b) => b.id === 'p1.2')).toEqual(original.blocks[2])
+      expect(bilingual.blocks.find((b) => b.id === 'p1.2@ko')).toMatchObject({
+        runs: expect.arrayContaining([
+          { kind: 'text', text: '[ko]bold', bold: true },
+          { kind: 'text', text: '[ko]link', href: 'https://example.com' },
+        ]),
+      })
+      expect(tree).toEqual(original)
+
+      // A corrected reading on the same PDF page changes the evidence. An excluded page never enters it.
+      const changed = tree.blocks.find((b) => b.id === 'p2.4')!
+      if (changed.kind !== 'paragraph') throw new Error('test fixture changed')
+      changed.runs = t('Corrected reading')
+      const changes: TranslationModelRequest[] = []
+      await run(reopened, goodModel(changes))
+      expect(analyze).toHaveBeenCalledTimes(2)
+      expect(changes.map((r) => r.sourceText)).toEqual(['Corrected reading'])
+      changed.runs = t('Latest reading')
+      const selected: TranslationModelRequest[] = []
+      await run(reopened, goodModel(selected), [2])
+      expect(analyze).toHaveBeenCalledTimes(3)
+      expect(data(selected[0]!).reference.overview).not.toContain('p1')
+      expect(data(selected[0]!).reference.previous.every((p) => p.target !== 'Human heading')).toBe(
+        true,
+      )
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('uses an edited match inside a resumed batch only for a later occurrence', async () => {
+    const tree = sampleTree()
+    tree.footnotes = []
+    tree.blocks = ['Earlier unique', 'Repeat', 'Between', 'Repeat', 'After'].map((text, i) => ({
+      ...at(1),
+      id: 'p' + i,
+      kind: 'paragraph',
+      runs: t(text),
+    }))
+    const store = new MemoryStore()
+    const docHash = newDoc()
+    const keys = translationBlockKeys(translationUnits(tree))
+    await store.writeTranslationBlocks(docHash, 'ko', [
+      { key: keys[1]!, status: 'translated', text: 'Previous correction', edited: true },
+    ])
+    const calls: TranslationModelRequest[] = []
+    await runJob(tree, store, docHash, goodModel(calls))
+    expect(calls).toHaveLength(1)
+    expect(calls[0]!.sourceText).toBe('Earlier unique\nBetween\nRepeat\nAfter')
+    const data = JSON.parse(
+      /<document_blocks>\n([\s\S]*)\n<\/document_blocks>/.exec(calls[0]!.prompt)![1]!,
+    )
+    expect(data.reference.previous).toEqual([])
+    expect(data.reference.matches).toEqual([
+      { source: 'Repeat', target: 'Previous correction', page: 1, unit: 2 },
+    ])
+  })
+
+  it('bounds a large document overview and only quotes evidence from the confirmed pages', () => {
+    const tree = sampleTree()
+    tree.info.title = 'Journal ' + 'x'.repeat(5000)
+    tree.footnotes = []
+    tree.blocks = Array.from({ length: 1200 }, (_, i) => ({
+      ...at(i < 600 ? 1 : 2),
+      id: 'p' + i,
+      kind: 'heading' as const,
+      level: 1,
+      levelSource: 'font' as const,
+      runs: t((i < 600 ? 'Excluded ' : 'Included ') + i + 'x'.repeat(1200)),
+    }))
+    const parts = translationJobParts(tree, { lang: 'ko', pages: [2], send: goodModel() })
+    const overview = parts.overview!.build()
+    expect(parts.blocks).toHaveLength(600)
+    expect(overview.length).toBeLessThanOrEqual(2400)
+    expect(overview).toContain('Included 1199')
+    expect(overview).not.toContain('Excluded')
+  })
+
   it('stores translated blocks and failed blocks; the report lists the failures', async () => {
     const tree = sampleTree()
     const store = new MemoryStore()

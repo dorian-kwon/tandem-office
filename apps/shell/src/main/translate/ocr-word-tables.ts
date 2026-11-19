@@ -44,7 +44,7 @@ function cellsOf(xml: string, row: Node) {
     .filter((n) => n.kind === 'tc')
     .map((node) => {
       const body = xml.slice(node.openEnd, node.closeStart)
-      const properties = body.match(/<w:tcPr\b[^>]*(?:\/>|>[\s\S]*?<\/w:tcPr>)/)?.[0] ?? ''
+      const properties = body.match(/^\s*<w:tcPr\b[^>]*(?:\/>|>[\s\S]*?<\/w:tcPr>)/)?.[0] ?? ''
       const span = Number(properties.match(/<w:gridSpan\b[^>]*w:val=["'](\d+)["']/)?.[1] ?? 1)
       if (!Number.isSafeInteger(span) || span < 1 || span > 16384 || !Number.isSafeInteger(column))
         invalid('unsupported merged cell')
@@ -70,39 +70,60 @@ function hasContent(body: string): boolean {
   )
 }
 
-export function recommendWordCell(xml: string, location: string, count: number) {
-  const at = location.match(/^document\.xml · ¶(\d+)$/)
-  if (!at) return null
+export function recommendWordCell(xml: string, locations: readonly string[]) {
   const tags = [...xml.matchAll(/<w:p\b[^>]*>/g)]
-  const paragraph = tags[Number(at[1]) - 1]
-  if (!paragraph) return null
+  const offsets = locations.map((location) => {
+    const at = location.match(/^document\.xml · ¶(\d+)$/)
+    return at && tags[Number(at[1]) - 1]?.index
+  })
+  const first = offsets[0]
+  if (typeof first !== 'number') return null
   const tables = tablesIn(xml)
-  for (let t = 0; t < tables.length; t++) {
-    const rows = tables[t]!.children.filter((n) => n.kind === 'tr')
-    for (let r = 0; r < rows.length; r++) {
-      const cells = cellsOf(xml, rows[r]!)
-      const imageCell = cells.find(
-        (c) => paragraph.index! >= c.node.openEnd && paragraph.index! < c.node.closeStart,
+  // Tables are stored in document order. A nested picture is also inside every
+  // enclosing cell, so only the innermost table may supply a neighbouring cell.
+  let t = tables.length - 1
+  while (t >= 0) {
+    const table = tables[t]!
+    if (first >= table.openEnd && first < table.closeStart) break
+    t--
+  }
+  if (t < 0) return null
+  const rows = tables[t]!.children.filter((n) => n.kind === 'tr')
+  for (let r = 0; r < rows.length; r++) {
+    const cells = cellsOf(xml, rows[r]!)
+    const imageCell = cells.find((c) => first >= c.node.openEnd && first < c.node.closeStart)
+    if (!imageCell) continue
+    const next = cells.find(
+      (c) =>
+        c.column >= imageCell.column + imageCell.span && !c.continuation && !hasContent(c.body),
+    )
+    if (!next) return null
+    const safe = offsets.every((offset, i) => {
+      const row = rows[r + i]
+      if (typeof offset !== 'number' || !row) return false
+      const rowCells = i === 0 ? cells : cellsOf(xml, row)
+      const source = rowCells.find(
+        (cell) => offset >= cell.node.openEnd && offset < cell.node.closeStart,
       )
-      if (!imageCell) continue
-      const next = cells.find(
-        (c) =>
-          c.column >= imageCell.column + imageCell.span && !c.continuation && !hasContent(c.body),
+      if (!source || source.column + source.span > next.column) return false
+      if (
+        source.node.children.some(
+          (child) => child.kind === 'tbl' && offset >= child.openEnd && offset < child.closeStart,
+        )
       )
-      if (!next) continue
-      const safe = Array.from({ length: count }, (_, i) => rows[r + i]).every((row) => {
-        const cell = row && cellsOf(xml, row).find((c) => c.column === next.column)
-        return cell && !cell.continuation && !hasContent(cell.body)
-      })
-      if (safe)
-        return {
-          kind: 'docx-table-cell' as const,
-          table: t + 1,
-          row: r + 1,
-          column: next.column,
-          overwrite: false,
-        }
-    }
+        return false
+      const target = rowCells.find((cell) => cell.column === next.column)
+      return target && !target.continuation && !hasContent(target.body)
+    })
+    if (safe)
+      return {
+        kind: 'docx-table-cell' as const,
+        table: t + 1,
+        row: r + 1,
+        column: next.column,
+        overwrite: false,
+      }
+    return null
   }
   return null
 }

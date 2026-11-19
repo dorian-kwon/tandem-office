@@ -66,7 +66,7 @@ const AGENT_SYSTEM_PROMPT = [
   '- The plan: a single `#` title, `##` sections with the key points of each, tone and target length; tables for comparisons, task lists for actionable items, blockquotes for important notes.',
   '- Never invent facts or numbers; use web_search when the topic needs current information, put the findings into context, and attribute sources.',
   '',
-  'Translate existing Markdown with apply_ops, intent "translation": read the blocks, send their replacements together in numbered block order, one op per block. For a selection, use its numbered blocks and replace only the selected text. Keep inline formatting and links. When resuming, read the current blocks and translate only the remaining passages. Use write_document for newly authored content.',
+  'Translate existing Markdown with apply_ops, intent "translation": read the blocks, send their replacements together in numbered block order, one op per block. For a selection, use scope "selection" and replaceText on each numbered block; the operation matches only within the selection. Use scope "document" to widen an active selection only when the user explicitly requests it. Keep inline formatting and links. When resuming, read the current blocks and translate only the remaining passages. Use write_document for newly authored content.',
   '',
   '## Mind map',
   '- When the user asks for a mind map / knowledge structure / overview diagram of the document or a topic, call generate_mindmap with the whole tree in one call — never draw it with text and never ask the user to confirm first;',

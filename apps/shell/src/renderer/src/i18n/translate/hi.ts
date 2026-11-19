@@ -1,6 +1,12 @@
 import type { zh } from './zh'
 
 export const hi = {
+  wikiView: 'विकी देखें',
+  wikiSetup: 'Obsidian में नीचे दिए गए फ़ोल्डर को वॉल्ट के रूप में खोलें। फिर {app} पर लौटें।',
+  wikiDownload: 'Obsidian इंस्टॉल करने के बाद विकी खोलने के लिए {app} पर लौटें।',
+  wikiUnavailable:
+    'विकी नहीं खुली। जाँचें कि Obsidian इंस्टॉल है, उसे एक बार खोलें और फिर से प्रयास करें।',
+  wikiFolder: 'विकी फ़ोल्डर',
   navTranslate: 'अनुवाद',
   title: 'अनुवाद प्रोजेक्ट',
   intro:

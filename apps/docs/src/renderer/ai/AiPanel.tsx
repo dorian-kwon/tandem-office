@@ -1,3 +1,4 @@
+import { analyzingDocumentLabel } from '@genoffice/i18n'
 import { useChatWindow, EarlierChatMessages } from '@genoffice/ui'
 import { OcrChatPreview, ocrDisplayOf, type OcrChatDisplay } from '@genoffice/ui'
 import {
@@ -989,7 +990,10 @@ export function AiPanel({
     // a reopened conversation starts with no MCP choices of another chat (user MCP spec 7.6)
     windowMcpState()?.newConversation()
     // restore model context: follow-ups after reopening a file continue the previous conversation (only when the loop is idle with no history)
-    loopRef.current?.restore(msgs.map((m) => ({ role: m.role, text: m.text })))
+    loopRef.current?.restore(
+      msgs.map((m) => ({ role: m.role, text: m.text })),
+      msgs,
+    )
   }
 
   /** This document's own conversation; nothing while a project chat shows. */
@@ -1240,6 +1244,10 @@ export function AiPanel({
       ordered: findNumId(blocksRef.current, 'ordered') ?? numIdFallbackRef.current?.ordered ?? null,
     })
     loopRef.current = new AgentLoop<RollbackSnapshot | undefined>({
+      documentTranslation: {
+        documentKey: () => savedPathRef.current,
+        analyzingLabel: () => analyzingDocumentLabel[langRef.current],
+      },
       transport: transportRef.current,
       systemSuffix: () =>
         aiLangDirective() +

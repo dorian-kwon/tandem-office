@@ -5,6 +5,7 @@
  * preview plan; runDeterministicPlan does the same for the regex planner.
  * Extracted from App.tsx; App-scope state comes in through PlanContext.
  */
+import { MIXED_TRANSLATION_PLAN, translationCellPlan } from './ai-undo-scope'
 import { planPrompt } from '../ai/deterministic-planner'
 import {
   columnIndex,
@@ -755,6 +756,8 @@ export function proposeOperations(
         if (!sheet) throw new Error(`Unknown sheet: ${id}`)
         return sheet.getSheetName()
       })
+      if (translation && !translationCellPlan(plan))
+        return { ok: false, error: MIXED_TRANSLATION_PLAN }
       ctx.lazyPreviewRef.current = { sessionId: state.file.sessionId, sheetId, plan }
       ctx.setPreview(plan)
       // All plans auto-apply (undo covers them); the caller awaits `applied`
@@ -868,6 +871,8 @@ export function proposeOperations(
       summary,
       operations: prepared,
     })
+    if (translation && !translationCellPlan(plan))
+      return { ok: false, error: MIXED_TRANSLATION_PLAN }
     ctx.setPreview(plan)
     // All plans auto-apply (undo covers them); on failure the preview
     // card stays up so the user can Apply manually.

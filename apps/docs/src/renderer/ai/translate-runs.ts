@@ -1,5 +1,11 @@
 import { applySlotRoles, bilingualSlots } from './bilingual-table-slots'
-import type { Step } from '@tiptap/pm/transform'
+import {
+  AddMarkStep,
+  AttrStep,
+  RemoveMarkStep,
+  ReplaceAroundStep,
+  type Step,
+} from '@tiptap/pm/transform'
 import { noteParagraph, type NoteUnit } from './note-translation-history'
 import { finishTranslationUnit } from '../editor/translation-history'
 import { originalAiEditor } from './ai-history-gate'
@@ -225,42 +231,19 @@ export function topLevel(
 // ---------------------------------------------------------------------------
 // Bilingual twins (add_bilingual)
 //
-// add_bilingual keeps the original paragraph and adds its translation next to
-// it. The twin is ordinary document content, so the tools remember the pairs
-// by fingerprint (original fp -> twin fps, per editor) and recognise them by
-// position: a plain paragraph's twin is the next block; a table's twins sit in
-// the same table. read_runs lists both sides as skipped, so the model never
-// translates a twin again and the completion check never flags either side.
+// Table layouts retain fingerprints for detached table drafts. Individual body
+// paragraphs and explicitly placed translations retain their own node identities.
 // ---------------------------------------------------------------------------
 
 const twinPairs = new WeakMap<object, Map<string, Set<string>>>()
 
-/**
- * Twins placed at an explicit destination (add_bilingual target): the pair is not
- * recognised by position, so a paragraph counts as an original while its twin text
- * is anywhere in the document, and as a twin while its original is.
- */
-const placedPairs = new WeakMap<object, Map<string, Set<string>>>()
-
-/** remember that the paragraph with fingerprint `original` now has a twin with fingerprint `twin` */
-export function recordTwins(
-  editor: Editor,
-  pairs: ReadonlyArray<readonly [string, string]>,
-  options: { placed?: boolean } = {},
-): void {
+export function recordTwins(editor: Editor, pairs: ReadonlyArray<readonly [string, string]>): void {
   let map = twinPairs.get(originalAiEditor(editor))
   if (!map) twinPairs.set(originalAiEditor(editor), (map = new Map()))
-  let placed = placedPairs.get(originalAiEditor(editor))
-  if (options.placed && !placed) placedPairs.set(originalAiEditor(editor), (placed = new Map()))
   for (const [original, twin] of pairs) {
     let set = map.get(original)
     if (!set) map.set(original, (set = new Set()))
     set.add(twin)
-    if (options.placed && original !== twin && placed) {
-      let anywhere = placed.get(original)
-      if (!anywhere) placed.set(original, (anywhere = new Set()))
-      anywhere.add(twin)
-    }
   }
 }
 
@@ -273,36 +256,6 @@ export function twinPairsOf(editor: Editor): Array<[string, string]> {
   )
 }
 
-/** the fingerprints of every text paragraph of the document (tables included), per document state */
-const docFingerprints = new WeakMap<ProseMirrorNode, Set<string>>()
-
-function fingerprintsOfDoc(doc: ProseMirrorNode): Set<string> {
-  const cached = docFingerprints.get(doc)
-  if (cached) return cached
-  const set = new Set<string>()
-  let pos = 0
-  doc.forEach((top) => {
-    for (const block of textblocksOf(top, pos) ?? []) {
-      const groups = groupsOf(block.node, block.pos)
-      if (groups.length > 0) set.add(runFingerprint(groups.map((g) => g.text)))
-    }
-    pos += top.nodeSize
-  })
-  docFingerprints.set(doc, set)
-  return set
-}
-
-/** the role of a paragraph by explicit placement (its twin or original is anywhere in the document) */
-function placedRole(editor: Editor, fp: string): TwinRole | null {
-  const placed = placedPairs.get(originalAiEditor(editor))
-  if (!placed || placed.size === 0) return null
-  const present = fingerprintsOfDoc(editor.state.doc)
-  const mine = placed.get(fp)
-  if (mine && [...mine].some((t) => present.has(t))) return 'source'
-  for (const [original, twins] of placed) if (present.has(original) && twins.has(fp)) return 'twin'
-  return null
-}
-
 /** block indexes may have moved since the model last read them (blocks were inserted by add_bilingual) */
 const shiftedSinceRead = new WeakSet<object>()
 export const noteBlocksShifted = (editor: Editor): void =>
@@ -312,16 +265,109 @@ export const blocksShifted = (editor: Editor): boolean =>
 
 /** true once add_bilingual has added a twin in this editor */
 export function hasTwins(editor: Editor): boolean {
-  return (twinPairs.get(originalAiEditor(editor))?.size ?? 0) > 0
+  const live = originalAiEditor(editor)
+  return pairedNodes.has(live) || (twinPairs.get(live)?.size ?? 0) > 0
 }
 
 export type TwinRole = 'source' | 'twin'
 
-const blockFp = (doc: ProseMirrorNode, index: number): string | null => {
-  const top = topLevel(doc, index)
-  if (!top || !TEXT_BLOCK_TYPES.has(top.node.type.name)) return null
-  const groups = groupsOf(top.node, top.pos)
-  return groups.length > 0 ? runFingerprint(groups.map((g) => g.text)) : null
+interface ParagraphTwin {
+  role: TwinRole
+  pair: object
+  placed: boolean
+}
+
+const pairedNodes = new WeakMap<Editor, WeakMap<ProseMirrorNode, ParagraphTwin>>()
+
+const placedInDocument = new WeakMap<Editor, { doc: ProseMirrorNode; complete: Set<object> }>()
+
+/** A far pair is complete while both of its own non-empty paragraphs are present. */
+function placedRole(editor: Editor, node: ProseMirrorNode): TwinRole | null {
+  const live = originalAiEditor(editor)
+  const nodes = pairedNodes.get(live)
+  const identity = nodes?.get(node)
+  if (!identity?.placed || !nodes) return null
+  const doc = editor.state.doc
+  let cached = placedInDocument.get(live)
+  if (cached?.doc !== doc) {
+    const sources = new Set<object>()
+    const twins = new Set<object>()
+    doc.descendants((child) => {
+      if (!child.isTextblock) return
+      const entry = child.content.size && nodes.get(child)
+      if (entry && entry.placed) (entry.role === 'source' ? sources : twins).add(entry.pair)
+      return false
+    })
+    const complete = new Set([...sources].filter((pair) => twins.has(pair)))
+    cached = { doc, complete }
+    placedInDocument.set(live, cached)
+  }
+  return cached.complete.has(identity.pair) ? identity.role : null
+}
+
+/** Keep a bilingual pair attached to its two paragraphs when the user edits their text.
+ * A split, deletion or replacement of a whole paragraph must not mark its new neighbour. */
+export function rememberParagraphTwins(
+  editor: Editor,
+  pairs: ReadonlyArray<readonly [ProseMirrorNode, ProseMirrorNode]>,
+  placed = false,
+): void {
+  if (!pairs.length) return
+  const live = originalAiEditor(editor)
+  let nodes = pairedNodes.get(live)
+  if (!nodes) {
+    const identities = new WeakMap<ProseMirrorNode, ParagraphTwin>()
+    nodes = identities
+    pairedNodes.set(live, identities)
+    live.on('transaction', ({ transaction }) => {
+      transaction.mapping.maps.forEach((map, index) => {
+        const before = transaction.docs[index]!
+        const after = transaction.docs[index + 1] ?? transaction.doc
+        const step = transaction.steps[index]
+        // Mark steps have an empty position map. Only visit paragraphs touched.
+        if (step instanceof AddMarkStep || step instanceof RemoveMarkStep) {
+          before.nodesBetween(step.from, step.to, (node, pos) => {
+            if (!node.isTextblock) return
+            const identity = identities.get(node)
+            const next = identity && after.nodeAt(pos)
+            if (identity && next?.isTextblock) identities.set(next, identity)
+            return false
+          })
+        }
+        // Changing paragraph attributes replaces its wrapper while keeping all its content.
+        const wrapperPos =
+          step instanceof AttrStep
+            ? step.pos
+            : step instanceof ReplaceAroundStep &&
+                step.gapFrom === step.from + 1 &&
+                step.gapTo === step.to - 1
+              ? step.from
+              : undefined
+        if (wrapperPos !== undefined) {
+          const old = before.nodeAt(wrapperPos)
+          const next = after.nodeAt(wrapperPos)
+          const identity = old && identities.get(old)
+          if (identity && next?.isTextblock && old.content.eq(next.content))
+            identities.set(next, identity)
+        }
+        map.forEach((start, end, nextStart, nextEnd) => {
+          const old = before.resolve(start)
+          if (!old.parent.isTextblock || end > old.end()) return
+          const identity = identities.get(old.parent)
+          if (!identity) return
+          const next = after.resolve(nextStart)
+          if (old.depth === next.depth && nextEnd <= next.end() && next.parent.isTextblock)
+            identities.set(next.parent, identity)
+        })
+      })
+    })
+  }
+  placedInDocument.delete(live)
+  for (const [source, twin] of pairs) {
+    const pair = {}
+    nodes.set(source, { pair, role: 'source', placed })
+    nodes.set(twin, { pair, role: 'twin', placed })
+  }
 }
 
 /** the twin role of the plain paragraph at `index` (its neighbours decide), or null */
@@ -329,24 +375,26 @@ export function plainTwinRole(
   editor: Editor,
   doc: ProseMirrorNode,
   index: number,
-  fp: string,
 ): TwinRole | null {
-  const pairs = twinPairs.get(originalAiEditor(editor))
-  if (!pairs || pairs.size === 0) return null
-  const prev = blockFp(doc, index - 1)
-  if (prev && pairs.get(prev)?.has(fp)) return 'twin'
-  const next = blockFp(doc, index + 1)
-  if (next && pairs.get(fp)?.has(next)) return 'source'
-  return placedRole(editor, fp)
+  const nodes = pairedNodes.get(originalAiEditor(editor))
+  const identity = nodes?.get(doc.child(index))
+  if (identity?.placed) return placedRole(editor, doc.child(index))
+  if (identity) {
+    const neighbour = doc.maybeChild(index + (identity.role === 'source' ? 1 : -1))
+    if (neighbour?.content.size && nodes?.get(neighbour)?.pair === identity.pair)
+      return identity.role
+  }
+  return null
 }
 
 /** the twin roles of a table's paragraphs (null for text without a twin relation), by fingerprint inside the table */
 export function tableTwinRoles(
   editor: Editor,
   fps: ReadonlyArray<string | null>,
+  blocks: ReadonlyArray<{ node: ProseMirrorNode }>,
 ): Array<TwinRole | null> {
   const pairs = twinPairs.get(originalAiEditor(editor))
-  if (!pairs || pairs.size === 0) return fps.map(() => null)
+  if (!pairs || pairs.size === 0) return blocks.map((block) => placedRole(editor, block.node))
   const present = new Set(fps.filter((f): f is string => f !== null))
   const sources = new Set<string>()
   const twins = new Set<string>()
@@ -357,11 +405,11 @@ export function tableTwinRoles(
       twins.add(twin)
     }
   }
-  return fps.map((fp) => {
+  return fps.map((fp, i) => {
     if (fp === null) return null
     if (sources.has(fp)) return 'source'
     if (twins.has(fp)) return 'twin'
-    return placedRole(editor, fp)
+    return placedRole(editor, blocks[i]!.node)
   })
 }
 
@@ -590,7 +638,7 @@ function textRunEntries(
   const paragraphs = blocks.map((block) => paragraphRead(block.node))
   const fps = paragraphs.map((p) => p.fp)
   const slots = inTable ? bilingualSlots(node, tableModel) : undefined
-  const roles = inTable ? tableTwinRoles(editor, fps) : []
+  const roles = inTable ? tableTwinRoles(editor, fps, blocks) : []
   if (slots) applySlotRoles(slots, blocks, roles)
   const cells = inTable && !options.compact ? cellInfoOf(node, pos) : null
   blocks.forEach((block, paragraph) => {
@@ -606,7 +654,7 @@ function textRunEntries(
       return
     }
     const fp = fps[paragraph]!
-    const role = inTable ? roles[paragraph] : plainTwinRole(editor, doc, index, fp)
+    const role = inTable ? roles[paragraph] : plainTwinRole(editor, doc, index)
     if (role && options.review) {
       // a review lists both sides: the twin is what gets revised, the original is read-only (no fp)
       const where = inTable ? { index, paragraph, ...cellFields } : { index }
@@ -1738,10 +1786,9 @@ export interface RemainingReport {
 }
 
 /**
- * The paragraphs and notes that still look untranslated. With a source script
- * (a non-Latin source language) that is any paragraph still containing the
- * script; otherwise any paragraph with letters that no translate_blocks call
- * of this editor has handled (its fingerprint is not recorded).
+ * The current result of a completed edit takes precedence over the script
+ * heuristic: a translation may legitimately use the same script. For other
+ * paragraphs and notes, check the source script or, if unknown, any letters.
  */
 export function remainingUntranslated(
   editor: Editor,
@@ -1753,9 +1800,9 @@ export function remainingUntranslated(
   const script = sourceScriptOf(language)
   const handled = handledUnits.get(originalAiEditor(editor))
   const pending = (segments: string[], fp: string, unit: HandledUnit): boolean => {
+    if (handled?.get(unitKey(unit)) === fp) return false
     const text = segments.join(' ')
-    if (script) return script.test(text)
-    return /\p{L}/u.test(text) && handled?.get(unitKey(unit)) !== fp
+    return script ? script.test(text) : /\p{L}/u.test(text)
   }
   const body: string[] = []
   const doc = editor.state.doc

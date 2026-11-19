@@ -67,6 +67,7 @@ export function createIpcJobStore(api: JobStoreApi): DocumentJobStore {
       if (!t) return null
       return {
         lang: t.lang,
+        ...(t.overview ? { overview: t.overview } : {}),
         provider: t.provider,
         model: t.model,
         blocks: new Map<string, TranslationBlockEntry>(
@@ -81,6 +82,7 @@ export function createIpcJobStore(api: JobStoreApi): DocumentJobStore {
         lang,
         provider: meta.provider,
         model: meta.model,
+        ...(meta.overview ? { overview: meta.overview } : {}),
       }),
     writeTranslationBlocks: (docHash, lang, blocks) =>
       write(api, { kind: 'translationBlocks', docHash, lang, blocks: [...blocks] }),

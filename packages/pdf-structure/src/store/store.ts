@@ -17,6 +17,7 @@
  * entry is last-writer-wins. An entry that cannot be read or does not have the
  * expected shape counts as absent, so the job simply produces it again.
  */
+import { OVERVIEW_TEXT_LIMIT, type TranslationOverview } from '../translate/context'
 import { isAbsolute, join } from 'node:path'
 import type { InlineRun } from '../tree/types'
 import {
@@ -78,6 +79,7 @@ export interface AiReadPageEntry {
 }
 
 export interface TranslationMetaInput {
+  overview?: TranslationOverview
   /** AI provider id that translates this document into the language */
   provider: string
   model: string
@@ -107,6 +109,7 @@ export interface TranslationBlockEntry extends TranslationBlockInput {
 }
 
 export interface StoredTranslation {
+  overview?: TranslationOverview
   lang: string
   /** null when the translation's own record is missing or unreadable */
   provider: string | null
@@ -246,10 +249,27 @@ function asAiRead(raw: unknown, pageFp: string): AiReadPageEntry | null {
   return entry
 }
 
+export function validOverview(raw: unknown): raw is TranslationOverview {
+  return (
+    isRecord(raw) &&
+    typeof raw.scope === 'string' &&
+    raw.scope.length > 0 &&
+    raw.scope.length <= 256 &&
+    typeof raw.text === 'string' &&
+    raw.text.length > 0 &&
+    raw.text.length <= OVERVIEW_TEXT_LIMIT
+  )
+}
+
 function asMeta(raw: unknown, lang: string): (TranslationMetaInput & { savedAt: number }) | null {
   if (!isRecord(raw) || raw.format !== FORMAT || raw.lang !== lang) return null
   if (!isStr(raw.provider) || !isStr(raw.model) || !isNum(raw.savedAt)) return null
-  return { provider: raw.provider, model: raw.model, savedAt: raw.savedAt }
+  return {
+    provider: raw.provider,
+    model: raw.model,
+    savedAt: raw.savedAt,
+    ...(validOverview(raw.overview) ? { overview: raw.overview } : {}),
+  }
 }
 
 function asBlock(raw: unknown, expect: TranslationBlockKey): TranslationBlockEntry | null {
@@ -475,7 +495,17 @@ export class ResultStore {
     if (!isStr(meta.provider) || !isStr(meta.model)) {
       throw new TypeError('result store: a translation needs provider and model')
     }
-    await this.putMeta(docHash, lang, { ...meta, savedAt: this.now() })
+    if (meta.overview !== undefined && !validOverview(meta.overview))
+      throw new TypeError('result store: invalid translation overview')
+    // Older writers and single-page edits update attribution without discarding the source overview.
+    const overview =
+      meta.overview ??
+      asMeta(await readJson(this.translationMetaPath(docHash, lang)), lang)?.overview
+    await this.putMeta(docHash, lang, {
+      ...meta,
+      ...(overview ? { overview } : {}),
+      savedAt: this.now(),
+    })
   }
 
   async writeTranslationBlock(
@@ -533,7 +563,13 @@ export class ResultStore {
     for (const b of await this.readBlocks(docHash, lang)) {
       blocks.set(blockKeyString(b.key), b)
     }
-    return { lang, provider: meta?.provider ?? null, model: meta?.model ?? null, blocks }
+    return {
+      lang,
+      provider: meta?.provider ?? null,
+      model: meta?.model ?? null,
+      ...(meta?.overview ? { overview: meta.overview } : {}),
+      blocks,
+    }
   }
 
   /** languages this document has a stored translation for */
@@ -598,6 +634,7 @@ export class ResultStore {
       provider: meta.provider,
       model: meta.model,
       savedAt: meta.savedAt,
+      ...(meta.overview ? { overview: meta.overview } : {}),
     })
   }
 

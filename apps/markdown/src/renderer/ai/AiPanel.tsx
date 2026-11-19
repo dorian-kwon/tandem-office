@@ -1,3 +1,4 @@
+import { analyzingDocumentLabel } from '@genoffice/i18n'
 import { useChatWindow, EarlierChatMessages } from '@genoffice/ui'
 import {
   aiPanelWidthAtPointer,
@@ -692,6 +693,10 @@ export function AiPanel({
   const loopRef = useRef<AgentLoop<DocSnapshot | undefined> | null>(null)
   if (!loopRef.current) {
     loopRef.current = new AgentLoop<DocSnapshot | undefined>({
+      documentTranslation: {
+        documentKey: () => filePathRef.current,
+        analyzingLabel: () => analyzingDocumentLabel[langRef.current],
+      },
       transport: transportRef.current,
       // a local model that reported no tool support answers in text only
       toolsAllowed: () =>
@@ -919,7 +924,10 @@ export function AiPanel({
         if (applied && !loopRef.current?.busy) {
           // a reopened conversation starts with no MCP choices of another chat (user MCP spec 7.6)
           windowMcpState()?.newConversation()
-          loopRef.current?.restore(msgs.map((m) => ({ role: m.role, text: m.text })))
+          loopRef.current?.restore(
+            msgs.map((m) => ({ role: m.role, text: m.text })),
+            msgs,
+          )
           // the next request re-reads the current text of the skills this conversation used
           skillsRef.current.restoreHistory(
             msgs.map((m) => (m.role === 'user' ? skillChipRefsOf(m.skills) : undefined)),
@@ -968,7 +976,10 @@ export function AiPanel({
     // skill cards come back closed; a saved card's record is not part of the conversation
     const msgs = skillCardsRef.current.restore(opened.entries)
     setChat(msgs.map((m) => entryFromProject(m)))
-    loopRef.current?.restore(msgs.map((m) => ({ role: m.role, text: m.text })))
+    loopRef.current?.restore(
+      msgs.map((m) => ({ role: m.role, text: m.text })),
+      msgs,
+    )
     skillsRef.current.restoreHistory(
       msgs.map((m) => (m.role === 'user' ? skillChipRefsOf(m.skills) : undefined)),
     )

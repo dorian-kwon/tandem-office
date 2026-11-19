@@ -663,6 +663,7 @@ export function createPdfStructureHandlers(deps: StructureHandlerDeps) {
             await store.writeTranslationMeta(req.docHash, req.lang, {
               provider: req.provider,
               model: req.model,
+              ...(req.overview !== undefined ? { overview: req.overview } : {}),
             })
             return { ok: true }
           case 'translationBlocks':

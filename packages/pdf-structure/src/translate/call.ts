@@ -13,6 +13,7 @@
  * the translation sends it again. Run errors (rate limit, timeout, …) from
  * `send` go to the job engine untouched; it retries or stops (spec §9).
  */
+import type { TranslationBatchContext } from './context'
 import { JobUnitFailure } from '../jobs/errors'
 import type {
   TranslationBlockResult,
@@ -30,6 +31,8 @@ export const TRANSLATION_MAX_RESENDS = 2
 export type TranslationFailureReason = PlaceholderFailure | 'missing-translation'
 
 export interface TranslationModelRequest extends TranslationRequest {
+  /** Current translatable blocks only, for glossary/reference lookup. */
+  sourceText?: string
   /** target language code */
   lang: string
   /** 0 for the first send, then 1, 2 for the resends */
@@ -53,12 +56,16 @@ export interface TranslationModelCallOptions {
 /** the `callModel` of startTranslationJob */
 export function createTranslationModelCall<B extends TranslationSourceBlock>(
   o: TranslationModelCallOptions,
-): (batch: TranslationJobItem<B>[], signal: AbortSignal) => Promise<TranslationBlockResult[]> {
+): (
+  batch: TranslationJobItem<B>[],
+  signal: AbortSignal,
+  context?: TranslationBatchContext,
+) => Promise<TranslationBlockResult[]> {
   const maxResends = o.maxResends ?? TRANSLATION_MAX_RESENDS
   if (!Number.isInteger(maxResends) || maxResends < 0) {
     throw new RangeError(`translation: invalid resend count ${maxResends}`)
   }
-  return async (batch, signal) => {
+  return async (batch, signal, context) => {
     const encoded = batch.map((item) => encodeRuns(item.block.runs))
     const results: (TranslationBlockResult | undefined)[] = batch.map(() => undefined)
     const reasons: TranslationFailureReason[] = batch.map(() => 'missing-translation')
@@ -69,8 +76,17 @@ export function createTranslationModelCall<B extends TranslationSourceBlock>(
       const request = buildTranslationRequest(
         o.lang,
         pending.map((i) => ({ id: String(i + 1), text: encoded[i]!.text })),
+        context,
       )
-      const answer = await o.send({ ...request, lang: o.lang, attempt }, signal)
+      const answer = await o.send(
+        {
+          ...request,
+          lang: o.lang,
+          attempt,
+          sourceText: pending.map((i) => runsText(batch[i]!.block.runs)).join('\n'),
+        },
+        signal,
+      )
       const parsed = parseTranslationOutput(answer)
       if (!parsed) continue
       anyParsed = true

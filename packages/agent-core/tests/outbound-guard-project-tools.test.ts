@@ -18,7 +18,9 @@ const toolResult = (name: string, output: string): AgentMessage => ({
 
 describe('addressInConversation and project folder tools (spec 5.5)', () => {
   it('names exactly the four project tools as tools whose results vouch for nothing', () => {
-    expect([...UNVOUCHED_RESULT_TOOLS].sort()).toEqual([...PROJECT_TOOLS].sort())
+    expect(
+      [...UNVOUCHED_RESULT_TOOLS].filter((name) => name.startsWith('project_')).sort(),
+    ).toEqual([...PROJECT_TOOLS].sort())
   })
 
   it('does not count an address that only stands in a project tool result', () => {

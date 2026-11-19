@@ -79,3 +79,23 @@ describe('proposeOperations quadratic formula guard (demo workbook)', () => {
     expect(outcome.ok).toBe(true)
   })
 })
+
+it('rejects a flagged mixed translation before preview and accepts separate text and format plans', () => {
+  const ctx = demoContext()
+  const text = { op: 'set_cell', sheetId: 'sheet-1', address: 'B1', value: 'Translated' } as const
+  const format = {
+    op: 'format_range',
+    sheetId: 'sheet-1',
+    range: 'B1',
+    format: { bold: true },
+  } as const
+  expect(proposeOperations(ctx, [text, format], 'translate and style', true)).toMatchObject({
+    ok: false,
+    error: expect.stringContaining('separate ordinary batch'),
+  })
+  expect(ctx.setPreview).not.toHaveBeenCalled()
+  expect(ctx.autoApplySafePlan).not.toHaveBeenCalled()
+  expect(proposeOperations(ctx, [text], 'translate', true).ok).toBe(true)
+  expect(proposeOperations(ctx, [format], 'style').ok).toBe(true)
+  expect(proposeOperations(ctx, [text, format], 'ordinary edit').ok).toBe(true)
+})

@@ -243,6 +243,7 @@ describe('a run', () => {
     expect(request.tools.map((tool) => tool.name).sort()).toEqual(
       [
         'ask_choice',
+        'prepare_document_translation',
         'edit_map',
         'image_search',
         'insert_image',

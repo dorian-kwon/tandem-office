@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { nextSheetName, planFromOps, prefetchOpImages } from '../src/renderer/op-executor'
+import {
+  nextSheetName,
+  planFromOps,
+  prefetchOpImages,
+  translationTargetError,
+} from '../src/renderer/op-executor'
 
 const workbook = {
   getSheetBySheetId: (id: string) => (id === 'sh1' ? { getSheetName: () => 'Data' } : undefined),
@@ -84,4 +89,39 @@ describe('prefetchOpImages', () => {
       vi.unstubAllGlobals()
     }
   })
+})
+
+it('refuses rich-text targets across the whole translation plan, preserving ordinary cell formatting', () => {
+  const grid = {
+    getSheetBySheetId: () => ({
+      getRange: (address: string) => ({
+        getCellDatas: () => [
+          [
+            address === 'B1'
+              ? { p: { body: { textRuns: [{ st: 0, ed: 2, ts: { bl: 1 } }] } } }
+              : { s: 'style' },
+          ],
+        ],
+      }),
+    }),
+  } as unknown as Parameters<typeof translationTargetError>[1]
+  const cell = (address: string) => ({
+    sheetId: 'sh1',
+    address,
+    before: { value: 'a' },
+    after: { value: 'b' },
+  })
+  const plan = {
+    transactionId: '1',
+    baseRevision: 0,
+    cellChanges: [cell('A1')],
+    formatChanges: [],
+    sheetRenames: [],
+    structuralChanges: [],
+    warnings: [],
+  }
+  expect(translationTargetError(plan, grid)).toBeNull()
+  expect(
+    translationTargetError({ ...plan, cellChanges: [cell('A1'), cell('B1')] }, grid),
+  ).toContain('sh1!B1')
 })

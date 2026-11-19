@@ -398,6 +398,36 @@ describe('a run', () => {
     expect((await b.store.unfinishedJobs(b.docHash)).length).toBe(0)
   })
 
+  it('shows local source analysis before the first translation request and stores its overview', async () => {
+    const b = await backend(SMALL_BOOK, { answer: () => null })
+    const writeMeta = b.store.writeTranslationMeta.bind(b.store)
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    vi.spyOn(b.store, 'writeTranslationMeta').mockImplementationOnce(async (...args) => {
+      await gate
+      await writeMeta(...args)
+    })
+    const m = await mount(b)
+    await openWindow(m, 'ko')
+    await toConfirm(m)
+    await click(q(m.el, '[data-action="start"]'))
+    try {
+      await until(() => !!q(m.el, '[data-job-phase="analyzing"]'), 'document analysis')
+      expect(b.aiStream).not.toHaveBeenCalled()
+    } finally {
+      release()
+    }
+    await until(
+      () => !!q(m.el, '[data-job-phase="translating"]') && b.calls.length === 1,
+      'translation',
+    )
+    expect((await b.store.readTranslation(b.docHash, 'ko'))?.overview?.text).toBeTruthy()
+    await click(q(m.el, '[data-action="stop-job"]'))
+    await until(() => !!q(m.el, '[data-job-state="stopped"]'), 'stop')
+  })
+
   it('answers the AI panel: opened, running while it runs, unavailable without a book', async () => {
     const b = await backend(SMALL_BOOK, { answer: () => null })
     const m = await mount(b)
@@ -440,7 +470,7 @@ describe('a run', () => {
     await openWindow(m, 'ko')
     await toConfirm(m)
     await click(q(m.el, '[data-action="start"]'))
-    await until(() => b.calls.length >= 3, 'three calls')
+    await until(() => b.calls.length === 2, 'the next batch after the first one was stored')
     await click(q(m.el, '[data-action="stop-job"]'))
     await until(() => !!q(m.el, '[data-action="export-partial"]'), 'the stop choices')
     // Stop ends the job's own streams, not the AI panel's other calls
@@ -463,7 +493,7 @@ describe('a run', () => {
     await openWindow(m, 'ko')
     await toConfirm(m)
     await click(q(m.el, '[data-action="start"]'))
-    await until(() => b.calls.length >= 3, 'three calls')
+    await until(() => b.calls.length === 2, 'the next batch after the first one was stored')
     await click(q(m.el, '[data-action="stop-job"]'))
     await until(() => !!q(m.el, '[data-action="continue-later"]'), 'the stop choices')
     await click(q(m.el, '[data-action="continue-later"]'))

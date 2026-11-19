@@ -12,9 +12,10 @@ import {
   type SourceEntry,
 } from '@genoffice/translate-project'
 import type { ResultStore } from '../../../../../packages/pdf-structure/src/store'
-import type {
-  JobRecordInput,
-  TranslationBlockInput,
+import {
+  validOverview,
+  type JobRecordInput,
+  type TranslationBlockInput,
 } from '../../../../../packages/pdf-structure/src/store/store'
 import type { DocumentTree } from '../../../../../packages/pdf-structure/src/tree/types'
 import { withoutImageData } from '../pdf-structure/handlers'
@@ -380,16 +381,22 @@ export function createNonEditableService(
             lang: t.lang,
             provider: t.provider,
             model: t.model,
+            ...(t.overview ? { overview: t.overview } : {}),
             blocks: [...t.blocks.values()],
           },
         }
       }
       case 'meta': {
-        const { provider, model } = request
+        const { provider, model, overview } = request
         if (typeof provider !== 'string' || provider.length > MAX_TEXT) break
         if (typeof model !== 'string' || model.length > MAX_TEXT) break
+        if (overview !== undefined && !validOverview(overview)) break
         write()
-        await store.writeTranslationMeta(l.docHash, l.lang, { provider, model })
+        await store.writeTranslationMeta(l.docHash, l.lang, {
+          provider,
+          model,
+          ...(overview ? { overview } : {}),
+        })
         return {}
       }
       case 'blocks': {

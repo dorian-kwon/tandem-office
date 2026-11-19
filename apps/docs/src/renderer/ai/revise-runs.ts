@@ -308,9 +308,10 @@ function planParagraph(
         const g = groupsOf(b.node, b.pos)
         return g.length > 0 ? runFingerprint(g.map((x) => x.text)) : null
       }),
+      blocks,
     )
   }
-  const role = inTable ? top.roles?.[paragraph] : plainTwinRole(editor, doc, item.index, fp)
+  const role = inTable ? top.roles?.[paragraph] : plainTwinRole(editor, doc, item.index)
   if (role === 'source')
     return {
       ok: false,

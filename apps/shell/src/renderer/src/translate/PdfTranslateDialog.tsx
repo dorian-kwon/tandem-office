@@ -7,7 +7,7 @@ import {
   aiRunErrorText,
   type AiRunErrorCause,
 } from '@genoffice/ui'
-import type { Lang } from '@genoffice/i18n'
+import { analyzingDocumentLabel, type Lang } from '@genoffice/i18n'
 import type { DocumentJobEstimate } from '../../../../../../packages/pdf-structure/src/jobs/job'
 import type { TranslationSend } from '../../../../../../packages/pdf-structure/src/translate'
 import { routeLabel } from '../../../../../pdf/src/renderer/doc-jobs/route'
@@ -77,6 +77,7 @@ type Step =
   | { kind: 'choose'; estimates: PdfTranslateEstimates }
   /** the confirmation, with the estimate of the chosen mode */
   | { kind: 'confirm'; estimates: PdfTranslateEstimates; restart: boolean }
+  | { kind: 'analyzing' }
   | { kind: 'running'; done: number; total: number }
   | { kind: 'writing' }
   | { kind: 'done'; output: string }
@@ -153,6 +154,9 @@ export function PdfTranslateDialog(props: PdfTranslateDialogProps): ReactElement
           )
         }),
       signal: controller.signal,
+      onAnalyzing: () => {
+        if (alive) setStep({ kind: 'analyzing' })
+      },
       onProgress: (e) => {
         if (alive) setStep({ kind: 'running', done: e.done, total: e.total })
       },
@@ -242,7 +246,7 @@ export function PdfTranslateDialog(props: PdfTranslateDialogProps): ReactElement
           return (request, signal) =>
             ask(request.system, [{ role: 'user', text: request.prompt }], signal)
         })()
-    setStep({ kind: 'running', done: restart ? 0 : estimate.done, total: estimate.total })
+    setStep({ kind: 'loading' })
     answer({ send, model: { provider: r.provider, model: r.model }, bilingual, restart })
   }
 
@@ -341,10 +345,15 @@ export function PdfTranslateDialog(props: PdfTranslateDialogProps): ReactElement
             excerpts={(context?.referenceConverted ?? 0) > 0}
           />
         )}
-        {step.kind === 'running' && (
+        {(step.kind === 'analyzing' || step.kind === 'running') && (
           <>
-            <p role="status" data-progress={`${step.done}/${step.total}`}>
-              {s('trRunning', { done: step.done, total: step.total })}
+            <p
+              role="status"
+              data-progress={step.kind === 'running' ? `${step.done}/${step.total}` : undefined}
+            >
+              {step.kind === 'analyzing'
+                ? analyzingDocumentLabel[lang]
+                : s('trRunning', { done: step.done, total: step.total })}
             </p>
             <div className="modal-buttons">
               <button

@@ -36,6 +36,7 @@ import {
   noteBlocksShifted,
   plainTwinRole,
   recordTwins,
+  rememberParagraphTwins,
   revisionDate,
   runFingerprint,
   segmentsError,
@@ -331,7 +332,7 @@ function matches(editor: Editor, doc: PmNode, index: number, item: BilingualItem
   if (groups.length === 0) return false
   const fp = runFingerprint(groups.map((g) => g.text))
   if (fp !== item.fp) return false
-  return top.node.type.name === 'docTable' || plainTwinRole(editor, doc, index, fp) !== 'twin'
+  return top.node.type.name === 'docTable' || plainTwinRole(editor, doc, index) !== 'twin'
 }
 
 /**
@@ -753,6 +754,7 @@ function planCell(
         const g = groupsOf(b.node, b.pos)
         return g.length > 0 ? runFingerprint(g.map((x) => x.text)) : null
       }),
+      blocks,
     )
     if (roles[blocks.findIndex((b) => b.pos === texty[0].pos)] === 'source')
       return {
@@ -885,6 +887,7 @@ export function applyBilingual(
   const cellDests = new Map<string, CellDestination>()
   const originals = new Set<number>()
   const placedPairsList: Array<[string, string]> = []
+  const placedNodes: Array<[PmNode, PmNode]> = []
   const order = new Map(items.map((item, i) => [item, i]))
   const position = new Map<PmNode, number>()
   let seq = 0
@@ -949,8 +952,9 @@ export function applyBilingual(
               const g = groupsOf(b.node, b.pos)
               return g.length > 0 ? runFingerprint(g.map((x) => x.text)) : null
             }),
+            blocks,
           )[item.paragraph as number]
-        : plainTwinRole(editor, doc, index, ownFp)
+        : plainTwinRole(editor, doc, index)
       if (role === 'twin') {
         errors.push(`${where}: this is a translation add_bilingual already added; leave it alone`)
         continue
@@ -1011,6 +1015,7 @@ export function applyBilingual(
           ...(prepared.extra ? { extra: prepared.extra } : {}),
         })
       }
+      if (target.kind !== 'cell') placedNodes.push([block.node, prepared.node])
       placedPairsList.push([prepared.fp, prepared.twinFp])
       continue
     }
@@ -1040,7 +1045,7 @@ export function applyBilingual(
     }
     const groups = groupsOf(top.node, top.pos)
     if (groups.length === 0) continue
-    const role = plainTwinRole(editor, doc, index, runFingerprint(groups.map((g) => g.text)))
+    const role = plainTwinRole(editor, doc, index)
     if (role === 'twin') {
       errors.push(`${where}: this is a translation add_bilingual already added; leave it alone`)
       continue
@@ -1116,7 +1121,7 @@ export function applyBilingual(
         tableReports.push({ index, layout: existing.layout, paragraphs: restored, extra })
       continue
     }
-    const roles = tableTwinRoles(roleEditor, fps)
+    const roles = tableTwinRoles(roleEditor, fps, blocks)
     if (roles.some((r) => r !== null)) {
       alreadyDone.push(`block ${index} (table)`)
       continue
@@ -1211,7 +1216,11 @@ export function applyBilingual(
       )
       continue
     }
-    plan.op.content.forEach((node, i) => position.set(node, order.get(dest.entries[i]!.item)!))
+    plan.op.content.forEach((node, i) => {
+      const entry = dest.entries[i]!
+      position.set(node, order.get(entry.item)!)
+      placedNodes.push([doc.nodeAt(entry.originalPos)!, node])
+    })
     cellOps.push(plan.op)
     placedReports.push(...plan.reports)
   }
@@ -1297,8 +1306,12 @@ export function applyBilingual(
   }
   if (track) tr.setMeta(TRACK_IGNORE, true)
   if (tr.docChanged) editor.view.dispatch(tr)
+  rememberParagraphTwins(
+    editor,
+    bodyOps.map((op) => [doc.child(op.report.index), op.node]),
+  )
   if (pairs.length > 0) recordTwins(editor, pairs)
-  if (placedPairsList.length > 0) recordTwins(editor, placedPairsList, { placed: true })
+  rememberParagraphTwins(editor, placedNodes, true)
   const inserted = bodyOps.length + placeOps.length
   addedBodyTwins.set(
     originalAiEditor(editor),

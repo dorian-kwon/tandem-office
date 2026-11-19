@@ -222,6 +222,32 @@ describe('add_bilingual: body paragraphs', () => {
     expect(twin.ok).toBe(false)
   })
 
+  it('resumes only the unpaired duplicate after a manual edit of the first translation', async () => {
+    const editor = await createEditor([plain('동일'), plain('동일')])
+    expect(applyBilingual(editor, 'after', [item(0, '동일', ['Same'])]).ok).toBe(true)
+    const twinStart = editor.state.doc.child(0).nodeSize + 1
+    editor.view.dispatch(editor.state.tr.insertText('Revised', twinStart, twinStart + 4))
+    const mark = editor.schema.marks.docTextStyle!.create(STYLE_C)
+    editor.view.dispatch(editor.state.tr.addMark(twinStart, twinStart + 3, mark))
+    editor.view.dispatch(
+      editor.state.tr.setNodeMarkup(0, undefined, {
+        ...editor.state.doc.child(0).attrs,
+        styleId: 'Edited source style',
+      }),
+    )
+    const left = () => remainingUntranslated(editor, undefined, 'ko').body
+    expect(left()).toEqual(['2'])
+    expect(readRunGroups(editor, 0, 2)[1]?.skip).toMatch(/translation added/)
+    readRunGroups(editor, 0, 2)
+    expect(applyBilingual(editor, 'after', [item(2, '동일', ['Same'])]).ok).toBe(true)
+    expect(left()).toEqual([])
+    editor.commands.undo()
+    expect(left()).toEqual(['2'])
+    expect(editor.state.doc.child(1).textContent).toBe('Revised')
+    editor.commands.redo()
+    expect(left()).toEqual([])
+  })
+
   it('a second call from the same read still finds its paragraph after earlier insertions', async () => {
     const editor = await createEditor([plain('가'), plain('나'), plain('다')])
     expect(applyBilingual(editor, 'after', [item(0, '가', ['A'])]).ok).toBe(true)

@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile, readFile, readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import JSZip from 'jszip'
+import { createHash } from 'node:crypto'
 import { createOcrChatService } from '../src/main/translate/ocr-chat'
-import { chatOcrSourceResolver } from '../src/main/translate/ocr-chat-source'
+import { createOcrService } from '../src/main/translate/ocr'
+import { buildDocx } from '../../../packages/docx-engine/tests/helpers/build-docx'
+import { chatOcrSourceResolver, pruneOcrWorkDir } from '../src/main/translate/ocr-chat-source'
 import { PICTURE_OCR_INSTRUCTION } from '../src/shared/ocr-picture-instruction'
 
 /**
@@ -151,6 +154,7 @@ describe('reading and agreeing on a new Word document', () => {
     expect(api.recommend).not.toHaveBeenCalled()
     expect(proposal.needsConfirmation).toBe(true)
     expect(proposal.result).toBe('new-docx')
+    expect(proposal.destination).toBe('project-output')
     expect(proposal.placement).toBeUndefined()
     expect(proposal.texts[0].text).toContain('Recognised')
   })
@@ -163,7 +167,7 @@ describe('reading and agreeing on a new Word document', () => {
     })
     await call('apply', 't3', { session, placement: { kind: 'docx-after-images' } })
     expect(api.write).toHaveBeenCalledTimes(1)
-    expect(api.write.mock.calls[0]).toHaveLength(2)
+    expect(api.write.mock.calls[0]?.[2]).toBeUndefined()
   })
 
   it('keeps the person apart from the write: apply waits for a later human turn', async () => {
@@ -183,9 +187,12 @@ describe('reading and agreeing on a new Word document', () => {
       sourceUnchanged: true,
       format: 'docx',
     })
-    expect(api.write).toHaveBeenCalledWith('lease', [
-      expect.objectContaining({ index: 1, payload: expect.anything() }),
-    ])
+    expect(api.write).toHaveBeenCalledWith(
+      'lease',
+      [expect.objectContaining({ index: 1, payload: expect.anything() })],
+      undefined,
+      undefined,
+    )
     expect(JSON.stringify(api.write.mock.calls[0])).toContain('Reviewed')
   })
 
@@ -196,7 +203,12 @@ describe('reading and agreeing on a new Word document', () => {
     await call('read', 't2', { session, pages: [2] })
     await call('propose', 't2', { session })
     await call('apply', 't3', { session })
-    expect(api.write).toHaveBeenCalledWith('lease', [expect.objectContaining({ index: 2 })])
+    expect(api.write).toHaveBeenCalledWith(
+      'lease',
+      [expect.objectContaining({ index: 2 })],
+      undefined,
+      undefined,
+    )
   })
 })
 
@@ -227,6 +239,79 @@ describe('the source the chat takes when no project is open', () => {
     const source = await resolveFor('form.hwpx', await hwpx())
     expect(source).toMatchObject({ file: 'form.hwpx' })
   })
+
+  async function standaloneInput(ext: string): Promise<Buffer> {
+    if (ext === 'pdf') return Buffer.from('%PDF-1.4\n%%EOF\n')
+    // Same form in both containers. An orange pixel sits in the outer table; a navy
+    // pixel sits inside the exam table in its last cell (cellPath depth 2).
+    return readFile(join(__dirname, 'fixtures', 'ocr-nested-tables.' + ext))
+  }
+
+  it.each(['pdf', 'hwp', 'hwpx'])(
+    'keeps standalone %s OCR output beside its source after cleanup, without replacing existing files',
+    async (ext) => {
+      const base = await mkdtemp(join(tmpdir(), 'tandem-standalone-ocr-'))
+      dirs.push(base)
+      const work = join(base, 'work')
+      const docPath = join(base, 'report.' + ext)
+      const input = await standaloneInput(ext)
+      await writeFile(docPath, input)
+      await writeFile(join(base, 'report (OCR).docx'), 'existing result')
+      const seen: string[] = []
+      const service = createOcrChatService({
+        resolve: chatOcrSourceResolver(
+          () => work,
+          () => ({ kind: 'ai', provider: 'claude' }),
+        ),
+        ocr: createOcrService(
+          {
+            pdfPageCount: async () => 1,
+            renderPdfPage: async () => new Uint8Array([1]),
+            markdownToDocx: async (text) =>
+              buildDocx({ bodyXml: '<w:p><w:r><w:t>' + text + '</w:t></w:r></w:p>' }),
+          },
+          Date.now,
+          () => 'lease',
+        ),
+        route: () => ({ provider: 'local-fixture', model: 'fixture', paid: false }),
+        ask: async (_route, request) => {
+          for (const message of request.messages) {
+            if (message.role !== 'user') continue
+            for (const image of message.images ?? []) {
+              seen.push(
+                createHash('sha256').update(Buffer.from(image.base64, 'base64')).digest('hex'),
+              )
+            }
+          }
+          return '<page-content>\nVerified words\n</page-content>'
+        },
+        now: Date.now,
+        newToken: () => 'session',
+      })
+      const run = (action: 'inspect' | 'read' | 'propose' | 'apply', turnId: string, extra = {}) =>
+        service.execute(
+          1,
+          { action, turnId, requestId: action, ...extra },
+          { docPath, projectRoot: null },
+        )
+      const { session, imageCount } = parsed(await run('inspect', '1'))
+      const selected = ext === 'pdf' ? 1 : 2
+      expect(imageCount).toBe(selected)
+      expect((await run('read', '2', { session, pages: [selected] })).isError).not.toBe(true)
+      if (ext !== 'pdf') {
+        expect(seen).toEqual(['43e6ae2e04d12092acd29fe5905598d589e2339a1c7f0cfe7d71db210f4c0519'])
+      }
+      expect(parsed(await run('propose', '2', { session })).destination).toBe('beside-source')
+      const { outputPath } = parsed(await run('apply', '3', { session }))
+      expect(outputPath).toBe(join(base, 'report (OCR) (2).docx'))
+      expect(await pruneOcrWorkDir(work, Date.now() + 8 * 86400000)).toBe(1)
+      expect(await readdir(work)).toEqual([])
+      const file = await JSZip.loadAsync(await readFile(outputPath))
+      expect(await file.file('word/document.xml')!.async('string')).toContain('Verified words')
+      expect((await readFile(docPath)).equals(input)).toBe(true)
+      expect(await readFile(join(base, 'report (OCR).docx'), 'utf8')).toBe('existing result')
+    },
+  )
 
   it('makes a private project copy of a PDF', async () => {
     const source = await resolveFor('scan.pdf', new TextEncoder().encode('%PDF-1.4\n%%EOF\n'))

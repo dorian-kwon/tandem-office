@@ -58,12 +58,17 @@ it('keeps scope, selection and applying on distinct human turns without a dialog
   const applied = await call('apply', 't4', { session })
   expect(applied.isError).not.toBe(true)
   expect(JSON.parse(applied.output).outputPath).toMatch(/\.xlsx$/)
-  expect(api.write).toHaveBeenCalledWith('lease', [expect.objectContaining({ index: 2 })], {
-    kind: 'xlsx-cells',
-    sheet: 'Sheet1',
-    cell: 'C7',
-    overwrite: false,
-  })
+  expect(api.write).toHaveBeenCalledWith(
+    'lease',
+    [expect.objectContaining({ index: 2 })],
+    {
+      kind: 'xlsx-cells',
+      sheet: 'Sheet1',
+      cell: 'C7',
+      overwrite: false,
+    },
+    undefined,
+  )
 })
 it('refuses cross-window tokens and changing documents during negotiation', async () => {
   const session = JSON.parse((await call('inspect', 't1')).output).session

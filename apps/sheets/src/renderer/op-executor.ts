@@ -29,7 +29,12 @@ import type {
   StructuralChange,
 } from '@genoffice/xlsx-gateway/domain/workbook.types'
 import { pushBulkFillUndo } from './bulk-fill-undo'
-import { createAiUndoScope, undoCapacityNotice, translationCellPlan } from './ai-undo-scope'
+import {
+  createAiUndoScope,
+  undoCapacityNotice,
+  translationCellPlan,
+  MIXED_TRANSLATION_PLAN,
+} from './ai-undo-scope'
 import {
   journalCellContentAt,
   plainCellValue,
@@ -80,6 +85,7 @@ import {
   applyJournalOverlay,
   applyRangeInLoadedChunks,
   ensureSheetFileState,
+  lazyCellEditable,
   lazyWorkbookCellReader,
   loadVisibleRange,
   measureImage,
@@ -378,6 +384,31 @@ function planTargetSheets(plan: ChangePlan): Set<string> {
   return sheets
 }
 
+/** Scalar translation operations cannot carry per-run formatting or embedded cell content. */
+export function translationTargetError(
+  plan: ChangePlan,
+  workbook: ActiveWorkbook,
+  state?: LazyWorkbookState | null,
+): string | null {
+  if (!translationCellPlan(plan)) return MIXED_TRANSLATION_PLAN
+  for (const change of plan.cellChanges) {
+    const { row, column } = parseAddress(change.address)
+    if (state && !lazyCellEditable(state, change.sheetId, row, column))
+      return `Read the target cell ${change.sheetId}!${change.address} first so its formatting can be checked before translating.`
+    const cell = workbook
+      .getSheetBySheetId(change.sheetId)
+      ?.getRange(change.address)
+      .getCellDatas()[0]?.[0]
+    if (
+      cell?.p?.body?.textRuns?.length ||
+      cell?.p?.body?.customRanges?.length ||
+      cell?.p?.body?.customBlocks?.length
+    )
+      return `The target cell ${change.sheetId}!${change.address} contains formatted runs or embedded content that a scalar translation would discard. Leave it intact. For a bilingual layout, use a confirmed blank translation cell. For in-place work, report this cell as skipped.`
+  }
+  return null
+}
+
 /**
  * Applies a plan: prechecks, then every operation inside one undo batch —
  * range/structural ops first (so inserts establish the final coordinate
@@ -406,6 +437,8 @@ async function applyChangePlanNow(
   ctx: OpExecutorContext,
   options: ApplyPlanOptions,
 ): Promise<ApplyOutcome> {
+  if (options.translation && !translationCellPlan(plan))
+    return { ok: false, reason: MIXED_TRANSLATION_PLAN }
   const dropUndo = shouldDropUndoBatch(options)
   const aiScope = options.aiEdit
     ? createAiUndoScope(
@@ -415,7 +448,7 @@ async function applyChangePlanNow(
             throw new Error(t('appPreviewOtherWorkbook'))
         },
         ctx.workbook.getId(),
-        options.translation === true && translationCellPlan(plan),
+        options.translation === true,
       )
     : null
   // Only facade methods carry the source; the original runtime stays available
@@ -441,6 +474,10 @@ async function applyChangePlanNow(
   }
   const stale = options.verifyBeforeApply?.()
   if (stale) return stale
+  if (options.translation) {
+    const reason = translationTargetError(plan, workbook, state)
+    if (reason) return { ok: false, reason }
+  }
   const undoBatch = aiScope ?? beginUndoBatch(runtime)
   const commit = aiScope?.run ?? (<T>(run: () => T): T => run())
   const dropped = () => aiScope?.dropped ?? aiBulkUndoGate.dropped

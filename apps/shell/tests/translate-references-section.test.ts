@@ -38,5 +38,17 @@ describe('translationProjectSection reference excerpts', () => {
     const system = await send({ system: 'S', prompt: 'batch one' } as never, signal)
     expect(seen).toEqual(['batch one'])
     expect(system).toContain('for batch one')
+    const next = await send(
+      {
+        system: 'S',
+        prompt: 'previous source and previously accepted translation; current source',
+        sourceText: 'current source',
+        lang: 'de',
+        attempt: 0,
+      },
+      signal,
+    )
+    expect(seen).toEqual(['batch one', 'current source'])
+    expect(next).not.toContain('previously accepted translation')
   })
 })

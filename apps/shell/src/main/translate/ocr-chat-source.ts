@@ -53,7 +53,7 @@ export function chatOcrSourceResolver(workDir: () => string, ocrMode: () => OcrM
     _owner: number,
     input: ChatOcrRequest,
     context: ChatOcrContext,
-  ): Promise<{ dir: string; file: string } | { files: string[] }> => {
+  ): Promise<{ dir: string; file: string; besideSourceDir?: string } | { files: string[] }> => {
     const given = input.file
     if (
       given !== undefined &&
@@ -98,6 +98,6 @@ export function chatOcrSourceResolver(workDir: () => string, ocrMode: () => OcrM
     const made = await createProject(work, randomUUID(), 'auto', 'en')
     const project = await addSource(made.dir, path)
     await saveProject(made.dir, { ...project, ocr: ocrMode() })
-    return { dir: made.dir, file: project.sources[0]!.file }
+    return { dir: made.dir, file: project.sources[0]!.file, besideSourceDir: dirname(path) }
   }
 }

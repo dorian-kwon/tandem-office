@@ -1,6 +1,13 @@
 import type { zh } from './zh'
 
 export const ja = {
+  wikiView: 'ウィキを表示',
+  wikiSetup:
+    'Obsidian で「保管庫としてフォルダを開く」を選び、下のフォルダを開いてから {app} に戻ってください。',
+  wikiDownload: 'Obsidian のインストールが終わったら、{app} に戻るとウィキが開きます。',
+  wikiUnavailable:
+    'ウィキを開けませんでした。Obsidian がインストールされていることを確認し、一度起動してから再度お試しください。',
+  wikiFolder: 'ウィキのフォルダ',
   navTranslate: '翻訳',
   title: '翻訳プロジェクト',
   intro: '翻訳プロジェクトは、翻訳する文書、参考資料、用語集を1つのフォルダーにまとめます。',

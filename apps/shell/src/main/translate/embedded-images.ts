@@ -11,6 +11,7 @@ import { openHwp } from '../../../../hwp/src/main/hwp5-file'
 import { createHash } from 'node:crypto'
 import { hwpPicturePlaces } from '@genoffice/file-parse/hwp'
 import { orderByPlaces } from './picture-order'
+import { wordPictureReferences } from './ocr-docx-pictures'
 
 const MAX_ARCHIVE = 128 * 1024 * 1024
 const MAX_IMAGE = 20 * 1024 * 1024
@@ -296,37 +297,19 @@ export async function listEmbeddedImages(path: string): Promise<EmbeddedImage[]>
               : a.localeCompare(b, 'en', { numeric: true }),
         )
       for (const part of parts) {
-        const xml = (await text(part)).replace(
-          /<(?:\w+:)?object\b[\s\S]*?<\/(?:\w+:)?object\s*>/g,
-          '',
-        )
-        const raw = await text(part)
+        const xml = await text(part)
         const styles = (await text('word/styles.xml')) || undefined
-        let paragraph = 0
-        // only the body has pages of its own; a header or note part repeats or floats
         const starts = part === 'word/document.xml' ? pageStarts(xml) : null
-        for (const m of xml.matchAll(/<(?:\w+:)?(p|blip|imagedata|fill)\b[^>]*>/g)) {
-          if (m[1] === 'p') {
-            paragraph++
-            continue
-          }
-          const a = attrs(m[0])
-          const id = a['r:embed'] ?? a['r:id']
-          if (id) {
-            const at = Math.max(1, paragraph)
-            await add(
-              part,
-              id,
-              `${basename(part)} · ¶${at}`,
-              m[1] === 'blip' && inspectBoxableImage(part, raw, at, id, styles).ok,
-              starts
-                ? {
-                    number: 1 + starts.at.filter((position) => position < m.index!).length,
-                    approx: starts.approx,
-                  }
-                : undefined,
-            )
-          }
+        let breaks = 0
+        for (const { relId, paragraph, kind, offset } of wordPictureReferences(xml)) {
+          while (starts && breaks < starts.at.length && starts.at[breaks]! < offset) breaks++
+          await add(
+            part,
+            relId,
+            `${basename(part)} · ¶${paragraph}`,
+            kind === 'blip' && inspectBoxableImage(part, xml, paragraph, relId, styles).ok,
+            starts ? { number: breaks + 1, approx: starts.approx } : undefined,
+          )
         }
       }
     } else if (extname(path).toLowerCase() === '.hwpx') {

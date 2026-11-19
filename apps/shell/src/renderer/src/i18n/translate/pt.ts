@@ -1,6 +1,12 @@
 import type { zh } from './zh'
 
 export const pt = {
+  wikiView: 'Ver wiki',
+  wikiSetup: 'No Obsidian, abra a pasta abaixo como cofre e volte ao {app}.',
+  wikiDownload: 'Conclua a instalação do Obsidian e volte ao {app} para abrir a wiki.',
+  wikiUnavailable:
+    'Não foi possível abrir a wiki. Verifique se o Obsidian está instalado, inicie-o uma vez e tente novamente.',
+  wikiFolder: 'Pasta da wiki',
   navTranslate: 'Tradução',
   title: 'Projetos de tradução',
   intro:

@@ -1,3 +1,4 @@
+import { analyzingDocumentLabel } from '@genoffice/i18n'
 import { isWorkbookHistoryComposer } from './clear-selection-keyboard'
 import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
 import {
@@ -8,7 +9,6 @@ import {
 } from './adapter-ai-history'
 import {
   appendAiUndoEntries,
-  translationCellPlan,
   createAiUndoScope,
   matchesAiUndoEntries,
   undoCapacityNotice,
@@ -74,6 +74,7 @@ import {
 } from '@genoffice/xlsx-gateway/gateway/xlsx-protection-hash'
 import {
   applyChangePlan,
+  translationTargetError,
   applyGridLayoutOp,
   planFromOps,
   type OpExecutorContext,
@@ -760,6 +761,9 @@ export function App({
   const [preview, setPreview] = useState<ChangePlan | null>(null)
   const [_revision, setRevision] = useState(0)
   const [workbookFile, setWorkbookFile] = useState<WorkbookFile | null>(null)
+  const translationFileRef = useRef<string | null>(null)
+  translationFileRef.current =
+    workbookFile?.csvPath ?? workbookFile?.path ?? workbookFile?.sessionId ?? null
   const [pendingEdits, setPendingEdits] = useState(0)
   const pendingEditsRef = useRef(0)
   pendingEditsRef.current = pendingEdits
@@ -1368,16 +1372,23 @@ export function App({
   // The OCR popup finished reading: its text becomes the next message to the AI (the bubble
   // shows only a short line), sent as soon as the panel is idle so the AI can show what was
   // recognised and ask where it goes. Dismissing the popup sends nothing.
-  const [ocrResult, setOcrResult] = useState<OcrPopupResult | null>(null)
+  const latestOcr = useRef<{ session: string; id: string; result: OcrPopupResult } | null>(null)
+  const [ocrResult, setOcrResult] = useState<typeof latestOcr.current>(null)
   useEffect(
-    () => window.desktopApi?.onOcrPopupResult?.((result) => setOcrResult(result)) ?? undefined,
+    () =>
+      window.desktopApi?.onOcrPopupResult?.((result, session) => {
+        if (session !== lazyWorkbookRef.current?.file.sessionId) return
+        latestOcr.current = { session, id: crypto.randomUUID(), result }
+        setOcrResult(latestOcr.current)
+      }) ?? undefined,
     [],
   )
   useEffect(() => {
     if (!ocrResult || aiBusy) return
     setOcrResult(null)
     aiRunStatus.resolveWaiting()
-    const message = formatOcrResultMessage(ocrResult)
+    if (ocrResult.session !== lazyWorkbookRef.current?.file.sessionId) return
+    const message = formatOcrResultMessage(ocrResult.result, ocrResult.id)
     handleSend(t('aiOcrResultDisplay', { count: message.count }), undefined, undefined, {
       text: `\n\n${message.text}`,
       chips: [],
@@ -1649,7 +1660,10 @@ export function App({
     windowMcpState()?.newConversation()
     // Restore model context: follow-ups after reopening the file continue the
     // previous conversation (only when the loop is idle and has no history)
-    agentLoopRef.current?.restore(msgs.map((m) => ({ role: m.role, text: m.text })))
+    agentLoopRef.current?.restore(
+      msgs.map((m) => ({ role: m.role, text: m.text })),
+      msgs,
+    )
   }
 
   const persistChatMessage = (
@@ -1769,6 +1783,10 @@ export function App({
   const agentLoopRef = useRef<AgentLoop | null>(null)
   if (!agentLoopRef.current) {
     agentLoopRef.current = new AgentLoop({
+      documentTranslation: {
+        documentKey: () => translationFileRef.current,
+        analyzingLabel: () => analyzingDocumentLabel[getLang()],
+      },
       transport: agentTransportRef.current,
       systemSuffix: aiLangDirective,
       // a local model that reported no tool support answers in text only
@@ -1796,6 +1814,10 @@ export function App({
         createOcrPicturesSkill(
           () => lazyWorkbookRef.current?.file.sessionId,
           () => pendingEditsRef.current > 0 || lazyWorkbookRef.current?.file.unsavedNew === true,
+          (session, id) => {
+            const latest = latestOcr.current
+            return latest?.session === session && latest.id === id ? latest.result : undefined
+          },
         ),
         // the person's skills: use_skill, read_skill_file, propose_skill (app-run tools)
         ...panelUserSkills({
@@ -4122,7 +4144,11 @@ export function App({
       const workbook = runtime?.univerAPI.getActiveWorkbook()
       if (!runtime || !workbook) return { ok: false, reason: t('appNoWorkbookOpen') }
       const record = aiEditUndoHistoryEnabled()
-      const separateCells = translation && translationCellPlan(plan)
+      if (translation) {
+        const reason = translationTargetError(plan, workbook)
+        if (reason) return { ok: false, reason }
+      }
+      const separateCells = translation
       const {
         result: { receipt, prunedRevision },
         before,
@@ -4923,6 +4949,7 @@ export function App({
         }
       }
     }
+    if (latestOcr.current?.session !== state.file.sessionId) latestOcr.current = null
     lazyWorkbookRef.current = state
     void loadRowOutlines(state, lazyWorkbookRef)
     // Pivot definitions load eagerly so refresh (a synchronous apply step)
@@ -5341,6 +5368,10 @@ export function App({
       if (dryRun) {
         try {
           const plan = planFromOps(ops, workbook, 'mcp')
+          if (translation) {
+            const reason = translationTargetError(plan, workbook, state)
+            if (reason) return { ok: false, reason }
+          }
           return {
             ok: true,
             dryRun: true,

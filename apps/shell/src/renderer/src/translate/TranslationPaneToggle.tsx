@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { SplitViewState } from '../../../shared/split-view-api'
 import type { TabSummary } from '../../../shared/tabs-api'
 import { useI18n } from '../locale'
+import { TranslationWikiButton } from './TranslationWiki'
 import { saveAsNoticeFor, type SaveAsNotice } from './save-as-action'
 import { makeText } from './shared'
 import { dismissSourceChanged, useChangedSources } from './source-change-notice'
@@ -106,13 +107,18 @@ export function TranslationPaneToggle({ split, tabs }: TranslationPaneToggleProp
       <div className="translate-pane-toggle" role="group" aria-label={s('paneToggleGroup')}>
         {button('a')}
         {button('b')}
+        <TranslationWikiButton className="translate-pane-toggle-btn" />
         {outputPath && (
           <button
             type="button"
             className="translate-pane-toggle-btn"
             data-action="save-as-translation"
             disabled={exporting}
-            title={outputPath ? `${s('saveAsTranslation')} ${basenameOf(outputPath)}` : s('saveAsTranslation')}
+            title={
+              outputPath
+                ? `${s('saveAsTranslation')} ${basenameOf(outputPath)}`
+                : s('saveAsTranslation')
+            }
             onClick={() => outputPath && runSaveAs(outputPath)}
           >
             {s('saveAsTranslation')}

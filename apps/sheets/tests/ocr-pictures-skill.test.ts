@@ -27,11 +27,16 @@ function stub(over: Record<string, unknown> = {}) {
 }
 
 describe('ocr_pictures skill', () => {
-  it('exposes one tool, actions list and open, and nothing that takes a position or a file', () => {
+  it('exposes picture discovery, the popup and confirmed-result pagination without accepting file paths', () => {
     const skill = createOcrPicturesSkill(() => 'session-1')
     expect(skill.tools?.map((tool) => tool.name)).toEqual(['ocr_pictures'])
     const schema = skill.tools?.[0]?.inputSchema as { properties: Record<string, unknown> }
-    expect(Object.keys(schema.properties)).toEqual(['action'])
+    expect(Object.keys(schema.properties).sort()).toEqual([
+      'action',
+      'offset',
+      'position',
+      'resultId',
+    ])
   })
 
   it('lists the pictures in document order with anchor cells, count and destination hint', async () => {
@@ -121,6 +126,43 @@ describe('ocr_pictures skill', () => {
     expect(noSession.isError).toBe(true)
   })
 
+  it('reads every confirmed character across pictures and refuses stale workbook results', async () => {
+    const dataset = {
+      pages: Array.from({ length: 20 }, (_, i) => ({
+        index: i + 1,
+        location: 'Sheet · A' + (i + 1),
+        text: '가'.repeat(i === 0 ? 15999 : 1700) + '😀끝',
+      })),
+    }
+    let session = 'original'
+    const skill = createOcrPicturesSkill(
+      () => session,
+      () => false,
+      (id, key) => (id === 'original' && key === 'confirmed' ? dataset : undefined),
+    )
+    let cursor: { position: number; offset: number } | null = { position: 0, offset: 0 }
+    const recovered = new Map<number, string>()
+    do {
+      const res = await skill.executeTool(
+        call({ action: 'read', resultId: 'confirmed', ...cursor }),
+      )
+      expect(res.isError).toBeFalsy()
+      const chunk = JSON.parse(res.output)
+      for (const item of chunk.pages) {
+        const soFar = recovered.get(item.index) ?? ''
+        expect(item.offset).toBe(soFar.length)
+        expect(item.text.isWellFormed()).toBe(true)
+        recovered.set(item.index, soFar + item.text)
+      }
+      cursor = chunk.next
+    } while (cursor)
+    expect([...recovered.values()]).toEqual(dataset.pages.map((p) => p.text))
+    session = 'other'
+    expect((await skill.executeTool(call({ action: 'read', resultId: 'confirmed' }))).isError).toBe(
+      true,
+    )
+  })
+
   it('rejects unknown tools and actions', async () => {
     stub()
     const skill = createOcrPicturesSkill(() => 's')
@@ -186,7 +228,9 @@ describe('ocr_pictures in-chat placement flow', () => {
 
   it('opening twice reports the popup as already open and keeps waiting', async () => {
     vi.stubGlobal('window', {
-      desktopApi: { ocrPictures: vi.fn(async () => ({ ok: true, opened: true, alreadyOpen: true })) },
+      desktopApi: {
+        ocrPictures: vi.fn(async () => ({ ok: true, opened: true, alreadyOpen: true })),
+      },
     })
     const result = await createOcrPicturesSkill(() => 's').executeTool(call({ action: 'open' }))
     expect(result.output).toMatch(/already open/i)

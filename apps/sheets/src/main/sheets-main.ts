@@ -1775,6 +1775,7 @@ function hostWindowFor(wc: WebContents): BrowserWindow | undefined {
 }
 
 interface SheetsTabSession {
+  ocrSessionId?: string
   readonly webContents: WebContents
   readonly client: XlsxSidecarClient
   readonly sessions: Map<string, SessionInfo>
@@ -1924,8 +1925,11 @@ export function notifyOcrPopupOutcome(
 ): void {
   const entry = sheetsTabs.get(asker)
   if (!entry || entry.webContents.isDestroyed()) return
-  if (outcome.kind === 'result') entry.webContents.send(IPC_CHANNELS.ocrPopupResult, outcome.result)
-  else entry.webContents.send(IPC_CHANNELS.ocrPopupClosed)
+  const sessionId = entry.ocrSessionId
+  delete entry.ocrSessionId
+  if (outcome.kind === 'result') {
+    if (sessionId) entry.webContents.send(IPC_CHANNELS.ocrPopupResult, outcome.result, sessionId)
+  } else entry.webContents.send(IPC_CHANNELS.ocrPopupClosed)
 }
 
 function registerSheetsSession(webContents: WebContents, client: XlsxSidecarClient): void {
@@ -3178,8 +3182,12 @@ export function registerSheetsIpc(): void {
         return { ok: false, error: 'Picture OCR needs a saved .xlsx workbook without a password.' }
       try {
         if (request.action === 'list') return { ok: true, ...(await host.list(session.path)) }
-        if (request.action === 'open')
-          return { ok: true, ...(await host.open(session.path, event.sender.id)) }
+        if (request.action === 'open' && typeof request.sessionId === 'string') {
+          const outcome = await host.open(session.path, event.sender.id)
+          if (!outcome.opened) return { ok: false, error: 'The picture OCR popup could not open.' }
+          if (!outcome.alreadyOpen) entry.ocrSessionId = request.sessionId
+          return { ok: true, ...outcome }
+        }
         return { ok: false, error: 'Unknown picture OCR action.' }
       } catch (err) {
         return { ok: false, error: err instanceof Error ? err.message : 'Picture OCR failed.' }

@@ -46,7 +46,7 @@ export interface OcrChatDeps {
     owner: number,
     input: ChatOcrRequest,
     context: ChatOcrContext,
-  ): Promise<{ dir: string; file: string } | { files: string[] }>
+  ): Promise<{ dir: string; file: string; besideSourceDir?: string } | { files: string[] }>
   route(ocr: Extract<OcrPrepared['ocr'], { kind: 'ai' }>): ChatOcrRoute
   ask(
     route: ChatOcrRoute,
@@ -64,6 +64,8 @@ interface Session {
   owner: number
   dir: string
   file: string
+  /** Main derives this from the current file for a standalone document. */
+  besideSourceDir?: string
   context: string
   prepared: OcrPrepared
   inspectTurn: string
@@ -271,6 +273,7 @@ export function createOcrChatService(deps: OcrChatDeps) {
           owner,
           dir: source.dir,
           file: source.file,
+          ...(source.besideSourceDir ? { besideSourceDir: source.besideSourceDir } : {}),
           context: contextKey(context),
           prepared,
           inspectTurn: input.turnId,
@@ -592,7 +595,8 @@ export function createOcrChatService(deps: OcrChatDeps) {
                 truncated: plain(p.payload).length > 2000,
               })),
               needsConfirmation: true,
-              next: 'Say in one short sentence that it will be written into a new Word document next to the original, which is not changed, and ask for a plain confirmation. Do not show the text. Do not apply on this turn.',
+              destination: s.besideSourceDir ? 'beside-source' : 'project-output',
+              next: `Say in one short sentence that it will be written into a new Word document ${s.besideSourceDir ? 'next to the original' : 'in the translation project output folder'}. The original is unchanged. Ask for a plain confirmation. Do not show the text. Do not apply on this turn.`,
             })
           }
           const recommendation = await deps.ocr.recommend(
@@ -698,9 +702,12 @@ export function createOcrChatService(deps: OcrChatDeps) {
               { placeInDocument: plan as ChatOcrPlaceInDocument },
             )
           }
-          const output = placement
-            ? await deps.ocr.write(s.prepared.token, s.proposal.pages, placement)
-            : await deps.ocr.write(s.prepared.token, s.proposal.pages)
+          const output = await deps.ocr.write(
+            s.prepared.token,
+            s.proposal.pages,
+            placement,
+            s.besideSourceDir,
+          )
           sessions.delete(s.id)
           return answer(
             {

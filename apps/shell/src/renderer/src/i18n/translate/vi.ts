@@ -1,6 +1,12 @@
 import type { zh } from './zh'
 
 export const vi = {
+  wikiView: 'Xem wiki',
+  wikiSetup: 'Trong Obsidian, mở thư mục bên dưới dưới dạng kho lưu trữ, rồi quay lại {app}.',
+  wikiDownload: 'Cài đặt xong Obsidian rồi quay lại {app} để mở wiki.',
+  wikiUnavailable:
+    'Không thể mở wiki. Hãy kiểm tra xem Obsidian đã được cài đặt chưa, mở ứng dụng một lần rồi thử lại.',
+  wikiFolder: 'Thư mục wiki',
   navTranslate: 'Dịch thuật',
   title: 'Dự án dịch thuật',
   intro:

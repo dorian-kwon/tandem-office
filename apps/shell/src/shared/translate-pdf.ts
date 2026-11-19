@@ -18,6 +18,7 @@ import type {
   StoredTranslation,
   TranslationBlockEntry,
   TranslationBlockInput,
+  TranslationMetaInput,
 } from '../../../../packages/pdf-structure/src/store/store'
 import {
   TRANSLATION_LANGUAGES,
@@ -108,7 +109,7 @@ export interface TranslatePdfPrepared {
 /** the result store calls of one translation job; main fixes the document and language */
 export type TranslatePdfStoreRequest =
   | { op: 'read' }
-  | { op: 'meta'; provider: string; model: string }
+  | ({ op: 'meta' } & TranslationMetaInput)
   | { op: 'blocks'; blocks: TranslationBlockInput[] }
   | { op: 'delete' }
   | { op: 'delete-except-edited' }
@@ -118,6 +119,7 @@ export interface TranslatePdfStoredTranslation {
   lang: string
   provider: string | null
   model: string | null
+  overview?: NonNullable<StoredTranslation['overview']>
   blocks: TranslationBlockEntry[]
 }
 
@@ -194,7 +196,7 @@ export function withTranslationContext(
   instructions: (text: string) => Promise<TranslationContextParts>,
 ): TranslationSend {
   return async (request, signal) => {
-    const context = await instructions(request.prompt)
+    const context = await instructions(request.sourceText ?? request.prompt)
     if (signal.aborted) throw signal.reason
     const section = translationProjectSection(context)
     const system = section ? `${request.system}\n\n${section}` : request.system
@@ -224,11 +226,12 @@ export function createPdfJobStore(
         lang: t.lang,
         provider: t.provider,
         model: t.model,
+        ...(t.overview ? { overview: t.overview } : {}),
         blocks: new Map(t.blocks.map((b) => [blockKeyString(b.key), b])),
       } as StoredTranslation
     },
     async writeTranslationMeta(_docHash, _lang, meta) {
-      await call({ op: 'meta', provider: meta.provider, model: meta.model })
+      await call({ op: 'meta', ...meta })
     },
     async writeTranslationBlocks(_docHash, _lang, blocks) {
       await call({ op: 'blocks', blocks: [...blocks] })
@@ -299,6 +302,7 @@ export interface RunPdfTranslationOptions {
   /** the provider and model the estimates are made for (the route shown) */
   model: () => JobModelChoice
   signal?: AbortSignal
+  onAnalyzing?: () => void | Promise<void>
   onProgress?: (event: JobProgressEvent<unknown>) => void
   /** called once the job ran, before the PDF is written (the screen shows "writing") */
   onWriting?: () => void
@@ -348,6 +352,7 @@ export async function runPdfTranslation(
       store,
       ...restart,
       ...(o.signal ? { signal: o.signal } : {}),
+      ...(o.onAnalyzing ? { onAnalyzing: o.onAnalyzing } : {}),
       ...(o.onProgress
         ? { onProgress: (e) => o.onProgress?.(e as JobProgressEvent<unknown>) }
         : {}),

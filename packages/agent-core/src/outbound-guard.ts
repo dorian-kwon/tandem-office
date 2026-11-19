@@ -69,6 +69,10 @@ export const UNVOUCHED_RESULT_TOOLS: ReadonlySet<string> = new Set([
   'project_search',
   'project_read',
   'project_remember',
+  // These tools return model-authored overview and batch notes.
+  'prepare_document_translation',
+  'record_source_overview',
+  'translation_batch_context',
 ])
 
 /**

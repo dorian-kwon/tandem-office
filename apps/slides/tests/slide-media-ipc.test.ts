@@ -705,3 +705,28 @@ it('restores table cells, their exact XML and dirty flag, and rolls back a rejec
   }
   expect(table().anchor.originalXml).toBe(final)
 }, 30000)
+
+it('refuses mixed translation transactions before applying any op or clearing history', async () => {
+  const slide = session.opened.deck.slides[0]!
+  const text = addElement(slide, {
+    kind: 'textbox',
+    offset: { x: 0, y: 0, cx: 914400, cy: 914400 },
+    paragraphs: [{ runs: [{ text: 'Before', bold: true }] }],
+  })!
+  const target = { slide: 0, el: text.id }
+  const translated = { op: 'setText', target, paragraphs: [{ runs: [{ text: 'After' }] }] }
+  const style = { op: 'setFill', target, fill: '#123456' }
+  const apply = (ops: unknown[], translation: boolean, dryRun = false) =>
+    call('slides:apply-txn:ai-edit', [{ ops, translation, dryRun }], true)
+  for (const dryRun of [true, false]) {
+    const result = await apply([translated, style], true, dryRun)
+    expect(result).toMatchObject({
+      applied: false,
+      failures: [{ index: 1, error: expect.stringContaining('ordinary batch') }],
+    })
+    expect(session.undoStack).toHaveLength(0)
+  }
+  expect((await apply([translated], true)).applied).toBe(true)
+  expect(session.undoStack.at(-1)?.translation).toHaveLength(1)
+  expect((await apply([style], false)).applied).toBe(true)
+})

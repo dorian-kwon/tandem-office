@@ -82,6 +82,8 @@ export interface ToolDisplay {
 
 /** outcome of one tool execution */
 export interface ToolExecution {
+  /** Optional local activity record for restoring this conversation. Never sent to the provider. */
+  historyOutput?: string
   /** result text fed back to the model */
   output: string
   isError?: boolean

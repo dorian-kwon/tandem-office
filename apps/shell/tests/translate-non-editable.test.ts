@@ -556,6 +556,26 @@ describe('the store and instruction channels', () => {
     expect(prepared.lang).toBe('de')
   })
 
+  it('round-trips the source overview and rejects malformed metadata before marking the job busy', async () => {
+    await addOriginal('report.pdf', textPdf)
+    const h = handlers()
+    const { token } = await h.pdfPrepare({ dir, file: 'report.pdf' })
+    const meta = { op: 'meta' as const, provider: 'test', model: 'local' }
+    expect(
+      await codeOf(
+        h.pdfStore({
+          token,
+          request: { ...meta, overview: { scope: '', text: 'sample' } },
+        }),
+      ),
+    ).toBe('INVALID_ARGUMENT')
+    const next = await h.pdfPrepare({ dir, file: 'report.pdf' })
+    const overview = { scope: 'selected-pages', text: 'Representative source passage' }
+    await h.pdfStore({ token: next.token, request: { ...meta, overview } })
+    const read = await h.pdfStore({ token: next.token, request: { op: 'read' } })
+    expect(read.translation?.overview).toEqual(overview)
+  })
+
   it('a second translation of the same project waits while one runs', async () => {
     await addOriginal('report.pdf', textPdf)
     const h = handlers()

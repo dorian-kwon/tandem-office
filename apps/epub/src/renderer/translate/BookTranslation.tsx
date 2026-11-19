@@ -47,7 +47,7 @@ import type {
   EpubTranslationReport,
   EpubTranslationUnit,
 } from '@genoffice/epub-engine'
-import type { Lang } from '@genoffice/i18n'
+import { analyzingDocumentLabel, type Lang } from '@genoffice/i18n'
 import type { TranslationJobItem, TranslationSend } from '@genoffice/pdf-structure'
 import type { JobStatus } from '@genoffice/pdf-structure/store'
 import { aiRunErrorText } from '@genoffice/ui'
@@ -423,7 +423,7 @@ export const BookTranslation = forwardRef<BookTranslationHandle, BookTranslation
           docHash,
           lang: request.lang,
           provider: route.provider,
-          launch: ({ signal, registry, onProgress }) =>
+          launch: ({ signal, registry, onProgress, onAnalyzing }) =>
             startEpubTranslationJob({
               docHash,
               lang: request.lang,
@@ -435,6 +435,7 @@ export const BookTranslation = forwardRef<BookTranslationHandle, BookTranslation
               signal,
               registry,
               onProgress,
+              onAnalyzing,
             }),
           pageOf: (batch) => batch[0]?.block.page ?? null,
           onEnd: (last) => void ended(last, run),
@@ -617,6 +618,7 @@ function JobStrip({
       role={running ? 'status' : 'alert'}
       data-strip="job"
       data-job-state={view.state}
+      data-job-phase={running ? view.phase : undefined}
     >
       <div className="bt-strip-text">
         <span className="bt-strip-title">{title}</span>
@@ -673,6 +675,8 @@ function stripText(
   chapterName: (index: number) => string,
 ): { title: string; details: string[] } {
   if (view.state === 'running') {
+    if (view.phase === 'planning') return { title: t('btLoading'), details: [] }
+    if (view.phase === 'analyzing') return { title: analyzingDocumentLabel[lang], details: [] }
     const page = view.currentPage
     return {
       title: t('btRunning', { language, done: view.done, total: view.total }),

@@ -528,7 +528,7 @@ export const WORKBOOK_TOOLS: AgentToolDef[] = [
         translation: {
           type: 'boolean',
           description:
-            'Set true when writing translated text into cells; each cell can be undone independently.',
+            'Set true for translated cell text only; each cell can be undone independently. Send requested formatting or layout in a separate ordinary batch.',
         },
       },
       required: ['operations', 'summary'],

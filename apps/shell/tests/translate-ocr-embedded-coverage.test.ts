@@ -87,6 +87,30 @@ describe('pictures the OCR listing finds in a Word document', () => {
     expect(await namesOf(bytes)).toEqual(['in-cell.png', 'in-nested.png', 'in-textbox.png'])
   })
 
+  it('keeps real Word paragraph anchors around a nested text box and a drawing paragraph', async () => {
+    const bytes = await buildDocx({
+      extraRels:
+        rel('rIdInner', 'inner.png') + rel('rIdOuter', 'outer.png') + rel('rIdCell', 'cell.png'),
+      binaryParts: [png('inner.png'), png('outer.png'), png('cell.png')],
+      bodyXml:
+        '<w:p><w:r><w:pict><v:shape xmlns:v="urn:schemas-microsoft-com:vml"><v:textbox><w:txbxContent>' +
+        '<w:p>' +
+        inlinePicture('rIdInner') +
+        '</w:p></w:txbxContent></v:textbox></v:shape></w:pict></w:r>' +
+        inlinePicture('rIdOuter') +
+        '</w:p><w:p><w:r><w:drawing><a:txBody><a:p/></a:txBody></w:drawing></w:r></w:p>' +
+        '<w:tbl><w:tr><w:tc><w:tbl><w:tr><w:tc><w:p>' +
+        inlinePicture('rIdCell') +
+        '</w:p></w:tc></w:tr></w:tbl><w:p/></w:tc></w:tr></w:tbl>',
+    })
+    const images = await list(bytes)
+    expect(images.map((i) => [i.relId, i.location])).toEqual([
+      ['rIdInner', 'document.xml · ¶2'],
+      ['rIdOuter', 'document.xml · ¶1'],
+      ['rIdCell', 'document.xml · ¶4'],
+    ])
+  })
+
   it('finds a picture behind the text and the picture fill of a shape', async () => {
     const behind =
       '<w:p><w:r><w:drawing><wp:anchor behindDoc="1"><wp:extent cx="1" cy="1"/><wp:docPr id="50" name="BG"/>' +

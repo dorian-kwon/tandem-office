@@ -11,6 +11,14 @@
  * but keeps its own job record, leaves an existing provider record alone and
  * never restarts.
  */
+import {
+  CONTEXT_PAIR_COUNT,
+  CONTEXT_PAIR_LENGTH,
+  OVERVIEW_TEXT_LIMIT,
+  sourceExcerpt,
+  type TranslationOverview,
+  type TranslationBatchContext,
+} from '../translate/context'
 import type { TextUnit } from '../tree/derive'
 import type { InlineRun } from '../tree/types'
 import type { StoredTranslation, TranslationBlockInput } from '../store/store'
@@ -94,7 +102,11 @@ export async function planTranslationJob<B extends TranslationSourceBlock>(
 /** the plan, and the stored translation it was made against (edited blocks only on a restart) */
 async function planWithStored<B extends TranslationSourceBlock>(
   input: PlanInput<B>,
-): Promise<{ plan: TranslationJobPlan<B>; stored: StoredTranslation | null }> {
+): Promise<{
+  plan: TranslationJobPlan<B>
+  stored: StoredTranslation | null
+  keys: TranslationBlockKey[]
+}> {
   const keys = translationBlockKeys(input.blocks)
   const read =
     input.restart && !input.keepEdited
@@ -132,6 +144,7 @@ async function planWithStored<B extends TranslationSourceBlock>(
   const done = input.blocks.length - pending.length
   return {
     stored,
+    keys,
     plan: {
       batches,
       estimate: {
@@ -157,10 +170,17 @@ export async function estimateTranslationJob<B extends TranslationSourceBlock>(
 
 export interface StartTranslationJobOptions<B extends TranslationSourceBlock>
   extends TranslationJobInput<B>, StartDocumentJobOptions<TranslationJobItem<B>[]> {
+  /** Optional source-only evidence, scoped to the pages/chapters the person selected. */
+  overview?: {
+    scope: string | ((keys: readonly TranslationBlockKey[]) => string)
+    build: () => string
+  }
+  onAnalyzing?: () => void | Promise<void>
   /** translate one batch; one result per block, in order */
   callModel: (
     batch: TranslationJobItem<B>[],
     signal: AbortSignal,
+    context?: TranslationBatchContext,
   ) => Promise<TranslationBlockResult[]>
 }
 
@@ -187,8 +207,10 @@ export function startTranslationJob<B extends TranslationSourceBlock>(
   if (jobKind === 'translate-page' && o.restart) {
     throw new TypeError('translation job: a page translation does not restart')
   }
+  const source = jobKind === 'translate' ? o.overview : undefined
   return startDocumentJob<Batch, TranslationBlockResult[]>(
-    { ...o, kind: jobKind },
+    // Each contextual batch uses only translations committed before it in document order.
+    { ...o, kind: jobKind, ...(source ? { concurrency: 1 } : {}) },
     async (signal) => {
       if (o.restart && !signal.aborted) {
         if (!o.keepEdited) await o.store.deleteTranslation(o.docHash, o.lang)
@@ -202,10 +224,99 @@ export function startTranslationJob<B extends TranslationSourceBlock>(
       const {
         plan: { batches, estimate },
         stored,
+        keys,
       } = await planWithStored({ ...o, restart: false })
       // a page translation leaves the provider record of the document translation alone
       const writeMeta = jobKind === 'translate' || !stored || stored.provider === null
       let meta: Promise<void> | null = null
+      let overview: TranslationOverview | undefined
+      if (source && batches.length && !signal.aborted) {
+        const scope = typeof source.scope === 'string' ? source.scope : source.scope(keys)
+        if (stored?.overview?.scope === scope) {
+          overview = stored.overview
+        } else {
+          await o.onAnalyzing?.()
+          if (!signal.aborted) {
+            overview = { scope, text: source.build().slice(0, OVERVIEW_TEXT_LIMIT) }
+            await o.store.writeTranslationMeta(o.docHash, o.lang, {
+              provider: stored?.provider ?? o.model.provider,
+              model: stored?.model ?? o.model.model,
+              overview,
+            })
+            if (
+              !stored?.provider ||
+              (stored.provider === o.model.provider && stored.model === o.model.model)
+            )
+              meta = Promise.resolve()
+          }
+        }
+      }
+      // Scan selected source blocks once. Resume can have holes; load an edited or
+      // previously completed block only when it precedes this batch, never from a later page.
+      const previous: TranslationBatchContext['previous'] = []
+      const repeated = new Set<string>()
+      if (overview) {
+        const seen = new Set<string>()
+        for (const { textHash } of keys) {
+          if (seen.has(textHash)) repeated.add(textHash)
+          else seen.add(textHash)
+        }
+      }
+      const accepted = new Map<string, NonNullable<TranslationBatchContext['matches']>[number]>()
+      // A resumed batch can span saved blocks between two pending items. Keep their locations
+      // so a later item sees the accepted example, while an earlier one cannot see a future edit.
+      const savedMatches = new Map<
+        string,
+        NonNullable<TranslationBatchContext['matches']>[number]
+      >()
+      if (repeated.size && stored?.blocks.size) {
+        const last = new Map<string, NonNullable<TranslationBatchContext['matches']>[number]>()
+        keys.forEach((key, index) => {
+          if (!repeated.has(key.textHash)) return
+          const id = blockKeyString(key)
+          const saved = stored.blocks.get(id)
+          if (saved?.status === 'translated' && saved.text) {
+            const target = saved.text.slice(0, CONTEXT_PAIR_LENGTH)
+            if (target.trim())
+              last.set(key.textHash, {
+                source: sourceExcerpt(o.blocks[index]!.runs, CONTEXT_PAIR_LENGTH),
+                target,
+                page: o.blocks[index]!.page,
+                unit: index + 1,
+              })
+          } else if (!saved) {
+            const match = last.get(key.textHash)
+            if (match) savedMatches.set(id, match)
+          }
+        })
+      }
+      let cursor = 0
+      function remember(block: B, key: TranslationBlockKey, text: string) {
+        const target = text.slice(0, CONTEXT_PAIR_LENGTH)
+        if (!target.trim()) return
+        const pair = { source: sourceExcerpt(block.runs, CONTEXT_PAIR_LENGTH), target }
+        previous.push(pair)
+        if (repeated.has(key.textHash)) {
+          accepted.set(key.textHash, { ...pair, page: block.page, unit: cursor + 1 })
+        }
+        if (previous.length > CONTEXT_PAIR_COUNT) previous.shift()
+      }
+      function advanceTo(key: TranslationBlockKey) {
+        while (cursor < keys.length) {
+          const at = keys[cursor]!
+          if (
+            at === key ||
+            (at.textHash === key.textHash &&
+              at.pageFingerprint === key.pageFingerprint &&
+              at.occurrence === key.occurrence)
+          )
+            break
+          const saved = stored?.blocks.get(blockKeyString(keys[cursor]!))
+          if (saved?.status === 'translated' && saved.text)
+            remember(o.blocks[cursor]!, keys[cursor]!, saved.text)
+          cursor++
+        }
+      }
       return {
         store: o.store,
         units: batches,
@@ -213,7 +324,24 @@ export function startTranslationJob<B extends TranslationSourceBlock>(
         doneBefore: estimate.done,
         total: estimate.total,
         callModel: async (batch, callSignal) => {
-          const results = await o.callModel(batch, callSignal)
+          let context: TranslationBatchContext | undefined
+          if (overview) {
+            advanceTo(batch[0]!.key)
+            const matches: NonNullable<TranslationBatchContext['matches']> = []
+            for (const { key } of batch) {
+              const prior = accepted.get(key.textHash)
+              const saved = savedMatches.size ? savedMatches.get(blockKeyString(key)) : undefined
+              const match = saved && (!prior || saved.unit > prior.unit) ? saved : prior
+              if (match && !matches.some((p) => p.unit === match.unit)) matches.push(match)
+              if (matches.length === CONTEXT_PAIR_COUNT) break
+            }
+            context = {
+              overview: overview.text,
+              previous: [...previous],
+              ...(matches.length ? { matches } : {}),
+            }
+          }
+          const results = await o.callModel(batch, callSignal, context)
           if (!Array.isArray(results) || results.length !== batch.length) {
             throw new JobUnitFailure('result-mismatch')
           }
@@ -225,6 +353,7 @@ export function startTranslationJob<B extends TranslationSourceBlock>(
             ? o.store.writeTranslationMeta(o.docHash, o.lang, {
                 provider: o.model.provider,
                 model: o.model.model,
+                ...(overview ? { overview } : {}),
               })
             : Promise.resolve()
           await meta
@@ -233,6 +362,14 @@ export function startTranslationJob<B extends TranslationSourceBlock>(
             o.lang,
             batch.map((item, i) => toInput(item.key, results[i]!)),
           )
+          if (overview) {
+            batch.forEach((item, i) => {
+              advanceTo(item.key)
+              const result = results[i]!
+              if (result.status === 'translated') remember(item.block, item.key, result.text)
+              cursor++
+            })
+          }
         },
       }
     },

@@ -141,6 +141,8 @@ import { createDefaultAppService, execFileRunner } from './default-app'
 import { registerIntegrationsIpc } from './integrations-ipc'
 import { registerResultStoreIpc } from './result-store-ipc'
 import { registerTranslateIpc } from './translate/translate-ipc'
+import { createOpenWikiService } from './translate/open-wiki'
+import { prepareTranslationVault } from './translate/wiki-vault'
 import { createOcrService, type OcrServiceDeps } from './translate/ocr'
 import { createOcrChatService, type OcrChatService } from './translate/ocr-chat'
 import { rememberTranslationChoice } from './translate/choices'
@@ -9396,6 +9398,14 @@ chatOcrService = createOcrChatService({
 registerTranslateIpc(
   ipcMain,
   {
+    wiki: createOpenWikiService({
+      userDataPath: app.getPath('userData'),
+      appDataPath: app.getPath('appData'),
+      prepareVault: () => prepareTranslationVault(app.getPath('userData'), currentLang()),
+      handlerName: () => app.getApplicationNameForProtocol('obsidian://'),
+      handlerExecutable: async () => (await app.getApplicationInfoForProtocol('obsidian://')).path,
+      openExternal: (url) => shell.openExternal(url),
+    }),
     settingsPath: APP_SETTINGS_PATH,
     now: () => Date.now(),
     showOpenDialog: (options) => {
@@ -9466,6 +9476,7 @@ registerTranslateIpc(
   (sender) =>
     (!!shellWindow && !shellWindow.isDestroyed() && sender === shellWindow.webContents) ||
     ocrPopupHost.isPopupSender((sender as WebContents).id),
+  (sender) => !!shellWindow && !shellWindow.isDestroyed() && sender === shellWindow.webContents,
 )
 registerTabsIpc()
 registerSplitIpc()

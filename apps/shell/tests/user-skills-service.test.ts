@@ -12,6 +12,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { parseSkillMd } from '@genoffice/ai-provider'
+import { buildAgentSkillBundle } from '@genoffice/ai-provider/agent-session'
+import { agentSessionSkillsOf } from '../src/main/agent/agent-skills'
+import { agentSkillRequest } from '../src/renderer/src/agent/agent-skills-model'
 import { readAppSettings, writeAppSetting } from '../src/main/app-settings'
 import { builtinSkillsDirFor } from '../src/main/user-skills/builtin-dir'
 import {
@@ -80,6 +83,37 @@ afterEach(() => {
 })
 
 const byId = async (id: string) => (await service.list()).find((view) => view.id === id)
+
+describe('the translation wiki in a fresh app profile', () => {
+  it('loads the wiki in the panel and gives the agent its bundled copy', async () => {
+    const shipped = join(__dirname, '../resources/builtin-skills')
+    const service = createUserSkillsService({
+      homeDir: () => join(root, 'clean-home'),
+      builtinDir: () => shipped,
+      settingsPath: () => join(root, 'clean-settings.json'),
+      tempDir: () => join(root, 'temp'),
+      trash,
+      fetch: () => Promise.reject(new Error('offline')),
+    })
+    const enabled = (await service.enabledForAgent()).filter(
+      (skill) => skill.name === 'translation-wiki',
+    )
+    expect(enabled).toHaveLength(1)
+    const bundle = await buildAgentSkillBundle(enabled, join(root, 'session-bundle'))
+    expect(bundle.skipped).toEqual([])
+    const session = await agentSessionSkillsOf(bundle.skills)
+    const wiki = session[0]!
+    const prompt = '팸투어와 FAM tour가 함께 확인된 근거를 정리해 주세요.'
+    expect(agentSkillRequest(prompt, [{ id: wiki.id }], session)).toMatchObject({
+      ok: true,
+      text: `Use this skill: read ${wiki.skillMd} and follow it.\n\n${prompt}`,
+    })
+    const body = readFileSync(wiki.skillMd, 'utf8')
+    expect(body).toContain('FAM tour')
+    const panel = await service.aiRead(wiki.id)
+    expect(panel.ok && panel.skill.body).toMatch(/FAM tour/)
+  })
+})
 
 describe('the list', () => {
   it('starts builtin and own skills on and other programs’ skills off', async () => {

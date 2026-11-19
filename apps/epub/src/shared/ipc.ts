@@ -37,6 +37,7 @@ import type {
   JobStatus,
   TranslationBlockEntry,
   TranslationBlockInput,
+  TranslationMetaInput,
 } from '@genoffice/pdf-structure/store'
 import type { EpubSubscriptionApi } from './subscription-api'
 
@@ -484,12 +485,13 @@ export interface EpubStoredTranslation {
   lang: string
   provider: string | null
   model: string | null
+  overview?: TranslationMetaInput['overview']
   blocks: TranslationBlockEntry[]
 }
 
 /** The store writes a book translation job makes. Every one names a document hash of this view's book. */
 export type EpubStoreWriteRequest =
-  | { kind: 'translationMeta'; docHash: string; lang: string; provider: string; model: string }
+  | ({ kind: 'translationMeta'; docHash: string; lang: string } & TranslationMetaInput)
   | { kind: 'translationBlocks'; docHash: string; lang: string; blocks: TranslationBlockInput[] }
   | { kind: 'deleteTranslation'; docHash: string; lang: string }
   /** "translate again from the start" keeping a person's edits; answers `removed` */

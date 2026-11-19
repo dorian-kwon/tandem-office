@@ -52,14 +52,17 @@ interface Message {
 }
 type Callbacks = { onDelta: (t: string) => void; signal: AbortSignal }
 
+function translationData(text: string): { blocks: { id: string; text: string }[] } {
+  return JSON.parse(/<document_blocks>\n([\s\S]*?)\n<\/document_blocks>/.exec(text)![1]!)
+}
+
 /** what a well-behaved model answers: a page transcription, or every block translated */
 function answer(system: string, messages: Message[]): string {
   const text = messages[0]!.text
   if (system.includes('transcribe one page')) {
     return '<page-content>\n# Read by AI\n\nText the AI read.\n</page-content>'
   }
-  const data = /<document_blocks>\n([\s\S]*?)\n<\/document_blocks>/.exec(text)![1]!
-  const blocks = (JSON.parse(data) as { blocks: { id: string; text: string }[] }).blocks
+  const { blocks } = translationData(text)
   return JSON.stringify({
     translations: blocks.map((b) => ({ id: b.id, text: `[fr] ${b.text}` })),
   })
@@ -397,6 +400,7 @@ describe('pdf translate', () => {
     )
     expect(readFileSync(outputs[1]!, 'utf8')).toContain('[fr] Alpha page has words.')
     expect(readFileSync(outputs[0]!).subarray(0, 5).toString()).toBe('%PDF-')
+    expect(r.stderr).toContain('Analyzing document…')
     expect(r.stderr).toContain('translate')
 
     const status = await run(['pdf', 'status', pdf, '--json'], { env })
@@ -499,7 +503,9 @@ describe('pdf translate', () => {
     )
     expect(rest.code).toBe(0)
     expect(rest.json().detail.translated_blocks).toBe(3)
-    const sent = (fakes.stream.mock.calls[1]![3] as Message[])[0]!.text
+    const sent = translationData((fakes.stream.mock.calls[1]![3] as Message[])[0]!.text)
+      .blocks.map((b) => b.text)
+      .join('\n')
     expect(sent).not.toContain('Alpha')
     expect(sent).toContain('Beta')
 
@@ -569,7 +575,9 @@ describe('pdf translate', () => {
       { env },
     )
     expect(redo.code).toBe(0)
-    const sent = fakes.stream.mock.calls.map((c) => (c[3] as Message[])[0]!.text).join('\n')
+    const sent = fakes.stream.mock.calls
+      .flatMap((c) => translationData((c[3] as Message[])[0]!.text).blocks.map((b) => b.text))
+      .join('\n')
     expect(sent).not.toContain('Alpha')
     expect(sent).toContain('Beta')
     expect(readFileSync(out, 'utf8')).toContain('Alpha edited by hand')

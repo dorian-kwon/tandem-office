@@ -1,3 +1,4 @@
+import { analyzingDocumentLabel } from '@genoffice/i18n'
 import { useChatWindow, EarlierChatMessages } from '@genoffice/ui'
 import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
 import {
@@ -488,7 +489,10 @@ export function AiPanel({
         // a reopened conversation starts with no MCP choices of another chat (user MCP spec 7.6)
         windowMcpState()?.newConversation()
         // follow-ups after reopening continue the previous conversation
-        loopRef.current?.restore(msgs.map((m) => ({ role: m.role, text: m.text })))
+        loopRef.current?.restore(
+          msgs.map((m) => ({ role: m.role, text: m.text })),
+          msgs,
+        )
       })
       .catch(() => {
         /* history load failures are silent */
@@ -748,6 +752,11 @@ export function AiPanel({
       fetchImage: (url) => apiRef.current.fetchImage(url),
     }
     loopRef.current = new AgentLoop({
+      documentTranslation: {
+        documentKey: () => savedPathRef.current,
+        analyzingLabel: () => analyzingDocumentLabel[langRef.current],
+        inPlaceOnly: true,
+      },
       transport: transportRef.current,
       // a local model that reported no tool support answers in text only
       toolsAllowed: () =>
@@ -999,7 +1008,10 @@ export function AiPanel({
     // skill cards come back closed; a saved card's record is not part of the conversation
     const msgs = skillCardsRef.current.restore(opened.entries)
     setChat(msgs.map((m) => entryFromProject(m)))
-    loopRef.current?.restore(msgs.map((m) => ({ role: m.role, text: m.text })))
+    loopRef.current?.restore(
+      msgs.map((m) => ({ role: m.role, text: m.text })),
+      msgs,
+    )
     skillsRef.current.restoreHistory(
       msgs.map((m) => (m.role === 'user' ? skillChipRefsOf(m.skills) : undefined)),
     )

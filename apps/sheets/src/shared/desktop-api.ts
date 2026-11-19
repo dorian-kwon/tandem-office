@@ -3111,7 +3111,7 @@ export interface DesktopApi {
   /** The OCR popup the AI opened for this app closed (finished or dismissed). Returns an unsubscribe. */
   onOcrPopupClosed(callback: () => void): () => void
   /** The OCR popup finished reading: its text for the AI to place. Returns an unsubscribe. */
-  onOcrPopupResult(callback: (result: OcrPopupResult) => void): () => void
+  onOcrPopupResult(callback: (result: OcrPopupResult, sessionId: string) => void): () => void
   /// Web search (main-process Serper/DuckDuckGo, shared with docs/slides)
   webSearch(query: string, maxResults?: number): Promise<WebSearchResult>
   /// Read one web page as text (shared ai:read-url handler), paged by character offset

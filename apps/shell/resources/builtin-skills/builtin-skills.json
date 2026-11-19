@@ -61,5 +61,14 @@
     "license": "Apache-2.0",
     "agentOnly": false,
     "modified": false
+  },
+  {
+    "name": "translation-wiki",
+    "source": "dorian-kwon/tandem-office",
+    "path": "apps/shell/resources/builtin-skills/translation-wiki",
+    "commit": "",
+    "license": "Apache-2.0",
+    "agentOnly": false,
+    "modified": false
   }
 ]

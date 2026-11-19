@@ -1,3 +1,12 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import {
+  listEmbeddedImages,
+  readEmbeddedImage,
+} from '../../shell/src/main/translate/embedded-images'
+import { recommendOcrPlacement } from '../../shell/src/main/translate/ocr-recommendation'
+import { placeOcrIntoOpenDocx } from '../../shell/src/main/translate/ocr-docx-placement'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Editor } from '@tiptap/core'
 import JSZip from 'jszip'
@@ -91,4 +100,124 @@ describe('boxes into the document that is open', () => {
     expect(wt(xml)).toEqual(expect.arrayContaining(['EDITED Intro', 'Shop name', 'Opening hours']))
     expect(xml).toContain('r:embed="rId10"')
   })
+})
+
+it('lists the selected inner-cell image and places its reading in that table after a live edit', async () => {
+  const p = (text: string) => `<w:p><w:r><w:t>${text}</w:t></w:r></w:p>`
+  const cell = (contents: string) => `<w:tc>${contents}</w:tc>`
+  const table = (...cells: string[]) =>
+    `<w:tbl><w:tblPr/><w:tblGrid>${cells.map(() => '<w:gridCol w:w="3000"/>').join('')}</w:tblGrid><w:tr>${cells.map(cell).join('')}</w:tr></w:tbl>`
+  const inner = table(
+    p('Inner marker') +
+      '<w:p>' +
+      picture.replace('rId10', 'rId11').replace('id="7"', 'id="8"') +
+      '</w:p>',
+    '<w:p/>',
+  )
+  const secondRow = '<w:tr>' + cell('<w:p/>') + cell('<w:p/>') + '</w:tr>'
+  const outer = table(
+    p('Outer marker') + inner.replace('</w:tbl>', secondRow + '</w:tbl>') + '<w:p/>',
+    '<w:p/>',
+  )
+  const image2 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jh1sAAAAASUVORK5CYII='
+  const source = await buildDocx({
+    withImage: true,
+    extraRels:
+      '<Relationship Id="rId11" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image2.png"/>',
+    binaryParts: [
+      { path: 'word/media/image2.png', extension: 'png', contentType: 'image/png', base64: image2 },
+    ],
+    bodyXml: p('Intro') + '<w:p>' + picture + '</w:p>' + outer + '<w:p/>',
+  })
+  const dir = await mkdtemp(join(tmpdir(), 'tandem-docx-nested-ocr-'))
+  try {
+    const path = join(dir, 'nested.docx')
+    await writeFile(path, source)
+    const images = await listEmbeddedImages(path)
+    expect(images.map((i) => [i.relId, i.location])).toEqual([
+      ['rId10', 'document.xml · ¶2'],
+      ['rId11', 'document.xml · ¶5'],
+    ])
+    const selected = images[1]!
+    expect(Buffer.from((await readEmbeddedImage(path, selected)).data).toString('base64')).toBe(
+      image2,
+    )
+    const item = {
+      index: 2,
+      part: selected.part,
+      relId: selected.relId,
+      location: selected.location,
+      text: 'Inner reading',
+    }
+    const mixed = await recommendOcrPlacement(source, 'docx', [item, images[0]!])
+    expect(mixed.placement).toEqual({ kind: 'docx-after-images' })
+    const recommendation = await recommendOcrPlacement(source, 'docx', [item])
+    expect(recommendation.placement).toEqual({
+      kind: 'docx-table-cell',
+      table: 2,
+      row: 1,
+      column: 2,
+      overwrite: false,
+    })
+    const rendered = async (bytes: Uint8Array) => {
+      const zip = await JSZip.loadAsync(bytes)
+      const raw = await zip.file('word/document.xml')!.async('string')
+      const xml = new DOMParser().parseFromString(raw, 'application/xml')
+      const tables = Array.from(xml.getElementsByTagName('w:tbl'))
+      expect(tables).toHaveLength(2)
+      const cells = (table: Element) =>
+        Array.from(Array.from(table.children).find((e) => e.localName === 'tr')!.children).filter(
+          (e) => e.localName === 'tc',
+        )
+      expect(cells(tables[0]!)[1]?.textContent).toBe('')
+      expect(xml.getElementsByTagName('a:blip')).toHaveLength(2)
+      expect(await zip.file('word/media/image2.png')!.async('base64')).toBe(image2)
+      return { inner: cells(tables[1]!).map((c) => c.textContent), raw }
+    }
+    const dst = await placeOcrText(source, 'docx', [item], recommendation.placement)
+    expect((await rendered(dst)).inner).toEqual(['Inner marker', 'Inner reading'])
+    expect((await recommendOcrPlacement(dst, 'docx', [item])).placement).toEqual({
+      kind: 'docx-after-images',
+    })
+    expect(selected.boxable).toBe(true)
+    const overlay = await placeOcrText(source, 'docx', [item], {
+      kind: 'docx-image-boxes',
+      images: [
+        {
+          index: 2,
+          boxes: [{ x: 0.1, y: 0.2, w: 0.4, h: 0.2, fontHeight: 0.03, text: 'Inner box' }],
+        },
+      ],
+    })
+    const overlayXml = await rendered(overlay)
+    expect(overlayXml.inner[0]).toContain('Inner box')
+    expect(overlayXml.inner[1]).toBe('')
+    expect(overlayXml.raw).toContain('<wp:anchor')
+    const after = await placeOcrText(source, 'docx', [item], { kind: 'docx-after-images' })
+    expect((await rendered(after)).inner).toEqual(['Inner markerInner reading', ''])
+    const parsed = await parseDocx(source)
+    const editor = editorFor(parsed)
+    editor.commands.insertContentAt(0, {
+      type: 'docParagraph',
+      content: [{ type: 'text', text: 'Unsaved first paragraph' }],
+    })
+    const liveBytes = await saveDocx(
+      parsed,
+      pmDocToSavePlan(editor.getJSON() as PmNode, parsed.blocks).saveBlocks,
+    )
+    const placed = await placeOcrIntoOpenDocx(liveBytes, [item], { kind: 'docx-after-images' })
+    expect([placed.placed, placed.skipped]).toEqual([[2], []])
+    const reopened = await parseDocx(placed.bytes)
+    const swapped = editorFor(reopened)
+    const resaved = await saveDocx(
+      reopened,
+      pmDocToSavePlan(swapped.getJSON() as PmNode, reopened.blocks).saveBlocks,
+    )
+    const liveResult = await rendered(resaved)
+    expect(liveResult.raw).toContain('Unsaved first paragraph')
+    expect(liveResult.inner).toEqual(['Inner markerInner reading', ''])
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 })

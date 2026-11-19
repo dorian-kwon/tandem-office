@@ -379,6 +379,31 @@ describe('add_bilingual target: after / before / end', () => {
 })
 
 describe('add_bilingual target: bookkeeping', () => {
+  it('keeps a far manually edited twin paired with only its own duplicate original', async () => {
+    const editor = await createEditor([plain('동일'), plain('동일')])
+    expect(applyBilingual(editor, undefined, [item(0, '동일', ['Same'], { kind: 'end' })]).ok).toBe(
+      true,
+    )
+    const remaining = () => remainingUntranslated(editor, undefined, 'ko').body
+    expect(remaining()).toEqual(['1'])
+    let at = 0
+    editor.state.doc.forEach((node, start) => {
+      if (node.textContent === 'Same') at = start + 1
+    })
+    editor.view.dispatch(editor.state.tr.insertText('Revised', at, at + 4))
+    expect(remaining()).toEqual(['1'])
+    readRunGroups(editor, 0, editor.state.doc.childCount - 1)
+    expect(
+      applyBilingual(editor, undefined, [item(1, '동일', ['Other'], { kind: 'end' })]).ok,
+    ).toBe(true)
+    expect(remaining()).toEqual([])
+    editor.commands.undo()
+    expect(remaining()).toEqual(['1'])
+    expect(editor.state.doc.textContent).toContain('Revised')
+    editor.commands.redo()
+    expect(remaining()).toEqual([])
+  })
+
   it('a far twin counts as translated: skipped in read_runs, not flagged, original not offered or written again', async () => {
     const editor = await createEditor([plain('가'), plain('나'), sheet()])
     expect(

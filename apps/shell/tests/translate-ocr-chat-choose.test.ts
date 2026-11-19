@@ -150,9 +150,14 @@ describe('choosing pictures in the popup', () => {
     expect((await call('apply', 't2', { session })).isError).toBe(true)
     const applied = await call('apply', 't3', { session })
     expect(applied.isError).not.toBe(true)
-    expect(api.write).toHaveBeenCalledWith('lease', [expect.objectContaining({ index: 2 })], {
-      kind: 'docx-after-images',
-    })
+    expect(api.write).toHaveBeenCalledWith(
+      'lease',
+      [expect.objectContaining({ index: 2 })],
+      {
+        kind: 'docx-after-images',
+      },
+      undefined,
+    )
     expect(ask).not.toHaveBeenCalled()
   })
 
@@ -175,7 +180,7 @@ describe('choosing pictures in the popup', () => {
     expect(proposal.result).toBe('new-docx')
     expect(api.recommend).not.toHaveBeenCalled()
     await call('apply', 't3', { session })
-    expect(api.write.mock.calls[0]).toHaveLength(2)
+    expect(api.write.mock.calls[0]?.[2]).toBeUndefined()
   })
 
   it('tells the model when the person closed the popup without reading', async () => {

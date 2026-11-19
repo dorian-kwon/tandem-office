@@ -10,6 +10,7 @@
  * (store/keys.ts). Both go through `translationUnits`; a page range keeps or
  * drops whole pages, so it does not change the keys.
  */
+import { pdfSourceOverview } from './context'
 import type { StoredTranslation } from '../store/store'
 import { blockKeyString, translationBlockKeys, type TranslationBlockKey } from '../store/keys'
 import { deriveBilingualTree, deriveTranslatedTree, textUnits, type TextUnit } from '../tree/derive'
@@ -55,10 +56,13 @@ export interface TranslationJobPartsOptions extends TranslationUnitOptions {
 export function translationJobParts(
   tree: DocumentTree,
   o: TranslationJobPartsOptions,
-): Pick<StartTranslationJobOptions<TextUnit>, 'blocks' | 'batch' | 'callModel'> {
-  const unitOptions: TranslationUnitOptions = o.pages ? { pages: o.pages } : {}
+): Pick<StartTranslationJobOptions<TextUnit>, 'blocks' | 'batch' | 'callModel' | 'overview'> {
+  const pages = o.pages ? [...o.pages] : undefined
+  const unitOptions: TranslationUnitOptions = pages ? { pages } : {}
+  const blocks = translationUnits(tree, unitOptions)
   return {
-    blocks: translationUnits(tree, unitOptions),
+    blocks,
+    overview: pdfSourceOverview(tree, blocks, pages),
     batch: (items) =>
       batchTranslationItems(items, o.maxTokens !== undefined ? { maxTokens: o.maxTokens } : {}),
     callModel: createTranslationModelCall<TextUnit>({

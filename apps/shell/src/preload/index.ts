@@ -703,6 +703,8 @@ contextBridge.exposeInMainWorld('aiOfficeResultStore', resultStoreApi)
 // Translation tool projects: the folder list, project files and materials.
 // Main only accepts folders from its registered list, so paths here are requests, not access.
 const translateApi: TranslateApi = {
+  openWiki: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.openWiki),
+  resumeWiki: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.resumeWiki),
   list: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.list),
   recent: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.recent),
   adoptOutputAsSource: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.adoptOutputAsSource, args),

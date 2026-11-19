@@ -7,6 +7,7 @@ import type {
   TranslateRecentDocument,
 } from '../../../shared/translate-api'
 import { useI18n } from '../locale'
+import { TranslationWikiButton } from './TranslationWiki'
 import { normalizeProjectName } from '../../../shared/project-name'
 import { InlineName } from './InlineName'
 import { FileIcon, glyphForFile, ProjectIcon, SortChevron } from './icons'
@@ -416,6 +417,7 @@ export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
             >
               {s('openExisting')}
             </button>
+            <TranslationWikiButton />
           </div>
         </header>
 

@@ -13,7 +13,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { readAppSettings, writeAppSettings } from '../src/main/app-settings'
 import { createTranslateHandlers, registerTranslateIpc } from '../src/main/translate/translate-ipc'
 import {
@@ -546,6 +546,37 @@ describe('error codes', () => {
 })
 
 describe('registerTranslateIpc', () => {
+  it('only opens the profile wiki from the main shell, without renderer-supplied paths', async () => {
+    const answers = new Map<string, (event: { sender: unknown }, ...args: unknown[]) => unknown>()
+    const wiki = {
+      openWiki: vi.fn(async () => ({ status: 'opened' as const, vaultPath: '/profile/wiki' })),
+      resumeWiki: vi.fn(async () => ({ status: 'idle' as const, vaultPath: '' })),
+    }
+    registerTranslateIpc(
+      { handle: (c: string, fn: never) => void answers.set(c, fn) } as never,
+      {
+        settingsPath: () => settingsPath,
+        now: () => clock,
+        showOpenDialog: async () => dialogResult,
+        wiki,
+      },
+      (sender) => sender === 'shell' || sender === 'ocr-overlay',
+      (sender) => sender === 'shell',
+    )
+    for (const action of ['openWiki', 'resumeWiki'] as const) {
+      const call = answers.get(TRANSLATE_CHANNELS[action])!
+      await expect(call({ sender: 'ocr-overlay' })).rejects.toMatchObject({
+        code: 'INVALID_ARGUMENT',
+      })
+      await expect(call({ sender: 'shell' }, '/other-vault')).rejects.toMatchObject({
+        code: 'INVALID_ARGUMENT',
+      })
+      expect(wiki[action]).not.toHaveBeenCalled()
+      await call({ sender: 'shell' })
+      expect(wiki[action]).toHaveBeenCalledExactlyOnceWith()
+    }
+  })
+
   it('registers every channel once with the translate: prefix', () => {
     const seen: string[] = []
     registerTranslateIpc(

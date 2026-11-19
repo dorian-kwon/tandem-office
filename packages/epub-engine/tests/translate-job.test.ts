@@ -4,7 +4,11 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DocumentJobRegistry, type TranslationModelRequest } from '@genoffice/pdf-structure'
+import {
+  DocumentJobRegistry,
+  type TranslationBatchContext,
+  type TranslationModelRequest,
+} from '@genoffice/pdf-structure'
 import { blockKeyString, ResultStore } from '@genoffice/pdf-structure/store'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { openEpub } from '../src/open'
@@ -99,6 +103,70 @@ describe('EPUB translation job', () => {
     }
     expect((await store.readJob(docHash, 'translate', 'ko')).state).toBe('complete')
   })
+
+  it('carries a bounded source overview and only applied translations across a resumed multi-batch book', async () => {
+    const chapters = Array.from(
+      { length: 160 },
+      (_, i) =>
+        `<p>${i === 19 ? 'This guide is intended for field engineers. ' : ''}Reading ${i === 150 ? 3 : i} at the river gauge.</p>`,
+    ).join('')
+    const bytes = await translateBookBytes({ chapterOneBody: chapters })
+    const book = await openEpub(bytes)
+    if (!book.ok) throw Error(book.reason)
+    const units = (await epubTranslationUnits(book.book)).units
+    const docHash = await epubDocumentHash(bytes)
+    const options = { docHash, lang: 'ko', units, model: MODEL, store, maxTokens: 120, ...FAST }
+    const contexts: TranslationBatchContext[] = []
+    let length = 0
+    let previous: string[] = []
+    let analyses = 0
+    const run = (interrupt: boolean) => {
+      const controller = new AbortController()
+      return startEpubTranslationJob({
+        ...options,
+        signal: controller.signal,
+        onAnalyzing: () => {
+          analyses++
+        },
+        send: async (req) => {
+          const { context } = JSON.parse(
+            req.prompt.split('<document_blocks>\n')[1]!.split('\n</document_blocks>')[0]!,
+          ) as { context: TranslationBatchContext }
+          contexts.push(context)
+          expect(context.previous.map((pair) => pair.target)).toEqual(previous)
+          if (interrupt && previous.length) {
+            controller.abort('cancelled')
+            throw controller.signal.reason
+          }
+          const items = requestBlocks(req.prompt)
+          length += items.length
+          previous = [...previous, ...items.map((i) => 'KO ' + i.text)].slice(-2)
+          return answerWith(items, (text) => 'KO ' + text)
+        },
+      }).result
+    }
+    expect((await run(true)).state).toBe('stopped')
+    expect((await run(false)).state).toBe('complete')
+    expect(analyses).toBe(1)
+    expect(length).toBe(units.length)
+    expect(contexts.length).toBeGreaterThan(10)
+    expect(contexts.flatMap((context) => context.matches ?? [])).toContainEqual(
+      expect.objectContaining({
+        source: 'Reading 3 at the river gauge.',
+        target: 'KO Reading 3 at the river gauge.',
+        page: 0,
+        unit: expect.any(Number),
+      }),
+    )
+    const overview = contexts[0]!.overview
+    expect(overview).toContain('A Tale & More')
+    expect(overview).toContain('intended for field engineers')
+    expect(overview.length).toBeLessThanOrEqual(2400)
+    expect(contexts.every((c) => c.overview === overview && c.previous.length <= 2)).toBe(true)
+    expect((await store.readTranslation(docHash, 'ko'))?.overview?.text).toBe(overview)
+    expect((await run(false)).progress.done).toBe(units.length)
+    expect(analyses).toBe(1)
+  }, 30_000)
 
   it('cuts the units into batches by the token budget', async () => {
     const { docHash, units } = await bookUnits()
@@ -260,7 +328,9 @@ describe('EPUB translation job', () => {
       expect(summary.state).toBe('stopped')
       expect(summary.stopReason).toBe(kind)
       expect(calls).toBeLessThanOrEqual(2)
-      expect(await store.readTranslation(docHash, 'ko')).toBeNull()
+      const checkpoint = await store.readTranslation(docHash, 'ko')
+      expect(checkpoint?.overview?.text).toContain('A Tale & More')
+      expect(checkpoint?.blocks.size).toBe(0)
     }
   })
 

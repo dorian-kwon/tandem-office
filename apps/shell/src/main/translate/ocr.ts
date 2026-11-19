@@ -335,7 +335,12 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
       const count =
         kind === 'pdf' ? await deps.pdfPageCount(paths[0]!) : (embedded?.length ?? entries.length)
       if (!Number.isInteger(count) || count < 1)
-        throw new TranslateIpcError('OCR_FAILED', 'the document has no pages to read')
+        throw new TranslateIpcError(
+          'OCR_FAILED',
+          embedded
+            ? 'no supported embedded pictures (PNG or JPEG) were found in the document'
+            : 'the document has no pages to read',
+        )
       if (count > OCR_MAX_ITEMS)
         throw invalid(`a document of more than ${OCR_MAX_ITEMS} pages cannot be read at once`)
       const first = entries[0]!.file
@@ -510,10 +515,17 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
       )
     },
 
-    async write(token: unknown, pages: unknown, placement?: OcrPlacement): Promise<OcrWritten> {
+    async write(
+      token: unknown,
+      pages: unknown,
+      placement?: OcrPlacement,
+      besideSourceDir?: string,
+    ): Promise<OcrWritten> {
       const l = lease(token)
       const g = gatherReadings(l, pages)
       const { tree } = g
+      // Only the main-process chat resolver supplies a destination beside an open source.
+      const outputDir = besideSourceDir ?? join(l.dir, 'output')
       if (l.kind === 'embedded') {
         if (!placement) throw invalid('choose where the OCR text goes')
         const path = await embeddedPath(l.dir, l.source!)
@@ -525,17 +537,12 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
         const format = extname(l.source!.file).toLowerCase() === '.xlsx' ? 'xlsx' : 'docx'
         const items = placementItems(l, g)
         const bytes = await placeOcrText(await readFile(path), format, items, placement)
-        const outputPath = await writeNewFile(
-          join(l.dir, 'output'),
-          `${l.stem} (OCR)`,
-          `.${format}`,
-          bytes,
-        )
+        const outputPath = await writeNewFile(outputDir, `${l.stem} (OCR)`, `.${format}`, bytes)
         leases.delete(l.token)
         return { outputPath }
       }
       const docx = await deps.markdownToDocx(treeToMarkdown(tree).markdown)
-      const outputPath = await writeNewFile(join(l.dir, 'output'), `${l.stem} (OCR)`, '.docx', docx)
+      const outputPath = await writeNewFile(outputDir, `${l.stem} (OCR)`, '.docx', docx)
       leases.delete(l.token)
       return { outputPath }
     },

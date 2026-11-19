@@ -164,6 +164,56 @@ describe('model output is sanitized to pure GFM', () => {
   })
 })
 
+describe('selection-scoped translation', () => {
+  const translate = (editor: Editor, ops: unknown[], scope?: string) =>
+    executeTool(editor, call('apply_ops', { intent: 'translation', scope, ops }))
+  const replace = (start: number | 'selection', find: string, replacement: string) => ({
+    op: 'replaceText',
+    target: start === 'selection' ? start : { start },
+    find,
+    replace: replacement,
+  })
+
+  it('changes only the selected duplicate and keeps the other occurrence on undo and redo', () => {
+    const editor = createEditor('one and one')
+    editor.commands.setTextSelection({ from: 1, to: 4 })
+    markDocSeen(editor)
+    expect(translate(editor, [replace(0, 'one', '하나')]).isError).toBeFalsy()
+    expect(editor.getText()).toBe('하나 and one')
+    expect(
+      translate(editor, [replace('selection', '하나', '하나둘')], 'selection').isError,
+    ).toBeFalsy()
+    expect(editor.getText()).toBe('하나둘 and one')
+    editor.commands.undo()
+    expect(editor.getText()).toBe('하나 and one')
+    editor.commands.redo()
+    expect(editor.getText()).toBe('하나둘 and one')
+  })
+
+  it('clips every numbered block to the selection after an earlier replacement changes its length', () => {
+    const editor = createEditor('one one\n\none one')
+    editor.commands.setTextSelection({ from: 5, to: 13 })
+    markDocSeen(editor)
+    expect(
+      translate(editor, [replace(0, 'one', '첫째'), replace(1, 'one', '둘째')]).isError,
+    ).toBeFalsy()
+    expect(editor.getMarkdown()).toBe('one 첫째\n\n둘째 one')
+    editor.commands.undo()
+    expect(editor.getMarkdown()).toBe('one 첫째\n\none one')
+  })
+
+  it('refuses a moved selection and only widens a selection for explicit document scope', () => {
+    const editor = createEditor('one and one')
+    editor.commands.setTextSelection({ from: 1, to: 4 })
+    markDocSeen(editor)
+    editor.commands.setTextSelection({ from: 9, to: 12 })
+    expect(translate(editor, [replace(0, 'one', '하나')]).isError).toBe(true)
+    expect(editor.getText()).toBe('one and one')
+    expect(translate(editor, [replace(0, 'one', '하나')], 'document').isError).toBeFalsy()
+    expect(editor.getText()).toBe('하나 and 하나')
+  })
+})
+
 describe('apply_ops replaceBlocks', () => {
   it('rewrites a block range', () => {
     const editor = createEditor('# A\n\nold text\n\nkeep me')

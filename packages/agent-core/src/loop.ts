@@ -1,3 +1,8 @@
+import {
+  documentTranslationSkill,
+  type DocumentTranslationHost,
+  type StoredTranslationTurn,
+} from './document-translation'
 import type { AgentSkill, ExecutedToolCall } from './skill'
 import type {
   AgentImage,
@@ -62,6 +67,7 @@ export interface CompactionOptions {
 export interface AgentLoopOptions<TSnapshot = unknown> {
   transport: AgentTransport
   skill: AgentSkill
+  documentTranslation?: DocumentTranslationHost
   events?: AgentLoopEvents<TSnapshot>
   /** hard cap on model round-trips per run (default DEFAULT_MAX_TURNS) */
   maxTurns?: number
@@ -547,7 +553,13 @@ export class AgentLoop<TSnapshot = unknown> {
   /** one id per run: the context gate asks at most once for a whole tool loop */
   private runId: string | undefined
 
+  private readonly skill: AgentSkill
+  private readonly translation?: ReturnType<typeof documentTranslationSkill>
+
   constructor(options: AgentLoopOptions<TSnapshot>) {
+    if (options.documentTranslation)
+      this.translation = documentTranslationSkill(options.skill, options.documentTranslation)
+    this.skill = this.translation?.skill ?? options.skill
     this.options = options
   }
 
@@ -566,8 +578,12 @@ export class AgentLoop<TSnapshot = unknown> {
    * Old messages over the compaction budget fold into a mechanical digest
    * (no LLM request on restore, guaranteeing zero latency).
    */
-  restore(messages: readonly AgentMessage[]): void {
+  restore(
+    messages: readonly AgentMessage[],
+    localRecords?: readonly StoredTranslationTurn[],
+  ): void {
     if (this.running || this.history.length > 0 || messages.length === 0) return
+    if (localRecords) this.translation?.restore(localRecords)
     // Edits-only runs persist an assistant message with no text; give it a placeholder
     // so the turn stays paired and providers never see an empty assistant content block.
     // Turn-limit notes persisted by older builds are stripped: they are stale
@@ -703,7 +719,7 @@ export class AgentLoop<TSnapshot = unknown> {
     // mid-transition is enough to wedge the panel. The user message was never
     // pushed, so the rollback in failRun() is a no-op and only the report matters.
     try {
-      const context = this.options.skill.buildContext?.() ?? ''
+      const context = this.skill.buildContext?.() ?? ''
       const format =
         this.options.formatUserMessage ??
         ((instr: string, ctx: string) => (ctx ? `${instr}\n\n${ctx}` : instr))
@@ -941,6 +957,7 @@ export class AgentLoop<TSnapshot = unknown> {
 
   /** drop the conversation (e.g. when a different document is opened) */
   reset(): void {
+    this.translation?.reset()
     this.generation++
     this.clearRetryTimer()
     this.abortController?.abort()
@@ -1087,12 +1104,12 @@ export class AgentLoop<TSnapshot = unknown> {
           system:
             runtimePreamble() +
             MATERIAL_NOT_INSTRUCTIONS +
-            this.options.skill.systemPrompt +
+            this.skill.systemPrompt +
             (this.resumingAfterStop && toolsAllowed ? RESUME_AFTER_STOP : '') +
             (toolsAllowed ? '' : TOOLS_UNAVAILABLE_NOTE) +
             (this.options.systemSuffix?.() ?? ''),
           messages: this.requestMessages(),
-          tools: this.finalizing || !toolsAllowed ? [] : this.options.skill.tools,
+          tools: this.finalizing || !toolsAllowed ? [] : this.skill.tools,
           // one id for every turn of this run, so the context gate asks once
           ...(this.runId ? { runId: this.runId } : {}),
         },
@@ -1198,7 +1215,8 @@ export class AgentLoop<TSnapshot = unknown> {
   }
 
   private async finishTurn(): Promise<void> {
-    const { events, skill, captureSnapshot } = this.options
+    const { events, captureSnapshot } = this.options
+    const skill = this.skill
     const toolCalls = this.toolCalls
 
     // Claimed-action guard: before accepting a final text turn, let the skill
@@ -1374,7 +1392,9 @@ export class AgentLoop<TSnapshot = unknown> {
       })
       events?.onToolExecuted?.({
         call,
-        execution,
+        execution: execution.historyOutput
+          ? { ...execution, output: execution.historyOutput }
+          : execution,
         snapshotBefore: firstMutation ? snapshot : undefined,
       })
     }

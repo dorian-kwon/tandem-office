@@ -1,6 +1,12 @@
 import type { zh } from './zh'
 
 export const nl = {
+  wikiView: 'Wiki bekijken',
+  wikiSetup: 'Open de onderstaande map als kluis in Obsidian en ga dan terug naar {app}.',
+  wikiDownload: 'Rond de installatie van Obsidian af en ga terug naar {app} om de wiki te openen.',
+  wikiUnavailable:
+    'De wiki kon niet worden geopend. Controleer of Obsidian is geïnstalleerd, start het één keer en probeer het opnieuw.',
+  wikiFolder: 'Wikimap',
   navTranslate: 'Vertaling',
   title: 'Vertaalprojecten',
   intro:

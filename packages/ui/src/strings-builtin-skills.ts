@@ -12,11 +12,14 @@ export const BUILTIN_SKILL_NAMES = [
   'find-skills',
   'administration-report',
   'administration-report-draft',
+  'translation-wiki',
 ] as const
 
 export type BuiltinSkillName = (typeof BUILTIN_SKILL_NAMES)[number]
 
 const zh = {
+  'builtinSkillDesc.translation-wiki':
+    '按委托方和文档类型，从定稿译文中整理带出处的术语、双语例句和文体惯例。',
   'builtinSkillDesc.meeting-minutes': '把会议记录整理成列明决定事项和待办事项的会议纪要。',
   'builtinSkillDesc.internal-comms': '撰写公告、内部简报、进展汇报、常见问题解答等组织内部的文字。',
   'builtinSkillDesc.humanizer': '找出文本中带有 AI 痕迹的表达，在不改变内容的前提下改得更自然。',
@@ -36,6 +39,8 @@ const zh = {
 export const BUILTIN_SKILL_STRINGS = defineStrings({
   zh,
   en: {
+    'builtinSkillDesc.translation-wiki':
+      'Collects terms, parallel examples and style conventions from finished translations, with sources and client context.',
     'builtinSkillDesc.meeting-minutes':
       'Turns meeting notes into minutes that show the decisions and action items.',
     'builtinSkillDesc.internal-comms':
@@ -52,6 +57,8 @@ export const BUILTIN_SKILL_STRINGS = defineStrings({
       'Writes an administrative report from scratch in the ministry format: sections, the Ⅰ·1·가 numbering, prose, table titles and compatible fonts.',
   },
   ja: {
+    'builtinSkillDesc.translation-wiki':
+      '完成した訳文から用語、対訳例、文体の慣例を出典付きで依頼元ごとに整理します。',
     'builtinSkillDesc.meeting-minutes':
       '会議のメモを、決定事項とやることが分かる議事録にまとめます。',
     'builtinSkillDesc.internal-comms':
@@ -67,6 +74,8 @@ export const BUILTIN_SKILL_STRINGS = defineStrings({
       '行政文書を最初から行政安全部の形式で書きます。節構成、Ⅰ・1・가の番号、叙述式の文章、表の題名と通用するフォント。',
   },
   ko: {
+    'builtinSkillDesc.translation-wiki':
+      '완성된 번역의 용어·대역 예문·문체를 출처와 함께 의뢰 기관별로 정리합니다.',
     'builtinSkillDesc.meeting-minutes':
       '회의 메모를 결정 사항과 할 일이 보이는 회의록으로 정리합니다.',
     'builtinSkillDesc.internal-comms':
@@ -83,6 +92,8 @@ export const BUILTIN_SKILL_STRINGS = defineStrings({
       '행안부 형식으로 행정문서를 처음부터 씁니다. 절 구성, Ⅰ·1·가 번호, 서술식 문장, 표 제목과 호환 글꼴.',
   },
   fr: {
+    'builtinSkillDesc.translation-wiki':
+      'Classe par client les termes, exemples bilingues et usages stylistiques des traductions finales avec leurs sources.',
     'builtinSkillDesc.meeting-minutes':
       'Transforme les notes de réunion en compte rendu qui fait ressortir les décisions et les actions.',
     'builtinSkillDesc.internal-comms':
@@ -99,6 +110,8 @@ export const BUILTIN_SKILL_STRINGS = defineStrings({
       'Rédige un rapport administratif de zéro au format du ministère : sections, numérotation Ⅰ·1·가, phrases rédigées, titres de tableaux et polices disponibles partout.',
   },
   de: {
+    'builtinSkillDesc.translation-wiki':
+      'Ordnet Begriffe, zweisprachige Beispiele und Stilkonventionen fertiger Übersetzungen nach Auftraggeber und belegt sie mit Quellen.',
     'builtinSkillDesc.meeting-minutes':
       'Macht aus Besprechungsnotizen ein Protokoll, das Beschlüsse und Aufgaben zeigt.',
     'builtinSkillDesc.internal-comms':
@@ -115,6 +128,8 @@ export const BUILTIN_SKILL_STRINGS = defineStrings({
       'Schreibt einen Verwaltungsbericht von Grund auf im Format des Ministeriums: Abschnitte, Nummerierung Ⅰ·1·가, Fließtext, Tabellenüberschriften und verfügbare Schriften.',
   },
   es: {
+    'builtinSkillDesc.translation-wiki':
+      'Organiza por cliente los términos, ejemplos bilingües y usos de estilo de traducciones finales con sus fuentes.',
     'builtinSkillDesc.meeting-minutes':
       'Convierte las notas de una reunión en un acta que muestra las decisiones y las tareas.',
     'builtinSkillDesc.internal-comms':
@@ -131,6 +146,8 @@ export const BUILTIN_SKILL_STRINGS = defineStrings({
       'Escribe un informe administrativo desde cero con el formato del ministerio: secciones, numeración Ⅰ·1·가, frases redactadas, títulos de tablas y fuentes disponibles.',
   },
   th: {
+    'builtinSkillDesc.translation-wiki':
+      'รวบรวมคำศัพท์ ตัวอย่างสองภาษา และรูปแบบภาษาจากคำแปลฉบับสมบูรณ์ แยกตามผู้ว่าจ้างพร้อมระบุแหล่งที่มา',
     'builtinSkillDesc.meeting-minutes':
       'เรียบเรียงโน้ตการประชุมเป็นบันทึกการประชุมที่เห็นข้อตัดสินใจและงานที่ต้องทำ',
     'builtinSkillDesc.internal-comms':
@@ -147,6 +164,8 @@ export const BUILTIN_SKILL_STRINGS = defineStrings({
       'เขียนรายงานราชการตั้งแต่ต้นตามรูปแบบกระทรวง: โครง sections ลำดับเลข Ⅰ·1·가 ประโยคบรรยาย หัวตาราง และฟอนต์ที่ใช้ได้ทั่วไป',
   },
   id: {
+    'builtinSkillDesc.translation-wiki':
+      'Mengelompokkan istilah, contoh dwibahasa, dan gaya dari terjemahan akhir menurut klien, lengkap dengan sumber.',
     'builtinSkillDesc.meeting-minutes':
       'Mengubah catatan rapat menjadi notulen yang menampilkan keputusan dan tugas tindak lanjut.',
     'builtinSkillDesc.internal-comms':
@@ -163,6 +182,8 @@ export const BUILTIN_SKILL_STRINGS = defineStrings({
       'Menulis laporan administrasi dari nol dengan format kementerian: bagian, penomoran Ⅰ·1·가, kalimat naratif, judul tabel, dan font yang tersedia.',
   },
   ru: {
+    'builtinSkillDesc.translation-wiki':
+      'Собирает термины, двуязычные примеры и стилевые особенности готовых переводов по заказчикам с указанием источников.',
     'builtinSkillDesc.meeting-minutes':
       'Превращает заметки со встречи в протокол, где видны решения и задачи.',
     'builtinSkillDesc.internal-comms':
@@ -179,6 +200,8 @@ export const BUILTIN_SKILL_STRINGS = defineStrings({
       'Пишет административный отчёт с нуля в формате министерства: разделы, нумерация Ⅰ·1·가, связные предложения, заголовки таблиц и доступные шрифты.',
   },
   ar: {
+    'builtinSkillDesc.translation-wiki':
+      'ينظّم المصطلحات والأمثلة ثنائية اللغة والأساليب في الترجمات النهائية حسب الجهة الطالبة مع ذكر المصادر.',
     'builtinSkillDesc.meeting-minutes':
       'يحوّل ملاحظات الاجتماع إلى محضر يبيّن القرارات والمهام المطلوبة.',
     'builtinSkillDesc.internal-comms':
@@ -194,6 +217,8 @@ export const BUILTIN_SKILL_STRINGS = defineStrings({
       'يكتب تقريراً إدارياً من الصفر بصيغة الوزارة: الأقسام، ترقيم Ⅰ·1·가، جمل سردية، عناوين الجداول وخطوط متوفرة.',
   },
   pt: {
+    'builtinSkillDesc.translation-wiki':
+      'Organiza por cliente termos, exemplos bilíngues e convenções de estilo das traduções finais, com as respectivas fontes.',
     'builtinSkillDesc.meeting-minutes':
       'Transforma anotações de reunião em uma ata que mostra as decisões e as tarefas.',
     'builtinSkillDesc.internal-comms':
@@ -210,6 +235,8 @@ export const BUILTIN_SKILL_STRINGS = defineStrings({
       'Escreve um relatório administrativo do zero no formato do ministério: seções, numeração Ⅰ·1·가, frases corridas, títulos de tabelas e fontes disponíveis.',
   },
   it: {
+    'builtinSkillDesc.translation-wiki':
+      'Raccoglie termini, esempi bilingui e convenzioni stilistiche dalle traduzioni definitive, con fonti e committente.',
     'builtinSkillDesc.meeting-minutes':
       'Trasforma gli appunti di una riunione in un verbale che mostra decisioni e attività.',
     'builtinSkillDesc.internal-comms':
@@ -226,6 +253,8 @@ export const BUILTIN_SKILL_STRINGS = defineStrings({
       'Scrive una relazione amministrativa da zero nel formato del ministero: sezioni, numerazione Ⅰ·1·가, frasi discorsive, titoli delle tabelle e caratteri disponibili.',
   },
   pl: {
+    'builtinSkillDesc.translation-wiki':
+      'Porządkuje według klienta terminy, przykłady dwujęzyczne i konwencje stylistyczne z gotowych tłumaczeń wraz ze źródłami.',
     'builtinSkillDesc.meeting-minutes':
       'Zamienia notatki ze spotkania w protokół, w którym widać decyzje i zadania.',
     'builtinSkillDesc.internal-comms':
@@ -242,6 +271,8 @@ export const BUILTIN_SKILL_STRINGS = defineStrings({
       'Pisze raport administracyjny od zera w formacie ministerstwa: sekcje, numeracja Ⅰ·1·가, zdania opisowe, tytuły tabel i dostępne czcionki.',
   },
   cs: {
+    'builtinSkillDesc.translation-wiki':
+      'Třídí termíny, dvojjazyčné příklady a stylové zvyklosti z hotových překladů podle zadavatele a uvádí zdroje.',
     'builtinSkillDesc.meeting-minutes':
       'Udělá z poznámek z porady zápis, ve kterém jsou vidět rozhodnutí a úkoly.',
     'builtinSkillDesc.internal-comms':
@@ -258,6 +289,8 @@ export const BUILTIN_SKILL_STRINGS = defineStrings({
       'Píše správní zprávu od začátku ve formátu ministerstva: oddíly, číslování Ⅰ·1·가, souvislé věty, názvy tabulek a dostupné písmo.',
   },
   nl: {
+    'builtinSkillDesc.translation-wiki':
+      'Ordent termen, tweetalige voorbeelden en stijlconventies uit afgeronde vertalingen per opdrachtgever, met bronvermelding.',
     'builtinSkillDesc.meeting-minutes':
       'Maakt van vergaderaantekeningen notulen waarin besluiten en actiepunten zichtbaar zijn.',
     'builtinSkillDesc.internal-comms':
@@ -274,6 +307,8 @@ export const BUILTIN_SKILL_STRINGS = defineStrings({
       'Schrijft een bestuurlijk rapport vanaf nul in het formaat van het ministerie: secties, nummering Ⅰ·1·가, lopende tekst, tabelkoppen en overal beschikbare lettertypen.',
   },
   ms: {
+    'builtinSkillDesc.translation-wiki':
+      'Mengumpulkan istilah, contoh dwibahasa dan gaya daripada terjemahan akhir mengikut pelanggan berserta sumber.',
     'builtinSkillDesc.meeting-minutes':
       'Menyusun nota mesyuarat menjadi minit yang menunjukkan keputusan dan tindakan susulan.',
     'builtinSkillDesc.internal-comms':
@@ -290,6 +325,8 @@ export const BUILTIN_SKILL_STRINGS = defineStrings({
       'Menulis laporan pentadbiran dari awal mengikut format kementerian: bahagian, penomboran Ⅰ·1·가, ayat naratif, tajuk jadual dan fon yang tersedia.',
   },
   he: {
+    'builtinSkillDesc.translation-wiki':
+      'מרכז מונחים, דוגמאות דו־לשוניות וכללי סגנון מתרגומים סופיים לפי מזמין העבודה, בצירוף מקורות.',
     'builtinSkillDesc.meeting-minutes': 'הופך רשימות מפגישה לסיכום שמציג את ההחלטות ואת המשימות.',
     'builtinSkillDesc.internal-comms':
       'כותב הודעות, עלוני מידע, דיווחי התקדמות, שאלות נפוצות ושאר טקסטים פנימיים.',
@@ -305,6 +342,8 @@ export const BUILTIN_SKILL_STRINGS = defineStrings({
       'כותב דוח מנהלי מאפס בפורמט של המשרד: סעיפים, מספור Ⅰ·1·가, משפטים רצופים, כותרות טבלאות וגופנים זמינים.',
   },
   hi: {
+    'builtinSkillDesc.translation-wiki':
+      'अंतिम अनुवादों से शब्दावली, द्विभाषी उदाहरण और शैली के प्रयोग स्रोत सहित हर ग्राहक के लिए अलग संकलित करता है।',
     'builtinSkillDesc.meeting-minutes':
       'बैठक के नोट्स को ऐसे कार्यवृत्त में बदलता है जिसमें निर्णय और करने के काम साफ़ दिखें।',
     'builtinSkillDesc.internal-comms':
@@ -321,6 +360,8 @@ export const BUILTIN_SKILL_STRINGS = defineStrings({
       'मंत्रालय के प्रारूप में प्रशासनिक रिपोर्ट शुरू से लिखता है: अनुभाग, Ⅰ·1·가 क्रमांकन, वर्णनात्मक वाक्य, तालिका शीर्षक और उपलब्ध फ़ॉन्ट।',
   },
   'zh-TW': {
+    'builtinSkillDesc.translation-wiki':
+      '依委託方彙整定稿譯文中的術語、雙語例句及文體慣例，並標明出處。',
     'builtinSkillDesc.meeting-minutes': '把會議筆記整理成列明決議事項和待辦事項的會議紀錄。',
     'builtinSkillDesc.internal-comms': '撰寫公告、內部電子報、進度報告、常見問題等組織內部的文字。',
     'builtinSkillDesc.humanizer': '找出文字中帶有 AI 痕跡的說法，在不改變內容的前提下改得更自然。',
@@ -333,6 +374,8 @@ export const BUILTIN_SKILL_STRINGS = defineStrings({
       '依行政安全部格式從頭撰寫行政文書：章節結構、Ⅰ·1·가 編號、敘述式語句、表題與通用字體。',
   },
   vi: {
+    'builtinSkillDesc.translation-wiki':
+      'Tổng hợp thuật ngữ, ví dụ song ngữ và cách hành văn từ bản dịch cuối theo từng khách hàng, kèm nguồn.',
     'builtinSkillDesc.meeting-minutes':
       'Biến ghi chú cuộc họp thành biên bản nêu rõ các quyết định và việc cần làm.',
     'builtinSkillDesc.internal-comms':

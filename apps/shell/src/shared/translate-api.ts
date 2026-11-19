@@ -29,6 +29,8 @@ import type {
  */
 export const TRANSLATE_CHANNELS = {
   list: 'translate:list',
+  openWiki: 'translate:open-wiki',
+  resumeWiki: 'translate:resume-wiki',
   create: 'translate:create',
   remove: 'translate:remove',
   getSystemPrompt: 'translate:get-system-prompt',
@@ -372,7 +374,16 @@ export interface TranslateOcrWriteArgs {
   placement?: OcrPlacement
 }
 
+export interface TranslationWikiOpenResult {
+  status: 'opened' | 'setup' | 'download' | 'unavailable' | 'idle'
+  /** An idle transition still awaits installation or the initial vault registration. */
+  pending?: boolean
+  vaultPath: string
+}
+
 export interface TranslateApi {
+  openWiki(): Promise<TranslationWikiOpenResult>
+  resumeWiki(): Promise<TranslationWikiOpenResult>
   list(): Promise<TranslateProjectListEntry[]>
   /** documents opened lately, newest first, at most 10 */
   recent(): Promise<TranslateRecentDocument[]>

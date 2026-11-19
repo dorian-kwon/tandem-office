@@ -10,7 +10,10 @@ export async function recommendOcrPlacement(
   if (format === 'docx') {
     const zip = await loadDocxZip(bytes)
     const xml = await zip.file('word/document.xml')!.async('string')
-    const placement = items[0] && recommendWordCell(xml, items[0].location, items.length)
+    const placement = recommendWordCell(
+      xml,
+      items.map((item) => item.location),
+    )
     return placement
       ? { placement, reason: 'empty-cells' }
       : { placement: { kind: 'docx-after-images' }, reason: 'after-images' }

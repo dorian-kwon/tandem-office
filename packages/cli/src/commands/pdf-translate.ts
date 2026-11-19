@@ -255,6 +255,9 @@ export async function pdfTranslate(
   let reported = -1
   const handle = startTranslationJob({
     ...job,
+    onAnalyzing: () => {
+      if (!ctx.background) ctx.log('Analyzing document…')
+    },
     onProgress: (e) => {
       if (ctx.background || e.done === reported) return
       reported = e.done

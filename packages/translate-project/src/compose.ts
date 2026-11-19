@@ -156,7 +156,10 @@ export function translationChoicesRule(choices: TranslationChoices | undefined):
   const decided: string[] = []
   if (c.outputMode) decided.push(`- Output mode: ${oneLine(c.outputMode)}`)
   if (c.bilingual) decided.push(`- Bilingual layout: ${oneLine(c.bilingual)}`)
-  if (c.ocrPlacement) decided.push(`- OCR placement: ${oneLine(c.ocrPlacement)}`)
+  if (c.ocrPlacement)
+    decided.push(
+      `- OCR placement: ${oneLine(c.ocrPlacement)} (editable Word or spreadsheet placement only; for a PDF, HWP or HWPX new-docx result, ask only for plain confirmation of the proposed output file).`,
+    )
   const ask: string[] = []
   if (!c.outputMode)
     ask.push(
@@ -168,7 +171,7 @@ export function translationChoicesRule(choices: TranslationChoices | undefined):
     )
   if (!c.ocrPlacement)
     ask.push(
-      '- OCR placement is not decided: after reading text from pictures, ask with ask_choice where it goes (remember key "ocrPlacement"); never place it without an answer.',
+      '- OCR placement is not decided: ask with ask_choice for editable Word or spreadsheet placement (remember key "ocrPlacement"). For new-docx (PDF/HWP/HWPX), confirm the proposed file in plain text.',
     )
   // tables are asked every time, never remembered: the person picks the direction per document
   ask.push(

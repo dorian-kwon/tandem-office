@@ -5,6 +5,7 @@ import { BLANK_BULLET_NUM_ID, BLANK_ORDERED_NUM_ID } from '@genoffice/docx-engin
 import type { PmNode } from '../src/renderer/editor/convert'
 import {
   applyRunTranslation,
+  remainingUntranslated,
   readRunGroups,
   runFingerprint,
   TAG_LIKE,
@@ -155,6 +156,37 @@ describe('readRunGroups', () => {
       { index: 0, paragraph: 1, cell: 'r0c1', fp: runFingerprint(['칸 둘']), segments: ['칸 둘'] },
     ])
   })
+})
+
+it('resumes a same-script translation using the applied result at each address', async () => {
+  const original = 'Доброе утро'
+  const editor = await createEditor(
+    [0, 1].map(() => ({
+      type: 'docParagraph',
+      content: [{ type: 'text', text: original }],
+    })),
+  )
+  const pending = () => remainingUntranslated(editor, undefined, 'ru').body
+  expect(pending()).toEqual(['0', '1'])
+  const outcome = await executeTool(
+    editor,
+    {
+      id: 'translate',
+      name: 'translate_blocks',
+      input: {
+        blocks: [{ index: 0, fp: runFingerprint([original]), segments: ['Доброго ранку'] }],
+      },
+    },
+    NUM_IDS,
+  )
+  expect(outcome.isError).toBeFalsy()
+  expect(pending()).toEqual(['1'])
+  editor.commands.undo()
+  expect(pending()).toEqual(['0', '1'])
+  editor.commands.redo()
+  expect(pending()).toEqual(['1'])
+  editor.view.dispatch(editor.state.tr.insertText('!', 2))
+  expect(pending()).toEqual(['0', '1'])
 })
 
 describe('applyRunTranslation', () => {

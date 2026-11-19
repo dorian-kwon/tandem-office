@@ -1,6 +1,13 @@
 import type { zh } from './zh'
 
 export const cs = {
+  wikiView: 'Zobrazit wiki',
+  wikiSetup:
+    'V Obsidianu otevřete níže uvedenou složku jako trezor a potom se vraťte do aplikace {app}.',
+  wikiDownload: 'Dokončete instalaci Obsidianu a vraťte se do aplikace {app}, kde se wiki otevře.',
+  wikiUnavailable:
+    'Wiki se nepodařilo otevřít. Ověřte, že je Obsidian nainstalovaný, jednou jej spusťte a zkuste to znovu.',
+  wikiFolder: 'Složka wiki',
   navTranslate: 'Překlad',
   title: 'Překladatelské projekty',
   intro:

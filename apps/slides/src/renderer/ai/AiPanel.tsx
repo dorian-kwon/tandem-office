@@ -1,3 +1,4 @@
+import { analyzingDocumentLabel } from '@genoffice/i18n'
 import { useChatWindow, EarlierChatMessages } from '@genoffice/ui'
 import { aiEditApi } from './ai-edit-api'
 import {
@@ -935,7 +936,10 @@ export function AiPanel({
         // a reopened conversation starts with no MCP choices of another chat (user MCP spec 7.6)
         windowMcpState()?.newConversation()
         // Restore model context: follow-ups after reopening a file continue the earlier conversation (only when the loop is idle with no history)
-        loopRef.current?.restore(msgs.map((m) => ({ role: m.role, text: m.text })))
+        loopRef.current?.restore(
+          msgs.map((m) => ({ role: m.role, text: m.text })),
+          msgs,
+        )
       })
       .catch(() => {
         /* History load failures are silent */
@@ -1721,6 +1725,10 @@ export function AiPanel({
     }
     accessRef.current = access
     loopRef.current = new AgentLoop({
+      documentTranslation: {
+        documentKey: () => savedPathRef.current,
+        analyzingLabel: () => analyzingDocumentLabel[langRef.current],
+      },
       transport: createElectronTransport(() => settingsRef.current, transportHooksRef.current),
       systemSuffix: () =>
         aiLangDirective() +
@@ -2496,7 +2504,10 @@ export function AiPanel({
     skillsRef.current.restoreHistory(
       msgs.map((m) => (m.role === 'user' ? skillChipRefsOf(m.skills) : undefined)),
     )
-    loopRef.current?.restore(msgs.map((m) => ({ role: m.role, text: m.text })))
+    loopRef.current?.restore(
+      msgs.map((m) => ({ role: m.role, text: m.text })),
+      msgs,
+    )
   }
 
   /** the conversation on screen, in the loop and in the composer's helpers goes away */

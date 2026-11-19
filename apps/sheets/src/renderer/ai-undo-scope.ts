@@ -79,14 +79,15 @@ function isCellHistory(item: IUndoRedoItem): boolean {
   return item.undoMutations.every(cellMutation) && item.redoMutations.every(cellMutation)
 }
 
-/** Only pure text batches are independent cells. A flagged mixed edit keeps
- * its ordinary transaction boundary so layout and formulas stay together. */
+export const MIXED_TRANSLATION_PLAN =
+  'Translation batches accept only cell text. Send translated values with translation:true. Apply requested formatting, formulas, or sheet layout in a separate ordinary batch.'
+
+/** Check the planned changes so range writes and other DSL expansions follow the same rule. */
 export function translationCellPlan(plan: ChangePlan): boolean {
   return (
     plan.structuralChanges.length === 0 &&
     plan.formatChanges.length === 0 &&
     plan.sheetRenames.length === 0 &&
-    plan.cellChanges.length > 0 &&
     plan.cellChanges.every((c) => typeof c.after.value === 'string' && !c.after.formula)
   )
 }

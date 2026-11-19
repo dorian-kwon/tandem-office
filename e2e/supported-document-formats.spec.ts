@@ -9,6 +9,7 @@ import { buildEditFixture } from '../apps/sheets/tests/fixture-builder'
 import { buildEpub, epub3Files } from '../packages/epub-engine/tests/helpers'
 import { buildOdt } from '../packages/odt-engine/tests/helpers/build-odt'
 import { readHangulText } from './hwp-document-text'
+import { queueTurns, recorded, stubEverything } from './project-folder-user-lib'
 import { closeAndSaveVideo, launchShell, type LaunchedApp } from './helpers'
 
 type Extension = (typeof ROUTED_EXTENSIONS)[keyof typeof ROUTED_EXTENSIONS][number]
@@ -173,6 +174,7 @@ test.beforeAll(async () => {
     videoDir: 'supported-document-formats',
     env: { GENOFFICE_DEBUG_HOOKS: '1' },
   })
+  await stubEverything(launched.app)
 })
 test.afterAll(async () => {
   if (!launched) return
@@ -199,6 +201,30 @@ for (const ext of Object.values(ROUTED_EXTENSIONS).flat()) {
       .poll(() => page.evaluate(() => location.href).catch(() => ''))
       .toContain('://' + appForPath(path) + '/')
     await check(page)
+    await test.step('whole-document translation starts with the editor’s source-reading tools', async () => {
+      await queueTurns(launched.app, [
+        {
+          toolCalls: [
+            {
+              id: 'prepare',
+              name: 'prepare_document_translation',
+              input: { targetLanguage: 'Korean' },
+            },
+          ],
+        },
+        { text: 'SOURCE_READING_CHECK' },
+      ])
+      const composer = page.locator('.ai-composer textarea').first()
+      if (!(await composer.isVisible())) await page.locator('.ai-rail').first().click()
+      await composer.fill('Translate the entire current document into Korean in place.')
+      await page.locator('.ai-composer .ai-send-btn').first().click()
+      await expect(page.getByText('SOURCE_READING_CHECK', { exact: true }).last()).toBeVisible()
+      const request = JSON.parse((await recorded(launched.app)).streams.at(-1)!)
+      const tools: string[] = request.tools.map((tool: { name: string }) => tool.name)
+      expect(tools).toContain('record_source_overview')
+      expect(tools).not.toContain('prepare_document_translation')
+      expect(tools.some((name) => name.startsWith('read_'))).toBe(true)
+    })
     await tab.locator('.tab-close').click()
     await expect(launched.page.locator('.tab-item:not(.tab-home)')).toHaveCount(0)
   })

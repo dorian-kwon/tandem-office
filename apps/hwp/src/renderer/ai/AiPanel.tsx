@@ -1,3 +1,4 @@
+import { analyzingDocumentLabel } from '@genoffice/i18n'
 import { useChatWindow, EarlierChatMessages } from '@genoffice/ui'
 import { aiEditUndoHistoryEnabled, useAiPanelPrefs } from '@genoffice/ui'
 import {
@@ -761,6 +762,10 @@ export function AiPanel({
   const loopRef = useRef<AgentLoop | null>(null)
   if (!loopRef.current) {
     loopRef.current = new AgentLoop({
+      documentTranslation: {
+        documentKey: () => filePathRef.current,
+        analyzingLabel: () => analyzingDocumentLabel[langRef.current],
+      },
       transport: transportRef.current,
       // a local model that reported no tool support answers in text only
       toolsAllowed: () =>
@@ -1188,6 +1193,7 @@ export function AiPanel({
     windowMcpState()?.newConversation()
     loopRef.current?.restore(
       messages.map((message) => ({ role: message.role, text: message.text })),
+      messages,
     )
   }
 

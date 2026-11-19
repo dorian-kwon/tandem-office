@@ -1340,3 +1340,16 @@
   color: var(--text);
   font: inherit;
 }
+
+.translate-wiki-guide {
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+}
+
+.translate-wiki-guide::backdrop {
+  background: var(--color-bg-overlay);
+}
+
+.translate-wiki-guide .projects-field {
+  margin-top: 12px;
+}

@@ -5,6 +5,7 @@ import type { SubscriptionApi } from './subscription-api'
 import type { DocumentTree, InlineRun } from '../../../../packages/pdf-structure/src/tree/types'
 import type { PageFingerprint } from '../../../../packages/pdf-structure/src/tree/extract'
 import type { MarkdownWarning } from '../../../../packages/pdf-structure/src/markdown/write'
+import type { TranslationOverview } from '../../../../packages/pdf-structure/src/translate/context'
 import type { TranslationReport } from '../../../../packages/pdf-structure/src/translate/result'
 import type { WritebackReport } from '../../../../packages/pdf-structure/src/writeback/types'
 import type {
@@ -1389,6 +1390,7 @@ export interface PdfStructureApi {
 
 /** a translation as stored, blocks in a plain list */
 export interface PdfStoredTranslation {
+  overview?: TranslationOverview
   lang: string
   provider: string | null
   model: string | null
@@ -1404,7 +1406,14 @@ export type PdfStoreWriteRequest =
       provider?: string
       model?: string
     }
-  | { kind: 'translationMeta'; docHash: string; lang: string; provider: string; model: string }
+  | {
+      kind: 'translationMeta'
+      docHash: string
+      lang: string
+      provider: string
+      model: string
+      overview?: TranslationOverview
+    }
   | { kind: 'translationBlocks'; docHash: string; lang: string; blocks: TranslationBlockInput[] }
   | { kind: 'deleteTranslation'; docHash: string; lang: string }
   /** the record is found by (kind, key): `lang`, or `runId` for 'highlight' (JobRecordInput) */

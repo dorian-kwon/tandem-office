@@ -50,6 +50,7 @@ export function createBookJobStore(api: BookStoreApi): BookJobStore {
         lang: t.lang,
         provider: t.provider,
         model: t.model,
+        ...(t.overview && { overview: t.overview }),
         blocks: new Map<string, TranslationBlockEntry>(
           t.blocks.map((b) => [blockKeyString(b.key), b]),
         ),
@@ -62,6 +63,7 @@ export function createBookJobStore(api: BookStoreApi): BookJobStore {
         lang,
         provider: meta.provider,
         model: meta.model,
+        ...(meta.overview && { overview: meta.overview }),
       }),
     writeTranslationBlocks: (docHash, lang, blocks) =>
       write(api, { kind: 'translationBlocks', docHash, lang, blocks: [...blocks] }),

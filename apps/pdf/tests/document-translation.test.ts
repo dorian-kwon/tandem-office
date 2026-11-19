@@ -15,7 +15,7 @@ import {
   type AiSubscriptionState,
   type SubscriptionStatusMap,
 } from '@genoffice/ai-provider/browser'
-import { createI18n } from '@genoffice/i18n'
+import { analyzingDocumentLabel, createI18n } from '@genoffice/i18n'
 import { aiRunErrorText } from '@genoffice/ui'
 import { DocumentJobRegistry } from '../../../packages/pdf-structure/src/jobs'
 import { blockKeyString } from '../../../packages/pdf-structure/src/store/keys'
@@ -804,6 +804,25 @@ describe('translation: the job', () => {
     expect(q(m.el, '[data-step="confirm"]')).not.toBeNull()
   })
 
+  it('shows the localized analysis stage before requesting the first translation', async () => {
+    const m = await mount({ lang: 'ko' })
+    const titles: string[] = []
+    const observer = new MutationObserver(() => {
+      const title = q(m.el, '.pdf-job-strip-title')?.textContent
+      if (title) titles.push(title)
+    })
+    observer.observe(m.el, { childList: true, characterData: true, subtree: true })
+    try {
+      await openToConfirm(m, { lang: 'de', pages: null })
+      await click(m.el, '[data-action="start"]')
+      await until(() => bridge.starts.length === 1, 'the translation to begin')
+      expect(titles).toContain(analyzingDocumentLabel.ko)
+      expect(q(m.el, '.pdf-job-strip-title')?.textContent).not.toBe(analyzingDocumentLabel.ko)
+    } finally {
+      observer.disconnect()
+    }
+  })
+
   it('one job per document: a second open answers with the running progress', async () => {
     const m = await mount()
     await openToConfirm(m, { lang: 'de', pages: null })
@@ -1128,11 +1147,20 @@ describe('translation window: store only, and edited blocks on a restart', () =>
     await until(() => bridge.starts.length === 1, 'the job to send')
     expect(channels.writes.some((w) => w.kind === 'deleteTranslationExceptEdited')).toBe(true)
     expect(channels.writes.some((w) => w.kind === 'deleteTranslation')).toBe(false)
-    // the edited heading stays and is not sent; the other two blocks are
-    const text = bridge.starts[0]!.messages[0]!.text ?? ''
-    expect(text).not.toContain('Annual report')
-    expect(text).toContain('quick brown fox')
-    expect(text).toContain('harvest grew')
+    // Only the two pending blocks are translation targets. The retained heading
+    // and its accepted translation may appear in the bounded reference context.
+    const prompt = bridge.starts[0]!.messages[0]!.text ?? ''
+    const payload = JSON.parse(
+      /<document_blocks>\n([\s\S]*)\n<\/document_blocks>/.exec(prompt)![1]!,
+    )
+    expect(payload.blocks.map((b: { text: string }) => b.text)).toEqual([
+      expect.stringContaining('quick brown fox'),
+      expect.stringContaining('harvest grew'),
+    ])
+    expect(payload.reference.previous).toContainEqual({
+      source: 'Annual report of the river farm',
+      target: '[old] 0',
+    })
     expect(channels.translations.get('de')!.blocks.size).toBe(1)
   })
 

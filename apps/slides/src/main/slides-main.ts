@@ -1372,6 +1372,28 @@ export function applySessionTxn(
    */
   options: { dropUndo?: boolean } = {},
 ): ApplyTxnResult | null {
+  if (req?.translation === true && Array.isArray(req.ops)) {
+    const index = req.ops.findIndex((raw) => {
+      const op = raw as Partial<Parameters<typeof runTxn>[1]['ops'][number]> | null
+      return (
+        !op?.target ||
+        op.target.slide == null ||
+        op.target.part ||
+        !['setText', 'setNotes', 'setTableCell'].includes(op.op ?? '')
+      )
+    })
+    if (index >= 0)
+      return {
+        applied: false,
+        failures: [
+          {
+            index,
+            error:
+              'Translation batches accept only setText, setNotes and setTableCell on slide targets. Keep paragraph and run formatting in those text operations. Send requested layout or separate styling operations in an ordinary batch.',
+          },
+        ],
+      }
+  }
   if (options.dropUndo) {
     const undo = session.undoStack
     session.undoStack = []
@@ -1417,15 +1439,7 @@ export function applySessionTxn(
   pushHistory(session)
   const steps: TranslationStep[] = []
   const initiallyDirty = !!session.metaDirty
-  const independent =
-    req.translation === true &&
-    translationHistoryEnabled(session) &&
-    ops.every(
-      (op) =>
-        op.target?.slide != null &&
-        !op.target.part &&
-        ['setText', 'setNotes', 'setTableCell'].includes(op.op),
-    )
+  const independent = req.translation === true && translationHistoryEnabled(session)
   const r = journaledTxn(session, 'batch', {
     ops,
     isolation,

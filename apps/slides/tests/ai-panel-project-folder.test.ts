@@ -292,10 +292,16 @@ describe('slides AI panel: project folder', () => {
     const { container } = await mountPanel({ currentFilePath: 'C:/work/report/deck.pptx' })
     expect(container.querySelector('.ai-msg-historic')?.textContent).toContain('make a deck')
     expect(container.querySelector('.ai-project-tool-summary')?.textContent).toContain('brief.docx')
-    expect(agentHarness.restore).toHaveBeenCalledWith([
-      { role: 'user', text: 'make a deck' },
-      { role: 'assistant', text: 'made' },
-    ])
+    expect(agentHarness.restore).toHaveBeenCalledWith(
+      [
+        { role: 'user', text: 'make a deck' },
+        { role: 'assistant', text: 'made' },
+      ],
+      [
+        expect.objectContaining({ role: 'user', text: 'make a deck' }),
+        expect.objectContaining({ role: 'assistant', editor: 'docs', fileRef: 'brief.docx' }),
+      ],
+    )
   })
 })
 

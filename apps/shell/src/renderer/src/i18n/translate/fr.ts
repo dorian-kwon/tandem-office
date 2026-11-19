@@ -1,6 +1,12 @@
 import type { zh } from './zh'
 
 export const fr = {
+  wikiView: 'Voir le wiki',
+  wikiSetup: 'Dans Obsidian, ouvrez le dossier ci-dessous comme coffre, puis revenez dans {app}.',
+  wikiDownload: 'Terminez l’installation d’Obsidian, puis revenez dans {app} pour ouvrir le wiki.',
+  wikiUnavailable:
+    'Impossible d’ouvrir le wiki. Vérifiez qu’Obsidian est installé, lancez-le une fois, puis réessayez.',
+  wikiFolder: 'Dossier du wiki',
   navTranslate: 'Traduction',
   title: 'Projets de traduction',
   intro:

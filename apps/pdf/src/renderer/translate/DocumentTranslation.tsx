@@ -26,7 +26,7 @@ import { useEditorAiBusy, withEditorAiWork } from '@genoffice/ui'
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 import { useSyncExternalStore } from 'react'
-import type { Lang } from '@genoffice/i18n'
+import { analyzingDocumentLabel, type Lang } from '@genoffice/i18n'
 import {
   startTranslationJob,
   type TranslationJobItem,
@@ -158,6 +158,7 @@ export const DocumentTranslation = forwardRef<DocumentTranslationHandle, Documen
     const { filePath, password, pageCount, lang, t, api, session, encrypted } = props
     const [docHash, setDocHash] = useState<string | null>(null)
     const [dialog, setDialog] = useState<DialogState | null>(null)
+    const [analyzing, setAnalyzing] = useState(false)
     const [writing, setWriting] = useState<Writing | null>(null)
     const [report, setReport] = useState<ReportState | null>(null)
     const views = useSyncExternalStore(
@@ -429,10 +430,30 @@ export const DocumentTranslation = forwardRef<DocumentTranslationHandle, Documen
                 : {}),
               signal,
               registry,
-              onProgress,
+              onAnalyzing: async () => {
+                setAnalyzing(true)
+                // Yield a paint before the local analysis, including in a throttled hidden tab.
+                await new Promise<void>((resolve) => {
+                  const timer = setTimeout(resolve, 80)
+                  if (typeof requestAnimationFrame === 'undefined') return
+                  requestAnimationFrame(() =>
+                    requestAnimationFrame(() => {
+                      clearTimeout(timer)
+                      resolve()
+                    }),
+                  )
+                })
+              },
+              onProgress: (event) => {
+                setAnalyzing(false)
+                onProgress(event)
+              },
             }),
           pageOf: (batch) => batch[0]?.block.page ?? null,
-          onEnd: (view) => void ended(view, run),
+          onEnd: (view) => {
+            setAnalyzing(false)
+            void ended(view, run)
+          },
         })
         if (!outcome.ok) return { ok: false, busy: outcome.running.progress }
         runs.current.set(outcome.view.id, run)
@@ -470,6 +491,9 @@ export const DocumentTranslation = forwardRef<DocumentTranslationHandle, Documen
             view={view}
             t={t}
             {...stripText(view, lang, t, nameOf)}
+            {...(analyzing && view.state === 'running'
+              ? { title: analyzingDocumentLabel[lang] }
+              : {})}
             {...(view.state === 'stopped' &&
             run &&
             run.targets.length > 0 &&

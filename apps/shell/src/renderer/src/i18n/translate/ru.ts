@@ -1,6 +1,12 @@
 import type { zh } from './zh'
 
 export const ru = {
+  wikiView: 'Открыть вики',
+  wikiSetup: 'В Obsidian откройте указанную ниже папку как хранилище, затем вернитесь в {app}.',
+  wikiDownload: 'Завершите установку Obsidian и вернитесь в {app}, чтобы открыть вики.',
+  wikiUnavailable:
+    'Не удалось открыть вики. Убедитесь, что Obsidian установлен, запустите его и повторите попытку.',
+  wikiFolder: 'Папка вики',
   navTranslate: 'Перевод',
   title: 'Проекты перевода',
   intro:

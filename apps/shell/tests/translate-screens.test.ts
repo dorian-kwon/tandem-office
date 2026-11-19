@@ -71,6 +71,8 @@ beforeEach(() => {
   document.body.append(host)
   root = createRoot(host)
   api = {
+    openWiki: vi.fn().mockResolvedValue({ status: 'opened', vaultPath: '/wiki' }),
+    resumeWiki: vi.fn().mockResolvedValue({ status: 'idle', vaultPath: '' }),
     list: vi.fn().mockResolvedValue([]),
     recent: vi.fn().mockResolvedValue([]),
     create: vi.fn().mockResolvedValue({ dir: '/p/new' }),
@@ -158,6 +160,7 @@ describe('ProjectList', () => {
 
   it('with no projects the empty state offers the new project action', async () => {
     await render(ProjectList, { onOpen: vi.fn() })
+    expect(buttonByText('View wiki')).toBeTruthy()
     const empty = host.querySelector('[data-empty-projects]') as HTMLElement
     expect(empty).not.toBeNull()
     expect(empty.textContent).toContain('No translation projects yet')
@@ -339,6 +342,7 @@ describe('ProjectDetail', () => {
       }),
     )
     await render(ProjectDetail, props())
+    expect(buttonByText('View wiki')).toBeTruthy()
     const sections = host.querySelectorAll('[data-material-kind]')
     expect([...sections].map((e) => e.getAttribute('data-material-kind'))).toEqual([
       'source',
@@ -809,6 +813,7 @@ describe('TranslationPaneToggle', () => {
 
   it('hides the source pane, then offers to show it again', async () => {
     await render(TranslationPaneToggle, { split, tabs })
+    expect(buttonByText('View wiki')).toBeTruthy()
     await click(buttonByText('Hide source'))
     expect(api.setPaneHidden).toHaveBeenCalledWith({ side: 'left', hidden: true })
     await render(TranslationPaneToggle, { split: { ...split, collapsed: 'a' }, tabs })

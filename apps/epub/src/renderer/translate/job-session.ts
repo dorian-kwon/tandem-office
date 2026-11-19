@@ -33,6 +33,7 @@ export interface BookJobView {
   state: 'running' | 'complete' | 'stopped' | 'failed'
   /** blocks done, including those done before this run */
   done: number
+  phase?: 'planning' | 'analyzing' | 'translating'
   total: number
   failed: number
   /** the spine index in flight (EPUB_METADATA_PAGE for the title and contents), when known */
@@ -53,6 +54,7 @@ export interface StartBookJob<U> {
     signal: AbortSignal
     registry: DocumentJobRegistry
     onProgress: (event: JobProgressEvent<U>) => void
+    onAnalyzing: () => Promise<void>
   }): DocumentJobHandle<U>
   /** the page (spine index) a unit in flight is on */
   pageOf?(unit: U): number | null
@@ -88,6 +90,7 @@ export class BookJobSession {
       lang: spec.lang,
       provider: spec.provider,
       state: 'running',
+      phase: 'planning',
       done: 0,
       total: 0,
       failed: 0,
@@ -99,8 +102,13 @@ export class BookJobSession {
       handle = spec.launch({
         signal: controller.signal,
         registry: this.registry,
+        onAnalyzing: async () => {
+          this.update(view.id, { phase: 'analyzing' })
+          await new Promise<void>((resolve) => setTimeout(resolve, 0))
+        },
         onProgress: (event) =>
           this.update(view.id, {
+            phase: 'translating',
             done: event.done,
             total: event.total,
             failed: event.failed,

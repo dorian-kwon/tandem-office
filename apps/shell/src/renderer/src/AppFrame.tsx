@@ -11,6 +11,7 @@ import {
   type ViewportSize,
 } from './split-view-geometry'
 import { TabBar } from './TabBar'
+import { TranslationWikiProvider } from './translate/TranslationWiki'
 import { useSubscriptionConnection } from './subscription-client'
 
 interface AppFrameProps {
@@ -195,36 +196,41 @@ export function AppFrame({ initialOnboardingSeen }: AppFrameProps) {
   }
 
   return (
-    <div className="app-frame">
-      <TabBar split={split} />
-      {/* divider sits in the gap between the two pane views — the one slice of
-       * the content area they do not cover. Home paints this document instead
-       * (the panes are only hidden there, not closed), so no seam over it. */}
-      {/* a pane hidden by the translation view's toggle leaves no gap to paint */}
-      {split && !homeActive && split.collapsed == null && (
-        <SplitDivider split={split} viewport={viewport} />
-      )}
-      {/* docs/sheets tabs render as WebContentsView children of this window, positioned
-       * by the main process to cover this area — only Home paints its own content here. */}
-      <div className="app-frame-content" style={{ visibility: homeActive ? 'visible' : 'hidden' }}>
-        <Home
-          connection={connection}
-          aiSettings={notice.settings}
-          // during the onboarding its connect step shows the notice instead
-          noticeDue={notice.due && !showOnboarding}
-          onNoticeAcknowledge={notice.acknowledge}
-        />
+    <TranslationWikiProvider homeActive={homeActive}>
+      <div className="app-frame">
+        <TabBar split={split} />
+        {/* divider sits in the gap between the two pane views — the one slice of
+         * the content area they do not cover. Home paints this document instead
+         * (the panes are only hidden there, not closed), so no seam over it. */}
+        {/* a pane hidden by the translation view's toggle leaves no gap to paint */}
+        {split && !homeActive && split.collapsed == null && (
+          <SplitDivider split={split} viewport={viewport} />
+        )}
+        {/* docs/sheets tabs render as WebContentsView children of this window, positioned
+         * by the main process to cover this area — only Home paints its own content here. */}
+        <div
+          className="app-frame-content"
+          style={{ visibility: homeActive ? 'visible' : 'hidden' }}
+        >
+          <Home
+            connection={connection}
+            aiSettings={notice.settings}
+            // during the onboarding its connect step shows the notice instead
+            noticeDue={notice.due && !showOnboarding}
+            onNoticeAcknowledge={notice.acknowledge}
+          />
+        </div>
+        {/* editor WebContentsViews paint above ALL shell DOM, so the overlay only
+         * renders while the home tab is active — it comes back when home does */}
+        {showOnboarding && homeActive && (
+          <Onboarding
+            onDone={finishOnboarding}
+            connection={connection}
+            noticeDue={notice.due}
+            onNoticeAcknowledge={notice.acknowledge}
+          />
+        )}
       </div>
-      {/* editor WebContentsViews paint above ALL shell DOM, so the overlay only
-       * renders while the home tab is active — it comes back when home does */}
-      {showOnboarding && homeActive && (
-        <Onboarding
-          onDone={finishOnboarding}
-          connection={connection}
-          noticeDue={notice.due}
-          onNoticeAcknowledge={notice.acknowledge}
-        />
-      )}
-    </div>
+    </TranslationWikiProvider>
   )
 }

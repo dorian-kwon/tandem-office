@@ -62,6 +62,7 @@ import {
   TRANSLATE_CHANNELS,
   toTranslateIpcError,
   TranslateIpcError,
+  type TranslateApi,
   type TranslateAddMaterialArgs,
   type TranslateExportArgs,
   type TranslateExportResult,
@@ -109,6 +110,7 @@ import {
  */
 
 export interface TranslateIpcDeps {
+  wiki?: Pick<TranslateApi, 'openWiki' | 'resumeWiki'>
   /** path of userData/app-settings.json (read per call: userData is final only after ready) */
   settingsPath: () => string
   now: () => number
@@ -947,14 +949,16 @@ export function registerTranslateIpc(
   ipc: Pick<IpcMain, 'handle'>,
   deps: TranslateIpcDeps,
   isShellSender: (sender: unknown) => boolean,
+  isWikiSender = isShellSender,
 ): void {
   const h = createTranslateHandlers(deps)
   const handle = (
     channel: string,
     answer: (event: TranslateIpcEvent, ...args: never[]) => unknown,
+    allowed = isShellSender,
   ): void => {
     ipc.handle(channel, (event, ...args: unknown[]) => {
-      if (!isShellSender(event.sender))
+      if (!allowed(event.sender))
         return Promise.reject(
           new TranslateIpcError('INVALID_ARGUMENT', 'this window cannot use the translation tool'),
         )
@@ -975,6 +979,17 @@ export function registerTranslateIpc(
       sender.on('render-process-gone', () => void h.ocrForgetOwner(id))
     }
     return id
+  }
+  for (const action of ['openWiki', 'resumeWiki'] as const) {
+    handle(
+      TRANSLATE_CHANNELS[action],
+      async (_event, ...args) => {
+        if (args.length || !deps.wiki)
+          throw new TranslateIpcError('INVALID_ARGUMENT', 'invalid translation wiki request')
+        return deps.wiki[action]()
+      },
+      isWikiSender,
+    )
   }
   handle(TRANSLATE_CHANNELS.list, () => h.list())
   handle(TRANSLATE_CHANNELS.recent, () => h.recent())

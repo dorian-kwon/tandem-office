@@ -1,6 +1,11 @@
 import type { zh } from './zh'
 
 export const ar = {
+  wikiView: 'عرض الويكي',
+  wikiSetup: 'في Obsidian، افتح المجلد أدناه كخزنة، ثم ارجع إلى {app}.',
+  wikiDownload: 'أكمل تثبيت Obsidian، ثم ارجع إلى {app} لفتح الويكي.',
+  wikiUnavailable: 'تعذّر فتح الويكي. تأكد من تثبيت Obsidian وشغّله مرة واحدة ثم أعد المحاولة.',
+  wikiFolder: 'مجلد الويكي',
   navTranslate: 'الترجمة',
   title: 'مشاريع الترجمة',
   intro: 'يجمع مشروع الترجمة المستندات المراد ترجمتها والمواد المرجعية والمسارد في مجلد واحد.',
