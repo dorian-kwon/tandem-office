@@ -1,5 +1,5 @@
 import { withEditorAiWork } from '@genoffice/ui'
-import { recordEditHistory } from './edit-ops/history'
+import { recordEditHistory, rebaseEditHistory } from './edit-ops/history'
 import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
 import {
   Fragment,
@@ -2683,26 +2683,26 @@ export default function App() {
 
   const newId = () => `d${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
 
-  const editOpContext = (): OpContext => ({
+  const editOpContext = (state = snapshot()): OpContext => ({
     readOnly,
-    pageCount: pageCountNow(),
-    deleted: deletedRef.current,
+    pageCount: sizes.length + state.blankPages.length,
+    deleted: state.deleted,
     claimedImages: new Set(
-      imageEditsRef.current.flatMap((e) =>
+      state.imageEdits.flatMap((e) =>
         e.input.kind === 'insertImage'
           ? []
           : [`${e.input.pageIndex}:${imageRectKey(e.input.oldRect)}`],
       ),
     ),
     fieldNames: new Set([
-      ...liveFieldNames(formCatalog, formWidgetEditsRef.current),
-      ...formFieldsRef.current.map((f) => f.input.name),
+      ...liveFieldNames(formCatalog, state.formWidgetEdits),
+      ...state.formFields.map((f) => f.input.name),
     ]),
     radioGroups: new Set([
       ...[...(formCatalog?.fields.values() ?? [])]
         .filter((f) => f.kind === 'radio')
         .map((f) => f.name),
-      ...formFieldsRef.current.filter((f) => f.input.kind === 'radio').map((f) => f.input.name),
+      ...state.formFields.filter((f) => f.input.kind === 'radio').map((f) => f.input.name),
     ]),
   })
 
@@ -2733,10 +2733,13 @@ export default function App() {
     }
     const plan = planEditOps(ops, editOpContext(), newId)
     if (plan.failures.length > 0 || plan.ops.length === 0) return plan
+    setDeleteToast(false)
+    let unrecorded = false
     recordEditHistory(
       opts?.aiEdit === true,
       () => pushUndo(opts?.coalesceKey),
       () => {
+        unrecorded = true
         coalesceKeyRef.current = null
         setRedoStack([])
       },
@@ -2794,6 +2797,10 @@ export default function App() {
       metadataRef.current = reduce('metadata', metadataRef.current)
       setMetadata(metadataRef.current)
     }
+    if (unrecorded) {
+      const after = snapshot()
+      setUndoStack((stack) => rebaseEditHistory(stack, base, after, plan, editOpContext))
+    }
     return plan
   }
   /** Latest entry for async callbacks (bakes, validated AI edits): the closure they
@@ -2833,6 +2840,7 @@ export default function App() {
     ])
 
   const applySnapshot = (s: EditSnapshot) => {
+    setDeleteToast(false)
     markupsRef.current = s.markups
     formEditsRef.current = s.formEdits
     formWidgetEditsRef.current = s.formWidgetEdits
@@ -2861,6 +2869,7 @@ export default function App() {
     // The comment being rewritten may not exist in the restored snapshot; confirming a
     // stale edit box would reapply text that undo just reverted
     setNoteEditDraft(null)
+    stampRef.current = s.stampCfg
     setStampCfg(s.stampCfg)
     setFormEdits(s.formEdits)
     setRotations(s.rotations)
@@ -5245,7 +5254,7 @@ export default function App() {
                         staticFill: savedStaticFillForRef(sel.ref),
                       }
                     : { op: 'setStamps', cfg: null }
-    applyEditOps([op])
+    if (!applyEditOps([op]).ops.length) return
     setSelected(null)
     showDeletedToast(sel.kind === 'textInsert')
   }
@@ -5293,14 +5302,14 @@ export default function App() {
   }
 
   const deleteMarkupFromMenu = (menu: MarkupMenu) => {
-    applyEditOps(
+    const plan = applyEditOps(
       menu.kind === 'pending'
         ? [{ op: 'removeMarkup', id: menu.id }]
         : [{ op: 'deleteSavedAnnot', annot: menu.annot }],
     )
     setMarkupMenu(null)
     setSelected(null)
-    showDeletedToast()
+    if (plan.ops.length) showDeletedToast()
   }
 
   const runCompare = async (): Promise<void> => {
@@ -7506,7 +7515,7 @@ export default function App() {
   /** Delete a comment and everything under it (saved → pending annotDeletes; pending → dropped) */
   const deleteNoteItem = (item: NoteThreadItem, aiEdit = false) => {
     const { saved, pendingIds } = threadSubtree(item)
-    applyEditOps(
+    const plan = applyEditOps(
       [
         ...saved.map((annot): Op => ({ op: 'deleteSavedAnnot', annot })),
         ...pendingIds.map((id): Op => ({ op: 'removeDrawing', id })),
@@ -7515,7 +7524,7 @@ export default function App() {
     )
     if (activeNote && item.key === activeNote.rootKey) setActiveNote(null)
     // "deleted · undo" toast — a mistaken trash tap stays reversible before autosave
-    if (!aiEdit || aiEditUndoHistoryEnabled()) showDeletedToast()
+    if (plan.ops.length && (!aiEdit || aiEditUndoHistoryEnabled())) showDeletedToast()
   }
 
   /** Extract/insert work on the file on disk — flush unsaved changes first; undefined = the save failed */
@@ -8671,9 +8680,9 @@ export default function App() {
         if (k === 's') {
           e.preventDefault()
           void save()
-        } else if (k === 'z') {
+        } else if (!e.altKey && (k === 'z' || (e.ctrlKey && k === 'y' && !e.shiftKey))) {
           e.preventDefault()
-          if (e.shiftKey) redo()
+          if (e.shiftKey || k === 'y') redo()
           else undo()
         } else if (k === 'f') {
           e.preventDefault()

@@ -1,5 +1,7 @@
+import { isWorkbookHistoryComposer } from './clear-selection-keyboard'
 import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
-import { withAdapterAiHistory } from './adapter-ai-history'
+import { restoreAdapterSnapshot, withAdapterAiHistory } from './adapter-ai-history'
+import { appendAiUndoEntries, createAiUndoScope, matchesAiUndoEntries } from './ai-undo-scope'
 import { focusWorksheet } from './sheet-focus'
 import {
   activateFormulaClosure,
@@ -27,7 +29,7 @@ import {
   RECALC_MAX_FAILURES,
   queueVisualInstall,
   sheetOutline,
-  syncUniver,
+  pushVisualUndo,
   univerDefinedNames,
   installFindRevealFix,
   installInjectorResolutionGuard,
@@ -58,7 +60,12 @@ import {
   hashSheetPassword,
   type SheetPasswordHash,
 } from '@genoffice/xlsx-gateway/gateway/xlsx-protection-hash'
-import { applyChangePlan, planFromOps, type OpExecutorContext } from './op-executor'
+import {
+  applyChangePlan,
+  applyGridLayoutOp,
+  planFromOps,
+  type OpExecutorContext,
+} from './op-executor'
 import { installSheetsMcpBridge, type McpSheetHandlers } from './mcp-bridge'
 import { renameChartRefsForSheet } from './workbook-ops'
 import {
@@ -73,7 +80,7 @@ import {
   workbookFontFamilies,
 } from './cell-font-fallback'
 import { isNumericIdentifierText } from './cell-warning'
-import { consumePendingUndoCarry, undoStackDepth } from './undo-carry'
+import { consumePendingUndoCarry, currentUndoStack } from './undo-carry'
 import { createSaveGate, shouldRunSaveTick } from './save-scheduler'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import {
@@ -3924,6 +3931,16 @@ export function App({
     const defaultSheet = snapshot.sheets.find((sheet) => sheet.id === 'sheet-1')
     if (!defaultSheet || defaultSheet.name !== 'Sheet1') return null
     if (Object.keys(defaultSheet.cells).length > 0) return null
+    // Manual cell/format edits live on the grid even when the demo adapter
+    // still sees its original empty sheet.
+    const liveSheet = univerRef.current?.univerAPI.getActiveWorkbook()?.getSnapshot().sheets[
+      'sheet-1'
+    ]
+    if (
+      liveSheet &&
+      (liveSheet.name !== 'Sheet1' || Object.keys(liveSheet.cellData ?? {}).length > 0)
+    )
+      return null
     if ((defaultSheet.visuals?.length ?? 0) > 0) return null
     const touched =
       plan.cellChanges.some((change) => change.sheetId === 'sheet-1') ||
@@ -4008,7 +4025,7 @@ export function App({
     // run's edits stay pending in the journal, so the offered Undo / ⌘Z keeps
     // working (saving would reopen the session and reset the undo stack).
     if (!autoSaveRef.current) {
-      setMessage(t('appAiChangesNotSaved'))
+      setMessage(t('appAppliedJournaled'))
       return
     }
     // AutoSave-driven write after an AI run: silent like the interval autosave.
@@ -4055,18 +4072,19 @@ export function App({
       plan.structuralChanges.length
     const state = lazyWorkbookRef.current
     if (state) {
-      const undoDepthBefore = undoStackDepth(univerRef.current)
+      let undoIds: string[] = []
       // Lazy path reads lazyPreviewRef (a ref, already set by the caller) —
       // safe to invoke synchronously right after propose.
-      const apply = handleLazyApply(state).then((outcome) => {
+      const apply = handleLazyApply(state, (ids) => {
+        undoIds = ids
+      }).then((outcome) => {
         if (outcome.ok) {
-          const undoSteps = Math.max(0, undoStackDepth(univerRef.current) - undoDepthBefore)
           // Patch last assistant message with inline undo button.
           patchLastAssistant((entry) => ({
             ...entry,
             autoApplied: {
               opCount: (entry.autoApplied?.opCount ?? 0) + opCount,
-              undoSteps: (entry.autoApplied?.undoSteps ?? 0) + undoSteps,
+              undoIds: appendAiUndoEntries(entry.autoApplied?.undoIds, undoIds),
             },
           }))
         } else {
@@ -4083,72 +4101,100 @@ export function App({
     // Non-lazy path: apply the passed plan directly (setPreview is async, so we
     // cannot rely on the preview state within the same tick).
     try {
-      const { receipt, prunedRevision } = withAdapterAiHistory(adapterRef.current, () => ({
-        receipt: adapterRef.current.apply(plan),
-        prunedRevision: pruneEmptyDefaultSheet(plan),
-      }))
-      // Row/column shifts and new sheets can't be patched cell-by-cell into
-      // the existing Univer grid — rebuild the demo workbook from the snapshot.
-      if (plan.structuralChanges.length > 0 || prunedRevision !== null) {
-        loadSnapshotIntoUniver(
-          univerRef.current,
-          adapterRef.current.getSnapshot(),
-          'new-workbook',
-          'Untitled',
-        )
-        queueDemoVisualInstallForActiveSheet()
-      } else {
-        // Keep these programmatic writes off Univer's undo stack entirely:
-        // on blank workbooks the adapter owns AI-revision history (plans are
-        // built and validated against its snapshot), so undo must go through
-        // adapter.undo() as one step. A Univer-level undo item would revert
-        // the grid but leave the adapter unreverted — the next apply's
-        // full-snapshot syncUniver would then resurrect the undone content.
-        journalSuppression.active = true
-        try {
-          syncUniver(univerRef.current, adapterRef.current.getSnapshot())
-          const workbook = univerRef.current?.univerAPI.getActiveWorkbook()
-          for (const formatChange of plan.formatChanges) {
-            const worksheet = workbook?.getSheetBySheetId(formatChange.sheetId)
-            if (worksheet)
-              applyFormatPatchToRange(worksheet.getRange(formatChange.range), formatChange.format)
+      const runtime = univerRef.current
+      const workbook = runtime?.univerAPI.getActiveWorkbook()
+      if (!runtime || !workbook) return { ok: false, reason: t('appNoWorkbookOpen') }
+      const record = aiEditUndoHistoryEnabled()
+      const {
+        result: { receipt, prunedRevision },
+        before,
+      } = withAdapterAiHistory(
+        adapterRef.current,
+        () => ({
+          receipt: adapterRef.current.apply(plan),
+          prunedRevision: pruneEmptyDefaultSheet(plan),
+        }),
+        record,
+      )
+      const after = adapterRef.current.getSnapshot()
+      const scope = createAiUndoScope(record)
+      const sheetById = (id: string) => {
+        const sheet = workbook.getSheetBySheetId(id)
+        if (!sheet) throw new Error(`Unknown sheet: ${id}`)
+        return sheet
+      }
+      try {
+        scope.run(() => {
+          // Apply the same commands as file workbooks. Rebuilding from the
+          // adapter would discard intervening manual edits and their history.
+          for (const { op } of plan.structuralChanges) {
+            const id =
+              op.op === 'add_sheet'
+                ? after.sheets.find((sheet) => sheet.name === op.name)?.id
+                : undefined
+            applyGridLayoutOp(workbook, sheetById, op, false, id)
           }
-        } finally {
-          journalSuppression.active = false
-        }
-        // The CommandExecuted chart↔data sync listener is gated on
-        // journalSuppression, so re-queue the sync for the cells this plan
-        // actually changed.
-        const chartSyncBounds = new Map<string, CellBounds>()
-        for (const change of plan.cellChanges) {
-          const cell = parseAddress(change.address)
-          const bounds = chartSyncBounds.get(change.sheetId)
-          if (bounds) {
-            bounds.startRow = Math.min(bounds.startRow, cell.row)
-            bounds.endRow = Math.max(bounds.endRow, cell.row)
-            bounds.startColumn = Math.min(bounds.startColumn, cell.column)
-            bounds.endColumn = Math.max(bounds.endColumn, cell.column)
-          } else {
-            chartSyncBounds.set(change.sheetId, {
-              startRow: cell.row,
-              endRow: cell.row,
-              startColumn: cell.column,
-              endColumn: cell.column,
+          if (prunedRevision !== null) workbook.deleteSheet('sheet-1')
+          for (const rename of plan.sheetRenames) sheetById(rename.sheetId).setName(rename.after)
+          for (const change of plan.cellChanges) {
+            const range = sheetById(change.sheetId).getRange(change.address)
+            if (change.after.formula) range.setFormula(change.after.formula)
+            else if (change.after.value === null) range.clearContent()
+            else range.setValue(change.after.value)
+          }
+          for (const format of plan.formatChanges) {
+            applyFormatPatchToRange(sheetById(format.sheetId).getRange(format.range), format.format)
+          }
+          if (before && !scope.dropped) {
+            const adapter = adapterRef.current
+            const restore = (snap: typeof after) => {
+              setRevision(restoreAdapterSnapshot(adapter, snap))
+              queueDemoVisualInstallForActiveSheet()
+              setPreview(null)
+            }
+            pushVisualUndo(runtime, { undo: () => restore(before), redo: () => restore(after) })
+          } else if (!record || scope.dropped) {
+            // Visual-only commits also invalidate redo when recording is off.
+            runtime.univer.__getInjector().get(IUndoRedoService).pushUndoRedo({
+              unitID: workbook.getId(),
+              undoMutations: [],
+              redoMutations: [],
             })
           }
-        }
-        for (const [sheetId, bounds] of chartSyncBounds) queueChartDataSync(sheetId, bounds)
+        })
+      } finally {
+        scope.settle()
       }
-      const revision = prunedRevision ?? receipt.revision
-      setRevision(revision)
+      queueDemoVisualInstallForActiveSheet()
+      // Re-read chart values after cell writes.
+      const chartSyncBounds = new Map<string, CellBounds>()
+      for (const change of plan.cellChanges) {
+        const cell = parseAddress(change.address)
+        const bounds = chartSyncBounds.get(change.sheetId)
+        if (bounds) {
+          bounds.startRow = Math.min(bounds.startRow, cell.row)
+          bounds.endRow = Math.max(bounds.endRow, cell.row)
+          bounds.startColumn = Math.min(bounds.startColumn, cell.column)
+          bounds.endColumn = Math.max(bounds.endColumn, cell.column)
+        } else {
+          chartSyncBounds.set(change.sheetId, {
+            startRow: cell.row,
+            endRow: cell.row,
+            startColumn: cell.column,
+            endColumn: cell.column,
+          })
+        }
+      }
+      for (const [sheetId, bounds] of chartSyncBounds) queueChartDataSync(sheetId, bounds)
+      setRevision(prunedRevision ?? receipt.revision)
       setPreview(null)
-      setMessage(t('appAppliedRevision', { revision }))
+      setMessage(t('aiAutoApplied', { count: opCount }))
       // Patch last assistant message to show inline undo button.
       patchLastAssistant((entry) => ({
         ...entry,
         autoApplied: {
           opCount: (entry.autoApplied?.opCount ?? 0) + opCount,
-          undoSteps: (entry.autoApplied?.undoSteps ?? 0) + (aiEditUndoHistoryEnabled() ? 1 : 0),
+          undoIds: appendAiUndoEntries(entry.autoApplied?.undoIds, scope.entryIds),
         },
       }))
       return Promise.resolve({ ok: true })
@@ -4160,7 +4206,10 @@ export function App({
     }
   }
 
-  async function handleLazyApply(state: LazyWorkbookState): Promise<ApplyOutcome> {
+  async function handleLazyApply(
+    state: LazyWorkbookState,
+    onUndoEntries?: (ids: string[]) => void,
+  ): Promise<ApplyOutcome> {
     const stored = lazyPreviewRef.current
     const runtime = univerRef.current
     if (!stored || !runtime) return { ok: false, reason: t('appApplyTxFailed') }
@@ -4199,6 +4248,7 @@ export function App({
         // In-app AI apply (chat auto-apply, translation view): undo follows
         // the "AI edit undo history" setting.
         aiEdit: true,
+        ...(onUndoEntries && { onUndoEntries }),
         verifyBeforeApply: () => {
           if (lazyPreviewRef.current !== stored || lazyWorkbookRef.current !== state) {
             verified = { ok: false, reason: t('appApplyTxFailed') }
@@ -4289,49 +4339,24 @@ export function App({
     }
   }
 
-  function handleUndo(steps?: number): void {
-    const count =
-      typeof steps === 'number' && Number.isFinite(steps) ? Math.max(1, Math.floor(steps)) : 1
-    const fromAiBatch = typeof steps === 'number'
-    const clearInlineUndo = () => {
-      if (!fromAiBatch) return
-      patchLastAssistant(({ autoApplied: _autoApplied, ...entry }) => entry)
-    }
-    // Mirror ⌘Z: interactive grid edits live on Univer's undo stack even in a
-    // blank in-memory workbook, so drain that stack first; the adapter's
-    // revision history (AI plan applies) is the fallback once it is empty.
-    if (lazyWorkbookRef.current || univerHist.canUndo) {
-      const api = univerRef.current?.univerAPI
-      if (!api) return
-      void (async () => {
-        for (let step = 0; step < count; step += 1) await api.undo()
-        clearInlineUndo()
-      })()
+  function canUndoAiEntries(ids: readonly string[]): boolean {
+    return matchesAiUndoEntries(currentUndoStack(univerRef.current), ids)
+  }
+
+  async function handleUndo(ids?: readonly string[]): Promise<void> {
+    const api = univerRef.current?.univerAPI
+    if (!api) return
+    if (!ids) {
+      await api.undo()
       return
     }
-    try {
-      let receipt = adapterRef.current.undo()
-      for (let step = 1; step < count; step += 1) receipt = adapterRef.current.undo()
-      // Rebuild instead of patching: undo can remove cells and reverse
-      // structural changes, neither of which syncUniver can express.
-      loadSnapshotIntoUniver(
-        univerRef.current,
-        adapterRef.current.getSnapshot(),
-        'new-workbook',
-        'Untitled',
-      )
-      queueDemoVisualInstallForActiveSheet()
-      setRevision(receipt.revision)
-      setPreview(null)
-      setMessage(t('appUndoCommitted', { revision: receipt.revision }))
-      clearInlineUndo()
-    } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : t('appUndoFailed'))
+    if (!canUndoAiEntries(ids)) return
+    for (let i = ids.length - 1; i >= 0; i--) {
+      if (!canUndoAiEntries([ids[i]!])) return
+      await api.undo()
     }
   }
 
-  /// QAT Redo: workbook history via Univer, same path as the app menu's ⇧⌘Z
-  /// (the demo adapter has no redo, matching the menu's behavior).
   function handleRedo(): void {
     void univerRef.current?.univerAPI.redo()
   }
@@ -5187,7 +5212,12 @@ export function App({
       // The shell's own text fields (AI prompt, dialog inputs) keep native
       // text undo; everywhere else ⌘Z means workbook history.
       const active = document.activeElement
-      if (active instanceof HTMLTextAreaElement || active instanceof HTMLInputElement) {
+      if (
+        !isWorkbookHistoryComposer(active) &&
+        (active instanceof HTMLTextAreaElement ||
+          active instanceof HTMLInputElement ||
+          (active instanceof HTMLElement && active.isContentEditable))
+      ) {
         document.execCommand(action)
       } else if (action === 'undo') {
         void univerRef.current?.univerAPI.undo()
@@ -5654,6 +5684,7 @@ export function App({
         onStop={handleStopAgent}
         onNewChat={handleNewChat}
         onUndo={handleUndo}
+        canUndoAiEntries={canUndoAiEntries}
         aiScopeRange={aiScopeChip.range}
         aiScopeColumns={aiScopeChip.columns ?? null}
         aiScopeLocked={aiScopeChip.locked}
@@ -5661,7 +5692,7 @@ export function App({
           setAiScopeDismissed(true)
         }}
         onAiCitation={handleAiCitation}
-        canUndo={univerHist.canUndo || (!lazyWorkbookRef.current && adapterRef.current.canUndo)}
+        canUndo={univerHist.canUndo}
         canRedo={univerHist.canRedo}
         onCommand={handleRibbonCommand}
         presenting={presenting}

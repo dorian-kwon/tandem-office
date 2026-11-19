@@ -1702,14 +1702,21 @@ export function AiPanel({
     const undone = turns.slice(index).reverse()
     setReverting(true)
     void (async () => {
-      let complete = true
-      for (const point of undone) {
-        complete = (await revertTurn(hostRef.current, point.turn)) && complete
+      let reverted = 0
+      try {
+        for (const point of undone) {
+          if (!(await revertTurn(hostRef.current, point.turn))) break
+          reverted++
+        }
+      } catch {
+        // The document may have been closed while the sheet was loading.
+      } finally {
+        if (mountedRef.current) {
+          if (reverted > 0) setTurns((prev) => prev.slice(0, turns.length - reverted))
+          setRollbackNote(reverted !== undone.length)
+          setReverting(false)
+        }
       }
-      if (!mountedRef.current) return
-      setTurns((prev) => prev.slice(0, index))
-      setRollbackNote(!complete)
-      setReverting(false)
     })()
   }
 

@@ -1,3 +1,4 @@
+import { frontmatterInner } from '../markdown/docText'
 import { modelTextOf, redactJson, redactTextBetween } from '../editor/redact'
 import type { Editor, JSONContent } from '@tiptap/core'
 import type { Node as PmNode } from '@tiptap/pm/model'
@@ -288,6 +289,8 @@ function applyOps(editor: Editor, input: unknown, fm?: FrontmatterAccess): ToolE
   const parsed = validateOps(input)
   if ('error' in parsed) return fail(parsed.error, label)
   if (usesBlockIndexes(parsed.ops) && editedExternally(editor)) return fail(STALE_DOC_ERROR, label)
+  const before = editor.state.doc
+  const frontmatterBefore = fm?.read()
   const r = runOps(editor, parsed.ops, { source: 'ai', frontmatter: fm })
   const lines = r.results.map((res, i) =>
     res.ok
@@ -302,7 +305,7 @@ function applyOps(editor: Editor, input: unknown, fm?: FrontmatterAccess): ToolE
   return {
     output: lines.join('\n'),
     isError: failed || undefined,
-    mutated: r.applied > 0,
+    mutated: !before.eq(editor.state.doc) || frontmatterBefore !== fm?.read(),
     summary: opsSummary(parsed.ops, r.applied),
   }
 }
@@ -401,7 +404,8 @@ async function writeDocument(
     )
   }
   const str = (v: unknown) => (v === undefined || v === null ? undefined : String(v))
-  const draft = new DraftLanding(editor, position)
+  const wholeRewrite = position.kind === 'whole' && call.input.replaceDocument === true
+  const draft = new DraftLanding(editor, position, wholeRewrite)
   let result: DocWriteResult
   let rendered: string | null
   try {
@@ -414,6 +418,7 @@ async function writeDocument(
     rendered = draft.finish()
   }
   if (editor.isDestroyed) return fail('the document was closed', label)
+  if (draft.conflicted) return fail(STALE_DOC_ERROR, label)
   if (!result.ok || !result.markdown?.trim()) {
     return fail(
       `The writer produced nothing (${result.error ?? 'no output'}); the document is unchanged. Tell the user briefly and offer to try again.`,
@@ -431,9 +436,7 @@ async function writeDocument(
   // an explicit rewrite replaces everything; text the user typed into a formerly blank
   // document while the draft streamed is kept, the content goes into the draft's slot
   const op: MdOp =
-    position.kind === 'whole' &&
-    !isBlankDoc(editor.state.doc) &&
-    call.input.replaceDocument === true
+    wholeRewrite && !isBlankDoc(editor.state.doc)
       ? {
           op: 'replaceBlocks',
           target: { start: 0, end: editor.state.doc.childCount - 1 },
@@ -470,7 +473,7 @@ export function executeTool(
 
     case 'read_frontmatter': {
       if (!fm) return fail('frontmatter is not available', t('aiToolReadFm'))
-      const inner = fm.read()
+      const inner = frontmatterInner(fm.read())
       return {
         output: inner || '(the document has no frontmatter)',
         mutated: false,

@@ -1,3 +1,5 @@
+import { closeHistory } from '@tiptap/pm/history'
+import { setFrontmatter } from './editor/frontmatter-history'
 import { withEditorAiWork } from '@genoffice/ui'
 import {
   captureMarkdownSource,
@@ -84,7 +86,8 @@ import { PrintPreviewDialog } from './print/PrintPreviewDialog'
 import { diagramSvgToPng, renderDiagram } from './editor/diagrams'
 import type { DiagramLanguage } from './editor/diagrams'
 import type { ExportFormat, SaveMode } from '../shared/ipc'
-import { uiOp } from './editor/ops'
+import { OP_META, uiOp } from './editor/ops'
+import { DRAFT_META } from './ai/doc-writer'
 import { hasRedactionIn } from './editor/Redaction'
 import { appendMarkdownAtEnd, joinNoteAppends } from './note-append'
 
@@ -195,6 +198,7 @@ export default function App() {
   const [slashState, setSlashState] = useState<SlashMenuState | null>(null)
   const [wikiSuggestState, setWikiSuggestState] = useState<WikiSuggestState | null>(null)
   const [fmOpen, setFmOpen] = useState(false)
+  const manualVersionRef = useRef(0)
   const [fmText, setFmText] = useState('')
   // Persisted so a closed AI panel stays closed on next launch (docs/slides parity)
   const [aiOpen, setAiOpen] = useState(() => aiPanelInitiallyOpen('mdapp.showAi'))
@@ -416,6 +420,15 @@ export default function App() {
     content: '',
     autofocus: true,
     editorProps: { attributes: { class: 'doc-editor', spellcheck: String(spellcheck) } },
+    onTransaction: ({ transaction }) => {
+      if (
+        transaction.docChanged &&
+        !transaction.getMeta('uiOnly') &&
+        !transaction.getMeta(DRAFT_META) &&
+        transaction.getMeta(OP_META)?.source !== 'ai'
+      )
+        manualVersionRef.current++
+    },
     // uiOnly transactions (toggle fold state) never reach the file — not dirty
     onUpdate: ({ editor: updated, transaction }) => {
       if (!transaction.getMeta('uiOnly')) markDirty()
@@ -458,6 +471,7 @@ export default function App() {
    */
   const loadFromPath = useCallback(
     (path: string | null, raw: string, modePath: string | null = path) => {
+      manualVersionRef.current++
       const mode = textModeForPath(modePath)
       setTextMode(mode)
       if (sourceApplyTimerRef.current) clearTimeout(sourceApplyTimerRef.current)
@@ -557,6 +571,7 @@ export default function App() {
 
   const onFrontmatterChange = useCallback(
     (inner: string) => {
+      manualVersionRef.current++
       setFmText(inner)
       envelopeRef.current.frontmatter = buildFrontmatterRaw(inner)
       markDirty()
@@ -723,6 +738,7 @@ export default function App() {
   const onSourceChange = useCallback(
     (text: string) => {
       setSourceText(text)
+      manualVersionRef.current++
       pendingSourceRef.current = text
       setDocStats(statsOf(text))
       markDirty()
@@ -1301,32 +1317,52 @@ export default function App() {
     setAiPreset((prev) => ({ text, nonce: (prev?.nonce ?? 0) + 1 }))
   }, [])
 
+  const frontmatterStore = {
+    read: () => envelopeRef.current.frontmatter,
+    write: (raw: string) => {
+      envelopeRef.current.frontmatter = raw
+      const inner = frontmatterInner(raw)
+      setFmText(inner)
+      setFmOpen(inner !== '')
+      markDirty()
+    },
+  }
+
   const aiDeps: MarkdownAiDeps = {
     getEditor: () => editorRef.current,
     // envelopeRef, not fmText state: a write-then-read within one AI run must
     // see the new value before React commits
-    getFrontmatter: () => frontmatterInner(envelopeRef.current.frontmatter),
-    setFrontmatter: (inner) => {
-      onFrontmatterChange(inner)
-      setFmOpen(inner.trim() !== '')
-    },
+    getFrontmatter: frontmatterStore.read,
+    setFrontmatter: frontmatterStore.write,
     // snapshots carry body + the raw frontmatter block (structured, no
     // file-text round-trip) so a rollback also reverts set_frontmatter and
     // an untouched block restores byte-for-byte
-    getSnapshot: () => ({
-      body: editorRef.current ? bodyMarkdown(editorRef.current) : '',
-      frontmatter: envelopeRef.current.frontmatter,
-    }),
+    getManualVersion: () => manualVersionRef.current,
+    getSnapshot: () => {
+      flushSource()
+      return {
+        manualVersion: manualVersionRef.current,
+        body: editorRef.current ? bodyMarkdown(editorRef.current) : '',
+        frontmatter: envelopeRef.current.frontmatter,
+      }
+    },
     restoreSnapshot: (snapshot) => {
       const current = editorRef.current
-      if (!current) return
-      envelopeRef.current.frontmatter = snapshot.frontmatter
-      const inner = frontmatterInner(snapshot.frontmatter)
-      setFmText(inner)
-      setFmOpen(inner !== '')
-      current.commands.setContent(snapshot.body, { contentType: 'markdown' })
+      if (!current || manualVersionRef.current !== snapshot.manualVersion) return false
+      current
+        .chain()
+        .setContent(snapshot.body, { contentType: 'markdown' })
+        .command(({ tr }) => {
+          tr.setMeta(OP_META, { source: 'ai' })
+          closeHistory(tr)
+          setFrontmatter(current, tr, frontmatterStore, snapshot.frontmatter)
+          return true
+        })
+        .run()
+      current.view.dispatch(closeHistory(current.state.tr))
       sourceMapRef.current = buildSourceMap(current, current.state.doc, snapshot.body)
       markDirty()
+      return true
     },
     onRunDone: (mutated) => {
       // AI wrote into a never-saved document → name it from the content and save silently

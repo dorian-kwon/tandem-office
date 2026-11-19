@@ -410,6 +410,11 @@ export function registerSlidesOnlyAiIpc(): void {
         const baseWidthPx = session.opened.deck.size.cx / EMU_PER_PX_96
         const scale = op.fitWidthPx / baseWidthPx
         const toEmu = (px: number) => Math.round((px / scale) * EMU_PER_PX_96)
+        if (
+          sessions.get(e.sender.id) !== session ||
+          session.opened.deck.slides[op.slideIndex] !== slide
+        )
+          return null
         pushHistory(session)
         const el = addPicture(session.opened, slide, {
           bytes: new Uint8Array(buf),
@@ -481,6 +486,11 @@ export function registerSlidesOnlyAiIpc(): void {
           if (!kind) return null
           ext = kind
         }
+        if (
+          sessions.get(e.sender.id) !== session ||
+          session.opened.deck.slides[op.slideIndex] !== slide
+        )
+          return null
         pushHistory(session)
         const ok = replacePictureBytes(
           session.opened,

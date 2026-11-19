@@ -169,6 +169,7 @@ export interface ApplyPlanOptions {
   /** The apply originates from the AI (chat apply, translation view, MCP
    * bridge), not from a ribbon click or dialog. While the "AI edit undo
    * history" setting is off such an apply keeps no undo entry. */
+  onUndoEntries?: (ids: string[]) => void
   aiEdit?: boolean
 }
 
@@ -404,7 +405,12 @@ async function applyChangePlanNow(
   ctx: OpExecutorContext,
   options: ApplyPlanOptions,
 ): Promise<ApplyOutcome> {
-  const aiScope = shouldDropUndoBatch(options) ? createAiUndoScope() : null
+  const dropUndo = shouldDropUndoBatch(options)
+  const aiScope = options.aiEdit
+    ? createAiUndoScope(!dropUndo, () => {
+        if (ctx.lazyWorkbookRef.current !== ctx.state) throw new Error(t('appPreviewOtherWorkbook'))
+      })
+    : null
   // Only facade methods carry the source; the original runtime stays available
   // to listeners and deferred UI work installed by the apply.
   ctx = { ...ctx, workbook: aiScope?.wrap(ctx.workbook) ?? ctx.workbook }
@@ -542,9 +548,10 @@ async function applyChangePlanNow(
       setMessage(options.successMessage ?? t('appAppliedJournaled'))
     }
     undoBatch.settle()
+    if (aiScope) options.onUndoEntries?.(aiScope.entryIds)
     if (dropped()) {
       notices.push(
-        aiScope
+        dropUndo
           ? 'undo history for AI edits is turned off in the settings — the [Undo] button and ⌘Z will not revert this change'
           : 'this change is too large for the undo history — the [Undo] button and ⌘Z will not revert it',
       )
@@ -564,14 +571,14 @@ async function applyChangePlanNow(
   }
 }
 
-/** One structural / layout / range-level op against the live workbook. */
-async function executeOp(op: PlannedOp, run: OpRun): Promise<void> {
-  const { ctx, workbook, sheetById, plannedCellContents, imageData, notices } = run
-  const { runtime, state, lazyWorkbookRef, setMessage, setPendingEdits } = ctx
-  // BeforeCommandExecute gates cancel commands silently; re-check them
-  // here so a gated op fails loud instead of reporting success.
-  const gate = lazyGateFailure(state, op)
-  if (gate) throw new Error(run.userFacing && gate.messageKey ? t(gate.messageKey) : gate.reason)
+/** Grid commands shared by imported files and the in-memory workbook. */
+export function applyGridLayoutOp(
+  workbook: ActiveWorkbook,
+  sheetById: (id: string) => UniverWorksheet,
+  op: PlannedOp,
+  userFacing = false,
+  id?: string,
+): boolean {
   if (op.op === 'insert_rows') sheetById(op.sheetId).insertRowsBefore(op.row - 1, op.count)
   else if (op.op === 'delete_rows') sheetById(op.sheetId).deleteRows(op.row - 1, op.count)
   else if (op.op === 'insert_cols')
@@ -583,14 +590,15 @@ async function executeOp(op: PlannedOp, run: OpRun): Promise<void> {
     // the live list so two quick clicks cannot collide.
     const taken = workbook.getSheets().map((sheet) => sheet.getSheetName())
     const name =
-      run.userFacing && taken.some((existing) => existing.toLowerCase() === op.name.toLowerCase())
+      userFacing && taken.some((existing) => existing.toLowerCase() === op.name.toLowerCase())
         ? nextSheetName(taken)
         : op.name
     workbook.insertSheet(
       name,
-      op.rows !== undefined || op.columns !== undefined
+      id !== undefined || op.rows !== undefined || op.columns !== undefined
         ? {
             sheet: {
+              ...(id !== undefined && { id }),
               ...(op.rows !== undefined ? { rowCount: op.rows } : {}),
               ...(op.columns !== undefined ? { columnCount: op.columns } : {}),
             },
@@ -608,7 +616,23 @@ async function executeOp(op: PlannedOp, run: OpRun): Promise<void> {
     )
   } else if (op.op === 'set_col_width') {
     sheetById(op.sheetId).setColumnWidths(columnIndex(op.column), op.count, Math.round(op.widthPx))
-  } else if (op.op === 'set_rows_hidden') {
+  } else return false
+  return true
+}
+
+/** One structural / layout / range-level op against the live workbook. */
+async function executeOp(op: PlannedOp, run: OpRun): Promise<void> {
+  const { ctx, workbook, sheetById, plannedCellContents, imageData, notices } = run
+  const { runtime, state, lazyWorkbookRef, setMessage, setPendingEdits } = ctx
+  // BeforeCommandExecute gates cancel commands silently; re-check them
+  // here so a gated op fails loud instead of reporting success.
+  const gate = lazyGateFailure(state, op)
+  if (gate) throw new Error(run.userFacing && gate.messageKey ? t(gate.messageKey) : gate.reason)
+  if (applyGridLayoutOp(workbook, sheetById, op, run.userFacing)) {
+    run.markApplied()
+    return
+  }
+  if (op.op === 'set_rows_hidden') {
     if (op.hidden) sheetById(op.sheetId).hideRows(op.row - 1, op.count)
     else sheetById(op.sheetId).showRows(op.row - 1, op.count)
   } else if (op.op === 'set_cols_hidden') {
@@ -1605,9 +1629,11 @@ async function executeOp(op: PlannedOp, run: OpRun): Promise<void> {
         note: op.text,
       })
     }
-  } else {
+  } else if (op.op === 'edit_chart') {
     const edit = await buildAiChartEdit(ctx.visualContext(), state, workbook, op)
     run.commit(() => ctx.chartEditRef.current(op.chartPath, edit))
+  } else {
+    throw new Error(`Unsupported grid operation: ${op.op}`)
   }
   run.markApplied()
 }

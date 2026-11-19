@@ -1076,6 +1076,14 @@ export function AiPanel({
   /** Wall-clock start of the current run, drives the elapsed badge */
   const runStartedAtRef = useRef(0)
   const historyBatchActiveRef = useRef(false)
+  const [availableSnapshots, setAvailableSnapshots] = useState<readonly number[]>([])
+  useEffect(
+    () =>
+      window.slidesApi.onHistoryChanged?.((state) =>
+        setAvailableSnapshots(state.snapshotIds ?? []),
+      ),
+    [],
+  )
   const inputEditedSinceRunRef = useRef(false)
   /** This run's rollback batch — carried onto the QC entry when a QC pass
       follows (mid-turn segments never show the action toolbar) */
@@ -2389,15 +2397,16 @@ export function AiPanel({
           lines.push(tGlobal('aiQcPageSkipped', { n: page + 1 }))
         } else if (result.edited && result.postIssues > result.preIssues) {
           // The fix made the deterministic audit worse — undo this page's batch
-          if (typeof batchId === 'number') {
-            const restored = await window.slidesApi.aiSnapshotRestore(
-              batchId,
-              qcRequest ? { recordUndo: false } : undefined,
-            )
-            if (restored)
-              applyDeckRef.current(restored, Math.min(currentRef.current, restored.length - 1))
-          }
-          lines.push(tGlobal('aiQcPageReverted', { n: page + 1 }))
+          const restored =
+            typeof batchId === 'number'
+              ? await window.slidesApi.aiSnapshotRestore(batchId, {
+                  ...(qcRequest?.dropUndo && { recordUndo: false }),
+                  qcRollback: true,
+                })
+              : null
+          if (restored)
+            applyDeckRef.current(restored, Math.min(currentRef.current, restored.length - 1))
+          lines.push(tGlobal(restored ? 'aiQcPageReverted' : 'aiQcPageSkipped', { n: page + 1 }))
         } else if (result.edited) {
           const summary =
             result.reply && result.reply.toUpperCase() !== 'OK'
@@ -2406,7 +2415,7 @@ export function AiPanel({
           lines.push(tGlobal('aiQcPageFixed', { n: page + 1, summary }))
           if (typeof batchId === 'number') {
             // an internal rollback point is never offered to the person: free it
-            if (qcRequest) void window.slidesApi.aiSnapshotRelease(batchId)
+            if (qcRequest?.dropUndo) void window.slidesApi.aiSnapshotRelease(batchId)
             else if (qcSnapshotId == null) qcSnapshotId = batchId
           }
         } else {
@@ -2883,17 +2892,19 @@ export function AiPanel({
                       </svg>
                     </button>
                   )}
-                  {entry.snapshotId != null && undoHistoryOn && (
-                    <>
-                      {/* hairline between reply actions (icons) and the document action (icon+label);
+                  {entry.snapshotId != null &&
+                    undoHistoryOn &&
+                    availableSnapshots.includes(entry.snapshotId) && (
+                      <>
+                        {/* hairline between reply actions (icons) and the document action (icon+label);
                           CSS shows it only when an icon button actually precedes it */}
-                      <span className="ai-rollback-sep" aria-hidden />
-                      <RollbackButton
-                        disabled={busy}
-                        onClick={() => void rollback(entry.snapshotId!)}
-                      />
-                    </>
-                  )}
+                        <span className="ai-rollback-sep" aria-hidden />
+                        <RollbackButton
+                          disabled={busy}
+                          onClick={() => void rollback(entry.snapshotId!)}
+                        />
+                      </>
+                    )}
                 </div>
               )}
               {clarifyAnswers

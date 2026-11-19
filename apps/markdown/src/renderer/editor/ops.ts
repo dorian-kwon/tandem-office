@@ -1,11 +1,14 @@
 import type { Editor, ChainedCommands, SingleCommands } from '@tiptap/core'
+import { closeHistory } from '@tiptap/pm/history'
 import type { Node as PmNode } from '@tiptap/pm/model'
 import { NodeSelection, TextSelection, type Transaction } from '@tiptap/pm/state'
 import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
 import { checkPlaceholders, collectPlaceholders, modelTextOf } from './redact'
 import type { Mapping } from '@tiptap/pm/transform'
 import { createTable } from '@tiptap/extension-table'
-import { stripLegacyFencedDivs } from '../markdown/docText'
+import { setFrontmatter, type FrontmatterAccess } from './frontmatter-history'
+export type { FrontmatterAccess } from './frontmatter-history'
+import { buildFrontmatterRaw, stripLegacyFencedDivs } from '../markdown/docText'
 import type { StringKey } from '../i18n/locale'
 
 /**
@@ -63,13 +66,6 @@ export type MdOp =
   | { op: 'setFrontmatter'; yaml: string }
 
 export type OpName = MdOp['op']
-
-/** raw-text access to the YAML properties block (inner text, no --- fences) */
-export interface FrontmatterAccess {
-  read(): string
-  /** replace the whole inner YAML; empty string removes the block */
-  write(inner: string): void
-}
 
 export interface OpsContext {
   source: 'ai' | 'ui'
@@ -561,7 +557,12 @@ function resolveAnchor(exec: Exec, after: InsertAnchor): { pos: number; replace?
  * valid.
  */
 function applyHistoryPolicy(exec: Exec, tr: Transaction): void {
-  if (exec.ctx.source === 'ai' && !aiEditUndoHistoryEnabled()) tr.setMeta('addToHistory', false)
+  if (exec.ctx.source !== 'ai') return
+  if (!aiEditUndoHistoryEnabled()) tr.setMeta('addToHistory', false)
+  // ProseMirror groups a composition even across disjoint ranges. DOM composition
+  // IDs are positive; each synchronous tool batch gets its own negative ID.
+  tr.setMeta('composition', -exec.meta.batch)
+  if (exec.mappings.length === 0) closeHistory(tr)
 }
 
 /** invert a dispatched transaction step by step (highlights inside it fall away with the content) */
@@ -1006,7 +1007,14 @@ function execOp(exec: Exec, op: MdOp): OpResult {
     case 'setFrontmatter': {
       if (!exec.ctx.frontmatter) fail('frontmatter is not available')
       const inner = op.yaml
-      exec.ctx.frontmatter.write(inner.trim() ? inner.replace(/\n+$/, '') : '')
+      const tr = editor.state.tr
+      setFrontmatter(
+        editor,
+        tr,
+        exec.ctx.frontmatter,
+        inner.trim() ? buildFrontmatterRaw(inner) : '',
+      )
+      if (tr.steps.length > 0) dispatch(exec, tr)
       return { ok: true, message: inner.trim() ? 'Frontmatter updated.' : 'Frontmatter removed.' }
     }
   }
@@ -1051,6 +1059,8 @@ export function runOps(editor: Editor, ops: MdOp[], ctx: OpsContext): RunOpsResu
     }
   } finally {
     editor.off('transaction', onTransaction)
+    if (ctx.source === 'ai' && exec.mappings.length > 0)
+      editor.view.dispatch(closeHistory(editor.state.tr))
   }
   const applied = results.filter((r) => r.ok).length
   return {

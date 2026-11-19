@@ -5,8 +5,8 @@ import { aiHistoryBatchRequest } from '../src/renderer/history-batch'
 
 describe('aiHistoryBatchRequest', () => {
   it('is the ordinary collapsing batch while AI edit undo history is on', () => {
-    expect(aiHistoryBatchRequest(true)).toBeUndefined()
-    expect(aiHistoryBatchRequest(true, true)).toBeUndefined()
+    expect(aiHistoryBatchRequest(true)).toEqual({ aiRun: true })
+    expect(aiHistoryBatchRequest(true, true)).toEqual({ aiRun: true })
   })
 
   it('asks for a drop batch while it is off', () => {

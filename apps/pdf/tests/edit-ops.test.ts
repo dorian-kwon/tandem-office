@@ -1,3 +1,4 @@
+import { rebaseEditHistory } from '../src/renderer/edit-ops/history'
 import { describe, expect, it } from 'vitest'
 import {
   BUCKETS,
@@ -820,5 +821,36 @@ describe('link drawings', () => {
     )
     expect(plan(link({ destPage: 0 })).failures[0]?.error).toMatch(/1-based/)
     expect(plan(link({ destPage: 1.5 })).failures[0]?.error).toMatch(/1-based/)
+  })
+})
+
+describe('undo after unrecorded AI batches', () => {
+  it('carries AI annotations into past states while preserving later manual undo and redo', () => {
+    const start = empty()
+    const human = run(start, [{ op: 'addMarkup', id: 'human', markup: markup() }]).state
+    const { plan, state } = run(human, [
+      { op: 'addMarkup', id: 'ai', markup: markup() },
+      { op: 'setMetadata', metadata: { title: 'AI' } },
+    ])
+    const history = rebaseEditHistory([start], human, state, plan, () => ctx())
+    expect(history[0]!.markups.map((m) => m.id)).toEqual(['ai'])
+    expect(history[0]!.markups[0]).toBe(state.markups[1])
+    expect(history[0]!.metadata).toBe(state.metadata)
+    expect(state.markups.map((m) => m.id)).toEqual(['human', 'ai'])
+  })
+
+  it('keeps safely reachable edits when an annotation needs a manually inserted page', () => {
+    const start = empty()
+    const hasPage = run(start, [
+      { op: 'insertBlankPage', after: 1, pageIndex: 3, width: 100, height: 200 },
+    ]).state
+    const human = run(hasPage, [{ op: 'setMetadata', metadata: { title: 'human' } }]).state
+    const context = (s: EditSnapshot) => ctx({ pageCount: 3 + s.blankPages.length })
+    const added = run(human, [{ op: 'addMarkup', markup: markup(3) }], context(human))
+    const history = rebaseEditHistory([start, hasPage], human, added.state, added.plan, context)
+    expect(history).toHaveLength(1)
+    expect(history[0]!.metadata).toBeNull()
+    expect(history[0]!.markups).toBe(added.state.markups)
+    expect(history[0]!.blankPages).toHaveLength(1)
   })
 })

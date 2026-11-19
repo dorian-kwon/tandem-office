@@ -1,11 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
-import {
-  defaultAiSettings,
-  type AiSettings,
-  type AiStreamRequest,
-} from '@genoffice/ai-provider'
+import { defaultAiSettings, type AiSettings, type AiStreamRequest } from '@genoffice/ai-provider'
 import type { SubscriptionStatusMap } from '@genoffice/ai-provider/browser'
 import { DOC_ATTACH_BRIDGE_KEY } from '@genoffice/electron-utils/doc-attach-channels'
 import { AiPanel, type HtmlAiDeps } from '../src/renderer/ai/AiPanel'
@@ -75,8 +71,8 @@ function fakeDeps(): HtmlAiDeps {
       applyOps: () => ({ ok: true, ranges: [] }),
       replaceAll: () => undefined,
     },
-    getSnapshot: () => ({ text: DOC }),
-    restoreSnapshot: () => undefined,
+    getSnapshot: () => ({ manualVersion: 0, text: DOC }),
+    restoreSnapshot: () => true,
     onPrompt: () => undefined,
     onRunDone: () => undefined,
     clearHighlights: () => undefined,

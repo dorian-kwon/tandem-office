@@ -1,12 +1,17 @@
 // @vitest-environment jsdom
-import { IUniverInstanceService, LogLevel, Univer } from '@univerjs/core'
+import { IUniverInstanceService, LocaleType, LogLevel, Univer } from '@univerjs/core'
 import { UniverSheetsPlugin } from '@univerjs/sheets'
 import '@univerjs/sheets/facade'
 import { FUniver } from '@univerjs/core/lib/facade'
 import { describe, expect, it } from 'vitest'
 
 import { loadSnapshotIntoUniver, loadWorkbookSkeleton } from '../src/renderer/univer-sync'
-import type { UniverRuntime } from '../src/renderer/univer-state'
+import { createAiUndoScope, matchesAiUndoEntries } from '../src/renderer/ai-undo-scope'
+import { currentUndoStack } from '../src/renderer/undo-carry'
+import {
+  installJournalSuppressionUndoFilter,
+  type UniverRuntime,
+} from '../src/renderer/univer-state'
 import type { WorkbookFile } from '../src/shared/desktop-api'
 
 /**
@@ -53,7 +58,7 @@ const FILE: WorkbookFile = {
 } as unknown as WorkbookFile
 
 function bootRealUniver(): UniverRuntime {
-  const univer = new Univer({ logLevel: LogLevel.SILENT })
+  const univer = new Univer({ logLevel: LogLevel.SILENT, locale: LocaleType.EN_US, locales: {} })
   univer.registerPlugin(UniverSheetsPlugin)
   const univerAPI = FUniver.newAPI(univer)
   return { univer, univerAPI } as unknown as UniverRuntime
@@ -94,4 +99,40 @@ describe('a workbook load leaves its unit focused', () => {
     const instances = runtime.univer.__getInjector().get(IUniverInstanceService)
     expect(instances.getFocusedUnit()?.getUnitId()).toBe('new-workbook')
   })
+})
+
+it('undoes a repeated AI cell edit as one step among manual edits and invalidates redo on a dropped edit', async () => {
+  installJournalSuppressionUndoFilter()
+  const runtime = bootRealUniver()
+  const empty = { revision: 0, sheets: [{ id: 's', name: 'Sheet1', cells: {} }] }
+  loadSnapshotIntoUniver(runtime, empty, 'wb', 'Untitled')
+  const api = runtime.univerAPI
+  const cell = api.getActiveWorkbook()!.getActiveSheet().getRange('A1')
+  cell.setValue('manual')
+  const scope = createAiUndoScope(true)
+  const aiCell = scope.wrap(cell)
+  aiCell.setValue('first')
+  aiCell.setValue('second')
+  scope.settle()
+  const ids = scope.entryIds
+  expect(matchesAiUndoEntries(currentUndoStack(runtime), ids)).toBe(true)
+  cell.setValue('later')
+  expect(matchesAiUndoEntries(currentUndoStack(runtime), ids)).toBe(false)
+  await api.undo()
+  expect(cell.getValue()).toBe('second')
+  await api.undo()
+  expect(cell.getValue()).toBe('manual')
+  await api.redo()
+  expect(cell.getValue()).toBe('second')
+  await api.redo()
+  expect(cell.getValue()).toBe('later')
+  await api.undo()
+  const dropped = createAiUndoScope()
+  dropped.wrap(cell).setValue('unrecorded')
+  dropped.settle()
+  await api.redo()
+  expect(cell.getValue()).toBe('unrecorded')
+  loadSnapshotIntoUniver(runtime, empty, 'wb', 'Untitled')
+  expect(matchesAiUndoEntries(currentUndoStack(runtime), ids)).toBe(false)
+  expect(currentUndoStack(runtime)).toHaveLength(0)
 })

@@ -175,6 +175,7 @@ import {
   BORDER_COMMAND_TYPES,
   CLOSURE_MAX_CELLS,
   journalSuppression,
+  aiUndoSource,
   lazySheetScreenExtent,
   loadAutoHeightSuppression,
   lazyFileSheetId,
@@ -221,22 +222,6 @@ function focusCreatedUnit(runtime: UniverRuntime, unitId: string): void {
 
 export const MINIMUM_SHEET_COLUMN_COUNT = 26
 
-export function syncUniver(runtime: UniverRuntime | null, snapshot: WorkbookSnapshot): void {
-  const workbook = runtime?.univerAPI.getActiveWorkbook()
-  if (!workbook) return
-  for (const sheet of snapshot.sheets) {
-    const worksheet = workbook.getSheetBySheetId(sheet.id)
-    if (!worksheet) continue
-    worksheet.setName(sheet.name)
-    for (const [address, cell] of Object.entries(sheet.cells)) {
-      const range = worksheet.getRange(address)
-      if (cell.formula) range.setFormula(cell.formula)
-      else if (cell.value === null) range.clearContent()
-      else range.setValue(cell.value)
-    }
-  }
-}
-
 export function loadSnapshotIntoUniver(
   runtime: UniverRuntime | null,
   snapshot: WorkbookSnapshot,
@@ -245,8 +230,7 @@ export function loadSnapshotIntoUniver(
 ): void {
   if (!runtime) return
   // A rebuild is a load, not an edit: suppress undo entries so the fresh
-  // demo workbook starts with an empty stack (same convention as file opens)
-  // and the QAT undo falls through to the adapter's revision history.
+  // demo workbook starts with an empty stack (same convention as file opens).
   journalSuppression.active = true
   try {
     loadSnapshotIntoUniverInner(runtime, snapshot, workbookId, workbookName)
@@ -267,8 +251,7 @@ function loadSnapshotIntoUniverInner(
     runtime.univerAPI.disposeUnit(activeWorkbook.getId())
   }
   // Rebuilds reuse the same unitId ('new-workbook'): drop the previous grid's
-  // undo steps so ⌘Z falls through to the adapter's revision history instead
-  // of replaying stale mutations onto the rebuilt content.
+  // undo steps so ⌘Z never replays stale mutations onto a new workbook.
   clearUnitUndoHistory(runtime, workbookId)
 
   runtime.univerAPI.createWorkbook({
@@ -2152,6 +2135,9 @@ export function attachVisualUndoToLastStep(
   /// when the top is unchanged the step gets its own standalone entry instead
   notThisElement?: unknown,
 ): void {
+  // The active AI scope owns grouping and may have discarded the grid
+  // command. Never append a shadow operation to an earlier manual entry.
+  if (aiUndoSource.current) return pushVisualUndo(runtime, step)
   const unitId = runtime.univerAPI.getActiveWorkbook()?.getId()
   if (!unitId) return
   const injector = (
@@ -2235,6 +2221,14 @@ export function pushVisualUndo(runtime: UniverRuntime, step: VisualUndoStep): vo
       __getInjector(): { get<T>(token: unknown): T }
     }
   ).__getInjector()
+  if (aiUndoSource.current?.discarding()) {
+    runtime.univer.__getInjector().get(IUndoRedoService).pushUndoRedo({
+      unitID: unitId,
+      undoMutations: [],
+      redoMutations: [],
+    })
+    return
+  }
   ensureVisualUndoCommand(injector, runtime)
   const token = registerVisualUndoStep(step)
   injector

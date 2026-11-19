@@ -267,7 +267,8 @@ export interface AiChatMessage {
   /** the run stopped because its connection cannot go on — render the blocked notice */
   readonly blocked?: AiBlockedRun | undefined
   /** Set when this message reflects an auto-applied plan; renders an inline [Undo] button. */
-  readonly autoApplied?: { readonly opCount: number; readonly undoSteps: number } | undefined
+  readonly autoApplied?:
+    { readonly opCount: number; readonly undoIds?: readonly string[] } | undefined
   /** attachments consumed from the composer by this user message (read-only echo chips) */
   readonly attachments?: readonly AttachmentMeta[] | undefined
   /** the range this user message targeted, frozen at send */
@@ -373,6 +374,7 @@ export function AiChatPanel({
   onStop,
   onNewChat,
   onUndo,
+  canUndoAiEntries,
   scopeRange,
   scopeColumns,
   scopeLocked,
@@ -440,7 +442,8 @@ export function AiChatPanel({
   ) => boolean
   readonly onStop: () => void
   readonly onNewChat: () => void
-  readonly onUndo: (steps: number) => void
+  readonly onUndo: (ids: readonly string[]) => void
+  readonly canUndoAiEntries: (ids: readonly string[]) => boolean
   /** A1 notation of the selected range or explicitly requested single cell;
    *  dismissing the chip clears it until the next selection or explicit request. */
   readonly scopeRange: string | null
@@ -459,6 +462,7 @@ export function AiChatPanel({
   readonly project?: AiPanelProject | undefined
 }): React.JSX.Element {
   const undoHistoryOn = useAiPanelPrefs().aiEditUndoHistory
+  const [sentComposer, setSentComposer] = useState(false)
   const { t, lang } = useI18n()
   // A reply that stopped because its connection cannot go on: the queue is paused, so the next
   // message does not run into the same wall. Declared ahead of the queue so that it runs before
@@ -701,7 +705,10 @@ export function AiChatPanel({
     // while nothing can run the send is answered by the connect prompt or the first-use
     // notice instead (see the send gate in App.tsx); the draft stays in the composer
     skills.withSkills(prompt.trim(), (skillUse) =>
-      onSend(undefined, undefined, undefined, skillUse, () => skillsRef.current.consume(skillUse)),
+      onSend(undefined, undefined, undefined, skillUse, () => {
+        setSentComposer(true)
+        skillsRef.current.consume(skillUse)
+      }),
     )
   }
 
@@ -926,18 +933,17 @@ export function AiChatPanel({
                     <span className="ai-auto-applied-text">
                       {t('aiAutoApplied', { count: entry.autoApplied.opCount })}
                     </span>
-                    {/* undoSteps 0 = the batch exceeded the undo budget and
-                        kept no stack entry; a forced 1-step undo would revert
-                        the user's own previous action instead. */}
-                    {undoHistoryOn && (entry.autoApplied.undoSteps ?? 1) > 0 && (
-                      <button
-                        className="ai-undo-btn"
-                        onClick={() => onUndo(Math.max(1, entry.autoApplied?.undoSteps ?? 1))}
-                        data-tip={t('aiUndoTitle')}
-                      >
-                        {t('aiUndo')}
-                      </button>
-                    )}
+                    {undoHistoryOn &&
+                      entry.autoApplied.undoIds &&
+                      canUndoAiEntries(entry.autoApplied.undoIds) && (
+                        <button
+                          className="ai-undo-btn"
+                          onClick={() => onUndo(entry.autoApplied!.undoIds!)}
+                          data-tip={t('aiUndoTitle')}
+                        >
+                          {t('aiUndo')}
+                        </button>
+                      )}
                   </div>
                 )}
               </>
@@ -1011,7 +1017,10 @@ export function AiChatPanel({
         )}
       </div>
 
-      <div className="ai-composer">
+      <div
+        className="ai-composer"
+        data-workbook-history-ready={sentComposer && !aiBusy && !prompt && undoHistoryOn}
+      >
         {subscription.noticeDue && (
           <AiFirstConnectionNotice
             lang={lang}
@@ -1189,7 +1198,10 @@ export function AiChatPanel({
           }
           footerBelow={project?.picker}
           textareaRef={inputRef}
-          onChange={onPromptChange}
+          onChange={(value) => {
+            setSentComposer(false)
+            onPromptChange(value)
+          }}
           onSend={send}
           skills={skills.composer}
           docs={docMention}

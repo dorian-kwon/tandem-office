@@ -1,5 +1,9 @@
+import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
 import type { Editor } from '@tiptap/core'
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
+import { rollbackCheckpoint, withAiEdit } from './ai-history-gate'
+import { closeHistory } from '@tiptap/pm/history'
+import { TRACK_IGNORE } from '../editor/revisions'
 import { TABLE_TRAILING_SKIP } from '../editor/extensions'
 
 /**
@@ -10,16 +14,38 @@ import { TABLE_TRAILING_SKIP } from '../editor/extensions'
  * reads several times before editing no longer copies the whole document each
  * time.
  */
-export function captureRollbackSnapshot(editor: Editor): ProseMirrorNode {
-  return editor.state.doc
+export interface RollbackSnapshot {
+  doc: ProseMirrorNode
+  checkpoint: object | undefined
 }
 
-/** Put the document back to a roll-back point. */
-export function restoreRollbackSnapshot(editor: Editor, snapshot: ProseMirrorNode): void {
-  editor
-    .chain()
-    .setMeta(TABLE_TRAILING_SKIP, true)
-    // a snapshot from an editor instance since replaced goes through JSON into this schema
-    .setContent(snapshot.type.schema === editor.schema ? snapshot : snapshot.toJSON())
-    .run()
+export function captureRollbackSnapshot(editor: Editor): RollbackSnapshot {
+  return { doc: editor.state.doc, checkpoint: rollbackCheckpoint(editor) }
+}
+
+export function canRestoreRollbackSnapshot(editor: Editor, snapshot: RollbackSnapshot): boolean {
+  return (
+    aiEditUndoHistoryEnabled() &&
+    snapshot.doc !== editor.state.doc &&
+    snapshot.checkpoint !== undefined &&
+    snapshot.checkpoint === rollbackCheckpoint(editor)
+  )
+}
+
+/** Recheck at dispatch time: an edit can arrive after the button was rendered. */
+export function restoreRollbackSnapshot(editor: Editor, snapshot: RollbackSnapshot): boolean {
+  if (!canRestoreRollbackSnapshot(editor, snapshot)) return false
+  withAiEdit(() =>
+    editor
+      .chain()
+      .command(({ tr }) => {
+        closeHistory(tr)
+        return true
+      })
+      .setMeta(TRACK_IGNORE, true)
+      .setMeta(TABLE_TRAILING_SKIP, true)
+      .setContent(snapshot.doc)
+      .run(),
+  )
+  return editor.state.doc.eq(snapshot.doc)
 }

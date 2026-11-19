@@ -2,6 +2,7 @@ import { acquireEditorAiWork } from '@genoffice/ui'
 import type { Editor } from '@tiptap/react'
 import { BLANK_BULLET_NUM_ID, BLANK_ORDERED_NUM_ID } from '@genoffice/docx-engine'
 import type { McpCommandMessage, McpEditorCommand } from '../shared/ipc'
+import { aiEditor } from './ai/ai-history-gate'
 import { executeTool, markDocSeen } from './ai/tools'
 import { findNumId, type NumIds } from './ai/protocol'
 import { isPhasedContentPending, waitForFullContent } from './phased-content'
@@ -98,8 +99,8 @@ async function runCommand(
       throw new Error('the document changed while loading')
     }
   }
-  const editor = ctx.editor
-  if (!editor || !ctx.doc) throw new Error('the document is not ready')
+  if (!ctx.editor || !ctx.doc) throw new Error('the document is not ready')
+  const editor = aiEditor(ctx.editor, 'mcp')
 
   switch (command) {
     case 'insert_content': {

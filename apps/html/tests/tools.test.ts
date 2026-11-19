@@ -332,6 +332,20 @@ describe('generation flow tools', () => {
     expect(spec?.context).not.toContain('[object Object]')
   })
 
+  it('keeps source edits made while a whole-page write was streaming', async () => {
+    const doc = fakeAccess(DOC)
+    const core = createHtmlSkillCore(doc.access)
+    core.buildContext()
+    doc.access.writePage = async () => {
+      doc.userTypes(DOC + '<!-- my edit -->')
+      return { ok: true, html: '<p>replacement</p>' }
+    }
+    const result = await core.executeTool(call('write_document', { plan: 'rewrite' }))
+    expect(result.isError).toBe(true)
+    expect(result.mutated).toBeFalsy()
+    expect(doc.text).toBe(DOC + '<!-- my edit -->')
+  })
+
   it('plan_page reports a failed or partial page write', async () => {
     const doc = fakeAccess('')
     doc.access.confirmBrief = async (brief) => ({ kind: 'confirmed', brief })

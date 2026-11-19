@@ -80,8 +80,13 @@ import type {
 } from '../../shared/ipc'
 import { createSelectionPreviewReader } from './selection-preview'
 import { ATTACHMENT_IMAGE_EXTS } from '../../shared/ipc'
-import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
-import { captureRollbackSnapshot, restoreRollbackSnapshot } from './rollback-snapshot'
+import { withAiEdit } from './ai-history-gate'
+import {
+  canRestoreRollbackSnapshot,
+  captureRollbackSnapshot,
+  restoreRollbackSnapshot,
+  type RollbackSnapshot,
+} from './rollback-snapshot'
 import { findNumId, type AiProfile, type NumIds } from './protocol'
 import { TRANSLATION_PAST_TOOL_OUTPUT_LIMITS } from './translation-profile'
 import { DOC_NAV_SCHEME, navigateToBlock, parseDocNavHref } from './doc-nav'
@@ -243,7 +248,7 @@ interface ChatEntry {
    * the persisted transcript keeps the tool call, so a reopened file can regenerate) */
   mindmap?: MindMapTreeNode
   /** document state before this turn's first edit — rendered as an inline roll-back action */
-  snapshot?: ProseMirrorNode
+  snapshot?: RollbackSnapshot
   /** attachments consumed from the composer by this user message (read-only echo chips) */
   attachments?: AttachmentMeta[]
   /** the selection this user message targeted, frozen at send */
@@ -945,7 +950,8 @@ export function AiPanel({
     })
     if (silent) tr = tr.setMeta('addToHistory', false)
     if (touched) {
-      view.dispatch(tr)
+      if (silent) withAiEdit(() => view.dispatch(tr))
+      else view.dispatch(tr)
       // AI-pipeline housekeeping, not a user edit: keep the freshness baseline current
       markDocSeen(editorRef.current)
     }
@@ -954,7 +960,7 @@ export function AiPanel({
   const instructionRef = useRef('')
   /** document state before the run's first edit — attached to the turn's final
       segment at run end (mid-turn segments never show the action toolbar) */
-  const runSnapshotRef = useRef<ProseMirrorNode | null>(null)
+  const runSnapshotRef = useRef<RollbackSnapshot | null>(null)
   /** last sent instruction, for one-click retry */
   const lastInstructionRef = useRef('')
   /** Tool activity of the whole run (with args/output, accumulated across turns) — for full
@@ -1227,13 +1233,13 @@ export function AiPanel({
 
   /** the tool and prompt set of the current run, decided when it starts */
   const aiProfileRef = useRef<AiProfile>('normal')
-  const loopRef = useRef<AgentLoop<ProseMirrorNode> | null>(null)
+  const loopRef = useRef<AgentLoop<RollbackSnapshot | undefined> | null>(null)
   if (!loopRef.current) {
     const numIds = (): NumIds => ({
       bullet: findNumId(blocksRef.current, 'bullet') ?? numIdFallbackRef.current?.bullet ?? null,
       ordered: findNumId(blocksRef.current, 'ordered') ?? numIdFallbackRef.current?.ordered ?? null,
     })
-    loopRef.current = new AgentLoop<ProseMirrorNode>({
+    loopRef.current = new AgentLoop<RollbackSnapshot | undefined>({
       transport: transportRef.current,
       systemSuffix: () =>
         aiLangDirective() +
@@ -1314,11 +1320,8 @@ export function AiPanel({
         }),
       ]),
       // no roll-back point (and so no [Roll back] button) while AI edit undo history is off
-      // (the loop types the snapshot as a node; an absent one only skips `snapshotBefore`)
       captureSnapshot: () =>
-        (aiEditUndoHistoryEnabled()
-          ? captureRollbackSnapshot(editorRef.current)
-          : undefined) as ProseMirrorNode,
+        aiEditUndoHistoryEnabled() ? captureRollbackSnapshot(editorRef.current) : undefined,
       events: runStatus.wrap({
         onText: (text) => queueAssistantText(text),
         onToolStart: (call) => {
@@ -1903,8 +1906,8 @@ export function AiPanel({
     )
   }, [undoHistoryOn])
 
-  const rollback = (entryIdx: number, snapshot: ProseMirrorNode) => {
-    restoreRollbackSnapshot(editor, snapshot)
+  const rollback = (entryIdx: number, snapshot: RollbackSnapshot) => {
+    if (!restoreRollbackSnapshot(editor, snapshot)) return
     // The document rewound to before this turn, so this and every later
     // rollback point now describe discarded futures
     setChat((prev) =>
@@ -2258,17 +2261,19 @@ export function AiPanel({
                       </svg>
                     </button>
                   )}
-                  {entry.snapshot && undoHistoryOn && (
-                    <>
-                      {/* hairline between reply actions (icons) and the document action (icon+label);
+                  {entry.snapshot &&
+                    undoHistoryOn &&
+                    canRestoreRollbackSnapshot(editor, entry.snapshot) && (
+                      <>
+                        {/* hairline between reply actions (icons) and the document action (icon+label);
                           CSS shows it only when an icon button actually precedes it */}
-                      <span className="ai-rollback-sep" aria-hidden />
-                      <RollbackButton
-                        disabled={busy}
-                        onClick={() => rollback(i, entry.snapshot!)}
-                      />
-                    </>
-                  )}
+                        <span className="ai-rollback-sep" aria-hidden />
+                        <RollbackButton
+                          disabled={busy}
+                          onClick={() => rollback(i, entry.snapshot!)}
+                        />
+                      </>
+                    )}
                 </div>
               )}
               {entry.turnLimit && isLast && !busy && (

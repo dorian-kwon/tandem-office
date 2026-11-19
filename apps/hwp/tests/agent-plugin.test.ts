@@ -22,6 +22,7 @@ function fakeEditor(
     fields: fields.map(([name, value, fieldType = 'clickhere']) => ({ name, value, fieldType })),
   }
   const history: (typeof state)[] = []
+  let supplyHistory: ((services: unknown) => void) | undefined
   const listeners: (() => void)[] = []
   const emit = () => listeners.forEach((listener) => listener())
   const copy = () => structuredClone(state)
@@ -107,8 +108,14 @@ function fakeEditor(
     },
     events: { on: (_name: string, handler: () => void) => listeners.push(handler) },
     automation: {
-      // the editor's undo; other commands (the plugin's own) do nothing here
+      registerCommand(command: { id: string; execute: (services: unknown) => void }) {
+        if (command.id === 'ext:ieum-ai-history') supplyHistory = command.execute
+      },
       execute: (command: string) => {
+        if (command === 'ext:ieum-ai-history') {
+          supplyHistory?.({ getInputHandler: () => ({ history: { undoStack: history } }) })
+          return { ok: true }
+        }
         if (command !== 'edit:undo') return null
         const before = history.pop()
         if (!before) return { ok: false }
@@ -130,6 +137,7 @@ function fakeEditor(
       emit()
     },
     steps: () => history.length,
+    evictOldestSnapshot: () => history.shift(),
   }
 }
 
@@ -307,6 +315,33 @@ describe('form fields', () => {
 })
 
 describe('taking a run back', () => {
+  it('undoes the AI run only when all its snapshots remain at the top', () => {
+    const editor = fakeEditor(['one two three'])
+    const revision = editor.plugin.foreignChanges()
+    const change = (from: string, to: string, run: string) =>
+      editor.plugin.invokeAi('replaceText', [from, to], true, run)
+    change('one', '1', 'first')
+    change('two', '2', 'second')
+    change('three', '3', 'second')
+    expect(editor.plugin.undo(2, revision, 'first')).toMatchObject({ ok: false, undone: 0 })
+    expect(editor.plugin.undo(2, revision, 'second')).toMatchObject({ ok: true, undone: 2 })
+    expect(editor.text()).toBe('1 two three')
+    // A change from the format-check panel calls the plugin directly.
+    editor.plugin.replaceText('two', 'manual')
+    expect(editor.plugin.undo(1, revision, 'first')).toMatchObject({ ok: false, undone: 0 })
+    expect(editor.text()).toBe('1 manual three')
+  })
+
+  it('leaves a partly evicted AI run wholly in place', () => {
+    const editor = fakeEditor(['one two'])
+    const revision = editor.plugin.foreignChanges()
+    editor.plugin.invokeAi('replaceText', ['one', '1'], true, 'run')
+    editor.plugin.invokeAi('replaceText', ['two', '2'], true, 'run')
+    editor.evictOldestSnapshot()
+    expect(editor.plugin.undo(2, revision, 'run')).toMatchObject({ ok: false, undone: 0 })
+    expect(editor.text()).toBe('1 2')
+  })
+
   it('undoes exactly the steps of the run', () => {
     const editor = fakeEditor(['하나 둘 셋'])
     const before = editor.plugin.foreignChanges()

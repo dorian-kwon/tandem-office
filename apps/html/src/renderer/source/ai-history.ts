@@ -1,3 +1,4 @@
+import { isolateHistory } from '@codemirror/commands'
 import { Transaction, type Annotation } from '@codemirror/state'
 import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
 import { External } from './cm-setup'
@@ -12,7 +13,7 @@ import { External } from './cm-setup'
  * earlier edits stay undoable.
  */
 export function sourceEditAnnotations(highlight: boolean): Annotation<unknown>[] {
-  const annotations: Annotation<unknown>[] = [External.of(true)]
+  const annotations: Annotation<unknown>[] = [External.of(true), isolateHistory.of('full')]
   if (highlight && !aiEditUndoHistoryEnabled()) {
     annotations.push(Transaction.addToHistory.of(false))
   }

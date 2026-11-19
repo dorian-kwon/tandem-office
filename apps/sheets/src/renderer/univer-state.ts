@@ -6,7 +6,13 @@
  */
 import type { SheetPasswordHash } from '@genoffice/xlsx-gateway/gateway/xlsx-protection-hash'
 import type { SheetProtectionInfo } from './sheet-protection'
-import { BorderType, LocalUndoRedoService, Worksheet, type IRange } from '@univerjs/core'
+import {
+  BorderType,
+  LocalUndoRedoService,
+  Worksheet,
+  type IRange,
+  type IUndoRedoItem,
+} from '@univerjs/core'
 import { SheetInterceptorService } from '@univerjs/sheets'
 
 import type {
@@ -300,6 +306,20 @@ export function undoPayloadCells(item: UndoRedoItemLike, cap: number): number {
   return cells
 }
 
+/** Univer resolves the real service behind a DI proxy. The hook is installed
+ * only for the synchronous commands belonging to the current AI operation. */
+export interface AiUndoStacks {
+  _getUndoStack(unitId: string): IUndoRedoItem[] | undefined
+  _getRedoStack(unitId: string): IUndoRedoItem[] | undefined
+  _updateStatus(): void
+}
+export const aiUndoSource: {
+  current?: {
+    push(service: AiUndoStacks, item: IUndoRedoItem, push: () => void): void
+    discarding(): boolean
+  }
+} = {}
+
 let undoFilterInstalled = false
 
 /// Drops undo-stack entries pushed while journalSuppression is active.
@@ -317,6 +337,12 @@ export function installJournalSuppressionUndoFilter(): void {
   const originalPush = proto.pushUndoRedo
   proto.pushUndoRedo = function (this: unknown, item: UndoRedoItemLike) {
     if (journalSuppression.active) return
+    if (aiUndoSource.current) {
+      aiUndoSource.current.push(this as AiUndoStacks, item as IUndoRedoItem, () =>
+        originalPush.call(this, item),
+      )
+      return
+    }
     if (aiBulkUndoGate.active) {
       if (aiBulkUndoGate.dropped) return
       if (!aiBulkUndoGate.dropAll) {

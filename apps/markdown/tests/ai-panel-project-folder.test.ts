@@ -88,8 +88,9 @@ async function mountPanel(filePath: string | null = null): Promise<HTMLElement> 
     getEditor: () => null,
     getFrontmatter: () => '',
     setFrontmatter: () => {},
-    getSnapshot: () => ({ body: '', frontmatter: '' }),
-    restoreSnapshot: () => {},
+    getManualVersion: () => 0,
+    getSnapshot: () => ({ manualVersion: 0, body: '', frontmatter: '' }),
+    restoreSnapshot: () => true,
     onRunDone: () => {},
   }
   const container = document.createElement('div')
@@ -280,8 +281,9 @@ describe('markdown AI panel: project folder', () => {
       getEditor: () => null,
       getFrontmatter: () => '',
       setFrontmatter: () => {},
-      getSnapshot: () => ({ body: '', frontmatter: '' }),
-      restoreSnapshot: () => {},
+      getManualVersion: () => 0,
+      getSnapshot: () => ({ manualVersion: 0, body: '', frontmatter: '' }),
+      restoreSnapshot: () => true,
       onRunDone: () => {},
     }
     const container = document.createElement('div')

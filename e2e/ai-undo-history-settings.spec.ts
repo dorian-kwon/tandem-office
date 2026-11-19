@@ -4,7 +4,11 @@ import { join } from 'node:path'
 import { launchShell, closeAndSaveVideo, screenshotPath } from './helpers'
 
 test('home settings gear opens General and AI undo preference survives restart', async () => {
-  const launched = await launchShell({ onboardingSeen: true, videoDir: 'ai-undo-settings' })
+  const launched = await launchShell({
+    onboardingSeen: true,
+    hideUpdateWindows: true,
+    videoDir: 'ai-undo-settings',
+  })
   try {
     const { page } = launched
     await page.locator('.account-gear').click()
@@ -28,6 +32,7 @@ test('home settings gear opens General and AI undo preference survives restart',
 
   const restarted = await launchShell({
     userDataDir: launched.userDataDir,
+    hideUpdateWindows: true,
     videoDir: 'ai-undo-settings-restart',
   })
   try {

@@ -40,7 +40,7 @@ PowerPoint 프레젠테이션(.pptx) 에디터다. 파일을 바이트 그대로
 
 ## 이 모듈의 방식
 
-- AI undo는 전용 IPC와 `AsyncLocalStorage`의 요청 출처로 가른다(결정 0114). 꺼짐에서 AI 요청의 실패 복구 사본만 잠시 쌓고 요청이 끝나면 그 사본만 제거한다. 실행 배치가 사람의 기록을 잘라내지 않는다. MCP의 `applySessionTxn({ dropUndo })`도 해당 호출만 버린다. QC 내부 사본은 사용자 undo로 내놓지 않는다. 새 AI 쓰기는 `aiEditApi`와 `handleAiEditable`로 연결한다.
+- AI undo는 전용 IPC와 `AsyncLocalStorage`의 요청 출처로 가른다(결정 0114). 꺼짐에서 AI 요청의 실패 복구 사본만 잠시 쌓고 요청이 끝나면 그 사본만 제거한다. 실행 배치가 사람의 기록을 잘라내지 않는다. MCP의 `applySessionTxn({ dropUndo })`도 해당 호출만 버린다. 켜짐에서는 같은 배치의 연속된 AI 쓰기만 묶는다. 사람 편집이나 일반 undo/redo가 끼어들면 덱 전체를 덮어쓸 수 있는 채팅·QC 복구 지점은 폐기한다. QC 내부 사본은 사용자 undo로 내놓지 않는다. 새 AI 쓰기는 `aiEditApi`와 `handleAiEditable`로 연결한다.
 
 - 메인 코드는 shell 번들에 들어간다(`../../../slides/src/main/slides-main`을 상대 경로로 import한다). `src/main`을 고친 뒤에는 shell을 다시 빌드한다.
 - 쓸 만한 답을 내지 못한 실행의 사후 기록(`ai:log-run-failure` → `userData/ai-run-failures.jsonl`, 2MB에서 한 세대 회전)은 `registerAiIpc`에 있어 단독 실행에서만 남는다. shell 안에서는 이 채널에 핸들러가 없다.

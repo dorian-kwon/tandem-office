@@ -1,3 +1,4 @@
+import { closeHistory } from '@tiptap/pm/history'
 import { brandText } from '@genoffice/i18n'
 import type { Editor } from '@tiptap/core'
 import type { Node as PmNode } from '@tiptap/pm/model'
@@ -109,8 +110,17 @@ export class DraftLanding {
   private timer: ReturnType<typeof setTimeout> | null = null
   private closed = false
   private follow = true
+  // On a conflicting rewrite, only untouched preview nodes may be discarded.
+  private disposable: Set<PmNode> | null = null
   private readonly onTransaction = ({ transaction }: { transaction: Transaction }) => {
     if (!transaction.docChanged || transaction.getMeta(DRAFT_META)) return
+    if (this.wholeRewrite && !this.disposable && !transaction.before.eq(transaction.doc)) {
+      const disposable = new Set<PmNode>()
+      transaction.before.forEach((node, pos) => {
+        if (pos >= this.from && pos + node.nodeSize <= this.to) disposable.add(node)
+      })
+      this.disposable = disposable
+    }
     this.from = transaction.mapping.map(this.from, 1)
     this.to = Math.max(this.from, transaction.mapping.map(this.to, -1))
   }
@@ -118,18 +128,24 @@ export class DraftLanding {
   constructor(
     private readonly editor: Editor,
     position: WritePosition,
+    private readonly wholeRewrite = false,
   ) {
     this.from =
       position.kind === 'after' && position.index >= 0
         ? blockRange(editor.state.doc, position.index, position.index).to
         : 0
     this.to = this.from
+    if (wholeRewrite) editor.view.dispatch(closeHistory(editor.state.tr))
     editor.on('transaction', this.onTransaction)
+  }
+
+  get conflicted(): boolean {
+    return this.disposable !== null
   }
 
   /** latest cumulative markdown; rendered on the next tick */
   update(markdown: string): void {
-    if (this.closed) return
+    if (this.closed || this.conflicted) return
     this.pending = markdown
     if (this.timer === null) this.timer = setTimeout(() => this.flush(), DRAFT_TICK_MS)
   }
@@ -158,7 +174,15 @@ export class DraftLanding {
     this.closed = true
     this.editor.off('transaction', this.onTransaction)
     if (this.to > this.from && !this.editor.isDestroyed) {
-      this.editor.view.dispatch(this.draftTr().delete(this.from, this.to))
+      const tr = this.draftTr()
+      if (this.disposable) {
+        for (const { node, end } of this.liveNodes().reverse()) {
+          if (this.disposable.has(node)) tr.delete(end - node.nodeSize, end)
+        }
+      } else {
+        tr.delete(this.from, this.to)
+      }
+      if (tr.docChanged) this.editor.view.dispatch(tr)
     }
     this.to = this.from
     return this.rendered
@@ -180,7 +204,7 @@ export class DraftLanding {
 
   private flush(): void {
     this.timer = null
-    if (this.closed || this.pending === null || this.editor.isDestroyed) return
+    if (this.closed || this.conflicted || this.pending === null || this.editor.isDestroyed) return
     const markdown = this.pending
     this.pending = null
     let next: PmNode[]

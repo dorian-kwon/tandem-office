@@ -428,10 +428,17 @@ import {
   ocrRedoAvailable,
   ocrUndoAvailable,
   placeOcrIntoOpenDocument,
+  discardBranchedOcrRedo,
+  pendingOcrEditReason,
   tryOcrRedo,
   tryOcrUndo,
 } from './ocr-open-document'
-import { registerOcrHistoryHandlers } from './ocr-history-state'
+import {
+  clearOcrHistory,
+  getOcrHistory,
+  onOcrHistoryChange,
+  registerOcrHistoryHandlers,
+} from './ocr-history-state'
 import { BlockIndex } from './pagination-index'
 import { hasPhasedContentFailed, isPhasedContentPending } from './phased-content'
 import { sameSectionInfos } from './pagination-sections'
@@ -2075,7 +2082,12 @@ export function App() {
   // the AI's own write is not held off by the translation lock; Read Mode and protection still are
   const lockOnlyRef = useRef(false)
   lockOnlyRef.current = translationLocked && !readMode && !isProtected
-  const ocrLockOptions = () => ({ translationLocked: lockOnlyRef.current })
+  const ocrLockOptions = () => ({
+    get translationLocked() {
+      return lockOnlyRef.current
+    },
+    currentContext: () => fileCtxRef.current,
+  })
   const ocrOpenDocument = useMemo<OcrOpenDocument>(
     () => ({
       unavailableReason: () => {
@@ -7167,11 +7179,19 @@ export function App() {
       if (transaction?.docChanged) setDocVersion((v) => v + 1)
     }
     refresh()
+    const unsubscribe = onOcrHistoryChange(refresh)
+    editor.on('transaction', discardBranchedOcrRedo)
     editor.on('transaction', refresh)
     return () => {
+      unsubscribe()
+      editor.off('transaction', discardBranchedOcrRedo)
       editor.off('transaction', refresh)
     }
   }, [editor])
+  // File-level edits do not dispatch body transactions. A later OCR swap would discard them.
+  useEffect(() => {
+    if (getOcrHistory() && pendingOcrEditReason(fileCtxRef.current)) clearOcrHistory()
+  })
   const quickActions = useMemo(
     () => (
       <>

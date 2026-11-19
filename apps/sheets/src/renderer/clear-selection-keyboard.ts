@@ -117,3 +117,13 @@ export function shouldInterceptRedoRepeat(
   if (modalOpen || isCellEditing) return false
   return isGridKeyTarget(event.target)
 }
+
+/** The untouched, cleared prompt after an AI run yields history shortcuts
+ * back to the workbook. Editing the draft restores native text undo. */
+export function isWorkbookHistoryComposer(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLTextAreaElement &&
+    target.value === '' &&
+    !!target.closest('.ai-composer[data-workbook-history-ready="true"]')
+  )
+}

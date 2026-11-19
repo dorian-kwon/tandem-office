@@ -13,6 +13,8 @@ import {
   endHistoryBatch,
   pushHistory,
   withoutAiUndo,
+  runAiHistoryRequest,
+  withRecordedAiUndo,
   registerAiSnapshot,
   restoreAiSnapshot,
   restoreSnapshot,
@@ -64,6 +66,52 @@ describe('Slides main-process history batching', () => {
     expect(session.undoStack).toHaveLength(1)
     restoreSnapshot(session, session.undoStack[0]!)
     expect(valueOf(session)).toBe('before')
+  })
+
+  it('keeps the 49 preceding steps when a 60-edit run starts at the 50-step cap', () => {
+    const session = sessionWith('start')
+    for (let i = 0; i < 50; i++) {
+      pushHistory(session)
+      setValue(session, `human ${i}`)
+    }
+    const previous = session.undoStack.slice(1)
+    beginHistoryBatch(session, { aiRun: true })
+    withRecordedAiUndo(() => {
+      for (let i = 0; i < 60; i++) {
+        pushHistory(session)
+        setValue(session, `AI ${i}`)
+      }
+    })
+    const point = endHistoryBatch(session)
+    expect(session.undoStack.slice(0, -1)).toEqual(previous)
+    expect(session.undoStack.at(-1)).toBe(point)
+    restoreSnapshot(session, session.undoStack.pop()!)
+    expect(valueOf(session)).toBe('human 49')
+  })
+
+  it('keeps manual edits during an AI run in chronological undo order', () => {
+    const session = sessionWith('start')
+    const edit = (value: string) => {
+      pushHistory(session)
+      setValue(session, value)
+    }
+    beginHistoryBatch(session, { aiRun: true })
+    edit('human before')
+    withRecordedAiUndo(() => {
+      edit('AI first')
+      edit('AI second')
+    })
+    edit('human during')
+    withRecordedAiUndo(() => {
+      edit('AI third')
+      edit('AI fourth')
+    })
+    expect(endHistoryBatch(session)).toBeNull()
+    edit('human after')
+    for (const expected of ['AI fourth', 'human during', 'AI second', 'human before', 'start']) {
+      restoreSnapshot(session, session.undoStack.pop()!)
+      expect(valueOf(session)).toBe(expected)
+    }
   })
 
   it('supports nested tool batching inside an AI-run batch', () => {
@@ -131,16 +179,33 @@ describe('Slides main-process history batching', () => {
     setValue(session, 'ai edited')
     const id = registerAiSnapshot(session, endHistoryBatch(session)!)
 
-    setValue(session, 'user edited on top')
     expect(restoreAiSnapshot(session, id)).toBe(true)
     expect(valueOf(session)).toBe('before')
     expect(restoreAiSnapshot(session, id)).toBe(false) // consumed
 
     restoreSnapshot(session, session.undoStack.pop()!) // ⌘Z returns to the pre-rollback state
-    expect(valueOf(session)).toBe('user edited on top')
+    expect(valueOf(session)).toBe('ai edited')
   })
 
-  it('keeps registered snapshots isolated from later in-place deck mutations', () => {
+  it('keeps the preceding uninterrupted turn available after a panel rewind', async () => {
+    const session = sessionWith('start')
+    const turn = async (value: string) => {
+      beginHistoryBatch(session, { aiRun: true })
+      await runAiHistoryRequest(true, () => {
+        pushHistory(session)
+        setValue(session, value)
+      })
+      return registerAiSnapshot(session, endHistoryBatch(session)!)
+    }
+    const first = await turn('first')
+    const second = await turn('second')
+    expect(restoreAiSnapshot(session, second)).toBe(true)
+    expect(valueOf(session)).toBe('first')
+    expect(restoreAiSnapshot(session, first)).toBe(true)
+    expect(valueOf(session)).toBe('start')
+  })
+
+  it('rejects old panel rollbacks after keyboard undo', () => {
     const session = sessionWith('before')
     beginHistoryBatch(session)
     pushHistory(session)
@@ -149,8 +214,8 @@ describe('Slides main-process history batching', () => {
 
     restoreSnapshot(session, session.undoStack.pop()!) // undo hands the stack snapshot to the live deck
     setValue(session, 'mutated after undo')
-    expect(restoreAiSnapshot(session, id)).toBe(true)
-    expect(valueOf(session)).toBe('before')
+    expect(restoreAiSnapshot(session, id)).toBe(false)
+    expect(valueOf(session)).toBe('mutated after undo')
   })
 
   it('undo restores the archive-only dirty flag with the deck', () => {
@@ -312,6 +377,47 @@ describe('AI undo history switched off', () => {
     expect(valueOf(session)).toBe('before')
     expect(session.undoStack).toHaveLength(0)
   })
+
+  it('refuses both stale panel and internal QC snapshots after manual edits', async () => {
+    const session = sessionWith('before')
+    beginHistoryBatch(session, { aiRun: true })
+    withRecordedAiUndo(() => {
+      pushHistory(session)
+      setValue(session, 'AI')
+    })
+    const id = registerAiSnapshot(session, endHistoryBatch(session)!)
+    pushHistory(session)
+    setValue(session, 'human')
+    expect(restoreAiSnapshot(session, id)).toBe(false)
+    beginHistoryBatch(session, { dropUndo: true, keepRollback: true })
+    await withoutAiUndo(() => {
+      pushHistory(session)
+      setValue(session, 'QC')
+    })
+    pushHistory(session)
+    setValue(session, 'human during QC')
+    expect(endHistoryBatch(session)).toBeNull()
+    expect(valueOf(session)).toBe('human during QC')
+  })
+
+  it.each([true, false])(
+    'retains redo when a request rolls back all changes (record=%s)',
+    async (record) => {
+      const session = sessionWith('before')
+      const redo = takeSnapshot(session)
+      session.redoStack.push(redo)
+      beginHistoryBatch(session, {
+        aiRun: true,
+        ...(!record && { dropUndo: true, keepRollback: true }),
+      })
+      await runAiHistoryRequest(record, () => {
+        pushHistory(session)
+        session.undoStack.pop() // normal failure/no-op handler
+      })
+      expect(endHistoryBatch(session)).toBeNull()
+      expect(session.redoStack).toEqual([redo])
+    },
+  )
 
   it('releases temporary snapshots after errors and preserves a replacement deck history', async () => {
     const previous = sessionWith('old')

@@ -10,7 +10,7 @@ import {
   type AiSubscriptionState,
 } from '@genoffice/ai-provider'
 import type { SubscriptionStatusMap } from '@genoffice/ai-provider/browser'
-import { aiRunErrorText, aiSubscriptionText } from '@genoffice/ui'
+import { aiRunErrorText, aiSubscriptionText, applyAiPanelPrefs } from '@genoffice/ui'
 import { AiPanel, type HtmlAiDeps } from '../src/renderer/ai/AiPanel'
 import { buildParseMap, type ParseMap } from '../src/renderer/document/parse-map'
 
@@ -117,8 +117,8 @@ function fakeDeps(): HtmlAiDeps {
       applyOps: () => ({ ok: true, ranges: [] }),
       replaceAll: () => undefined,
     },
-    getSnapshot: () => ({ text: DOC }),
-    restoreSnapshot: () => undefined,
+    getSnapshot: () => ({ manualVersion: 0, text: DOC }),
+    restoreSnapshot: () => true,
     onPrompt: () => undefined,
     onRunDone: () => undefined,
     clearHighlights: () => undefined,
@@ -165,12 +165,12 @@ async function settle() {
   }
 }
 
-async function mountPanel(main: ReturnType<typeof fakeMain>) {
+async function mountPanel(main: ReturnType<typeof fakeMain>, deps = fakeDeps()) {
   Object.assign(window, { htmlApi: main.htmlApi })
   act(() =>
     root.render(
       createElement(AiPanel, {
-        deps: fakeDeps(),
+        deps,
         filePath: null,
         editQueue: [],
         onQueueEditInstruction: () => undefined,
@@ -598,4 +598,47 @@ describe('AI panel during a turn', () => {
     expect(host.querySelector('.ai-panel-resizer')!.getAttribute('aria-label')).toBe(label)
     expect(label).not.toMatch(/Claude|Codex/)
   })
+})
+
+it('disables a turn rollback after manual editing during its tool call', async () => {
+  const deps = fakeDeps()
+  let manualVersion = 0
+  deps.access.getLastManualVersion = () => manualVersion
+  deps.access.applyOps = () => {
+    manualVersion++
+    return { ok: true, ranges: [] }
+  }
+  deps.restoreSnapshot = vi.fn(() => true)
+  const main = fakeMain({
+    settings: ready(),
+    statuses: statusMap('ready', 'ready'),
+    reply: (_request, n) =>
+      n === 1
+        ? [
+            {
+              type: 'tool-call',
+              toolCall: {
+                id: 'c',
+                name: 'apply_ops',
+                input: {
+                  ops: [{ op: 'set_attr', sid: 1, name: 'lang', value: 'en' }],
+                },
+              },
+            },
+            { type: 'done' },
+          ]
+        : [{ type: 'delta', text: 'done' }, { type: 'done' }],
+  })
+  try {
+    await mountPanel(main, deps)
+    act(() => applyAiPanelPrefs({ aiEditUndoHistory: true }))
+    await sendMessage('change the language')
+    const rollback = host.querySelector<HTMLButtonElement>('.ai-version-rollback')
+    expect(rollback).not.toBeNull()
+    expect(rollback!.disabled).toBe(true)
+    act(() => rollback!.click())
+    expect(deps.restoreSnapshot).not.toHaveBeenCalled()
+  } finally {
+    act(() => applyAiPanelPrefs({}))
+  }
 })

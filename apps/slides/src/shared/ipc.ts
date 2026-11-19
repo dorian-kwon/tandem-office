@@ -160,6 +160,7 @@ export interface DesktopFilesApi {
  * `keepRollback` (QC pass) keeps an internal rollback point without an undo step.
  */
 export interface HistoryBatchRequest {
+  aiRun?: boolean
   dropUndo?: boolean
   keepRollback?: boolean
 }
@@ -1712,7 +1713,7 @@ export interface SlidesApi {
   /** Roll the deck back to an AI rollback point; returns the restored full RenderSlide array, null when the id is unknown */
   aiSnapshotRestore: (
     id: number,
-    options?: { recordUndo?: boolean },
+    options?: { recordUndo?: boolean; qcRollback?: boolean },
   ) => Promise<RenderSlide[] | null>
   /** Free an internal rollback point that turned out not to be needed */
   aiSnapshotRelease: (id: number) => Promise<void>
@@ -1789,7 +1790,9 @@ export interface SlidesApi {
   /** The close guard chose "Save": the main process asks the renderer to run the full save flow */
   onCloseSaveRequest: (handler: () => void) => () => void
   /** Undo/redo stack occupancy pushed by the main process (drives the QAT button gray states) */
-  onHistoryChanged: (handler: (state: { canUndo: boolean; canRedo: boolean }) => void) => () => void
+  onHistoryChanged: (
+    handler: (state: { canUndo: boolean; canRedo: boolean; snapshotIds?: number[] }) => void,
+  ) => () => void
   /** Another window attached to the same file changed the deck (shared session): fresh render state to apply */
   onDeckChanged: (handler: (state: DeckChange) => void) => () => void
   reportCloseSaveResult: (ok: boolean) => void

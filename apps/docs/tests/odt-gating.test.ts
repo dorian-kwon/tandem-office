@@ -11,6 +11,11 @@ import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Editor } from '@tiptap/core'
 import { Fragment, Slice, type Node as PmNode } from '@tiptap/pm/model'
+import { applyAiPanelPrefs } from '@genoffice/ui'
+import {
+  captureRollbackSnapshot,
+  canRestoreRollbackSnapshot,
+} from '../src/renderer/ai/rollback-snapshot'
 import { buildBlankDocx, parseDocx, readDocxPartBase64 } from '@genoffice/docx-engine'
 import { odtToDocx } from '@genoffice/odt-engine'
 import { editorExtensions } from '../src/renderer/editor/extensions'
@@ -292,6 +297,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  applyAiPanelPrefs({ aiEditUndoHistory: false })
   for (const editor of editors.splice(0)) editor.destroy()
   setFormatChangeHost(null)
 })
@@ -350,6 +356,72 @@ describe('features switched off in an ODT document', () => {
     }
     // the same tools are offered for docx (the gate never fires there)
     expect(AGENT_TOOLS.some((tool) => tool.name === 'add_comment')).toBe(true)
+  })
+})
+
+describe.each([
+  ['DOCX', openDocx],
+  ['ODT', openSample],
+] as const)('%s AI history', (_format, open) => {
+  it.each([true, false])('runs chat and MCP with history %s', async (on) => {
+    applyAiPanelPrefs({ aiEditUndoHistory: on })
+    const ctx = await open()
+    const editor = editorOf(ctx)
+    editor.commands.insertContentAt(1, 'Manual ')
+    const snapshot = captureRollbackSnapshot(editor)
+    const skill = createDocsSkill(
+      () => editor,
+      () => ({ bullet: null, ordered: null }),
+    )
+    const result = await skill.executeTool({
+      id: 'chat',
+      name: 'insert_content',
+      input: {
+        html: '<p>Chat edit</p>',
+        afterBlockIndex: editor.state.doc.childCount - 1,
+      },
+    })
+    expect(result.mutated).toBe(true)
+    expect(canRestoreRollbackSnapshot(editor, snapshot)).toBe(on)
+
+    let send!: (message: unknown) => void
+    const report = vi.fn()
+    Object.assign(window.desktop, {
+      onMcpCommand: (callback: typeof send) => {
+        send = callback
+        return () => {}
+      },
+      reportMcpResult: report,
+    })
+    const stop = installMcpBridge({ getCtx: () => ctx })
+    try {
+      send({
+        requestId: 'write',
+        command: 'insert_content',
+        payload: {
+          html: '<p>MCP edit</p>',
+          afterBlockIndex: editor.state.doc.childCount - 1,
+        },
+      })
+      await vi.waitFor(() =>
+        expect(report).toHaveBeenCalledWith(expect.objectContaining({ ok: true })),
+      )
+      expect(canRestoreRollbackSnapshot(editor, snapshot)).toBe(false)
+      expect(editor.state.doc.textContent).toContain('MCP edit')
+      editor.commands.undo()
+      if (on) {
+        expect(editor.state.doc.textContent).not.toContain('MCP edit')
+        expect(editor.state.doc.textContent).toContain('Chat edit')
+        editor.commands.undo()
+      }
+      expect(editor.state.doc.textContent.includes('Chat edit')).toBe(!on)
+      expect(editor.state.doc.textContent.includes('Manual ')).toBe(on)
+      while (editor.can().redo()) editor.commands.redo()
+      for (const text of ['Manual ', 'Chat edit', 'MCP edit'])
+        expect(editor.state.doc.textContent).toContain(text)
+    } finally {
+      stop()
+    }
   })
 })
 

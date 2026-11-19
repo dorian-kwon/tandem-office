@@ -119,6 +119,7 @@ function Harness({
     onStop: () => undefined,
     onNewChat,
     onUndo: () => undefined,
+    canUndoAiEntries: () => false,
     scopeRange: null,
     scopeColumns: null,
     scopeLocked: false,

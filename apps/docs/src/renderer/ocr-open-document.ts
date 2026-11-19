@@ -2,12 +2,12 @@ import type { ChatOcrPlaceInDocument } from '@genoffice/project-store/folder-api
 import type { Editor } from '@tiptap/core'
 import type { ParsedDocFull } from '@genoffice/docx-engine'
 import { placeOcrIntoOpenDocx } from '../../../shell/src/main/translate/ocr-docx-placement'
-import type { PmNode } from './editor/convert'
+import { isHistoryTransaction } from '@tiptap/pm/history'
+import type { Transaction } from '@tiptap/pm/state'
 import {
   clearOcrHistory,
   getOcrHistory,
   setOcrHistory,
-  type OcrHistory,
   type OcrSnapshot,
 } from './ocr-history-state'
 import {
@@ -48,6 +48,7 @@ export interface OcrOpenDocumentOptions {
    * during an AI run, so it is not a reason. Read Mode and a protected document are not this.
    */
   translationLocked?: boolean
+  currentContext?: () => FileActionContext
 }
 
 export function ocrIntoDocumentUnavailableReason(
@@ -60,6 +61,11 @@ export function ocrIntoDocumentUnavailableReason(
     return 'it is read-only (a source copy, Read Mode or a protected document)'
   if (doc.format !== 'docx' || doc.odt) return 'it is not a docx document (an ODT document)'
   if (doc.encrypted) return 'it is password-protected'
+  return pendingOcrEditReason(ctx)
+}
+
+/** A swap also restores page layout, headers, comments and other file-level state. */
+export function pendingOcrEditReason(ctx: FileActionContext): string | null {
   const pending: [string, boolean][] = [
     ['page setup or sections', !!ctx.sectionDirty || ctx.sectionsDirty?.length > 0],
     ['page numbers', ctx.pgNumDirtySections?.length > 0 || ctx.pgNumEdit != null],
@@ -121,6 +127,7 @@ export async function placeOcrIntoOpenDocument(
     generation === currentDocGeneration() && !!ctx.editor && !ctx.editor.isDestroyed
   let placed: Awaited<ReturnType<typeof placeOcrIntoOpenDocx>>
   let reparsed: ParsedDocFull
+  let body: Editor['state']['doc'] | undefined
   try {
     if (isPhasedContentPending()) {
       if (!(await waitForFullContent()))
@@ -128,6 +135,7 @@ export async function placeOcrIntoOpenDocument(
       if (!stillHere() || isPhasedContentPending())
         return { ok: false, reason: 'the document changed while the text was placed' }
     }
+    body = ctx.editor?.state.doc
     const bytes = await deps.buildBytes(ctx)
     if (!bytes) return { ok: false, reason: 'the document could not be read from the screen' }
     placed = await placeOcrIntoOpenDocx(bytes, plan.items, plan.placement)
@@ -136,41 +144,48 @@ export async function placeOcrIntoOpenDocument(
     return { ok: false, reason: reasonOf(err) }
   }
   // a document opened or closed while this ran must not receive another document's text
-  if (!stillHere() || !ctx.doc || !ctx.editor)
+  const current = options.currentContext?.() ?? ctx
+  if (
+    !stillHere() ||
+    !ctx.doc ||
+    !current.doc ||
+    !ctx.editor ||
+    current.editor !== ctx.editor ||
+    current.doc.parsed !== ctx.doc.parsed ||
+    current.editor.state.doc !== body ||
+    ocrIntoDocumentUnavailableReason(current, options)
+  )
     return { ok: false, reason: 'the document changed while the text was placed' }
-  const editor = ctx.editor
+  ctx = current
+  const editor = current.editor
   const keepHistory = aiEditUndoHistoryEnabled()
   const before: OcrSnapshot = {
-    pm: editor.getJSON() as PmNode,
-    doc: ctx.doc,
+    state: editor.state,
+    doc: current.doc,
     dirty: ctx.dirtyRef.current,
   }
-  // set before the swap: the buttons that follow the editor's transactions see undo is possible
-  const history: OcrHistory | null = keepHistory
-    ? { before, after: null, applied: true, restored: null }
-    : null
-  // an earlier OCR undo would now return to a document older than this swap
-  setOcrHistory(history)
+  const previousHistory = getOcrHistory()
   // the translation lock is let go for the moment of the swap and put back as it was
   const relock = !editor.isEditable
   if (relock) editor.setEditable(true, false)
   try {
     swapDocumentContent(ctx, reparsed)
     ctx.dirtyRef.current = true
-    if (history) {
-      history.after = {
-        pm: editor.getJSON() as PmNode,
-        doc: { ...before.doc, parsed: reparsed },
-        dirty: true,
-      }
-    }
+    setOcrHistory(
+      keepHistory
+        ? {
+            before,
+            after: { state: editor.state, doc: { ...before.doc, parsed: reparsed }, dirty: true },
+            applied: true,
+          }
+        : null,
+    )
   } catch (err) {
-    setOcrHistory(null)
-    // put back what was on screen
     try {
       restore(ctx, before)
+      setOcrHistory(previousHistory)
     } catch {
-      /* the swap failed before it changed anything that matters */
+      clearOcrHistory()
     }
     return { ok: false, reason: reasonOf(err) }
   } finally {
@@ -180,35 +195,44 @@ export async function placeOcrIntoOpenDocument(
 }
 
 function restore(ctx: FileActionContext, snapshot: OcrSnapshot): void {
-  swapDocumentContent(ctx, snapshot.doc.parsed, snapshot.pm)
+  swapDocumentContent(ctx, snapshot.doc.parsed, snapshot.state)
   ctx.dirtyRef.current = snapshot.dirty
 }
 
 /** undo reaches the OCR text only when the editor has nothing of its own left to undo */
 export function ocrUndoAvailable(editor: Editor): boolean {
   const history = getOcrHistory()
-  return !!history?.applied && !!history.after && !editor.can().undo()
+  return !!history?.applied && !editor.can().undo() && editor.state.doc.eq(history.after.state.doc)
 }
 export function ocrRedoAvailable(editor: Editor): boolean {
   const history = getOcrHistory()
-  return !!history && !history.applied && editor.state.doc === history.restored
+  return !!history && !history.applied && editor.state.doc.eq(history.before.state.doc)
+}
+
+/** Typing after an OCR undo starts a new branch, even if that typing is later undone. */
+export function discardBranchedOcrRedo({ transaction }: { transaction: Transaction }): void {
+  const history = getOcrHistory()
+  if (history && !history.applied && transaction.docChanged && !isHistoryTransaction(transaction)) {
+    clearOcrHistory()
+  }
 }
 
 export function tryOcrUndo(ctx: FileActionContext): boolean {
   const editor = ctx.editor
   const history = getOcrHistory()
-  if (!editor || !history || !ocrUndoAvailable(editor)) return false
-  history.applied = false
+  if (!editor || !history || !ocrUndoAvailable(editor) || pendingOcrEditReason(ctx)) return false
+  // Include redo of the later typing the person undid on their way back to the OCR.
+  const after = { ...history.after, state: editor.state }
   restore(ctx, history.before)
-  history.restored = editor.state.doc
+  setOcrHistory({ ...history, after, applied: false })
   return true
 }
 
 export function tryOcrRedo(ctx: FileActionContext): boolean {
   const editor = ctx.editor
   const history = getOcrHistory()
-  if (!editor || !history?.after || !ocrRedoAvailable(editor)) return false
-  history.applied = true
+  if (!editor || !history || !ocrRedoAvailable(editor) || pendingOcrEditReason(ctx)) return false
   restore(ctx, history.after)
+  setOcrHistory({ ...history, applied: true })
   return true
 }

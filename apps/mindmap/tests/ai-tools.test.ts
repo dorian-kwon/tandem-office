@@ -550,6 +550,38 @@ describe('one AI turn', () => {
     expect(r.controller(r.key(1)).canRedo).toBe(true)
   })
 
+  it('preserves later typing on a sheet before removing any AI-created sheets', async () => {
+    const r = await rigOf(richSheet())
+    const turn = new MapTurn()
+    await editMap(r.host, { edits: [{ op: 'set_title', id: IDS.root, title: 'AI' }] }, turn)
+    await writeMap(r.host, { outline: '# Added\n\n- Centre\n' }, turn)
+    expect(r.controller(r.key(1)).setTitle(IDS.a, 'Manual')).toBe(true)
+    expect(await revertTurn(r.host, turn)).toBe(false)
+    expect(r.session.tabs()).toHaveLength(2)
+    expect(findTopic(r.sheet(1).rootTopic, IDS.a)?.title).toBe('Manual')
+    r.controller(r.key(1)).undo()
+    expect(await revertTurn(r.host, turn)).toBe(true)
+  })
+
+  it('preserves manual edits between tool calls in one turn', async () => {
+    const r = await rigOf(richSheet())
+    const turn = new MapTurn()
+    await editMap(r.host, { edits: [{ op: 'set_title', id: IDS.root, title: 'AI' }] }, turn)
+    expect(r.controller().setTitle(IDS.a, 'Manual')).toBe(true)
+    await editMap(r.host, { edits: [{ op: 'set_title', id: IDS.b, title: 'AI again' }] }, turn)
+    expect(await revertTurn(r.host, turn)).toBe(false)
+    expect(findTopic(r.sheet(1).rootTopic, IDS.a)?.title).toBe('Manual')
+  })
+
+  it('keeps an AI-created sheet that the user renamed', async () => {
+    const r = await rigOf(plainSheet())
+    const turn = new MapTurn()
+    await writeMap(r.host, { outline: '# Added\n\n- Centre\n' }, turn)
+    r.session.renameSheet(r.key(2), 'Manual')
+    expect(await revertTurn(r.host, turn)).toBe(false)
+    expect(r.session.tabs().map((tab) => tab.title)).toEqual(['Plain', 'Manual'])
+  })
+
   it('takes back the filling of a blank new map, name included', async () => {
     const r = rig(await newMap({ sheetTitle: 'Sheet 1', rootTitle: 'Central Topic' }), true)
     const blank = copyOf(r.sheet(1))

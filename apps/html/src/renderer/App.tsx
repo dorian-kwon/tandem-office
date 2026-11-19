@@ -367,6 +367,7 @@ export default function App() {
         if (cancelled) return
         const doc = parseDocText(raw)
         envelopeRef.current = doc.envelope
+        lastManualVersionRef.current = ++versionRef.current
         textRef.current = doc.text
         // the frame must never race the first push: serve the buffer before the URL is known to React
         const map0 = getMap()
@@ -583,8 +584,13 @@ export default function App() {
   }, [])
 
   const replaceAll = useCallback(
-    (html: string, highlight: boolean) => {
+    (html: string, highlight: boolean, expectedManualVersion?: number): boolean => {
       flushPending()
+      if (
+        expectedManualVersion !== undefined &&
+        lastManualVersionRef.current !== expectedManualVersion
+      )
+        return false
       // a generated document carries the confirmed brief so later turns (and re-opens) stay anchored to it
       const pinned =
         highlight && briefRef.current && !parseBrief(html)
@@ -594,6 +600,7 @@ export default function App() {
       // a new page, not an edit of the one on screen: it opens at the top
       frameScrollRef.current = null
       commitText(pinned, false)
+      return true
     },
     [commitText, flushPending],
   )
@@ -1489,7 +1496,7 @@ export default function App() {
           const adopted = adoptImageRewrites(textAtSave, textRef.current, result.imageRewrites)
           if (adopted.liveText !== textRef.current) {
             editorRef.current?.setDoc(adopted.liveText)
-            commitText(adopted.liveText, false, true)
+            commitText(adopted.liveText, true, true)
           }
           setPath((previous) => {
             if (previous !== result.path) setPreviewNonce((n) => n + 1)
@@ -1786,7 +1793,7 @@ export default function App() {
         flushPending()
         return applyOps(ops, false)
       },
-      replaceAll: (html) => replaceAll(html, true),
+      replaceAll: (html, _label, version) => replaceAll(html, true, version),
       measurePages: async () => {
         if (!previewUrl) return null
         // the probe reads the copy the main process serves: make that the text as it is now
@@ -1810,8 +1817,16 @@ export default function App() {
         return measure && { setup, measure }
       },
     },
-    getSnapshot: () => ({ text: textRef.current }),
-    restoreSnapshot: (snapshot) => replaceAll(snapshot.text, false),
+    getSnapshot: () => {
+      flushPending()
+      return { text: textRef.current, manualVersion: lastManualVersionRef.current }
+    },
+    restoreSnapshot: (snapshot) => {
+      flushPending()
+      if (snapshot.manualVersion !== lastManualVersionRef.current) return false
+      replaceAll(snapshot.text, false)
+      return true
+    },
     onPrompt: (text) => {
       if (pathRef.current || provisionalNameRef.current) return
       const name = deriveNameFromPrompt(text)

@@ -140,14 +140,14 @@ function undoRedoService(runtime: UniverRuntime): UndoRedoServiceInternals {
   return runtime.univer.__getInjector().get<UndoRedoServiceInternals>(IUndoRedoService)
 }
 
-export function undoStackDepth(runtime: UniverRuntime | null): number {
-  if (!runtime) return 0
+export function currentUndoStack(runtime: UniverRuntime | null): readonly object[] {
+  if (!runtime) return []
   try {
     const unitId = runtime.univerAPI.getActiveWorkbook()?.getId()
-    if (!unitId) return 0
-    return undoRedoService(runtime)._undoStacks?.get(unitId)?.length ?? 0
+    if (!unitId) return []
+    return undoRedoService(runtime)._undoStacks?.get(unitId) ?? []
   } catch {
-    return 0
+    return []
   }
 }
 

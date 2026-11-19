@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, afterEach, describe, expect, it } from 'vitest'
+import { applyAiPanelPrefs } from '@genoffice/ui'
 import { Editor } from '@tiptap/core'
+import { aiEditor } from '../src/renderer/ai/ai-history-gate'
 import { editorExtensions } from '../src/renderer/editor/extensions'
 import {
   captureRollbackSnapshot,
@@ -9,7 +11,7 @@ import {
 /**
  * The roll-back point of an AI run is the document node itself. It must bring
  * the document back exactly, share the untouched blocks with later documents
- * instead of copying them, and still restore after the editor was rebuilt.
+ * instead of copying them, and leave later edits from outside the chat intact.
  */
 
 function para(index: number, text: string) {
@@ -31,17 +33,24 @@ function createEditor(): Editor {
   })
 }
 
+beforeEach(() => applyAiPanelPrefs({ aiEditUndoHistory: true }))
+afterEach(() => applyAiPanelPrefs({ aiEditUndoHistory: false }))
+
 describe('AI roll-back snapshot', () => {
   it('restores the document as it was before the run', () => {
     const editor = createEditor()
     const before = editor.getJSON()
     const snapshot = captureRollbackSnapshot(editor)
-    editor.commands.insertContentAt(editor.state.doc.content.size, para(3, 'Added by the AI'))
-    editor.commands.insertContentAt(1, 'Edited ')
+    aiEditor(editor).commands.insertContentAt(
+      editor.state.doc.content.size,
+      para(3, 'Added by the AI'),
+    )
+    aiEditor(editor).commands.insertContentAt(1, 'Edited ')
     expect(editor.getJSON()).not.toEqual(before)
+    editor.storage.trackChanges.enabled = true
     restoreRollbackSnapshot(editor, snapshot)
     expect(editor.getJSON()).toEqual(before)
-    expect(editor.state.doc.eq(snapshot)).toBe(true)
+    expect(editor.state.doc.eq(snapshot.doc)).toBe(true)
     editor.destroy()
   })
 
@@ -50,22 +59,46 @@ describe('AI roll-back snapshot', () => {
     const snapshot = captureRollbackSnapshot(editor)
     editor.commands.insertContentAt(1, 'Edited ')
     const live = editor.state.doc
-    expect(live.child(0)).not.toBe(snapshot.child(0))
-    expect(live.child(1)).toBe(snapshot.child(1))
-    expect(live.child(2)).toBe(snapshot.child(2))
+    expect(live.child(0)).not.toBe(snapshot.doc.child(0))
+    expect(live.child(1)).toBe(snapshot.doc.child(1))
+    expect(live.child(2)).toBe(snapshot.doc.child(2))
     editor.destroy()
   })
 
-  it('restores a snapshot taken in an editor that has since been replaced', () => {
+  it.each(['typing', 'MCP'])('preserves %s between two edits of the same run', (source) => {
+    const editor = createEditor()
+    const snapshot = captureRollbackSnapshot(editor)
+    aiEditor(editor).commands.insertContentAt(1, 'AI ')
+    if (source === 'typing') editor.commands.insertContentAt(1, 'My edit ')
+    else aiEditor(editor, 'mcp').commands.insertContentAt(1, 'External ')
+    aiEditor(editor).commands.insertContentAt(1, 'AI again ')
+    const before = editor.state.doc
+    expect(restoreRollbackSnapshot(editor, snapshot)).toBe(false)
+    expect(editor.state.doc).toBe(before)
+    editor.destroy()
+  })
+
+  it('does not revive a checkpoint across an unrecorded AI edit', () => {
+    const editor = createEditor()
+    const snapshot = captureRollbackSnapshot(editor)
+    applyAiPanelPrefs({ aiEditUndoHistory: false })
+    aiEditor(editor).commands.insertContentAt(1, 'Unrecorded ')
+    applyAiPanelPrefs({ aiEditUndoHistory: true })
+    aiEditor(editor).commands.insertContentAt(1, 'Recorded ')
+    expect(restoreRollbackSnapshot(editor, snapshot)).toBe(false)
+    expect(editor.state.doc.textContent).toContain('Recorded Unrecorded ')
+    editor.destroy()
+  })
+
+  it('leaves a replacement editor alone', () => {
     const first = createEditor()
     const snapshot = captureRollbackSnapshot(first)
-    const before = first.getJSON()
     first.destroy()
     const second = createEditor()
     second.commands.insertContentAt(1, 'Changed ')
-    expect(second.schema).not.toBe(snapshot.type.schema)
-    restoreRollbackSnapshot(second, snapshot)
-    expect(second.getJSON()).toEqual(before)
+    expect(second.schema).not.toBe(snapshot.doc.type.schema)
+    expect(restoreRollbackSnapshot(second, snapshot)).toBe(false)
+    expect(second.state.doc.textContent).toContain('Changed ')
     second.destroy()
   })
 })

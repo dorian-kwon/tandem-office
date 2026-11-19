@@ -781,7 +781,7 @@ export type AgentReadPictureResult =
 export declare function withoutAiUndoHistory<T>(history: unknown, run: () => T): T
 
 export interface AgentPluginSurface {
-  invokeAi(method: string, args: unknown[], recordUndo: boolean): unknown
+  invokeAi(method: string, args: unknown[], recordUndo: boolean, runId?: string): unknown
   foreignChanges(): number
   readText(): string
   listPictures(): AgentPictureList
@@ -952,7 +952,7 @@ export interface AgentPluginSurface {
   ): AgentFormatCellsResult
   /** take the marks of the changes made so far off the pages */
   clearMarks(): { ok: true }
-  undo(steps: number, expectedForeign: number): AgentUndoResult
+  undo(steps: number, expectedForeign: number, runId?: string): AgentUndoResult
   /** the memos of the document in document order, with their pages and anchor rectangles */
   listMemos(): AgentMemoList
   /** whether the selection (or the caret) may carry a memo anchor */

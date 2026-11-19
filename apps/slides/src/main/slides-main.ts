@@ -2257,6 +2257,7 @@ export function registerSlidesIpc(): void {
       // replace: assemble the whole batch into one multi-page pptx as the new deck base.
       // append/replace_at/insert_at: land the extracted pages as insertSlidePptx ops
       // (earlier pages are untouched; landing shows up in the op journal like any edit).
+      const target = sessions.get(e.sender.id)
       const readCloudPage = async (marker: string): Promise<{ bytes: Uint8Array }> => {
         if (!marker.startsWith(CLOUD_PAGE_PREFIX)) throw new Error('expected a cloud page marker')
         const path = marker.slice(CLOUD_PAGE_PREFIX.length)
@@ -2302,6 +2303,7 @@ export function registerSlidesIpc(): void {
               lastErr = pageErr instanceof Error ? pageErr.message : String(pageErr)
             }
           }
+          if (sessions.get(e.sender.id) !== target) return { error: tm('errNoDeckAppend') }
           let merged = 0
           if (sources.length > 0) {
             pushHistory(existing)
@@ -2352,6 +2354,7 @@ export function registerSlidesIpc(): void {
           if (!source) {
             return { error: tm('errMergeFailed') }
           }
+          if (sessions.get(e.sender.id) !== target) return { error: tm('errNoDeckReplace') }
           pushHistory(existing)
           const r = journaledTxn(existing, 'generate', {
             ops: [{ op: 'insertSlidePptx', source, at: atIndex, replace: true }],
@@ -2393,6 +2396,7 @@ export function registerSlidesIpc(): void {
           if (!source) {
             return { error: tm('errMergeFailed') }
           }
+          if (sessions.get(e.sender.id) !== target) return { error: tm('errNoDeckReplace') }
           pushHistory(existing)
           const r = journaledTxn(existing, 'generate', {
             ops: [{ op: 'insertSlidePptx', source, at: atIndex }],
@@ -2422,7 +2426,8 @@ export function registerSlidesIpc(): void {
           undoStack: [],
           redoStack: [],
         }
-        const old = sessions.get(e.sender.id)
+        if (sessions.get(e.sender.id) !== target) return { error: tm('errNoDeckReplace') }
+        const old = target
         carryHistoryForReplacement(old, replaceSession)
         inheritTemplateSelection(old, replaceSession)
         // the same tab's document: an untitled deck keeps its recovery slot
@@ -4828,6 +4833,7 @@ export function registerSlidesIpc(): void {
     // Only the AI panel asks for a drop batch (the "AI edit undo history" switch is off)
     const dropUndo = options?.dropUndo === true
     beginHistoryBatch(session, {
+      aiRun: options?.aiRun === true,
       dropUndo,
       keepRollback: dropUndo && options?.keepRollback === true,
     })
@@ -4848,10 +4854,15 @@ export function registerSlidesIpc(): void {
 
   ipcMain.handle(
     'slides:ai-snapshot-restore',
-    (e, id: number, options?: { recordUndo?: boolean }) => {
+    (e, id: number, options?: { recordUndo?: boolean; qcRollback?: boolean }) => {
       const session = sessions.get(e.sender.id)
       if (!session || session.masterEdit || session.historyBatch) return null
-      if (!restoreAiSnapshot(session, id, { recordUndo: options?.recordUndo !== false }))
+      if (
+        !restoreAiSnapshot(session, id, {
+          recordUndo: options?.recordUndo !== false,
+          qcRollback: options?.qcRollback === true,
+        })
+      )
         return null
       scheduleDeckBroadcast(session)
       return buildAllRenderSlides(session.opened, session.fitWidthPx)

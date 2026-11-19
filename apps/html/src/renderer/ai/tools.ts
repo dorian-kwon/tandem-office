@@ -43,7 +43,7 @@ export interface HtmlDocAccess {
     ops: HtmlOp[],
     label: string,
   ): { ok: true; ranges: Array<[number, number]> } | { ok: false; errors: OpError[] }
-  replaceAll(html: string, label: string): void
+  replaceAll(html: string, label: string, expectedManualVersion?: number): boolean | void
   /** questionnaire card; resolves with the user's answers or cancelled when skipped */
   askClarification?(questions: ClarifyQuestion[]): Promise<{ answers: string; cancelled?: boolean }>
   /** brief drafting as its own streamed request (see brief-writer.ts); resolves with the raw JSON object */
@@ -714,6 +714,7 @@ export function createHtmlSkillCore(access: HtmlDocAccess): {
     const summary = t('aiToolWritePage')
     if (!access.writePage)
       return { output: 'page generation is not available here', isError: true, summary }
+    const manualVersion = access.getLastManualVersion()
     const result = await access.writePage(spec, currentSignal)
     if (!result.ok || !result.html)
       return {
@@ -721,7 +722,12 @@ export function createHtmlSkillCore(access: HtmlDocAccess): {
         isError: true,
         summary: t('aiToolWritePageFailed'),
       }
-    access.replaceAll(result.html, 'generate')
+    if (
+      access.getLastManualVersion() !== manualVersion ||
+      access.replaceAll(result.html, 'generate', manualVersion) === false
+    ) {
+      return { output: STALE_MESSAGE, isError: true, summary: t('aiToolWritePageFailed') }
+    }
     markSeen()
     const lines = result.html.split('\n').length
     const sections = [...result.html.matchAll(/data-section="([^"]+)"/g)].map((m) => m[1])

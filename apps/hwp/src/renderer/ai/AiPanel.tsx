@@ -142,6 +142,7 @@ interface RunChanges {
   items: HwpChange[]
   /** the editor's count of changes made by anyone else, read when the run began */
   foreign: number
+  runId: string
   state: 'applied' | 'reverted' | 'refused'
 }
 
@@ -654,6 +655,7 @@ export function AiPanel({
   const runInstructionRef = useRef('')
   /** document changes of the in-flight run, in the order they were made */
   const runChangesRef = useRef<HwpChange[]>([])
+  const runIdRef = useRef('')
   const runUndoableRef = useRef(true)
   /** foreign-change count read when the in-flight run began; null when it could not be read */
   const runForeignRef = useRef<number | null>(null)
@@ -678,10 +680,14 @@ export function AiPanel({
     // the plugin marked each change on the pages as it made it
     setMarksShown(true)
     const foreign = runUndoableRef.current ? runForeignRef.current : null
-    runUndoableRef.current = true
     // a run whose starting point is unknown cannot be checked, so it is not offered for undo
     return {
-      changes: { items, foreign: foreign ?? -1, state: foreign === null ? 'refused' : 'applied' },
+      changes: {
+        items,
+        runId: runIdRef.current,
+        foreign: foreign ?? -1,
+        state: foreign === null ? 'refused' : 'applied',
+      },
     }
   }
 
@@ -728,7 +734,7 @@ export function AiPanel({
         get:
           (_target, method: keyof AgentBridge) =>
           (...args: unknown[]) =>
-            bridgeRef.current.invokeAi(method, args, aiEditUndoHistoryEnabled()),
+            bridgeRef.current.invokeAi(method, args, aiEditUndoHistoryEnabled(), runIdRef.current),
       }),
       label: tGlobal,
       onChange: (change) => {
@@ -971,6 +977,8 @@ export function AiPanel({
         }
       : undefined
     runToolsRef.current = []
+    runIdRef.current = crypto.randomUUID()
+    runUndoableRef.current = true
     persistMessage('user', instruction, undefined, scopeQuote, skillUse.chips)
     setChat((prev) => [
       ...prev,
@@ -1114,7 +1122,7 @@ export function AiPanel({
       setReverting(false)
     }
     setReverting(true)
-    bridgeRef.current.undo(changes.items.length, changes.foreign).then(
+    bridgeRef.current.undo(changes.items.length, changes.foreign, changes.runId).then(
       (result) => settle(result.ok ? 'reverted' : 'refused'),
       () => settle('refused'),
     )

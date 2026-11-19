@@ -205,6 +205,7 @@ const SCOPE_TEXT_MAX = 200
 /** structured, not the serialized file text: a body starting with `---` must
  *  never be re-parsed as a frontmatter block on rollback */
 export interface DocSnapshot {
+  manualVersion: number
   /** document body as markdown */
   body: string
   /** raw frontmatter block (fences included), kept byte-for-byte */
@@ -225,14 +226,15 @@ export interface AiPreset {
 
 export interface MarkdownAiDeps {
   getEditor(): Editor | null
-  /** inner YAML of the properties block, read synchronously (write-then-read within one run) */
+  /** Raw YAML block including its fences and following blank lines. */
   getFrontmatter(): string
   /** replace the properties block; empty string removes it */
-  setFrontmatter(inner: string): void
+  setFrontmatter(raw: string): void
   /** document body + frontmatter, for pre-mutation snapshots */
+  getManualVersion(): number
   getSnapshot(): DocSnapshot
   /** rollback: replace the document (body and frontmatter) with a snapshot */
-  restoreSnapshot(snapshot: DocSnapshot): void
+  restoreSnapshot(snapshot: DocSnapshot): boolean
   /** fired when a run with at least one mutation finishes (auto-save hook) */
   onRunDone(mutated: boolean): void
 }
@@ -693,7 +695,7 @@ export function AiPanel({
           () => depsRef.current.getEditor(),
           {
             read: () => depsRef.current.getFrontmatter(),
-            write: (inner) => depsRef.current.setFrontmatter(inner),
+            write: (raw) => depsRef.current.setFrontmatter(raw),
           },
           () => imageGenAvailableRef.current,
           () => ({
@@ -1241,8 +1243,15 @@ export function AiPanel({
 
   const rollback = (snapshot: Snapshot): void => {
     if (busy) return
-    depsRef.current.restoreSnapshot(snapshot.doc)
-    setSnapshots((prev) => prev.filter((s) => s !== snapshot))
+    if (!aiEditUndoHistoryEnabled()) return
+    const restored = depsRef.current.restoreSnapshot(snapshot.doc)
+    setSnapshots((prev) => {
+      const index = prev.indexOf(snapshot)
+      if (index < 0) return prev
+      // A restored point supersedes later turns. An intervening manual edit
+      // instead invalidates this point and every older one.
+      return restored ? prev.slice(0, index) : prev.slice(index + 1)
+    })
   }
 
   // Re-derive the display width on window resize (max is 60% of the window);
@@ -1576,7 +1585,11 @@ export function AiPanel({
                 <span className="ai-version-time">{s.time}</span>
                 {s.label}
               </span>
-              <button className="ai-version-rollback" disabled={busy} onClick={() => rollback(s)}>
+              <button
+                className="ai-version-rollback"
+                disabled={busy || s.doc.manualVersion !== deps.getManualVersion()}
+                onClick={() => rollback(s)}
+              >
                 {t('aiRollback')}
               </button>
             </div>

@@ -1,4 +1,4 @@
-import type { PmNode } from './editor/convert'
+import type { EditorState } from '@tiptap/pm/state'
 import type { DocState } from './doc-state'
 
 /**
@@ -8,27 +8,32 @@ import type { DocState } from './doc-state'
  */
 
 export interface OcrSnapshot {
-  pm: PmNode
+  state: EditorState
   doc: DocState
   dirty: boolean
 }
 export interface OcrHistory {
   before: OcrSnapshot
-  after: OcrSnapshot | null
+  after: OcrSnapshot
   /** the OCR text is in the document now (false after an undo) */
   applied: boolean
-  /** the document as it stood right after an undo: redo is only good while it is unchanged */
-  restored: unknown
+}
+
+const listeners = new Set<() => void>()
+export function onOcrHistoryChange(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
 }
 
 let history: OcrHistory | null = null
 export const getOcrHistory = (): OcrHistory | null => history
 export const setOcrHistory = (next: OcrHistory | null): void => {
   history = next
+  for (const listener of listeners) listener()
 }
 /** forget what undo and redo could bring back: the document was saved or another one was opened */
 export const clearOcrHistory = (): void => {
-  history = null
+  if (history) setOcrHistory(null)
 }
 
 export interface OcrHistoryHandlers {

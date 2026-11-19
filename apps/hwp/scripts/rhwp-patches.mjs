@@ -1241,6 +1241,7 @@ export const pluginHooks = [
   {
     file: 'src/engine/history.ts',
     needles: [
+      'private undoStack: EditCommand[] = []',
       'private redoStack: EditCommand[] = []',
       'execute(command: EditCommand, wasm: WasmBridge)',
       'if (command.isNoOp?.())',

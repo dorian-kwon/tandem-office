@@ -106,6 +106,7 @@ describe('sheets AI panel: attach from a document', () => {
           onStop: () => undefined,
           onNewChat: () => undefined,
           onUndo: () => undefined,
+          canUndoAiEntries: () => false,
           scopeRange: null,
           scopeColumns: null,
           scopeLocked: false,

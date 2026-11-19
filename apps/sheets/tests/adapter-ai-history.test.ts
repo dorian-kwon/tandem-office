@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { applyAiPanelPrefs } from '@genoffice/ui'
 import { InMemoryWorkbookAdapter } from '@genoffice/xlsx-gateway/domain/in-memory-workbook'
-import { withAdapterAiHistory } from '../src/renderer/adapter-ai-history'
+import { restoreAdapterSnapshot, withAdapterAiHistory } from '../src/renderer/adapter-ai-history'
 
 afterEach(() => applyAiPanelPrefs({}))
 describe('blank workbook AI history adapter', () => {
@@ -24,13 +24,27 @@ describe('blank workbook AI history adapter', () => {
       )
     applyAiPanelPrefs({})
     apply('human')
-    withAdapterAiHistory(adapter, () => apply('AI'))
+    expect(withAdapterAiHistory(adapter, () => apply('AI'), false).before).toBeUndefined()
     expect(adapter.getSnapshot().sheets[0]!.cells.A1?.value).toBe('AI')
     expect(adapter.canUndo).toBe(true)
     adapter.undo()
     expect(adapter.canUndo).toBe(false)
     applyAiPanelPrefs({ aiEditUndoHistory: true })
-    withAdapterAiHistory(adapter, () => apply('recorded AI'))
-    expect(adapter.canUndo).toBe(true)
+    const { before } = withAdapterAiHistory(
+      adapter,
+      () => {
+        apply('recorded AI')
+        apply('second AI edit')
+      },
+      true,
+    )
+    const after = adapter.getSnapshot()
+    expect(adapter.canUndo).toBe(false)
+    restoreAdapterSnapshot(adapter, before!)
+    expect(adapter.getSnapshot().sheets[0]!.cells.A1).toBeUndefined()
+    const undoRevision = adapter.getSnapshot().revision
+    restoreAdapterSnapshot(adapter, after)
+    expect(adapter.getSnapshot().sheets[0]!.cells.A1?.value).toBe('second AI edit')
+    expect(adapter.getSnapshot().revision).toBe(undoRevision + 1)
   })
 })

@@ -72,6 +72,7 @@ import { fontFamilyGroups, useSystemFontFamilies } from './system-fonts'
 import {
   isFormulaBarKeyTarget,
   isGridKeyTarget,
+  isWorkbookHistoryComposer,
   shouldInterceptClearSelection,
   shouldInterceptRedoRepeat,
 } from './clear-selection-keyboard'
@@ -304,7 +305,8 @@ interface ExcelShellProps {
   ) => void
   readonly onStop: () => void
   readonly onNewChat: () => void
-  readonly onUndo: (steps?: number) => void
+  readonly onUndo: (ids?: readonly string[]) => void
+  readonly canUndoAiEntries: (ids: readonly string[]) => boolean
   /// A1 notation of the selected AI scope, including an explicitly requested
   /// single cell, or null when there is no scope.
   readonly aiScopeRange: string | null
@@ -569,6 +571,7 @@ export function ExcelShell({
   onStop,
   onNewChat,
   onUndo,
+  canUndoAiEntries,
   aiScopeRange,
   aiScopeColumns,
   aiScopeLocked,
@@ -828,6 +831,17 @@ export function ExcelShell({
   useEffect(() => {
     const onKeyDownCapture = (event: KeyboardEvent): void => {
       if (openingWorkbookRef.current) return
+      if (
+        isWorkbookHistoryComposer(event.target) &&
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        (event.code === 'KeyZ' || (event.code === 'KeyY' && !event.shiftKey))
+      ) {
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        dispatchCommandRef.current(event.shiftKey || event.code === 'KeyY' ? 'redo' : 'undo')
+        return
+      }
       if (shouldInterceptRedoRepeat(event, onIsCellEditingRef.current(), isModalOpen())) {
         event.preventDefault()
         event.stopImmediatePropagation()
@@ -1077,6 +1091,7 @@ export function ExcelShell({
           onStop={onStop}
           onNewChat={onNewChat}
           onUndo={onUndo}
+          canUndoAiEntries={canUndoAiEntries}
           scopeRange={aiScopeRange}
           scopeColumns={aiScopeColumns}
           scopeLocked={aiScopeLocked}

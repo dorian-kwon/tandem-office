@@ -106,8 +106,9 @@ describe('AiPanel teardown', () => {
     Object.defineProperty(window, 'projectApi', { configurable: true, value: undefined })
     const deps: MarkdownAiDeps = {
       getEditor: () => null,
-      getSnapshot: () => '',
-      restoreSnapshot: () => {},
+      getManualVersion: () => 0,
+      getSnapshot: () => ({ manualVersion: 0, body: '', frontmatter: '' }),
+      restoreSnapshot: () => true,
       onRunDone: () => {},
     }
     const { root, container } = mount(

@@ -4512,6 +4512,8 @@ export const agentPlugin = {
      * user was asked and the change would now take another one, it is refused again.
      */
     let skipAiHistory = false
+    let aiRunId = null
+    const runOfCommand = new WeakMap()
     let transactionHistory = null
     host.automation.registerCommand?.({
       id: 'ext:ieum-ai-history',
@@ -4520,11 +4522,23 @@ export const agentPlugin = {
         transactionHistory = services.getInputHandler()?.history ?? null
       },
     })
-    const transact = (label, fn) => {
-      if (!skipAiHistory || MEMO_CHANGES.has(label)) return host.transaction(label, fn)
+    const studioHistory = () => {
       transactionHistory = null
       host.automation.execute('ext:ieum-ai-history')
-      return withoutAiUndoHistory(transactionHistory, () => host.transaction(label, fn))
+      return transactionHistory
+    }
+    const transact = (label, fn) => {
+      if (MEMO_CHANGES.has(label)) return host.transaction(label, fn)
+      if (skipAiHistory) {
+        return withoutAiUndoHistory(studioHistory(), () => host.transaction(label, fn))
+      }
+      if (!aiRunId) return host.transaction(label, fn)
+      const stack = studioHistory()?.undoStack
+      const previous = stack?.at(-1)
+      const result = host.transaction(label, fn)
+      const command = stack?.at(-1)
+      if (command && command !== previous) runOfCommand.set(command, aiRunId)
+      return result
     }
     const change = (label, fn, options) => {
       const allowMemoRemoval = options?.allowMemoRemoval === true || options?.memoPolicy === 'allow'
@@ -4578,7 +4592,7 @@ export const agentPlugin = {
         noteChange(label, done.result, done.before, done.after)
         // a memo the user added, changed or removed in the panel is the user's own edit: an
         // AI run's undo must not take it back in place of the run's changes
-        if (MEMO_CHANGES.has(label)) foreign += 1
+        if (MEMO_CHANGES.has(label) || skipAiHistory) foreign += 1
         if (
           done.result &&
           typeof done.result === 'object' &&
@@ -4690,7 +4704,7 @@ export const agentPlugin = {
       })
 
     const api = {
-      invokeAi: (method, args, recordUndo) => {
+      invokeAi: (method, args, recordUndo, runId) => {
         if (
           method === 'invokeAi' ||
           !Object.hasOwn(api, method) ||
@@ -4699,10 +4713,13 @@ export const agentPlugin = {
           throw new Error('unknown AI editor method')
         }
         const previous = skipAiHistory
+        const previousRun = aiRunId
+        aiRunId = runId
         skipAiHistory = recordUndo !== true
         try {
           return api[method](...args)
         } finally {
+          aiRunId = previousRun
           skipAiHistory = previous
         }
       },
@@ -7310,11 +7327,24 @@ export const agentPlugin = {
        * `expectedForeign` still equals foreignChanges(): the check and the undo happen here,
        * in one go, so nothing can slip in between them.
        */
-      undo: guarded((steps, expectedForeign) => {
+      undo: guarded((steps, expectedForeign, runId) => {
         if (!Number.isInteger(steps) || steps < 1 || steps > MAX_UNDO_STEPS) {
           throw fail('BAD_ARGUMENT', 'steps must be a small positive integer')
         }
         if (expectedForeign !== foreign) return { ok: false, reason: 'changed', undone: 0 }
+        if (runId) {
+          // The studio may have evicted old snapshots. A manual format check also uses plugin
+          // commands. Verify the whole run before the first undo, without retaining snapshots.
+          const stack = studioHistory()?.undoStack
+          if (
+            !stack ||
+            stack.length < steps ||
+            runOfCommand.get(stack.at(-steps - 1)) === runId ||
+            stack.slice(-steps).some((command) => runOfCommand.get(command) !== runId)
+          ) {
+            return { ok: false, reason: 'changed', undone: 0 }
+          }
+        }
         let undone = 0
         own = true
         text = null

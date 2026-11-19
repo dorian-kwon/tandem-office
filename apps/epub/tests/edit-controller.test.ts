@@ -6,6 +6,7 @@
  * cross-chapter undo, replace all as one undo with the read-only count, the
  * translation lock, and AI batches as one undo.
  */
+import { applyAiPanelPrefs } from '@genoffice/ui'
 import { afterEach, describe, expect, it } from 'vitest'
 import { EpubEditController, type EditHost, type OkChapter } from '../src/renderer/edit/controller'
 import { buildChapterHtml } from '../src/renderer/reader/chapter-html'
@@ -290,6 +291,68 @@ describe('bold and italic', () => {
 })
 
 describe('history across chapters', () => {
+  it('maps earlier human ranges past an unrecorded AI edit in the same chapter', async () => {
+    applyAiPanelPrefs({ aiEditUndoHistory: false })
+    const t = setup([{ body: '<p>first</p><p>second</p><p>third</p>' }])
+    await t.open(0)
+    t.type('b2', 'second', 'human')
+    await t.controller.flush()
+    const ai = await t.controller.applyEditGroups(
+      [
+        {
+          spineIndex: 0,
+          edits: [{ op: 'replace', blockId: 'b1', text: 'a much longer first line' }],
+        },
+      ],
+      { aiEdit: true },
+    )
+    expect(ai.ok).toBe(true)
+    t.type('b3', 'third', 'last human')
+    await t.controller.undo()
+    expect(t.book.source(0)).toContain('<p>a much longer first line</p><p>human</p><p>third</p>')
+    await t.controller.undo()
+    expect(t.book.source(0)).toContain('<p>a much longer first line</p><p>second</p><p>third</p>')
+    await t.controller.redo()
+    await t.controller.redo()
+    expect(t.book.source(0)).toContain(
+      '<p>a much longer first line</p><p>human</p><p>last human</p>',
+    )
+  })
+
+  it('refuses an overlapping human undo without losing an older independent edit', async () => {
+    applyAiPanelPrefs({ aiEditUndoHistory: false })
+    const t = setup([{ body: '<p>first</p><p>second</p>' }])
+    await t.open(0)
+    t.type('b2', 'second', 'earlier')
+    await t.controller.flush()
+    t.type('b1', 'first', 'human')
+    await t.controller.flush()
+    await t.controller.applyEditGroups(
+      [{ spineIndex: 0, edits: [{ op: 'replace', blockId: 'b1', text: 'AI wrote this' }] }],
+      { aiEdit: true },
+    )
+    await t.controller.undo()
+    expect(t.book.source(0)).toContain('<p>AI wrote this</p><p>earlier</p>')
+    expect(t.notices).toContain('editRefused')
+    await t.controller.undo()
+    expect(t.book.source(0)).toContain('<p>AI wrote this</p><p>second</p>')
+  })
+
+  it('keeps an undo entry available after a transient backend refusal', async () => {
+    const t = setup([{ body: '<p>original</p>' }])
+    await t.open(0)
+    t.type('b1', 'original', 'human')
+    await t.controller.flush()
+    const replaceRanges = t.book.replaceRanges
+    t.book.replaceRanges = async () => ({ ok: false, error: 'failed' })
+    await t.controller.undo()
+    expect(t.controller.state().canUndo).toBe(true)
+    expect(t.book.source(0)).toContain('<p>human</p>')
+    t.book.replaceRanges = replaceRanges
+    await t.controller.undo()
+    expect(t.book.source(0)).toContain('<p>original</p>')
+  })
+
   it('undoing an edit of another chapter undoes it there and goes there', async () => {
     const t = setup([{ body: P3 }, { body: '<p>Second chapter.</p>' }])
     await t.open(0)

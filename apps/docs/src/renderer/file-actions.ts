@@ -7,6 +7,7 @@
  */
 import { restoreNoteRuns } from './ai/note-run-save'
 import type { Editor } from '@tiptap/core'
+import type { EditorState } from '@tiptap/pm/state'
 import { history } from '@tiptap/pm/history'
 import { Fragment, Slice } from '@tiptap/pm/model'
 import { ReplaceAroundStep } from '@tiptap/pm/transform'
@@ -1096,7 +1097,7 @@ export function currentDocGeneration(): number {
 export function swapDocumentContent(
   ctx: FileActionContext,
   parsed: ParsedDocFull,
-  content?: PmNode,
+  restored?: EditorState,
 ): void {
   const editor = ctx.editor
   if (!editor) return
@@ -1106,7 +1107,8 @@ export function swapDocumentContent(
   editor.storage.listNumbering.docDefaults = parsed.docDefaults
   editor.storage.listNumbering.defs = parsed.numbering
   applyDocLayoutSettings(editor, parsed)
-  const next = content ?? blocksToPmDoc(parsed.blocks, readSections(parsed), pmDocOptions(parsed))
+  const next =
+    restored?.doc ?? blocksToPmDoc(parsed.blocks, readSections(parsed), pmDocOptions(parsed))
   const before = editor.state.doc
   const caret = editor.state.selection.from
   editor
@@ -1114,8 +1116,13 @@ export function swapDocumentContent(
     .setMeta(TRACK_IGNORE, true)
     .setContent(next as never)
     .run()
-  resetEditorHistory(editor)
-  editor.chain().setTextSelection(Math.min(caret, editor.state.doc.content.size)).run()
+  if (restored) {
+    // The restored native undo/redo positions belong to this exact body and parsed file.
+    editor.view.updateState(restored)
+  } else {
+    resetEditorHistory(editor)
+    editor.chain().setTextSelection(Math.min(caret, editor.state.doc.content.size)).run()
+  }
   // the swap is not a user edit: the AI freshness baseline follows the new doc object
   carryDocSeen(editor, before)
   applyReparsedState(ctx, parsed, ctx.doc?.filePath ?? null)

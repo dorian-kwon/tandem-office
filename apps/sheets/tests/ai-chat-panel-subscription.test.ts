@@ -15,7 +15,12 @@ import {
   type AiSubscriptionState,
   type AiSubscriptionStatuses,
 } from '@genoffice/ai-provider/browser'
-import { AI_SUBSCRIPTION_STRINGS, aiSendGate, aiConnectPromptChoice } from '@genoffice/ui'
+import {
+  applyAiPanelPrefs,
+  AI_SUBSCRIPTION_STRINGS,
+  aiSendGate,
+  aiConnectPromptChoice,
+} from '@genoffice/ui'
 import {
   AiChatPanel,
   type AiChatMessage,
@@ -94,6 +99,8 @@ afterEach(() => {
 })
 
 interface PanelState {
+  onUndo?: (ids: readonly string[]) => void
+  canUndoAiEntries?: (ids: readonly string[]) => boolean
   onCitation?: (href: string) => void
   chat: readonly AiChatMessage[]
   prompt: string
@@ -130,7 +137,8 @@ function panel(initial: PanelState) {
           onSendQueued,
           onStop: () => undefined,
           onNewChat: () => undefined,
-          onUndo: () => undefined,
+          onUndo: state.onUndo ?? (() => undefined),
+          canUndoAiEntries: state.canUndoAiEntries ?? (() => false),
           scopeRange: null,
           scopeColumns: null,
           scopeLocked: false,
@@ -357,4 +365,36 @@ it('collapses old messages, expands them, and preserves the failed message retry
   expect(host.querySelectorAll('.ai-msg')).toHaveLength(60)
   p.set({ aiBusy: true })
   expect(host.querySelectorAll('.ai-msg')).toHaveLength(30)
+})
+
+it('shows a chat undo button only for a recorded turn still at the top of this workbook', () => {
+  const onUndo = vi.fn()
+  const view = panel({
+    subscription: subscriptionOf(settings(), statuses('ready', 'ready')),
+    prompt: '',
+    aiBusy: false,
+    chat: [
+      {
+        role: 'assistant',
+        text: 'Changed cells',
+        tools: [],
+        autoApplied: { opCount: 2, undoIds: ['a', 'b'] },
+      },
+    ],
+    onUndo,
+    canUndoAiEntries: () => true,
+  })
+  const button = () => host.querySelector<HTMLButtonElement>('.ai-undo-btn')
+  try {
+    act(() => applyAiPanelPrefs({ aiEditUndoHistory: false }))
+    expect(button()).toBeNull()
+    act(() => applyAiPanelPrefs({ aiEditUndoHistory: true }))
+    expect(button()).not.toBeNull()
+    act(() => button()!.click())
+    expect(onUndo).toHaveBeenCalledWith(['a', 'b'])
+    view.set({ canUndoAiEntries: () => false })
+    expect(button()).toBeNull()
+  } finally {
+    act(() => applyAiPanelPrefs({}))
+  }
 })

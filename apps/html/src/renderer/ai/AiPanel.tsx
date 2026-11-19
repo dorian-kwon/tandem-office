@@ -385,6 +385,7 @@ function chatEntryOf(entry: ProjectChatEntry & { skillProposals?: string[] }): C
 
 /** the whole source text: one string is the exact rollback unit */
 export interface DocSnapshot {
+  manualVersion: number
   text: string
 }
 
@@ -413,7 +414,7 @@ export interface HtmlAiDeps {
   /** live document access for the skill's tools */
   access: HtmlDocAccess
   getSnapshot(): DocSnapshot
-  restoreSnapshot(snapshot: DocSnapshot): void
+  restoreSnapshot(snapshot: DocSnapshot): boolean
   /** the user sent a request (the text as shown in the bubble); names an untitled document */
   onPrompt(text: string): void
   /** fired when a run with at least one mutation finishes (auto-save hook) */
@@ -1112,7 +1113,8 @@ export function AiPanel({
             getSelectedSid: () =>
               queueRunRef.current ? null : depsRef.current.access.getSelectedSid(),
             applyOps: (ops, label) => depsRef.current.access.applyOps(ops, label),
-            replaceAll: (html, label) => depsRef.current.access.replaceAll(html, label),
+            replaceAll: (html, label, version) =>
+              depsRef.current.access.replaceAll(html, label, version),
             askClarification: (questions) =>
               new Promise((resolve) => {
                 clarifyResolverRef.current = resolve
@@ -2064,8 +2066,15 @@ export function AiPanel({
 
   const rollback = (snapshot: Snapshot): void => {
     if (busy) return
-    depsRef.current.restoreSnapshot(snapshot.doc)
-    setSnapshots((prev) => prev.filter((s) => s !== snapshot))
+    if (!aiEditUndoHistoryEnabled()) return
+    const restored = depsRef.current.restoreSnapshot(snapshot.doc)
+    setSnapshots((prev) => {
+      const index = prev.indexOf(snapshot)
+      if (index < 0) return prev
+      // A restored point supersedes later turns. An intervening manual edit
+      // instead invalidates this point and every older one.
+      return restored ? prev.slice(0, index) : prev.slice(index + 1)
+    })
   }
 
   // Re-derive the display width on window resize (max is 60% of the window);
@@ -2395,7 +2404,11 @@ export function AiPanel({
                 <span className="ai-version-time">{s.time}</span>
                 {s.label}
               </span>
-              <button className="ai-version-rollback" disabled={busy} onClick={() => rollback(s)}>
+              <button
+                className="ai-version-rollback"
+                disabled={busy || s.doc.manualVersion !== deps.access.getLastManualVersion()}
+                onClick={() => rollback(s)}
+              >
                 {t('aiRollback')}
               </button>
             </div>

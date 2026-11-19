@@ -98,12 +98,38 @@ describe('AI edit undo history in the Word editor', () => {
     editor.destroy()
   })
 
+  it.each([false, true])(
+    'isolates adjacent manual edits on both sides of the AI (history %s)',
+    (on) => {
+      applyAiPanelPrefs({ aiEditUndoHistory: on })
+      const editor = createEditor()
+      editor.commands.insertContentAt(1, 'A')
+      aiEditor(editor).commands.insertContentAt(2, 'B')
+      editor.commands.insertContentAt(3, 'C')
+      const nativeUndo = () =>
+        editor.view.dom.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }),
+        )
+      nativeUndo()
+      expect(editor.state.doc.firstChild?.textContent).toBe('ABFirst')
+      if (on) {
+        editor.commands.undo()
+        expect(editor.state.doc.firstChild?.textContent).toBe('AFirst')
+      }
+      nativeUndo()
+      expect(editor.state.doc.firstChild?.textContent).toBe(on ? 'First' : 'BFirst')
+      while (editor.can().redo()) editor.commands.redo()
+      expect(editor.state.doc.firstChild?.textContent).toBe('ABCFirst')
+      editor.destroy()
+    },
+  )
+
   it('wires the agent skill and the rollback button to the setting', () => {
     expect(src('../src/renderer/ai/docs-skill.ts')).toContain('withAiEdit(')
     const panel = src('../src/renderer/ai/AiPanel.tsx')
     expect(panel).toContain(
       'aiEditUndoHistoryEnabled() && snapshotBefore && !runSnapshotRef.current',
     )
-    expect(panel).toMatch(/captureSnapshot: \(\) =>\s*\(aiEditUndoHistoryEnabled\(\)/)
+    expect(panel).toMatch(/captureSnapshot: \(\) =>\s*aiEditUndoHistoryEnabled\(\)/)
   })
 })

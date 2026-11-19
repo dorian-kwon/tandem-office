@@ -40,6 +40,111 @@ const texts = (editor: Editor) => {
 const insert = { op: 'insertContent', after: 'end', markdown: 'added' } as const
 
 describe('AI edit undo history setting (markdown)', () => {
+  it.each([false, true])(
+    'separates a multi-block AI call from adjacent typing (history %s)',
+    (enabled) => {
+      applyAiPanelPrefs({ aiEditUndoHistory: enabled })
+      const editor = createEditor('one\n\ntwo\n\nthree')
+      editor.view.dispatch(editor.state.tr.insertText('H', 1))
+      const r = runOps(
+        editor,
+        [
+          { op: 'replaceText', target: { start: 0 }, find: 'one', replace: '1' },
+          { op: 'replaceText', target: { start: 2 }, find: 'three', replace: '3' },
+        ],
+        { source: 'ai' },
+      )
+      expect(r.applied).toBe(2)
+      editor.view.dispatch(editor.state.tr.insertText('M', editor.state.doc.content.size - 1))
+      expect(editor.commands.undo()).toBe(true)
+      expect(texts(editor)).toEqual(['H1', 'two', '3'])
+      if (enabled) {
+        expect(editor.commands.undo()).toBe(true)
+        expect(texts(editor)).toEqual(['Hone', 'two', 'three'])
+      }
+      expect(editor.commands.undo()).toBe(true)
+      expect(texts(editor)).toEqual(enabled ? ['one', 'two', 'three'] : ['1', 'two', '3'])
+      expect(editor.commands.redo()).toBe(true)
+      if (enabled) expect(editor.commands.redo()).toBe(true)
+      expect(editor.commands.redo()).toBe(true)
+      expect(texts(editor)).toEqual(['H1', 'two', '3M'])
+    },
+  )
+
+  it.each([false, true])(
+    'records YAML with the body and restores the original fenced bytes (history %s)',
+    (enabled) => {
+      applyAiPanelPrefs({ aiEditUndoHistory: enabled })
+      const editor = createEditor('one')
+      const original = '---\ntitle: Original\n---\n\n\n'
+      let raw = original
+      const fm = {
+        read: () => raw,
+        write: (v: string) => {
+          raw = v
+        },
+      }
+      const r = runOps(
+        editor,
+        [
+          { op: 'setFrontmatter', yaml: 'title: Revised' },
+          { op: 'replaceText', target: { start: 0 }, find: 'one', replace: 'two' },
+        ],
+        { source: 'ai', frontmatter: fm },
+      )
+      expect(r.applied).toBe(2)
+      expect(editor.can().undo()).toBe(enabled)
+      expect(raw).toBe('---\ntitle: Revised\n---\n\n')
+      expect(texts(editor)).toEqual(['two'])
+      if (enabled) {
+        expect(editor.commands.undo()).toBe(true)
+        expect(raw).toBe(original)
+        expect(texts(editor)).toEqual(['one'])
+        expect(editor.commands.redo()).toBe(true)
+        expect(raw).toBe('---\ntitle: Revised\n---\n\n')
+        expect(texts(editor)).toEqual(['two'])
+      }
+    },
+  )
+
+  it('undoes just the successful prefix when a later op is refused', () => {
+    applyAiPanelPrefs({ aiEditUndoHistory: true })
+    const editor = createEditor('one')
+    const result = runOps(
+      editor,
+      [
+        { op: 'insertContent', after: 0, markdown: 'accepted' },
+        { op: 'deleteBlocks', target: { start: 99 } },
+      ],
+      { source: 'ai' },
+    )
+    expect(result.applied).toBe(1)
+    expect(editor.commands.undo()).toBe(true)
+    expect(texts(editor)).toEqual(['one'])
+    expect(editor.commands.undo()).toBe(false)
+    expect(editor.commands.redo()).toBe(true)
+    expect(texts(editor)).toEqual(['one', 'accepted'])
+  })
+
+  it('does not offer a panel checkpoint when applying the existing YAML', async () => {
+    applyAiPanelPrefs({ aiEditUndoHistory: true })
+    const editor = createEditor('one')
+    const fm = { read: () => '---\ntitle: Old\n---\n\n', write: () => {} }
+    const result = await executeTool(
+      editor,
+      {
+        id: 't',
+        name: 'apply_ops',
+        input: { ops: [{ op: 'setFrontmatter', yaml: 'title: Old' }] },
+      },
+      undefined,
+      fm,
+    )
+    expect(result.isError).toBeFalsy()
+    expect(result.mutated).toBe(false)
+    expect(undoDepth(editor.state)).toBe(0)
+  })
+
   it('keeps no undo entry for an AI op batch while the setting is off', () => {
     const editor = createEditor('one')
     const depth = undoDepth(editor.state)

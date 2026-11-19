@@ -37,7 +37,7 @@ import {
   type XmindTopic,
 } from '@genoffice/xmind-engine'
 import { emptyMeta, type MapNode, type MapNodeMeta, viewToMind } from '../document/convert'
-import { type DocumentSession, MAX_HISTORY_STEPS } from '../document/session'
+import { type DocumentSession } from '../document/session'
 import type { MapController } from '../map/controller'
 import {
   ownTopicStyle,
@@ -615,6 +615,7 @@ export async function editMap(
       .filter((outcome) => outcome.ok && outcome.op === 'set_format' && outcome.id)
       .map((outcome) => outcome.id!)
     controller.edit((root) => takeTree(root, data.nodeData), { restyled, aiEdit: true })
+    turn?.finishEdit(session, key)
     confirmApplied(session, key, outcomes, edits)
   }
   const done = outcomes.filter((outcome) => outcome.ok).length
@@ -826,6 +827,7 @@ export async function setTopicPicture(
     turn?.noteEdit(session, key)
     controller.edit((root) => takeTree(root, data.nodeData), { aiEdit: source === 'ai' })
 
+    turn?.finishEdit(session, key)
     const shown = topicInView(session.view(key).root, topicId)
     if (entryName !== null && shown?.image?.entryName !== entryName) {
       session.removePicture(entryName)
@@ -949,18 +951,19 @@ export async function writeMap(
       const title =
         typeof sheet.title === 'string' && sheet.title.trim() !== '' ? sheet.title : fresh.title
       key = session.addSheet({ title, rootTitle: fresh.rootTitle }).key
-      turn?.noteSheetAdded(key)
+      turn?.noteSheetAdded(session, key)
     }
     const controller = await controllerFor(host, key)
     if (!controller) return fail('the new sheet could not be opened for writing')
     const nodes = nodesOf(sheet, controller.layout === 'both')
-    if (fill) turn?.noteEdit(session, key)
+    turn?.noteEdit(session, key)
     controller.edit((root) => takeTree(root, nodes), { aiEdit: true })
     if (fill && typeof sheet.title === 'string' && sheet.title !== session.tabs()[0]!.title) {
-      turn?.noteRename(key, session.tabs()[0]!.title)
+      turn?.noteRename(key, session.tabs()[0]!.title, sheet.title)
       session.renameSheet(key, sheet.title)
     }
     const position = session.indexOf(key) + 1
+    turn?.finishEdit(session, key)
     const count = countSheetTopics(session.sheet(key))
     written.push(
       fill
@@ -983,7 +986,7 @@ export async function writeMap(
 function sortedKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortedKeys)
   if (!isRecord(value)) return value
-  const out: Record<string, unknown> = {}
+  const out: Record<string, unknown> = Object.create(null)
   for (const key of Object.keys(value).sort()) out[key] = sortedKeys(value[key])
   return out
 }
@@ -1005,81 +1008,84 @@ export function sheetFingerprint(sheet: XmindSheet): string {
  * The panel keeps one per turn as the turn's undo point.
  */
 export class MapTurn {
-  readonly addedSheets: string[] = []
-  /** sheet key → the sheet before the turn's first edit of it */
-  readonly editedSheets = new Map<string, string>()
-  /** sheet key → its title before the turn renamed it */
-  readonly renamedSheets = new Map<string, string>()
+  readonly addedSheets = new Set<string>()
+  readonly editedSheets = new Map<string, { before: string; steps: number }>()
+  readonly renamedSheets = new Map<string, { before: string; after: string }>()
+  readonly #after = new Map<string, string>()
+  #interleaved = false
 
   get changed(): boolean {
-    return this.addedSheets.length > 0 || this.editedSheets.size > 0
+    return this.addedSheets.size > 0 || this.editedSheets.size > 0
   }
 
-  noteSheetAdded(key: string): void {
-    this.addedSheets.push(key)
+  #fingerprint(session: DocumentSession, key: string): string {
+    const sheet = session.sheet(key)
+    // Removing an added sheet would also remove its title, theme and layout.
+    return this.addedSheets.has(key) ? JSON.stringify(sortedKeys(sheet)) : sheetFingerprint(sheet)
   }
 
-  /** Called before the turn edits a sheet; only the first call per sheet counts. */
+  noteSheetAdded(session: DocumentSession, key: string): void {
+    this.addedSheets.add(key)
+    this.#after.set(key, this.#fingerprint(session, key))
+  }
+
   noteEdit(session: DocumentSession, key: string): void {
-    if (this.addedSheets.includes(key) || this.editedSheets.has(key)) return
-    this.editedSheets.set(key, sheetFingerprint(session.sheet(key)))
+    const current = this.#fingerprint(session, key)
+    if (this.#after.has(key) && this.#after.get(key) !== current) this.#interleaved = true
+    if (!this.addedSheets.has(key) && !this.editedSheets.has(key)) {
+      this.editedSheets.set(key, { before: current, steps: 0 })
+    }
   }
 
-  noteRename(key: string, before: string): void {
-    if (!this.renamedSheets.has(key)) this.renamedSheets.set(key, before)
+  finishEdit(session: DocumentSession, key: string): void {
+    const edited = this.editedSheets.get(key)
+    if (edited) edited.steps++
+    this.#after.set(key, this.#fingerprint(session, key))
+  }
+
+  noteRename(key: string, before: string, after: string): void {
+    this.renamedSheets.set(key, { before, after })
+  }
+
+  canRevert(session: DocumentSession): boolean {
+    if (this.#interleaved || session.tabs().length <= this.addedSheets.size) return false
+    for (const [key, after] of this.#after) {
+      if (session.indexOf(key) < 0 || this.#fingerprint(session, key) !== after) return false
+    }
+    for (const [key, edit] of this.editedSheets) {
+      const before = session.sheetBeforeSteps(key, edit.steps)
+      if (!before || sheetFingerprint(before) !== edit.before) return false
+    }
+    for (const [key, rename] of this.renamedSheets) {
+      if (session.sheet(key).title !== rename.after) return false
+    }
+    return true
   }
 }
 
-/**
- * Takes a turn back: the sheets it added are deleted, every sheet it edited is
- * undone step by step (the same undo as Ctrl+Z) until it is as it was before
- * the turn, and the names it changed are put back. A sheet that cannot be
- * brought back that way (its history no longer reaches that far) is left as
- * it was, with every undo redone; the answer is then false.
- */
+/** Check the whole turn after loading controllers, before changing any sheet. */
 export async function revertTurn(host: MapAiHost, turn: MapTurn): Promise<boolean> {
-  host.flush()
   const session = host.session()
   if (!session) return false
-  let complete = true
-  for (const key of turn.addedSheets) {
-    if (session.indexOf(key) < 0) continue
-    if (!session.deleteSheet(key).ok) complete = false
-  }
-  for (const [key, before] of turn.editedSheets) {
-    if (session.indexOf(key) < 0) continue
+  const controllers = new Map<string, MapController>()
+  for (const key of turn.editedSheets.keys()) {
     const controller = await controllerFor(host, key)
-    if (!controller) {
-      complete = false
-      continue
-    }
-    controller.commitEdit()
-    controller.flush()
-    let undone = 0
-    while (
-      sheetFingerprint(session.sheet(key)) !== before &&
-      controller.canUndo &&
-      undone < MAX_HISTORY_STEPS
-    ) {
-      controller.undo()
-      undone++
-    }
-    if (sheetFingerprint(session.sheet(key)) !== before) {
-      for (let step = 0; step < undone; step++) controller.redo()
-      complete = false
-    }
+    if (!controller) return false
+    controllers.set(key, controller)
   }
-  for (const [key, title] of turn.renamedSheets) {
-    if (session.indexOf(key) >= 0) session.renameSheet(key, title)
+  host.flush()
+  if (host.session() !== session || !turn.canRevert(session)) return false
+  for (const [key, edit] of turn.editedSheets) {
+    const controller = controllers.get(key)!
+    for (let step = 0; step < edit.steps; step++) controller.undo()
   }
-  const tabs = session.tabs()
-  const active = host.activeSheetKey()
-  if (!tabs.some((tab) => tab.key === active)) {
-    const edited = [...turn.editedSheets.keys()].find((key) => session.indexOf(key) >= 0)
-    const next = edited ?? tabs[0]?.key
+  for (const [key, rename] of turn.renamedSheets) session.renameSheet(key, rename.before)
+  for (const key of turn.addedSheets) session.deleteSheet(key)
+  if (session.indexOf(host.activeSheetKey() ?? '') < 0) {
+    const next = controllers.keys().next().value ?? session.tabs()[0]?.key
     if (next) host.showSheet(next)
   }
-  return complete
+  return true
 }
 
 // ---- walking ----

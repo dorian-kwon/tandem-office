@@ -600,10 +600,19 @@ export class BookTools {
       const failure = outcome.failure
       const opIndex = opOf[outcome.index]?.[failure.index ?? 0] ?? opOf[outcome.index]?.[0] ?? 0
       const op = ops[opIndex]!
-      return err(
-        `Refused; nothing was changed.\nop ${opIndex + 1} (${op.op}, chapter ${op.chapter}, block ${op.blockId}): ${failureText(failure)}`,
-        { done: 0 },
-      )
+      const reason = `op ${opIndex + 1} (${op.op}, chapter ${op.chapter}, block ${op.blockId}): ${failureText(failure)}`
+      if (outcome.results.length > 0) {
+        const chapters = [...new Set(outcome.results.map((r) => r.spineIndex + 1))]
+        return {
+          isError: true,
+          mutated: true,
+          output: `Rollback failed; some edits remain in chapter(s) ${chapters.join(', ')}. Read them again before retrying.\n${reason}`,
+        }
+      }
+      return err(`Refused; nothing was changed.\n${reason}`, { done: 0 })
+    }
+    if (!outcome.results.some((r) => r.replacements.length > 0)) {
+      return { output: 'The blocks already match the requested edits.', detail: { done: 0 } }
     }
     return {
       output: this.appliedText(ops.length, outcome.results),

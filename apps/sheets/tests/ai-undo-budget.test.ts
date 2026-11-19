@@ -1,4 +1,4 @@
-import { createAiUndoScope } from '../src/renderer/ai-undo-scope'
+import { createAiUndoScope, matchesAiUndoEntries } from '../src/renderer/ai-undo-scope'
 import { LocalUndoRedoService } from '@univerjs/core'
 import { beforeEach, describe, expect, it } from 'vitest'
 
@@ -203,5 +203,42 @@ describe('AI source scope across asynchronous loads', () => {
     scope.settle()
     aiSheet.edit()
     expect(stack).toHaveLength(2)
+  })
+})
+
+describe('opt-in AI transactions on the Univer history stack', () => {
+  it('replays overlapping commands in inverse order and protects intervening manual undo steps', () => {
+    installJournalSuppressionUndoFilter()
+    const stack: ReturnType<typeof setRangeItem>[] = []
+    const redo: ReturnType<typeof setRangeItem>[] = []
+    const service = fakeService(stack, redo)
+    const scope = createAiUndoScope(true)
+    const edit = (before: string, after: string) =>
+      LocalUndoRedoService.prototype.pushUndoRedo.call(service as never, {
+        unitID: 'wb',
+        undoMutations: [{ id: 'cell', params: { value: before } }],
+        redoMutations: [{ id: 'cell', params: { value: after } }],
+      })
+    scope.run(() => {
+      edit('start', 'first')
+      edit('first', 'second')
+    })
+    const firstIds = scope.entryIds
+    expect(matchesAiUndoEntries(stack, firstIds)).toBe(true)
+    expect(stack[0]!.undoMutations).toEqual([
+      { id: 'cell', params: { value: 'first' } },
+      { id: 'cell', params: { value: 'start' } },
+    ])
+    expect(stack[0]!.redoMutations).toEqual([
+      { id: 'cell', params: { value: 'first' } },
+      { id: 'cell', params: { value: 'second' } },
+    ])
+    edit('second', 'manual')
+    expect(matchesAiUndoEntries(stack, firstIds)).toBe(false)
+    scope.run(() => edit('manual', 'third'))
+    scope.settle()
+    expect(stack).toHaveLength(3)
+    expect(matchesAiUndoEntries(stack, scope.entryIds)).toBe(false)
+    expect(matchesAiUndoEntries([], firstIds)).toBe(false)
   })
 })

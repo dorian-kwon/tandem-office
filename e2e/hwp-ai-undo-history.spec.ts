@@ -3,7 +3,11 @@ import { closeAndSaveVideo, launchShell, waitForPageWithUrl } from './helpers'
 
 test('the built HWP studio keeps manual undo while skipping disabled AI history', async () => {
   test.setTimeout(120_000)
-  const launched = await launchShell({ onboardingSeen: true, videoDir: 'hwp-ai-undo' })
+  const launched = await launchShell({
+    onboardingSeen: true,
+    videoDir: 'hwp-ai-undo',
+    hideUpdateWindows: true,
+  })
   try {
     // The current release home exposes translation projects; open via the same shell API.
     await launched.page.evaluate(() => window.aiOffice.newHwp())
@@ -36,14 +40,26 @@ test('the built HWP studio keeps manual undo while skipping disabled AI history'
         false,
       ])
       const afterDisabled = await historyDepth()
+      const foreign = await call('foreignChanges', [])
       const withHistory = await call('invokeAi', [
         'insertParagraphs',
         ['', null, 'end', ['AI with history']],
         true,
+        'first',
       ])
       const afterEnabled = await historyDepth()
       await studio.automation.execute('edit:undo')
       const text = await call('readText', [])
+      await studio.automation.execute('edit:redo')
+      const afterRedo = await call('readText', [])
+      const guarded = await call('undo', [1, foreign, 'first'])
+      const reverted = await call('readText', [])
+      await call('invokeAi', ['insertParagraphs', ['', null, 'end', ['Next AI']], true, 'second'])
+      const safe = await call('undo', [1, await call('foreignChanges', []), 'second'])
+      await call('invokeAi', ['insertParagraphs', ['', null, 'end', ['Next AI']], true, 'third'])
+      await call('insertParagraphs', ['', null, 'end', ['Manual from the plugin']])
+      const blocked = await call('undo', [1, await call('foreignChanges', []), 'third'])
+      const preserved = await call('readText', [])
       return {
         initial,
         manual,
@@ -53,6 +69,12 @@ test('the built HWP studio keeps manual undo while skipping disabled AI history'
         withHistory,
         afterEnabled,
         text,
+        afterRedo,
+        guarded,
+        reverted,
+        safe,
+        blocked,
+        preserved,
       }
     })
     expect(result.manual).toMatchObject({ ok: true })
@@ -64,6 +86,13 @@ test('the built HWP studio keeps manual undo while skipping disabled AI history'
     expect(result.text).toContain('Manual paragraph')
     expect(result.text).toContain('AI without history')
     expect(result.text).not.toContain('AI with history')
+    expect(result.afterRedo).toContain('AI with history')
+    // Native undo/redo counts as a foreign change.
+    expect(result.guarded).toMatchObject({ ok: false, undone: 0 })
+    expect(result.reverted).toContain('AI with history')
+    expect(result.safe).toMatchObject({ ok: true, undone: 1 })
+    expect(result.blocked).toMatchObject({ ok: false, undone: 0 })
+    expect(result.preserved).toContain('Manual from the plugin')
   } finally {
     await closeAndSaveVideo(launched, 'hwp-ai-undo')
   }

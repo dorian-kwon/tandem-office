@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
-import { undo, undoDepth } from '@codemirror/commands'
+import { redo, undo, undoDepth } from '@codemirror/commands'
 import { applyAiPanelPrefs, normalizeAiPanelPrefs } from '@genoffice/ui'
 import { buildExtensions, External } from '../src/renderer/source/cm-setup'
 import { sourceEditAnnotations } from '../src/renderer/source/ai-history'
@@ -40,6 +40,32 @@ describe('source edit annotations', () => {
     expect(sourceEditAnnotations(true).some((a) => a.type === External)).toBe(true)
     expect(sourceEditAnnotations(false).some((a) => a.type === External)).toBe(true)
   })
+
+  it.each([false, true])(
+    'separates typing on both sides of an AI patch (history %s)',
+    (enabled) => {
+      setHistory(enabled)
+      const view = makeView('abc')
+      view.dispatch({ changes: { from: 1, insert: 'H' }, userEvent: 'input.type' })
+      view.dispatch({
+        changes: { from: 2, insert: 'AI' },
+        annotations: sourceEditAnnotations(true),
+      })
+      view.dispatch({ changes: { from: 4, insert: 'M' }, userEvent: 'input.type' })
+      expect(undo(view)).toBe(true)
+      expect(view.state.doc.toString()).toBe('aHAIbc')
+      if (enabled) {
+        expect(undo(view)).toBe(true)
+        expect(view.state.doc.toString()).toBe('aHbc')
+      }
+      expect(undo(view)).toBe(true)
+      expect(view.state.doc.toString()).toBe(enabled ? 'abc' : 'aAIbc')
+      expect(redo(view)).toBe(true)
+      if (enabled) expect(redo(view)).toBe(true)
+      expect(redo(view)).toBe(true)
+      expect(view.state.doc.toString()).toBe('aHAIMbc')
+    },
+  )
 
   it('keeps no undo entry for an AI edit while the setting is off', () => {
     setHistory(false)

@@ -1,3 +1,6 @@
+import { Editor } from '@tiptap/core'
+import { applyAiPanelPrefs } from '@genoffice/ui'
+import { buildExtensions } from '../src/renderer/editor/extensions'
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -109,14 +112,16 @@ async function settle(): Promise<void> {
   })
 }
 
-async function mountPanel(): Promise<HTMLElement> {
+async function mountPanel(overrides: Partial<MarkdownAiDeps> = {}): Promise<HTMLElement> {
   const deps: MarkdownAiDeps = {
     getEditor: () => null,
     getFrontmatter: () => '',
     setFrontmatter: () => {},
-    getSnapshot: () => ({ body: '', frontmatter: '' }),
-    restoreSnapshot: () => {},
+    getManualVersion: () => 0,
+    getSnapshot: () => ({ manualVersion: 0, body: '', frontmatter: '' }),
+    restoreSnapshot: () => true,
     onRunDone: () => {},
+    ...overrides,
   }
   const container = document.createElement('div')
   document.body.appendChild(container)
@@ -517,4 +522,57 @@ describe('AiPanel under the subscription contract', () => {
     expect(bridge.requests[0]!.system).toContain('Tandem Office Markdown')
     expect(bridge.requests[0]!.system).not.toContain('GenOffice')
   })
+})
+
+it('rewinds two uninterrupted turns from the older button and removes both checkpoints', async () => {
+  const bridge = installBridge({
+    settings: { subscriptionNoticeSeen: true },
+    statuses: statusMap('ready', 'ready'),
+  })
+  const editor = new Editor({
+    extensions: buildExtensions({
+      slashController: { onOpen() {}, onUpdate() {}, onKeyDown: () => false, onClose() {} },
+      slashItems: () => [],
+    }),
+    content: '<p>Original</p>',
+  })
+  const restore = vi.fn(() => true)
+  try {
+    const container = await mountPanel({
+      getEditor: () => editor,
+      getSnapshot: () => ({ manualVersion: 0, body: editor.getText(), frontmatter: '' }),
+      restoreSnapshot: restore,
+    })
+    act(() => applyAiPanelPrefs({ aiEditUndoHistory: true }))
+    for (const word of ['First', 'Second']) {
+      await sendMessage(container, word)
+      const id = bridge.requests.at(-1)!.requestId
+      act(() => {
+        bridge.emit({
+          requestId: id,
+          type: 'tool-call',
+          toolCall: {
+            id: word,
+            name: 'apply_ops',
+            input: { ops: [{ op: 'insertContent', after: 0, markdown: word }] },
+          },
+        })
+        bridge.emit({ requestId: id, type: 'done' })
+      })
+      await settle()
+      const next = bridge.requests.at(-1)!.requestId
+      act(() => {
+        bridge.emit({ requestId: next, type: 'delta', text: 'done' })
+        bridge.emit({ requestId: next, type: 'done' })
+      })
+      await settle()
+    }
+    expect(container.querySelectorAll('.ai-version-rollback')).toHaveLength(2)
+    await click(container, '.ai-version-rollback')
+    expect(restore).toHaveBeenCalledWith({ manualVersion: 0, body: 'Original', frontmatter: '' })
+    expect(container.querySelectorAll('.ai-version-rollback')).toHaveLength(0)
+  } finally {
+    act(() => applyAiPanelPrefs({}))
+    editor.destroy()
+  }
 })

@@ -345,6 +345,16 @@ describe('find_text', () => {
 })
 
 describe('edit_blocks', () => {
+  it('does not promise an undo step when the requested block already matches', async () => {
+    const s = setup([{ body: '<p>Already here</p>' }])
+    const result = await s.run('edit_blocks', {
+      ops: [{ op: 'replace', chapter: 1, blockId: 'b1', text: 'Already here' }],
+    })
+    expect(result.isError).toBe(false)
+    expect(result.output).toContain('already match')
+    expect(s.controller.state().canUndo).toBe(false)
+  })
+
   it('applies a batch over two chapters as one undo entry', async () => {
     const s = setup(THREE)
     const before = [0, 1, 2].map((i) => s.book.source(i))
@@ -367,6 +377,30 @@ describe('edit_blocks', () => {
     await s.controller.undo()
     expect([0, 1, 2].map((i) => s.book.source(i))).toEqual(before)
     expect(s.controller.state().canUndo).toBe(false)
+  })
+
+  it('reports a partial batch if the backend also refuses rollback, and keeps it undoable', async () => {
+    const s = setup(THREE)
+    const original = s.book.source(0)
+    const applyEdits = s.book.applyEdits
+    const replaceRanges = s.book.replaceRanges
+    s.book.applyEdits = (request) =>
+      request.spineIndex === 1
+        ? Promise.resolve({ ok: false, error: 'failed' })
+        : applyEdits(request)
+    s.book.replaceRanges = async () => ({ ok: false, error: 'failed' })
+    const result = await s.run('edit_blocks', {
+      ops: [
+        { op: 'replace', chapter: 1, blockId: 'b1', text: 'Applied' },
+        { op: 'replace', chapter: 2, blockId: 'b1', text: 'Refused' },
+      ],
+    })
+    expect(result.isError).toBe(true)
+    expect(result.output).toContain('some edits remain in chapter(s) 1')
+    expect(s.book.source(0)).toContain('Applied')
+    s.book.replaceRanges = replaceRanges
+    await s.controller.undo()
+    expect(s.book.source(0)).toBe(original)
   })
 
   it('keeps the placeholders of a replaced block', async () => {

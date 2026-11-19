@@ -23,7 +23,7 @@
  *
  * Everything that talks to the main process runs one after the other.
  */
-import type { BlockEdit, ChapterBlock, OpenChapter, RangeReplacement } from '@genoffice/epub-engine'
+import type { BlockEdit, ChapterBlock, OpenChapter } from '@genoffice/epub-engine'
 import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
 import type { Params } from '@genoffice/i18n'
 import type {
@@ -38,6 +38,7 @@ import { normalizeQuery } from '../reader/book-search'
 import { BLOCK_ATTR } from '../reader/chapter-html'
 import { blockMatches, countMatches, plainOffsetAtSource, replacedNotation } from './block-text'
 import { blockPlainText, openChapter } from './engine'
+import { forwardChanges, mapHistory, type HistoryEntry, type HistoryPart } from './history'
 import {
   domNotation,
   domPlainText,
@@ -114,17 +115,6 @@ export interface ReplaceAllOutcome {
   skipped: number
   /** matches in chapters the main process refused to change */
   failed: number
-}
-
-interface HistoryPart {
-  spineIndex: number
-  path: string
-  /** the replacements that undo the change, against the chapter text right after it */
-  inverse: RangeReplacement[]
-}
-
-interface HistoryEntry {
-  parts: HistoryPart[]
 }
 
 interface BlockState {
@@ -751,7 +741,12 @@ export class EpubEditController {
   private partsOf(results: readonly OkEdit[]): HistoryPart[] {
     return results
       .filter((r) => r.replacements.length > 0)
-      .map((r) => ({ spineIndex: r.spineIndex, path: r.path, inverse: r.inverse }))
+      .map((r) => ({
+        spineIndex: r.spineIndex,
+        path: r.path,
+        inverse: r.inverse,
+        length: r.source.length,
+      }))
   }
 
   private push(parts: HistoryPart[]): void {
@@ -953,16 +948,31 @@ export class EpubEditController {
       return
     }
     await this.run(async () => {
-      await this.send(this.capture())
+      if (!(await this.send(this.capture()))) return
       const from = which === 'undo' ? this.undoStack : this.redoStack
       const entry = from.pop()
       if (!entry) return
-      const done = await this.revert(entry)
-      if (!done) {
-        this.undoStack = []
-        this.redoStack = []
-        this.host.notify({ key: 'editHistoryFailed' })
+      if (entry.parts.length === 0) {
+        this.host.notify({ key: 'editRefused' })
         this.host.changed()
+        return
+      }
+      const done = await this.revert(entry)
+      if (!done.ok) {
+        // A rollback or a backend refusal can itself fail. Only map through
+        // changes actually left in the book; a temporary failure can be retried.
+        if (done.failure.error === 'invalid-request' || done.failure.error === 'refused') {
+          mapHistory(from, forwardChanges(entry.parts))
+        } else {
+          from.push(entry)
+        }
+        if (done.results.length > 0) {
+          const changes = forwardChanges(this.partsOf(done.results))
+          mapHistory(this.undoStack, changes)
+          mapHistory(this.redoStack, changes)
+          this.show(done.results, false)
+        }
+        this.refused(done.failure)
         return
       }
       ;(which === 'undo' ? this.redoStack : this.undoStack).push(done.entry)
@@ -974,7 +984,10 @@ export class EpubEditController {
   /** Applies an entry's inverses, last part first; the entry that reverts this is returned. */
   private async revert(
     entry: HistoryEntry,
-  ): Promise<{ entry: HistoryEntry; results: OkEdit[] } | null> {
+  ): Promise<
+    | { ok: true; entry: HistoryEntry; results: OkEdit[] }
+    | { ok: false; failure: FailedEdit; results: OkEdit[] }
+  > {
     const results: OkEdit[] = []
     for (const part of [...entry.parts].reverse()) {
       const result = await this.host.api
@@ -985,25 +998,25 @@ export class EpubEditController {
         })
         .catch((err): EpubEditResult => ({ ok: false, error: 'failed', message: String(err) }))
       if (!result.ok) {
-        if (result.error === 'locked') this.refused(result)
-        await this.rollback(results)
-        return null
+        return { ok: false, failure: result, results: await this.rollback(results) }
       }
       this.note(result)
       results.push(result)
     }
-    const parts = results.map((r) => ({
-      spineIndex: r.spineIndex,
-      path: r.path,
-      inverse: r.inverse,
-    }))
-    return { entry: { parts }, results }
+    return { ok: true, entry: { parts: this.partsOf(results) }, results }
   }
 
   /** Takes back changes just made, last first (an entry or a batch that could not be made whole). */
-  private async rollback(results: readonly OkEdit[]): Promise<void> {
+  private async rollback(results: readonly OkEdit[]): Promise<OkEdit[]> {
+    const remaining: OkEdit[] = []
+    const blocked = new Set<string>()
     for (const result of [...results].reverse()) {
       if (result.replacements.length === 0) continue
+      // Older inverses in this chapter have offsets from before the failed one.
+      if (blocked.has(result.path)) {
+        remaining.push(result)
+        continue
+      }
       const back = await this.host.api
         .replaceRanges({
           spineIndex: result.spineIndex,
@@ -1011,8 +1024,14 @@ export class EpubEditController {
           replacements: result.inverse,
         })
         .catch(() => null)
-      if (back?.ok) this.note(back)
+      if (back?.ok) {
+        this.note(back)
+      } else {
+        blocked.add(result.path)
+        remaining.push(result)
+      }
     }
+    return remaining.reverse()
   }
 
   /** Brings the screen up to date with changes; with `go`, a change elsewhere is shown there. */
@@ -1064,7 +1083,14 @@ export class EpubEditController {
       }
     }
     return this.run(async () => {
-      await this.send(this.capture())
+      if (!(await this.send(this.capture()))) {
+        return {
+          ok: false,
+          index: 0,
+          results: [],
+          failure: { ok: false, error: 'failed', message: 'pending typing could not be applied' },
+        }
+      }
       let results: OkEdit[] = []
       let failed: { index: number; failure: FailedEdit } | null = null
       for (const [index, group] of groups.entries()) {
@@ -1075,8 +1101,7 @@ export class EpubEditController {
           if (result.error === 'locked') this.refused(result, true)
           failed ??= { index, failure: result }
           if (options.atomic) {
-            await this.rollback(results)
-            results = []
+            results = await this.rollback(results)
             break
           }
           continue
@@ -1085,7 +1110,13 @@ export class EpubEditController {
         results.push(result)
       }
       if (options.aiEdit && !aiEditUndoHistoryEnabled()) {
-        if (results.some((result) => result.replacements.length > 0)) this.redoStack = []
+        const parts = this.partsOf(results)
+        if (parts.length > 0) {
+          this.redoStack = []
+          if (this.undoStack.length > 0) {
+            mapHistory(this.undoStack, forwardChanges(parts))
+          }
+        }
       } else {
         this.push(this.partsOf(results))
       }

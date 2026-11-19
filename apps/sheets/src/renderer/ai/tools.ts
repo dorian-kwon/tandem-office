@@ -1347,7 +1347,7 @@ export function executeWorkbookTool(
           outcome.plan.formatChanges.length +
           outcome.plan.sheetRenames.length +
           outcome.plan.structuralChanges.length
-        const base = `Auto-applied ${opCount} change(s) (undo via the side panel [Undo] button or ⌘Z): ${formatPlanSummary(outcome.plan)}${warnings}`
+        const base = `Auto-applied ${opCount} change(s): ${formatPlanSummary(outcome.plan)}${warnings}`
         // Read-back after write (write → verify): formula cells fetch their
         // computed values after the async recalc, so the AI sees real results and
         // errors like #REF!/#DIV/0! instead of just what it wrote.

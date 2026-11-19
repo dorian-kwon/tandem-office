@@ -202,6 +202,12 @@ export class DocumentSession {
     entry.stale = true
   }
 
+  /** The sheet an exact number of undo steps would restore, if still retained. */
+  sheetBeforeSteps(key: string, steps: number): Readonly<XmindSheet> | undefined {
+    const { entry } = this.#at(key)
+    return entry.snapshots[entry.cursor - steps]
+  }
+
   canUndo(key: string): boolean {
     const entry = this.#entries.find((candidate) => candidate.key === key)
     return !!entry && entry.cursor > 0

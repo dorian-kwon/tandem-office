@@ -1,3 +1,4 @@
+import { onOcrHistoryChange, registerOcrHistoryHandlers } from '../src/renderer/ocr-history-state'
 import { cancelPhasedContent, setContentPhased } from '../src/renderer/phased-content'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Editor } from '@tiptap/core'
@@ -12,6 +13,7 @@ import type { DocState } from '../src/renderer/doc-state'
 import type { FileActionContext } from '../src/renderer/file-actions'
 import {
   clearOcrHistory,
+  discardBranchedOcrRedo,
   ocrIntoDocumentAvailable,
   ocrIntoDocumentUnavailableReason,
   ocrRedoAvailable,
@@ -92,6 +94,7 @@ async function open(extra: Partial<DocState> = {}) {
     content: blocksToPmDoc(original.blocks) as never,
   })
   live.push(editor)
+  editor.on('transaction', discardBranchedOcrRedo)
   const state: Record<string, unknown> = {
     editor,
     dirtyRef: { current: false },
@@ -189,6 +192,23 @@ describe('putting OCR text into the document on screen', () => {
     expect(ctx.doc!.filePath).toBe('/work/book.docx')
     expect(ctx.doc!.fileName).toBe('book.docx')
     expect(ctx.doc!.parsed).not.toBe(original)
+  })
+
+  it('keeps typing during parsing and applies a retry against the edited body', async () => {
+    await open()
+    const result = await placeOcrIntoOpenDocument(ctx, plan(), {
+      ...deps,
+      parse: async (bytes) => {
+        unsavedEdit()
+        return parseDocx(bytes)
+      },
+    })
+    expect(result.ok).toBe(false)
+    expect(editor.state.doc.textContent).toContain('EDITED Intro')
+    expect(boxTexts()).toEqual([])
+    expect(editor.can().undo()).toBe(true)
+    expect((await place()).ok).toBe(true)
+    expect(boxTexts()).toHaveLength(2)
   })
 
   it('saves the edit, the boxes and the picture together when the person saves', async () => {
@@ -400,6 +420,23 @@ describe('undo and redo of the OCR text', () => {
     expect(boxTexts()).toEqual([])
   })
 
+  it('crosses the OCR boundary with the native undo and redo on both sides intact', async () => {
+    await open()
+    unsavedEdit()
+    await place()
+    editor.commands.insertContentAt(1, 'Later ')
+    editor.commands.undo()
+    expect(tryOcrUndo(ctx)).toBe(true)
+    editor.commands.undo()
+    expect(editor.state.doc.textContent).not.toContain('EDITED')
+    editor.commands.redo()
+    expect(editor.state.doc.textContent).toContain('EDITED')
+    expect(tryOcrRedo(ctx)).toBe(true)
+    editor.commands.redo()
+    expect(editor.state.doc.textContent).toContain('Later ')
+    expect(boxTexts()).toHaveLength(2)
+  })
+
   it('cannot be redone after the document was edited', async () => {
     await open()
     await place()
@@ -407,6 +444,21 @@ describe('undo and redo of the OCR text', () => {
     editor.chain().focus('start').insertContent('NEW ').run()
     expect(ocrRedoAvailable(editor)).toBe(false)
     expect(tryOcrRedo(ctx)).toBe(false)
+    editor.commands.undo()
+    expect(tryOcrRedo(ctx)).toBe(false)
+  })
+
+  it('leaves an unsaved header in place on either side of OCR', async () => {
+    await open()
+    await place()
+    ctx.headerDirty = true
+    expect(tryOcrUndo(ctx)).toBe(false)
+    expect(boxTexts()).toHaveLength(2)
+    ctx.headerDirty = false
+    expect(tryOcrUndo(ctx)).toBe(true)
+    ctx.headerDirty = true
+    expect(tryOcrRedo(ctx)).toBe(false)
+    expect(boxTexts()).toHaveLength(0)
   })
 
   it('is gone once the document is saved or another document is opened', async () => {
@@ -442,6 +494,8 @@ describe('with AI edit undo history off', () => {
     expect(ctx.dirtyRef.current).toBe(true)
     expect(ocrUndoAvailable(editor)).toBe(false)
     expect(tryOcrUndo(ctx)).toBe(false)
+    expect(editor.commands.undo()).toBe(true)
+    expect(editor.state.doc.textContent).not.toContain('EDITED')
   })
 
   it('puts the OCR text in without keeping any undo of it', async () => {
@@ -497,8 +551,29 @@ describe('Ctrl+Z and Ctrl+Shift+Z in the editor', () => {
       new KeyboardEvent('keydown', { key, ctrlKey: true, shiftKey: shift, bubbles: true }),
     )
 
+  it('publishes the available buttons immediately after placement and keyboard undo/redo', async () => {
+    await open()
+    let buttons: boolean[] = []
+    const off = onOcrHistoryChange(() => {
+      buttons = [ocrUndoAvailable(editor), ocrRedoAvailable(editor)]
+    })
+    registerOcrHistoryHandlers({ undo: () => tryOcrUndo(ctx), redo: () => tryOcrRedo(ctx) })
+    try {
+      await place()
+      expect(buttons).toEqual([true, false])
+      press('z')
+      expect(buttons).toEqual([false, true])
+      press('z', true)
+      expect(buttons).toEqual([true, false])
+      clearOcrHistory()
+      expect(buttons).toEqual([false, false])
+    } finally {
+      off()
+      registerOcrHistoryHandlers(null)
+    }
+  })
+
   it('reach the OCR undo and redo before the editor’s own history', async () => {
-    const { registerOcrHistoryHandlers } = await import('../src/renderer/ocr-history-state')
     await open()
     const calls: string[] = []
     registerOcrHistoryHandlers({
@@ -513,7 +588,6 @@ describe('Ctrl+Z and Ctrl+Shift+Z in the editor', () => {
   })
 
   it('leave the key to the editor’s history when the OCR text has nothing to undo', async () => {
-    const { registerOcrHistoryHandlers } = await import('../src/renderer/ocr-history-state')
     await open()
     registerOcrHistoryHandlers({ undo: () => false, redo: () => false })
     editor.chain().focus('start').insertContent('TYPED ').run()

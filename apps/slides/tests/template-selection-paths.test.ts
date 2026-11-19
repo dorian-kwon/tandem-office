@@ -225,6 +225,21 @@ describe('the template memory follows the document', () => {
     expect(onDisk(from)).toEqual(stored)
   })
 
+  it('does not land an in-flight generated deck onto a newly opened document', async () => {
+    const replacement = await blankSession('')
+    await blankSession('')
+    const markers = [await generatedPage('Late')]
+    const pending = call<Promise<{ error?: string }>>(
+      'slides:land-generated-pages:ai-edit',
+      [markers, FIT, 'replace'],
+      true,
+    )
+    sessions.set(WC, replacement)
+    expect((await pending).error).toBeTruthy()
+    expect(sessions.get(WC)).toBe(replacement)
+    expect(replacement.undoStack).toHaveLength(0)
+  })
+
   it('AI generation that replaces the deck: an unsaved deck keeps the selection, nothing is written', async () => {
     const from = join(root, 'elsewhere', 'my-own-file.pptx')
     const old = await blankSession(from)

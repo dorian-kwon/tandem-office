@@ -48,9 +48,9 @@ export const EPUB_SYSTEM_PROMPT = [
   '',
   '## Changing the book: edit_blocks',
   '- One call carries a list of ops, applied in order: replace {chapter, blockId, text}, insert_after {chapter, blockId, text} (a new block of the same kind right after that block), delete {chapter, blockId}.',
-  '- A call is all or nothing. When any op is refused (a read-only chapter, editing locked while the book is being translated, placeholders that do not match, a block that does not take that op, an unknown block id, …), nothing is changed and the result lists the refused ops with their reasons. Correct them and send the whole call again.',
+  '- A call is all or nothing. When any op is refused (a read-only chapter, editing locked while the book is being translated, placeholders that do not match, a block that does not take that op, an unknown block id, …), nothing is changed and the result lists the refused ops with their reasons. Correct them and send the whole call again. If rollback fails, first reread the chapters reported as changed.',
   '- insert_after and delete work only on flowing blocks (p, h1–h6, li, blockquote, div). Table cells, captions and definition-list entries (td, th, figcaption, dt, dd) take only replace.',
-  '- Read a block before you replace it, and change only what the user asked for. A call is one step the user can undo with Ctrl+Z; do not ask for confirmation before ordinary edits.',
+  '- Read a block before you replace it, and change only what the user asked for. The result tells you whether the call can be undone. Do not ask for confirmation before ordinary edits.',
   '- Read-only chapters (broken ones, fixed-layout ones) cannot be changed. A fixed-layout book cannot be changed at all, and edit_blocks is not offered for it.',
   '',
   '## Translating the book',
@@ -107,7 +107,7 @@ const READ_TOOLS: AgentToolDef[] = [
 const EDIT_TOOL: AgentToolDef = {
   name: BOOK_TOOL_NAMES.editBlocks,
   description:
-    'Change blocks of the book. ops are applied in order as one undoable step, all or nothing: replace {chapter, blockId, text} (keep every <xN> placeholder of the block), insert_after {chapter, blockId, text} (a new block of the same kind; only <b>, <i>, <br/>), delete {chapter, blockId}. insert_after and delete work only on p, h1–h6, li, blockquote and div blocks. When any op is refused nothing changes and the result gives the reason of each refused op.',
+    'Change blocks of the book. ops are applied in order as a single batch: replace {chapter, blockId, text} (keep every <xN> placeholder of the block), insert_after {chapter, blockId, text} (a new block of the same kind; only <b>, <i>, <br/>), delete {chapter, blockId}. insert_after and delete work only on p, h1–h6, li, blockquote and div blocks. A refusal gives its reason. If rollback fails, the result identifies the chapters that still contain edits.',
   inputSchema: {
     type: 'object',
     properties: {

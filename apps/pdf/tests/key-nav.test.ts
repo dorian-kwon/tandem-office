@@ -43,6 +43,7 @@ describe('shouldHandleDocumentUndo', () => {
       const input = document.createElement('input')
       input.type = type
       expect(shouldHandleDocumentUndo(input, 'z', true), type).toBe(false)
+      expect(shouldHandleDocumentUndo(input, 'y', true), type).toBe(false)
     }
     expect(shouldHandleDocumentUndo(document.createElement('textarea'), 'Z', true)).toBe(false)
     const editable = document.createElement('div')

@@ -183,6 +183,36 @@ describe('write_document tool', () => {
     expect(texts(editor)).toEqual(['New', 'half', 'body'])
   })
 
+  it.each([false, true])(
+    'refuses a streamed rewrite after manual edits, including inside the draft (%s)',
+    async (insideDraft) => {
+      const editor = createEditor('original')
+      const writer: AiDocWriter = {
+        write: async (_spec, onProgress) => {
+          onProgress('preview\n\ndisposable')
+          await tick()
+          const pos = insideDraft ? 1 : editor.state.doc.content.size - 1
+          editor.view.dispatch(editor.state.tr.insertText('mine', pos))
+          onProgress('later preview')
+          await tick()
+          return { ok: true, markdown: 'AI replacement' }
+        },
+      }
+      const result = await executeTool(
+        editor,
+        { id: 't', name: 'write_document', input: { plan: 'rewrite', replaceDocument: true } },
+        undefined,
+        undefined,
+        writer,
+      )
+      expect(result.isError).toBe(true)
+      expect(result.mutated).toBeFalsy()
+      expect(texts(editor)).toEqual(insideDraft ? ['minepreview', 'original'] : ['originalmine'])
+      expect(editor.commands.undo()).toBe(true)
+      expect(texts(editor)).toEqual(insideDraft ? ['preview', 'original'] : ['original'])
+    },
+  )
+
   it('keeps text the user typed into a blank document while the draft streamed', async () => {
     const editor = createEditor()
     const writer: AiDocWriter = {
