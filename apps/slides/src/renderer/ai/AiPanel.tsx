@@ -1079,7 +1079,7 @@ export function AiPanel({
   const [availableSnapshots, setAvailableSnapshots] = useState<readonly number[]>([])
   useEffect(
     () =>
-      window.slidesApi.onHistoryChanged?.((state) =>
+      window.slidesApi?.onHistoryChanged?.((state) =>
         setAvailableSnapshots(state.snapshotIds ?? []),
       ),
     [],
