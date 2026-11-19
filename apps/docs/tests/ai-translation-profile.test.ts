@@ -20,15 +20,12 @@ import {
 const sha = (text: string): string => createHash('sha256').update(text).digest('hex')
 
 /**
- * Fingerprints of the prompt and tool list as they were before profiles existed. The tool
- * fingerprint was re-pinned when read_runs and translate_blocks gained the text box `box`
- * field, and again when analyze_media's description began naming document_ocr for pictures
- * that are not image blocks, and again when translate_blocks gained the `tagged` field
- * (deliberate changes to what every profile sends); nothing else may move it.
+ * Fingerprints of the full profile. Update them for deliberate changes to the
+ * shared prompt or tool schemas, such as batched translations of nested tables.
  */
-const PRE_PROFILE_PROMPT_SHA = '02b4feecd02268794937d822caf71ea189b4cec097f337fd25fdd594e34a943a'
-const PRE_PROFILE_PROMPT_LENGTH = 25100
-const PRE_PROFILE_TOOLS_SHA = '8f21bb48ba5e6a22d69b600f3ec70702fc68743b84e67234091b8f3f029aa667'
+const NORMAL_PROMPT_SHA = '441612c0b64df301fbe43bd1b00b3670b9363b253302a161898799ea88a27d4c'
+const NORMAL_PROMPT_LENGTH = 24240
+const NORMAL_TOOLS_SHA = '19332584946e5d817d3f906acf3a247c4336eac2d4d32e84c630fc72aeddfaad'
 
 /** Tools a translation workflow can need: none of them may ever be dropped. */
 const MUST_KEEP = [
@@ -106,17 +103,17 @@ const skillFor = (profile: AiProfile | undefined) => {
   return docsSkill(() => editor, profile ? () => profile : undefined)
 }
 
-describe('normal profile is unchanged', () => {
-  it('the system prompt is byte-identical to the one before profiles', () => {
+describe('normal profile', () => {
+  it('keeps the full system prompt', () => {
     expect(AGENT_SYSTEM_PROMPT).toBe(buildAgentSystemPrompt('normal'))
     expect(AGENT_SYSTEM_PROMPT).toBe(buildAgentSystemPrompt())
-    expect(AGENT_SYSTEM_PROMPT.length).toBe(PRE_PROFILE_PROMPT_LENGTH)
-    expect(sha(AGENT_SYSTEM_PROMPT)).toBe(PRE_PROFILE_PROMPT_SHA)
+    expect(AGENT_SYSTEM_PROMPT.length).toBe(NORMAL_PROMPT_LENGTH)
+    expect(sha(AGENT_SYSTEM_PROMPT)).toBe(NORMAL_PROMPT_SHA)
   })
 
-  it('the tool list is the same array, byte-identical', () => {
+  it('keeps the full tool list', () => {
     expect(toolsForProfile(AGENT_TOOLS, 'normal')).toBe(AGENT_TOOLS)
-    expect(sha(JSON.stringify(AGENT_TOOLS))).toBe(PRE_PROFILE_TOOLS_SHA)
+    expect(sha(JSON.stringify(AGENT_TOOLS))).toBe(NORMAL_TOOLS_SHA)
   })
 
   it('a docs skill without a profile, or with the normal one, offers everything', () => {
@@ -152,6 +149,8 @@ describe('translation profile', () => {
       '# Tool usage',
       'read_runs',
       'translate_blocks',
+      'batch outer and nested entries',
+      'nestedTable',
       '# Comments',
       '# Fields, footnotes & endnotes',
       'insert_footnote',
