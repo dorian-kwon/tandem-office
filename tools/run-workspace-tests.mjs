@@ -10,13 +10,14 @@
  * summary table follows. Exits 1 when any workspace failed.
  *
  * The workspace list is read from the root `test` script, so the two runs
- * always cover the same workspaces. TEST_JOBS=<n> sets how many run at once
+ * always cover the same workspaces. --editors selects the apps under apps/ other
+ * than the host shell. TEST_JOBS=<n> sets how many run at once
  * (default 2). Each vitest starts a worker per core by default; unless
  * VITEST_MAX_WORKERS is set, each workspace gets its share of the cores
  * instead, so the concurrent suites do not oversubscribe the CPU.
  */
-import { spawn } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { spawn, spawnSync } from 'node:child_process'
+import { readdirSync, readFileSync } from 'node:fs'
 import { availableParallelism } from 'node:os'
 
 /** The workspaces the root `test` script runs, in its order */
@@ -30,7 +31,16 @@ function testWorkspaces() {
   return names
 }
 
-const WORKSPACES = testWorkspaces()
+// Every app under apps/ except the host shell is a document editor.
+function editorWorkspaces() {
+  const apps = new URL('../apps/', import.meta.url)
+  return readdirSync(apps, { withFileTypes: true })
+    .filter((app) => app.isDirectory() && app.name !== 'shell')
+    .map((app) => JSON.parse(readFileSync(new URL(app.name + '/package.json', apps), 'utf8')).name)
+}
+
+const editorsOnly = process.argv.includes('--editors')
+const WORKSPACES = editorsOnly ? editorWorkspaces() : testWorkspaces()
 
 /**
  * Workspaces that must wait for another one to finish. The sheets test script
@@ -137,3 +147,30 @@ async function main() {
 }
 
 await main()
+
+// Run the file checks even when a unit suite failed. Only the Electron tests
+// depend on a successful build, since they launch the compiled applications.
+if (editorsOnly) {
+  const npmCli = process.env.npm_execpath
+  const run = (args) => {
+    const child = spawnSync(npmCli ? process.execPath : 'npm', npmCli ? [npmCli, ...args] : args, {
+      stdio: 'inherit',
+      shell: !npmCli && process.platform === 'win32',
+    })
+    if (child.error) console.error(child.error.message)
+    return child.status === 0
+  }
+  const built = run(['run', 'build:all'])
+  if (
+    !built ||
+    !run([
+      'run',
+      'test:e2e',
+      '--',
+      'supported-document-formats.spec.ts',
+      'hwp-ai-undo-history.spec.ts',
+    ])
+  ) {
+    process.exitCode = 1
+  }
+}

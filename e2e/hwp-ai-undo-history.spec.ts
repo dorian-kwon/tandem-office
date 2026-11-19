@@ -1,5 +1,9 @@
 import { expect, test } from '@playwright/test'
+import { chmod, copyFile, readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { closeAndSaveVideo, launchShell, waitForPageWithUrl } from './helpers'
+import { readHangulText } from './hwp-document-text'
+import { queueTurns, stubEverything } from './project-folder-user-lib'
 
 test('the built HWP studio keeps manual undo while skipping disabled AI history', async () => {
   test.setTimeout(120_000)
@@ -97,3 +101,62 @@ test('the built HWP studio keeps manual undo while skipping disabled AI history'
     await closeAndSaveVideo(launched, 'hwp-ai-undo')
   }
 })
+
+for (const format of ['hwp', 'hwpx'] as const) {
+  test(`opens an existing ${format.toUpperCase()} and restores its AI edit with native redo`, async () => {
+    test.setTimeout(120_000)
+    const fixture = join(__dirname, '..', 'apps', 'hwp', 'tests', 'fixtures', 'memo.' + format)
+    const file = test.info().outputPath('copy.' + format)
+    await copyFile(fixture, file)
+    await chmod(file, 0o444)
+    const launched = await launchShell({
+      onboardingSeen: true,
+      hideUpdateWindows: true,
+      openFile: file,
+      videoDir: 'hwp-ai-undo-' + format,
+    })
+    try {
+      await stubEverything(launched.app)
+      const hwp = await waitForPageWithUrl(launched.app, '://hwp/')
+      await hwp.waitForSelector('.hwp-app[data-phase="ready"]', { timeout: 90_000 })
+      const before = await readHangulText(hwp)
+      expect(before).toContain('본문 메모 앵커')
+      expect(before).toContain('표칸')
+
+      // Only the provider response is scripted. The real chat, tool, and studio apply the edit.
+      const added = `AI paragraph in ${format.toUpperCase()}`
+      await queueTurns(launched.app, [
+        {
+          toolCalls: [
+            { id: 'add', name: 'insert_paragraphs', input: { where: 'end', paragraphs: [added] } },
+          ],
+        },
+        { text: 'Added the paragraph.' },
+      ])
+      const input = hwp.locator('.ai-composer textarea')
+      if (!(await input.isVisible())) await hwp.locator('.ai-rail').click()
+      await input.fill('Append one paragraph.')
+      await hwp.locator('.ai-composer .ai-send-btn').click()
+      await expect(hwp.locator('.ai-changes-revert')).toBeEnabled()
+      const after = await readHangulText(hwp)
+      expect(after).toContain(added)
+      expect(after).toContain('표칸')
+
+      await hwp.locator('.ai-changes-revert').click()
+      await expect(hwp.locator('.ai-changes-reverted')).toBeVisible()
+      expect(await readHangulText(hwp)).toBe(before)
+
+      const editMenu = hwp.frameLocator('.hwp-editor-host iframe').locator('[data-menu="edit"]')
+      await editMenu.locator('.menu-title').click()
+      await editMenu.locator('[data-cmd="edit:redo"]').click()
+      await expect.poll(() => readHangulText(hwp)).toBe(after)
+
+      await editMenu.locator('.menu-title').click()
+      await editMenu.locator('[data-cmd="edit:undo"]').click()
+      await expect.poll(() => readHangulText(hwp)).toBe(before)
+      expect(await readFile(file)).toEqual(await readFile(fixture))
+    } finally {
+      await closeAndSaveVideo(launched, 'hwp-ai-undo-' + format)
+    }
+  })
+}
