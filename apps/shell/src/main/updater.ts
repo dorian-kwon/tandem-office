@@ -1,7 +1,7 @@
 import { dirname, join } from 'node:path'
 import { app, dialog, shell } from 'electron'
 import type { BrowserWindow } from 'electron'
-import { autoUpdater, CancellationToken } from 'electron-updater'
+import { AppImageUpdater, autoUpdater, CancellationToken, NsisUpdater } from 'electron-updater'
 import { installResumeDownload } from './update-resume'
 import {
   clearInstallAttempt,
@@ -16,7 +16,7 @@ import type { InstallFailureLevel } from './update-attempt'
 import { createUpdateLog, UPDATE_LOG_FILE } from './update-log'
 import type { UpdateLogger } from './update-log'
 import { reopenedByInstaller, requestUpdateRestart, updateRestartRequested } from './update-restart'
-import type { UpdateInfo } from 'electron-updater'
+import type { AppUpdater, UpdateInfo } from 'electron-updater'
 import { createI18n, getUiLang, htmlLang } from '@genoffice/i18n'
 import {
   GITHUB_LATEST_RELEASE_URL,
@@ -26,6 +26,7 @@ import {
 } from '@genoffice/electron-utils'
 import { createFeedAuth } from './update-auth'
 import type {
+  SelectUpdateVersionResult,
   UpdateChannel,
   UpdatePhase,
   UpdateReleaseNotes,
@@ -42,6 +43,13 @@ import {
 } from './update-window'
 import { normalizeReleaseNotes } from './update-notes'
 import { noteActivity } from './activity-trail'
+import {
+  fetchRecentVersions,
+  type VersionCandidate,
+  type VersionPlatform,
+} from './update-version-catalog'
+import { pinnedVersionProvider } from './update-pinned-provider'
+import { updateVersionStrings } from './update-version-strings'
 
 /**
  * Full-package auto-update from the GitHub Releases of the product's private
@@ -732,6 +740,10 @@ let dismissedVersion: string | null = null
 // exercisable in dev runs too
 let fakeShowAgain: (() => void) | null = null
 let manualCheckInFlight = false
+let openVersionPicker: (() => void) | null = null
+let reopenPinnedVersion: (() => void) | null = null
+let versionChannel: UpdateChannel = 'stable'
+let versionCatalogGeneration = 0
 // set by initAutoUpdater; drops the download state of the channel being left
 let resetDownloadFlow: (() => void) | null = null
 
@@ -809,6 +821,8 @@ function selectChannel(channel: UpdateChannel): void {
 }
 
 export function applyUpdateChannel(channel: UpdateChannel): void {
+  versionChannel = channel
+  versionCatalogGeneration += 1
   if (!updaterActive) return
   resetDownloadFlow?.()
   selectChannel(channel)
@@ -834,16 +848,26 @@ export async function checkForUpdatesNow(): Promise<void> {
       fakeShowAgain()
       return
     }
+    if (reopenPinnedVersion) {
+      reopenPinnedVersion()
+      return
+    }
+    const versionLabel = updateVersionStrings(lang).label
     if (!updaterActive) {
       const { response } = await dialog.showMessageBox({
         type: 'info',
         title: tUpd(lang, 'updTitle'),
         message: tUpd(lang, 'updManual'),
-        buttons: ['OK', tUpd(lang, 'updOpenDownload')],
+        buttons: [
+          'OK',
+          tUpd(lang, 'updOpenDownload'),
+          ...(openVersionPicker ? [versionLabel] : []),
+        ],
         defaultId: 0,
         cancelId: 0,
       })
       if (response === 1) void shell.openExternal(GITHUB_LATEST_RELEASE_URL)
+      if (response === 2) openVersionPicker?.()
       return
     }
     dismissedVersion = null
@@ -857,30 +881,77 @@ export async function checkForUpdatesNow(): Promise<void> {
       if (!isNoReleaseError(err) || !feedToken) {
         // no `gh` login: say how to get one (the command is the same in every language)
         const hint = feedToken ? '' : '\n\ngh auth login'
-        await dialog.showMessageBox({
+        const { response } = await dialog.showMessageBox({
           type: 'warning',
           title: tUpd(lang, 'updTitle'),
           message: tUpd(lang, 'updCheckFailed') + hint,
-          buttons: ['OK'],
+          buttons: ['OK', ...(openVersionPicker ? [versionLabel] : [])],
           defaultId: 0,
           cancelId: 0,
         })
+        if (response === 1) openVersionPicker?.()
         return
       }
     }
     // an available update already opened the update window via the
     // 'update-available' handler; only "nothing new" needs a dialog here
     if (result?.isUpdateAvailable) return
-    await dialog.showMessageBox({
+    const { response } = await dialog.showMessageBox({
       type: 'info',
       title: tUpd(lang, 'updTitle'),
       message: tUpd(lang, 'updUpToDate', { version: app.getVersion() }),
-      buttons: ['OK'],
+      buttons: ['OK', ...(openVersionPicker ? [versionLabel] : [])],
       defaultId: 0,
       cancelId: 0,
     })
+    if (response === 1) openVersionPicker?.()
   } finally {
     manualCheckInFlight = false
+  }
+}
+
+function createVersionActions(
+  platform: VersionPlatform,
+  select: (candidate: VersionCandidate, token: string | null) => Promise<SelectUpdateVersionResult>,
+) {
+  let offered: { candidates: VersionCandidate[]; token: string | null; generation: number } | null =
+    null
+  return {
+    async onListVersions() {
+      const generation = versionCatalogGeneration
+      const channel = versionChannel
+      try {
+        const token = await feedAuth.token()
+        const candidates = await fetchRecentVersions(channel, platform, token)
+        if (generation !== versionCatalogGeneration) return null
+        offered = { candidates, token, generation }
+        return candidates.map(({ version, prerelease }) => ({ version, prerelease }))
+      } catch {
+        if (generation === versionCatalogGeneration) offered = null
+        return null
+      }
+    },
+    async onSelectVersion(version: string): Promise<SelectUpdateVersionResult> {
+      if (
+        version === app.getVersion() ||
+        !offered ||
+        offered.generation !== versionCatalogGeneration
+      )
+        return 'unavailable'
+      const candidate = offered.candidates.find((entry) => entry.version === version)
+      return candidate ? select(candidate, offered.token) : 'unavailable'
+    },
+  }
+}
+
+async function openSelectedRelease(
+  candidate: VersionCandidate,
+): Promise<SelectUpdateVersionResult> {
+  try {
+    await shell.openExternal(githubReleaseTagUrl(candidate.version))
+    return 'selected'
+  } catch {
+    return 'unavailable'
   }
 }
 
@@ -908,7 +979,42 @@ export function initAutoUpdater(
   // AppImage runtime sets); deb installs update manually via apt.
   if (!app.isPackaged) return
   const isLinuxAppImage = process.platform === 'linux' && Boolean(process.env.APPIMAGE)
-  if (process.platform !== 'win32' && process.platform !== 'darwin' && !isLinuxAppImage) return
+  const versionPlatform = {
+    platform: process.platform,
+    arch: process.arch,
+    appImage: isLinuxAppImage,
+  }
+  versionChannel = initialChannel
+  const showCurrentVersion = (actions: ReturnType<typeof createVersionActions>) => {
+    const version = app.getVersion()
+    const state = initialState(version)
+    showUpdateWindow(
+      getWindow(),
+      {
+        ...state,
+        phase: 'current',
+        recentVersions: updateVersionStrings(getUiLang()),
+        strings: { ...state.strings, headline: tUpd(getUiLang(), 'updUpToDate', { version }) },
+      },
+      {
+        ...actions,
+        onDownload: () => {},
+        onInstall: () => {},
+        onLater: () => {
+          versionCatalogGeneration += 1
+          closeUpdateWindow()
+        },
+        onOpenDownload: () => {},
+      },
+    )
+  }
+  if (process.platform !== 'win32' && process.platform !== 'darwin' && !isLinuxAppImage) {
+    if (process.platform === 'linux') {
+      const versions = createVersionActions(versionPlatform, openSelectedRelease)
+      openVersionPicker = () => showCurrentVersion(versions)
+    }
+    return
+  }
 
   updaterActive = true
   const dataDir = app.getPath('userData')
@@ -954,6 +1060,9 @@ export function initAutoUpdater(
   // can cancel the request and its late rejection cannot fail the next one
   let downloadToken: CancellationToken | null = null
   let downloadGen = 0
+  let pinnedUpdater: AppUpdater | null = null
+  let preparingVersion = false
+  const activeUpdater = () => pinnedUpdater ?? autoUpdater
 
   // An installer start that left the app at the old version is reported and
   // gets one more try; a second one that failed goes to the download page
@@ -1006,7 +1115,7 @@ export function initAutoUpdater(
     )
     // BaseUpdater.install: the same call electron-updater's quit hook makes;
     // it spawns the installer detached and returns at once
-    const updater = autoUpdater as unknown as {
+    const updater = activeUpdater() as unknown as {
       install?: (isSilent: boolean, isForceRunAfter: boolean) => boolean
     }
     if (typeof updater.install !== 'function' || !updater.install(!visible, true)) {
@@ -1037,6 +1146,8 @@ export function initAutoUpdater(
   /** the window state for `version` at the current phase */
   const windowState = (version: string): UpdateUiState => ({
     ...initialState(version, latestSeenNotes, phase === 'downloaded' && adminPromptExpected()),
+    ...(pinnedUpdater ? { selectedVersion: true } : {}),
+    recentVersions: updateVersionStrings(getUiLang()),
     phase,
     percent,
   })
@@ -1053,11 +1164,13 @@ export function initAutoUpdater(
   // quit, not via the window) and the next channel's update-available starts
   // the flow over from 'available'
   resetDownloadFlow = () => {
+    downloadGen += 1
     if (latestSeenVersion === null) return
-    log('channel switch: dropping', latestSeenVersion, 'in phase', phase)
+    log('discarding update for', latestSeenVersion, 'in phase', phase)
+    pinnedUpdater = null
+    reopenPinnedVersion = null
     downloadToken?.cancel()
     downloadToken = null
-    downloadGen += 1
     latestSeenVersion = null
     latestSeenNotes = null
     failedAttempts = 0
@@ -1067,9 +1180,66 @@ export function initAutoUpdater(
     clearUpdateState()
   }
 
+  const versions = createVersionActions(versionPlatform, async (candidate, token) => {
+    if (preparingVersion || downloadInFlight || phase === 'downloaded') return 'unavailable'
+    if (candidate.install === 'manual') return openSelectedRelease(candidate)
+    preparingVersion = true
+    const generation = downloadGen
+    const catalogGeneration = versionCatalogGeneration
+    try {
+      const updater = isLinuxAppImage ? new AppImageUpdater() : new NsisUpdater()
+      updater.logger = record
+      updater.autoDownload = false
+      updater.autoInstallOnAppQuit = false
+      updater.disableDifferentialDownload = true
+      updater.allowDowngrade = true
+      updater.setFeedURL({
+        provider: 'custom',
+        updateProvider: pinnedVersionProvider(candidate, token),
+      })
+      installResumeDownload(updater as unknown as Parameters<typeof installResumeDownload>[0])
+      observeDownload(updater)
+      const result = await updater.checkForUpdates()
+      if (
+        generation !== downloadGen ||
+        catalogGeneration !== versionCatalogGeneration ||
+        !result?.isUpdateAvailable ||
+        result.updateInfo.version !== candidate.version
+      )
+        return 'unavailable'
+      pinnedUpdater = updater
+      latestSeenVersion = candidate.version
+      latestSeenNotes = normalizeReleaseNotes(result.updateInfo.releaseNotes)
+      failedAttempts = 0
+      phase =
+        failedInstall?.version !== candidate.version
+          ? 'available'
+          : installFailures >= 2
+            ? 'manual'
+            : 'install-failed'
+      percent = 0
+      reopenPinnedVersion = () =>
+        showUpdateWindow(getWindow(), windowState(candidate.version), actions)
+      reopenPinnedVersion()
+      return 'selected'
+    } catch {
+      return 'unavailable'
+    } finally {
+      preparingVersion = false
+    }
+  })
+  openVersionPicker = () => showCurrentVersion(versions)
+
   const actions = {
+    ...versions,
     onDownload: () => {
-      if (phase === 'downloading' || phase === 'downloaded') return
+      if (
+        !latestSeenVersion ||
+        preparingVersion ||
+        phase === 'downloading' ||
+        phase === 'downloaded'
+      )
+        return
       if (!SELF_UPDATES) {
         void shell.openExternal(manualDownloadUrlFor(latestSeenVersion))
         return
@@ -1079,11 +1249,13 @@ export function initAutoUpdater(
       setPhase({ phase: 'downloading', percent: 0 })
       const gen = ++downloadGen
       downloadToken = new CancellationToken()
-      autoUpdater.downloadUpdate(downloadToken).catch((err) => {
-        if (gen !== downloadGen) return
-        log('download failed:', err?.message ?? err)
-        failDownload()
-      })
+      activeUpdater()
+        .downloadUpdate(downloadToken)
+        .catch((err) => {
+          if (gen !== downloadGen) return
+          log('download failed:', err?.message ?? err)
+          failDownload()
+        })
     },
     onInstall: () => {
       closeUpdateWindow()
@@ -1095,23 +1267,25 @@ export function initAutoUpdater(
       setImmediate(() => app.quit())
     },
     onLater: () => {
-      dismissedVersion = latestSeenVersion
-      closeUpdateWindow()
+      versionCatalogGeneration += 1
+      if (pinnedUpdater && !downloadInFlight && phase !== 'downloaded') {
+        resetDownloadFlow?.()
+      } else {
+        dismissedVersion = latestSeenVersion
+        closeUpdateWindow()
+      }
     },
     onOpenDownload: () => {
-      void shell.openExternal(manualDownloadUrlFor(latestSeenVersion))
+      const url =
+        pinnedUpdater && latestSeenVersion
+          ? githubReleaseTagUrl(latestSeenVersion)
+          : manualDownloadUrlFor(latestSeenVersion)
+      void shell.openExternal(url)
     },
   }
 
-  autoUpdater.on('error', (err) => {
-    // network failures during background checks are expected; only surface
-    // when the user is watching a download
-    log('error:', err?.message ?? err)
-    failDownload()
-  })
-
   autoUpdater.on('update-available', (info: UpdateInfo) => {
-    if (info.version === dismissedVersion) return
+    if (pinnedUpdater || preparingVersion || info.version === dismissedVersion) return
     const sameVersionRecheck = info.version === latestSeenVersion
     // progress/downloaded/error events carry no version, so a newer release
     // landing while the previous one is downloading or already downloaded
@@ -1152,31 +1326,40 @@ export function initAutoUpdater(
     showUpdateWindow(getWindow(), windowState(info.version), actions)
   })
 
-  autoUpdater.on('download-progress', (progress) => {
-    if (!downloadInFlight) return
-    setPhase({ phase: 'downloading', percent: progress.percent })
-  })
+  function observeDownload(updater: AppUpdater): void {
+    updater.on('error', (err) => {
+      if (activeUpdater() !== updater) return
+      log('error:', err?.message ?? err)
+      failDownload()
+    })
+    updater.on('download-progress', (progress) => {
+      if (activeUpdater() !== updater || !downloadInFlight) return
+      setPhase({ phase: 'downloading', percent: progress.percent })
+    })
 
-  autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
-    if (info.version !== latestSeenVersion) {
-      log('downloaded:', info.version, 'ignored (stale after channel switch)')
-      return
-    }
-    log('downloaded:', info.version)
-    downloadInFlight = false
-    failedAttempts = 0
-    setPhase({ phase: 'downloaded', percent: 100, visibleInstall: adminPromptExpected() })
-    // A download finished behind a minimized window would otherwise wait,
-    // unseen, in Settings > About: bring "Restart & Install" back, without
-    // taking the focus from whatever the user is typing in.
-    if (!isUpdateWindowOpen()) {
-      showUpdateWindow(getWindow(), windowState(info.version), actions, { inactive: true })
-    }
-  })
+    updater.on('update-downloaded', (info: UpdateInfo) => {
+      if (activeUpdater() !== updater) return
+      if (info.version !== latestSeenVersion) {
+        log('downloaded:', info.version, 'ignored (stale after channel switch)')
+        return
+      }
+      log('downloaded:', info.version)
+      downloadInFlight = false
+      failedAttempts = 0
+      setPhase({ phase: 'downloaded', percent: 100, visibleInstall: adminPromptExpected() })
+      // A download finished behind a minimized window would otherwise wait,
+      // unseen, in Settings > About: bring "Restart & Install" back, without
+      // taking the focus from whatever the user is typing in.
+      if (!isUpdateWindowOpen()) {
+        showUpdateWindow(getWindow(), windowState(info.version), actions, { inactive: true })
+      }
+    })
+  }
+  observeDownload(autoUpdater)
 
   const check = (): void => {
     // turned off: only an explicit check (Help › Check for Updates…, a channel switch) asks the feed
-    if (!autoCheckEnabled()) return
+    if (!autoCheckEnabled() || pinnedUpdater || preparingVersion) return
     checkFeed().catch((err) => log('check failed:', err?.message ?? err))
   }
   setTimeout(check, FIRST_CHECK_DELAY_MS)
@@ -1186,7 +1369,16 @@ export function initAutoUpdater(
 /** unpacked-run simulation: real window + IPC, fake download that completes */
 function initFakeUpdate(getWindow: () => BrowserWindow | null, version: string): void {
   let timer: NodeJS.Timeout | null = null
+  let pickedVersion: string | null = null
+  const recentVersions = [...new Set([version, app.getVersion(), '9.9.8', '9.9.7', '9.9.6'])]
   const actions = {
+    onListVersions: async () => recentVersions.map((version) => ({ version, prerelease: false })),
+    onSelectVersion: async (version: string): Promise<SelectUpdateVersionResult> => {
+      if (version === app.getVersion() || !recentVersions.includes(version)) return 'unavailable'
+      pickedVersion = version
+      fakeShowAgain?.()
+      return 'selected'
+    },
     onDownload: () => {
       let pct = 0
       pushUpdateState({ phase: 'downloading', percent: 0 })
@@ -1232,6 +1424,15 @@ function initFakeUpdate(getWindow: () => BrowserWindow | null, version: string):
 </ul>`,
     },
   ])
-  fakeShowAgain = () => showUpdateWindow(getWindow(), initialState(version, notes), actions)
+  fakeShowAgain = () =>
+    showUpdateWindow(
+      getWindow(),
+      {
+        ...initialState(pickedVersion ?? version, notes),
+        selectedVersion: pickedVersion !== null,
+        recentVersions: updateVersionStrings(getUiLang()),
+      },
+      actions,
+    )
   setTimeout(() => fakeShowAgain?.(), 1500)
 }

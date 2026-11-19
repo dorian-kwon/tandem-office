@@ -8,6 +8,12 @@ const api: UpdateWindowApi = {
     const result: unknown = await ipcRenderer.invoke(UPDATE_CHANNELS.getState)
     return (result ?? null) as UpdateUiState | null
   },
+  async listVersions() {
+    return await ipcRenderer.invoke(UPDATE_CHANNELS.listVersions)
+  },
+  async selectVersion(version) {
+    return await ipcRenderer.invoke(UPDATE_CHANNELS.selectVersion, version)
+  },
   download() {
     void ipcRenderer.invoke(UPDATE_CHANNELS.download)
   },

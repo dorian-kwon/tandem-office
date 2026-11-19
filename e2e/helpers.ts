@@ -55,6 +55,8 @@ interface LaunchOptions {
   openFiles?: string[]
   /** extra environment variables for the launched app */
   env?: Record<string, string>
+  /** Keep the shell and update dialog hidden on macOS for the update preview. */
+  hideUpdateWindows?: boolean
   /**
    * record a video of the window (default true where it works). Some Windows
    * hosts wedge the page CDP session under the screencast the same way Linux
@@ -103,6 +105,10 @@ export async function launchShell(options: LaunchOptions): Promise<LaunchedApp> 
   args.push(SHELL_DIR)
   if (options.openFile) args.push(options.openFile)
   if (options.openFiles) args.push(...options.openFiles)
+  const hideUpdateWindows =
+    process.platform === 'darwin' &&
+    options.hideUpdateWindows === true &&
+    process.env.E2E_SHOW_UPDATE_WINDOWS !== '1'
   const app = await electron.launch({
     executablePath,
     args,
@@ -112,6 +118,7 @@ export async function launchShell(options: LaunchOptions): Promise<LaunchedApp> 
       GENOFFICE_NO_SPARE_VIEW: '1',
       GENOFFICE_LANG: options.lang ?? 'en',
       ...(options.env ?? {}),
+      GENOFFICE_TEST_HIDDEN_UPDATE_WINDOWS: hideUpdateWindows ? '1' : '0',
       ...(process.platform === 'linux' ? { ELECTRON_DISABLE_SANDBOX: '1' } : {}),
     },
     // Playwright's Electron screencast wedges the page CDP session on Linux
@@ -119,6 +126,7 @@ export async function launchShell(options: LaunchOptions): Promise<LaunchedApp> 
     // only where it works
     recordVideo:
       process.platform === 'linux' ||
+      hideUpdateWindows ||
       options.recordVideo === false ||
       process.env.E2E_NO_VIDEO === '1'
         ? undefined

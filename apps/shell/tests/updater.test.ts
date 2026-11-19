@@ -12,7 +12,11 @@ import {
   GITHUB_REPO_OWNER,
   githubReleaseTagUrl,
 } from '@genoffice/electron-utils'
-import type { UpdateUiState } from '../src/shared/update-api'
+import type {
+  RecentUpdateVersion,
+  SelectUpdateVersionResult,
+  UpdateUiState,
+} from '../src/shared/update-api'
 
 /**
  * Main-process auto-updater flow (src/main/updater.ts): manual-download policy
@@ -81,8 +85,37 @@ class FakeCancellationToken {
 const quitAndInstall = vi.fn()
 const install = vi.fn<(isSilent: boolean, isForceRunAfter: boolean) => boolean>(() => true)
 
+const pinned = {
+  handlers: new Map<string, Listener>(),
+  check: vi.fn<() => Promise<unknown>>(),
+  download: vi.fn<() => Promise<unknown>>(),
+  install: vi.fn<(silent: boolean, restart: boolean) => boolean>(),
+  feed: vi.fn(),
+  allowDowngrade: false,
+}
+class FakePinnedUpdater {
+  on(event: string, listener: Listener) {
+    pinned.handlers.set(event, listener)
+  }
+  setFeedURL(options: unknown) {
+    pinned.feed(options)
+    pinned.allowDowngrade = this.allowDowngrade
+  }
+  allowDowngrade = false
+  checkForUpdates() {
+    return pinned.check()
+  }
+  downloadUpdate() {
+    return pinned.download()
+  }
+  install(silent: boolean, restart: boolean) {
+    return pinned.install(silent, restart)
+  }
+}
+
 vi.mock('electron-updater', () => ({
   CancellationToken: FakeCancellationToken,
+  NsisUpdater: FakePinnedUpdater,
   autoUpdater: {
     on: (event: string, listener: Listener) => {
       updaterState.listeners.set(event, listener)
@@ -137,6 +170,8 @@ interface UpdateActions {
   onInstall: () => void
   onLater: () => void
   onOpenDownload: () => void
+  onListVersions?: () => Promise<RecentUpdateVersion[] | null>
+  onSelectVersion?: (version: string) => Promise<SelectUpdateVersionResult>
 }
 
 type ShowOptions = { inactive?: boolean }
@@ -356,6 +391,12 @@ beforeEach(() => {
   installDir.writable = true
   delete process.env.GENOFFICE_FAKE_UPDATE
   updaterState.listeners.clear()
+  pinned.handlers.clear()
+  pinned.check.mockReset()
+  pinned.download.mockReset().mockResolvedValue([])
+  pinned.install.mockReset().mockReturnValue(true)
+  pinned.feed.mockClear()
+  pinned.allowDowngrade = false
   updaterState.autoDownload = true
   updaterState.autoInstallOnAppQuit = false
   updaterState.disableDifferentialDownload = false
@@ -380,6 +421,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.unstubAllGlobals()
   vi.useRealTimers()
   platformSpy?.restore()
   platformSpy = null
@@ -1581,5 +1623,90 @@ describe('checkForUpdatesNow (r148 manual check)', () => {
     expect(showUpdateWindow).toHaveBeenCalledTimes(1)
     expect(lastShownState().version).toBe('9.9.9')
     expect(showMessageBox).not.toHaveBeenCalled()
+  })
+})
+
+describe('selecting an exact older release', () => {
+  const older = '0.0.9'
+  const olderRelease = {
+    tag_name: `v${older}`,
+    draft: false,
+    prerelease: false,
+    published_at: '2026-11-19T03:00:00Z',
+    assets: [
+      { name: 'latest.yml', id: 201, state: 'uploaded' },
+      { name: `tandem-office-Setup-${older}.exe`, id: 202, state: 'uploaded' },
+    ],
+  }
+
+  async function openFromCurrent() {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json([olderRelease])),
+    )
+    const arch = Object.getOwnPropertyDescriptor(process, 'arch')!
+    Object.defineProperty(process, 'arch', { value: 'x64' })
+    try {
+      const { initAutoUpdater, checkForUpdatesNow } = await loadUpdater()
+      initAutoUpdater(() => null)
+      checkForUpdates.mockResolvedValue({ isUpdateAvailable: false } as never)
+      showMessageBox.mockResolvedValueOnce({ response: 1 })
+      await checkForUpdatesNow()
+    } finally {
+      Object.defineProperty(process, 'arch', arch)
+    }
+    expect(lastShownState()).toMatchObject({ phase: 'current', currentVersion: CURRENT_VERSION })
+    return lastShownActions()
+  }
+
+  it('installs the selected version through its own updater only after Restart & Install', async () => {
+    const actions = await openFromCurrent()
+    expect(await actions.onSelectVersion?.(older)).toBe('unavailable')
+    expect(await actions.onListVersions?.()).toEqual([{ version: older, prerelease: false }])
+    expect(await actions.onSelectVersion?.(CURRENT_VERSION)).toBe('unavailable')
+    expect(await actions.onSelectVersion?.('0.0.1')).toBe('unavailable')
+    pinned.check.mockResolvedValue({ isUpdateAvailable: true, updateInfo: { version: older } })
+    expect(await actions.onSelectVersion?.(older)).toBe('selected')
+    expect(pinned.allowDowngrade).toBe(true)
+    expect(updaterState.allowDowngrade).toBe(false)
+    expect(lastShownState()).toMatchObject({
+      version: older,
+      selectedVersion: true,
+      phase: 'available',
+    })
+    updaterState.listeners.get('update-available')?.({ version: '0.2.0' })
+    expect(lastShownState().version).toBe(older)
+    lastShownActions().onDownload()
+    expect(pinned.download).toHaveBeenCalledOnce()
+    expect(downloadUpdate).not.toHaveBeenCalled()
+    pinned.handlers.get('update-downloaded')?.({ version: older })
+    quitCompletes()
+    expect(pinned.install).not.toHaveBeenCalled()
+    lastShownActions().onInstall()
+    quitCompletes()
+    expect(pinned.install).toHaveBeenCalledWith(false, true)
+    expect(install).not.toHaveBeenCalled()
+  })
+
+  it('keeps a rejected or dismissed selection from opening an installer', async () => {
+    const actions = await openFromCurrent()
+    await actions.onListVersions?.()
+    pinned.check.mockResolvedValue({ isUpdateAvailable: true, updateInfo: { version: '0.2.0' } })
+    expect(await actions.onSelectVersion?.(older)).toBe('unavailable')
+    expect(lastShownState().phase).toBe('current')
+
+    let finish!: (value: unknown) => void
+    pinned.check.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+    const selection = actions.onSelectVersion?.(older)
+    actions.onLater()
+    finish({ isUpdateAvailable: true, updateInfo: { version: older } })
+    expect(await selection).toBe('unavailable')
+    expect(pinned.download).not.toHaveBeenCalled()
+    expect(showUpdateWindow).toHaveBeenCalledOnce()
   })
 })

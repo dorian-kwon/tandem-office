@@ -212,6 +212,84 @@
       #action:hover {
         background: var(--accent-hover);
       }
+      #action-group {
+        position: relative;
+        display: flex;
+        width: 100%;
+        -webkit-app-region: no-drag;
+      }
+      #action-group[hidden] {
+        display: none;
+      }
+      #action-group.split #action {
+        border-start-end-radius: 0;
+        border-end-end-radius: 0;
+      }
+      #action:disabled {
+        background: var(--panel);
+        color: var(--text-muted);
+        cursor: default;
+      }
+      #version-toggle {
+        flex: 0 0 46px;
+        border: none;
+        border-inline-start: 1px solid var(--border);
+        border-start-end-radius: 10px;
+        border-end-end-radius: 10px;
+        background: var(--accent);
+        color: white;
+        cursor: pointer;
+      }
+      #version-toggle:hover,
+      #version-toggle[aria-expanded='true'] {
+        background: var(--accent-hover);
+      }
+      #version-toggle svg {
+        width: 16px;
+        height: 16px;
+        vertical-align: middle;
+      }
+      #version-picker {
+        position: absolute;
+        inset-inline-end: 0;
+        bottom: calc(100% + 6px);
+        width: min(100%, 254px);
+        max-height: 240px;
+        overflow: auto;
+        padding: 5px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: white;
+        box-shadow: 0 5px 20px var(--border);
+        z-index: 1;
+      }
+      #version-picker button {
+        display: block;
+        padding: 8px 10px;
+        width: 100%;
+        border: none;
+        border-radius: 5px;
+        background: transparent;
+        color: var(--text);
+        font: inherit;
+        font-size: 13px;
+        text-align: start;
+        font-variant-numeric: tabular-nums;
+        cursor: pointer;
+      }
+      #version-picker button:hover:not(:disabled),
+      #version-picker button:focus-visible {
+        background: var(--panel);
+      }
+      #version-picker button:disabled {
+        color: var(--text-muted);
+        cursor: default;
+      }
+      #version-status {
+        padding: 6px 10px;
+        color: var(--text-muted);
+        font-size: 12px;
+      }
       #progress {
         width: 100%;
         display: none;
@@ -261,7 +339,7 @@
         <div id="headline"></div>
         <div id="versions">
           <span class="chip" id="ver-current"></span>
-          <span>→</span>
+          <span id="version-arrow">→</span>
           <span class="chip new" id="ver-new"></span>
         </div>
       </div>
@@ -276,7 +354,24 @@
           <div class="track"><div class="bar" id="bar"></div></div>
           <div class="label"><span id="progress-text"></span><span id="percent"></span></div>
         </div>
-        <button id="action"></button>
+        <div id="action-group">
+          <button id="action" type="button"></button>
+          <button
+            id="version-toggle"
+            type="button"
+            aria-controls="version-picker"
+            aria-expanded="false"
+            hidden
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" />
+            </svg>
+          </button>
+          <div id="version-picker" role="group" hidden>
+            <div id="version-status" aria-live="polite" hidden></div>
+            <div id="version-options"></div>
+          </div>
+        </div>
         <button id="later"></button>
       </div>
     </div>

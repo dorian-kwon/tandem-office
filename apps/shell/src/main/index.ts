@@ -660,6 +660,7 @@ import {
   takeTornTab,
 } from './detached-windows'
 import { applyUpdateChannel, checkForUpdatesNow, initAutoUpdater } from './updater'
+import { hideUpdateTestWindows } from './update-window'
 import { cancelUpdateRestart, reopenedByInstaller, updateRestartRequested } from './update-restart'
 import { isUpdateChannel, type UpdateChannel } from '../shared/update-api'
 
@@ -718,6 +719,9 @@ if (revealSecretsRun) {
   setHeadlessMode(true)
   app.dock?.hide()
 }
+
+const hiddenUpdateTest = hideUpdateTestWindows()
+if (hiddenUpdateTest) app.dock?.hide()
 
 // module build outputs: packaged builds carry them as extraResources
 // (resources/modules/*, resources/native/*); dev/unpacked resolves them
@@ -5064,6 +5068,7 @@ function createShellWindow(): void {
     screen.getAllDisplays().map((display) => display.workArea),
   )
   const win = new BrowserWindow({
+    ...(hiddenUpdateTest ? { show: false } : {}),
     width: restored?.width ?? SHELL_WINDOW_DEFAULT_WIDTH,
     height: restored?.height ?? SHELL_WINDOW_DEFAULT_HEIGHT,
     // x/y only when a saved position survived validation; omitting them keeps
@@ -5093,6 +5098,7 @@ function createShellWindow(): void {
         }),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
+      ...(hiddenUpdateTest ? { backgroundThrottling: false } : {}),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -5100,7 +5106,7 @@ function createShellWindow(): void {
   })
   // the stored rectangle is the normal-state one, so a maximized session
   // reopens maximized instead of as a screen-sized ordinary window
-  if (restored?.maximized) win.maximize()
+  if (restored?.maximized && !hiddenUpdateTest) win.maximize()
   shellWindow = win
   nativeTheme.on('updated', refreshTitleBarOverlay)
   win.once('closed', () => nativeTheme.off('updated', refreshTitleBarOverlay))
@@ -9184,6 +9190,7 @@ let controlServer: ControlServer | null = null
 // app keeps running — either way a file opened from Finder would land out of sight.
 function revealShellWindow(): void {
   if (!shellWindow) createShellWindow()
+  if (hiddenUpdateTest) return
   if (shellWindow?.isMinimized()) shellWindow.restore()
   shellWindow?.show()
   shellWindow?.focus()

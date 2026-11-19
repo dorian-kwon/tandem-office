@@ -9,6 +9,8 @@ export const UPDATE_CHANNELS = {
   later: 'update:later',
   openDownload: 'update:open-download',
   changed: 'update:changed',
+  listVersions: 'update:list-versions',
+  selectVersion: 'update:select-version',
   /** pushed to the shell window so Settings → About can offer the update */
   stateChanged: 'update:state-changed',
   /** Settings → About "update to vX": re-open the (minimized) dialog and act */
@@ -22,7 +24,7 @@ export const UPDATE_CHANNELS = {
  * came back at the old version; the next try opens the installer in its own
  * window */
 export type UpdatePhase =
-  'available' | 'downloading' | 'downloaded' | 'error' | 'manual' | 'install-failed'
+  'current' | 'available' | 'downloading' | 'downloaded' | 'error' | 'manual' | 'install-failed'
 
 /** window copy is localized in the main process (owner of UI language) */
 export interface UpdateUiStrings {
@@ -78,6 +80,21 @@ export interface UpdateReleaseNotes {
   truncated: boolean
 }
 
+export interface RecentUpdateVersion {
+  version: string
+  prerelease: boolean
+}
+
+export type SelectUpdateVersionResult = 'selected' | 'unavailable'
+
+export interface UpdateVersionStrings {
+  label: string
+  loading: string
+  empty: string
+  failed: string
+  install: string
+}
+
 export interface UpdateUiState {
   phase: UpdatePhase
   version: string
@@ -90,6 +107,8 @@ export interface UpdateUiState {
   releaseNotes: UpdateReleaseNotes | null
   /** the installer will ask for administrator approval (an install only an administrator can write) */
   visibleInstall: boolean
+  recentVersions?: UpdateVersionStrings
+  selectedVersion?: boolean
 }
 
 /** Settings → About reads the update state and re-opens the dialog on demand */
@@ -102,6 +121,8 @@ export interface UpdateSettingsApi {
 
 export interface UpdateWindowApi {
   getState(): Promise<UpdateUiState | null>
+  listVersions(): Promise<RecentUpdateVersion[] | null>
+  selectVersion(version: string): Promise<SelectUpdateVersionResult>
   download(): void
   install(): void
   later(): void

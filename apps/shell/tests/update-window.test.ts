@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { UpdateUiState } from '../src/shared/update-api'
 
 /**
@@ -16,6 +16,7 @@ const winOptions: Array<Record<string, unknown>> = []
 const shown = vi.fn()
 const shownInactive = vi.fn()
 const focused = vi.fn()
+const appState = { isPackaged: false }
 // 'ready-to-show' listeners of the windows made so far, fired by the test
 const readyToShow: Array<() => void> = []
 
@@ -39,6 +40,7 @@ class FakeBrowserWindow {
   showInactive(): void {
     shownInactive()
   }
+  setSize(): void {}
   focus(): void {
     focused()
   }
@@ -56,6 +58,7 @@ class FakeBrowserWindow {
 }
 
 vi.mock('electron', () => ({
+  app: appState,
   BrowserWindow: FakeBrowserWindow,
   ipcMain: {
     handle: (channel: string, handler: Handler) => handlers.set(channel, handler),
@@ -99,6 +102,7 @@ const parent = new FakeBrowserWindow() as unknown as Electron.BrowserWindow
 
 beforeEach(() => {
   vi.resetModules()
+  appState.isPackaged = false
   handlers.clear()
   sent.length = 0
   winOptions.length = 0
@@ -108,11 +112,36 @@ beforeEach(() => {
   readyToShow.length = 0
 })
 
+afterEach(() => vi.unstubAllEnvs())
+
 async function loadModule() {
   return import('../src/main/update-window')
 }
 
 describe('update window — settings-facing surface', () => {
+  it.each([false, true])(
+    'hides update test windows on Mac only for an unpackaged app (packaged %s)',
+    async (isPackaged) => {
+      const platform = Object.getOwnPropertyDescriptor(process, 'platform')!
+      Object.defineProperty(process, 'platform', { value: 'darwin' })
+      vi.stubEnv('GENOFFICE_TEST_HIDDEN_UPDATE_WINDOWS', '1')
+      appState.isPackaged = isPackaged
+      try {
+        const mod = await loadModule()
+        mod.showUpdateWindow(parent, state('available'), actions())
+        for (const ready of readyToShow) ready()
+        mod.showUpdateWindow(parent, state('downloaded'), actions(), { inactive: true })
+        handlers.get('update:open-for-update')!()
+        expect(shown).toHaveBeenCalledTimes(isPackaged ? 2 : 0)
+        expect(shownInactive).toHaveBeenCalledTimes(isPackaged ? 1 : 0)
+        expect(focused).toHaveBeenCalledTimes(isPackaged ? 1 : 0)
+        expect(winOptions[0]!.show).toBe(false)
+      } finally {
+        Object.defineProperty(process, 'platform', platform)
+      }
+    },
+  )
+
   it('opens non-modal (never blocks the shell window)', async () => {
     const mod = await loadModule()
     mod.showUpdateWindow(parent, state('available'), actions())

@@ -1,6 +1,10 @@
 import { join } from 'node:path'
-import { BrowserWindow, ipcMain } from 'electron'
-import type { UpdateUiState } from '../shared/update-api'
+import { app, BrowserWindow, ipcMain } from 'electron'
+import type {
+  RecentUpdateVersion,
+  SelectUpdateVersionResult,
+  UpdateUiState,
+} from '../shared/update-api'
 import { UPDATE_CHANNELS } from '../shared/update-api'
 
 /**
@@ -23,6 +27,8 @@ interface UpdateActions {
   onInstall: () => void
   onLater: () => void
   onOpenDownload: () => void
+  onListVersions?: () => Promise<RecentUpdateVersion[] | null>
+  onSelectVersion?: (version: string) => Promise<SelectUpdateVersionResult>
 }
 
 const UPDATE_WINDOW_WIDTH = 400
@@ -44,6 +50,24 @@ let closingProgrammatically = false
 /** The shell window is recreated on macOS after close, so it is resolved per call, never cached. */
 export function setUpdateParentWindow(getter: () => BrowserWindow | null): void {
   parentGetter = getter
+}
+
+/** Leave the renderer running while the update E2E uses CDP on macOS. */
+export function hideUpdateTestWindows(): boolean {
+  return (
+    process.platform === 'darwin' &&
+    process.env.GENOFFICE_TEST_HIDDEN_UPDATE_WINDOWS === '1' &&
+    !app.isPackaged
+  )
+}
+
+function revealUpdateWindow(win: BrowserWindow, inactive: boolean, focus: boolean): void {
+  if (hideUpdateTestWindows()) return
+  if (inactive) win.showInactive()
+  else {
+    win.show()
+    if (focus) win.focus()
+  }
 }
 
 function parentWindow(): BrowserWindow | null {
@@ -75,8 +99,7 @@ function registerSettingsIpc(): void {
   ipcMain.handle(UPDATE_CHANNELS.openForUpdate, (): boolean => {
     if (!currentState) return false
     if (updateWin && !updateWin.isDestroyed()) {
-      updateWin.show()
-      updateWin.focus()
+      revealUpdateWindow(updateWin, false, true)
     } else {
       const parent = parentWindow()
       if (parent) showUpdateWindow(parent, currentState, actions ?? dummyActions)
@@ -105,6 +128,16 @@ function registerIpc(): void {
   ipcMain.handle(UPDATE_CHANNELS.install, () => actions?.onInstall())
   ipcMain.handle(UPDATE_CHANNELS.later, () => actions?.onLater())
   ipcMain.handle(UPDATE_CHANNELS.openDownload, () => actions?.onOpenDownload())
+  // Only the update window can request a manually pinned release, and the main
+  // process checks that the version appeared in its own catalog.
+  ipcMain.handle(UPDATE_CHANNELS.listVersions, (event) =>
+    event.sender === updateWin?.webContents ? (actions?.onListVersions?.() ?? null) : null,
+  )
+  ipcMain.handle(UPDATE_CHANNELS.selectVersion, (event, version: unknown) =>
+    event.sender === updateWin?.webContents && typeof version === 'string'
+      ? (actions?.onSelectVersion?.(version) ?? 'unavailable')
+      : 'unavailable',
+  )
 }
 
 /** keeps the handler total when actions are missing (cannot happen today) */
@@ -127,6 +160,8 @@ export function showUpdateWindow(
   /** shown without taking the focus: the update came back by itself, not on a click */
   options: { inactive?: boolean } = {},
 ): void {
+  const hadNotes = (currentState?.releaseNotes?.sections.length ?? 0) > 0
+  const hasNotes = (state.releaseNotes?.sections.length ?? 0) > 0
   currentState = state
   actions = windowActions
   if (parent && !parent.isDestroyed()) lastParent = parent
@@ -134,17 +169,17 @@ export function showUpdateWindow(
   broadcastState()
 
   if (updateWin && !updateWin.isDestroyed()) {
-    updateWin.webContents.send(UPDATE_CHANNELS.changed, currentState)
-    if (options.inactive) {
-      updateWin.showInactive()
-    } else {
-      updateWin.show()
-      updateWin.focus()
+    if (hadNotes !== hasNotes) {
+      updateWin.setSize(
+        UPDATE_WINDOW_WIDTH,
+        hasNotes ? UPDATE_WINDOW_HEIGHT_WITH_NOTES : UPDATE_WINDOW_HEIGHT,
+      )
     }
+    updateWin.webContents.send(UPDATE_CHANNELS.changed, currentState)
+    revealUpdateWindow(updateWin, options.inactive === true, true)
     return
   }
 
-  const hasNotes = (state.releaseNotes?.sections.length ?? 0) > 0
   const win = new BrowserWindow({
     width: UPDATE_WINDOW_WIDTH,
     height: hasNotes ? UPDATE_WINDOW_HEIGHT_WITH_NOTES : UPDATE_WINDOW_HEIGHT,
@@ -160,6 +195,7 @@ export function showUpdateWindow(
     title: state.strings.title,
     webPreferences: {
       preload: join(__dirname, '../preload/update.js'),
+      ...(hideUpdateTestWindows() ? { backgroundThrottling: false } : {}),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -167,7 +203,7 @@ export function showUpdateWindow(
   })
   updateWin = win
 
-  win.once('ready-to-show', () => (options.inactive ? win.showInactive() : win.show()))
+  win.once('ready-to-show', () => revealUpdateWindow(win, options.inactive === true, false))
   win.on('closed', () => {
     updateWin = null
     if (!closingProgrammatically) actions?.onLater()

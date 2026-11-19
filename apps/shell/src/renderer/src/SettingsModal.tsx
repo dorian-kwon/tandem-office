@@ -2132,7 +2132,7 @@ export function SettingsModal({
                   }
                 />
                 {RELEASE_IS_BETA && <div className="set-field-desc">{t('betaTooltip')}</div>}
-                {updateState && (
+                {updateState && updateState.phase !== 'current' && (
                   <div className="set-field">
                     <div className="set-field-text">
                       <label className="set-field-label">{t('setUpdateAvailableLabel')}</label>
@@ -2149,7 +2149,9 @@ export function SettingsModal({
                       >
                         {updateState.phase === 'downloaded'
                           ? t('setUpdateRestart')
-                          : t('setUpdateTo', { version: updateState.version })}
+                          : updateState.selectedVersion
+                            ? (updateState.recentVersions?.install ?? updateState.strings.download)
+                            : t('setUpdateTo', { version: updateState.version })}
                       </button>
                     )}
                   </div>
