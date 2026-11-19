@@ -47,10 +47,13 @@ vi.mock('../src/main/shaped-metrics', () => ({
 }))
 
 import { serialize } from 'node:v8'
+import { elementDurableId } from '@genoffice/pptx-engine/identity'
 import {
   addPicture,
   addElement,
   createBlankPptx,
+  getSlideNotes,
+  parseMasterPart,
   duplicateSlide,
   openPptx,
   savePptx,
@@ -327,6 +330,97 @@ describe('slide media IPC payload', () => {
     expect(
       result.slides[0].nodes.filter((n: { type: string }) => n.type === 'picture'),
     ).toHaveLength(6)
+  })
+
+  it('sends the same page-local AI batch to the editor and its peer, with one undo step', async () => {
+    addImage(1024)
+    duplicateSlide(session.opened, 1)
+    sessions.set(2, session)
+    const before = buildAllRenderSlides(session.opened, FIT)
+    const first = session.opened.deck.slides[0]!.path
+    const initialNotes = getSlideNotes(session.opened.archive, first)
+    const ops = [
+      { op: 'setNotes', target: { slide: 0 }, text: 'New notes' },
+      { op: 'setHidden', target: { slide: 's_3' }, hidden: true },
+      { op: 'setTransition', target: { slide: 2 }, kind: 'fade' },
+    ]
+    call('slides:history-batch-begin', { aiRun: true })
+    const reply = await call('slides:apply-txn:ai-edit', [{ ops, acceptSlideUpdate: true }], true)
+    call('slides:history-batch-end')
+    expect(reply.applied).toBe(true)
+    expect(reply.slides).toBeUndefined()
+    expect(reply.update.slides.map((s: RenderSlide) => s.partPath)).toEqual([
+      before[0]!.partPath,
+      before[2]!.partPath,
+    ])
+    const expected = buildAllRenderSlides(session.opened, FIT)
+    const merged = mergeSlideUpdate(before, reply.update)
+    expect(merged).toEqual(expected)
+    expect(merged[1]).toBe(before[1])
+    expect(getSlideNotes(session.opened.archive, first)).toBe('New notes')
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    const messages = broadcasts.filter((b) => b.channel === 'slides:deck-changed')
+    expect(messages.map((m) => m.id)).toEqual([1, 2])
+    for (const message of messages) expect(message.payload).toMatchObject(reply.update)
+    expect(session.undoStack).toHaveLength(1)
+    expect(call('slides:undo')).toEqual(before)
+    expect(getSlideNotes(session.opened.archive, first)).toBe(initialNotes)
+    expect(call('slides:redo')).toEqual(expected)
+    expect(getSlideNotes(session.opened.archive, first)).toBe('New notes')
+  })
+
+  it('keeps full responses for existing callers and batches that change slide structure', async () => {
+    addImage(1024)
+    const notes = { op: 'setNotes', target: { slide: 0 }, text: 'Speaker notes' }
+    const ordinary = call('slides:apply-txn', { ops: [notes] })
+    expect(ordinary.update).toBeUndefined()
+    expect(ordinary.slides).toEqual(buildAllRenderSlides(session.opened, FIT))
+    const mixed = await call(
+      'slides:apply-txn:ai-edit',
+      [
+        {
+          ops: [notes, { op: 'deleteSlide', target: { slide: 1 } }],
+          acceptSlideUpdate: true,
+        },
+      ],
+      true,
+    )
+    expect(mixed.applied).toBe(true)
+    expect(mixed.update).toBeUndefined()
+    expect(mixed.slides).toEqual(buildAllRenderSlides(session.opened, FIT))
+  })
+
+  it('rebuilds every page when a local edit addresses inherited master content', async () => {
+    addImage(1024)
+    const part = 'ppt/slideMasters/slideMaster1.xml'
+    const added = call('slides:apply-txn', {
+      ops: [
+        {
+          op: 'addElement',
+          target: { part },
+          kind: 'rect',
+          offset: { x: 0, y: 0, cx: 500000, cy: 500000 },
+        },
+      ],
+    })
+    expect(added.applied).toBe(true)
+    const el = elementDurableId(parseMasterPart(session.opened.archive, part)!.elements.at(-1)!)
+    // A part takes precedence even if the caller also supplies a slide index.
+    const r = await call(
+      'slides:apply-txn:ai-edit',
+      [
+        {
+          ops: [{ op: 'setFill', target: { part, slide: 0, el }, fill: '#123456' }],
+          acceptSlideUpdate: true,
+        },
+      ],
+      true,
+    )
+    expect(r.failures).toBeUndefined()
+    expect(r.applied).toBe(true)
+    expect(r.update).toBeUndefined()
+    expect(r.slides).toEqual(buildAllRenderSlides(session.opened, FIT))
+    expect(r.slides).toHaveLength(2)
   })
 
   it('broadcasts only new pages to both attached windows and coalesces partial updates', async () => {

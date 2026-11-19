@@ -1,6 +1,6 @@
 import { brandText } from '@genoffice/i18n'
 import type { Editor } from '@tiptap/core'
-import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
+import { Fragment, type Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { TextSelection } from '@tiptap/pm/state'
 import {
   TABLE_HEADER_FILL,
@@ -567,8 +567,12 @@ export function serializeRangeToHtml(
   // not travel in the HTML this produces. `redactNode` is total, so a
   // shape it does not recognise still comes through rather than
   // throwing and falling back to the unredacted text.
-  const json = redactNode(editor.getJSON() as RedactableNode) as PmNode
-  const children = (json.content ?? []).slice(startIndex, endIndex + 1)
+  const doc = editor.state.doc
+  const blocks = doc.content.content.slice(startIndex, endIndex + 1)
+  if (blocks.length === 0) return ''
+  const rangeDoc = doc.copy(Fragment.fromArray(blocks))
+  const json = redactNode(rangeDoc.toJSON() as RedactableNode) as PmNode
+  const children = json.content ?? []
   const parts: string[] = []
   let listBuffer: { kind: string; items: string[] } | null = null
 
@@ -578,18 +582,20 @@ export function serializeRangeToHtml(
     parts.push(`<${tag}>${listBuffer.items.join('')}</${tag}>`)
     listBuffer = null
   }
-  const inlineSel = (i: number): InlineSelection | undefined => {
-    if (!sel) return undefined
-    const pmNode = editor.state.doc.child(startIndex + i)
-    const start = blockRangePositions(editor, startIndex + i, startIndex + i).from + 1
-    const from = Math.max(sel.from, start) - start
-    const to = Math.min(sel.to, start + pmNode.content.size) - start
-    return from < to ? { from, to } : undefined
-  }
-
+  // Selections use absolute positions in the source, including deleted blocks.
+  let offset = sel ? doc.resolve(0).posAtIndex(startIndex) : 0
   for (let i = 0; i < children.length; i++) {
     const node = children[i]
-    if (isTrackedDeleted(editor.state.doc.child(startIndex + i))) {
+    const pmNode = blocks[i]
+    const start = offset + 1
+    offset += pmNode.nodeSize
+    let inlineSelection: InlineSelection | undefined
+    if (sel) {
+      const from = Math.max(sel.from, start) - start
+      const to = Math.min(sel.to, start + pmNode.content.size) - start
+      if (from < to) inlineSelection = { from, to }
+    }
+    if (isTrackedDeleted(pmNode)) {
       // the deleted block still separates the surrounding lists in the document
       flushList()
       continue
@@ -597,22 +603,22 @@ export function serializeRangeToHtml(
     if (node.type === 'docHeading') {
       flushList()
       const level = Math.min(Math.max(Number(node.attrs?.level) || 1, 1), 6)
-      parts.push(`<h${level}>${inlineToHtml(node.content, inlineSel(i), image)}</h${level}>`)
+      parts.push(`<h${level}>${inlineToHtml(node.content, inlineSelection, image)}</h${level}>`)
     } else if (node.type === 'docListItem') {
       const kind = (node.attrs?.kind as string) ?? 'bullet'
       if (!listBuffer || listBuffer.kind !== kind) {
         flushList()
         listBuffer = { kind, items: [] }
       }
-      listBuffer.items.push(`<li>${inlineToHtml(node.content, inlineSel(i), image)}</li>`)
+      listBuffer.items.push(`<li>${inlineToHtml(node.content, inlineSelection, image)}</li>`)
     } else if (node.type === 'docParagraph') {
       flushList()
       if (isCodeParagraph(node)) {
-        parts.push(`<pre>${codeToHtml(node.content, inlineSel(i))}</pre>`)
+        parts.push(`<pre>${codeToHtml(node.content, inlineSelection)}</pre>`)
       } else if (isQuoteParagraph(node)) {
-        parts.push(`<blockquote>${inlineToHtml(node.content, inlineSel(i), image)}</blockquote>`)
+        parts.push(`<blockquote>${inlineToHtml(node.content, inlineSelection, image)}</blockquote>`)
       } else {
-        parts.push(`<p>${inlineToHtml(node.content, inlineSel(i), image)}</p>`)
+        parts.push(`<p>${inlineToHtml(node.content, inlineSelection, image)}</p>`)
       }
     } else if (node.type === 'docTable') {
       flushList()

@@ -8,7 +8,13 @@ import type {
   RenderSlide,
   ShapeRenderNode,
 } from '@genoffice/pptx-render'
-import type { AgentToolCall, AgentToolDef, ReadUrlResult, SlideComment } from '../../shared/ipc'
+import type {
+  AgentToolCall,
+  AgentToolDef,
+  ReadUrlResult,
+  SlideComment,
+  SlideUpdate,
+} from '../../shared/ipc'
 import { OP_GROUPS, opGuide, opGuideCatalog, opSignatureIndex } from '@genoffice/pptx-ops/op-docs'
 import { auditSlideLayout, formatAudit } from '@genoffice/pipelines/slides/layout-audit'
 import { findSlideTemplate, listSlideTemplates } from '@genoffice/pipelines/slides/templates'
@@ -108,8 +114,8 @@ export interface DeckAccess {
   /** Live summary for the context hint: total comments and the 1-based pages that have any. */
   getCommentSummary?(): { total: number; pages: number[] }
   applySlide(slideIndex: number, updated: RenderSlide): void
-  /** Replace the whole deck (after adding/removing slides) and jump to the goTo slide */
-  applyDeck(slides: RenderSlide[], goTo?: number): void
+  /** Apply the transaction result and jump to the goTo slide. */
+  applyDeck(slides: RenderSlide[] | SlideUpdate, goTo?: number): void
   /**
    * Generation progress callback (optional): called by generate_deck stages; the UI updates
    * the progress card and top progress bar in real time. Passed only through renderer
@@ -1572,20 +1578,23 @@ function preflightOps(
  */
 function auditTouchedPages(
   records: Array<{ target?: string }> | undefined,
-  slides: RenderSlide[],
+  deck: RenderSlide[] | SlideUpdate,
 ): string {
-  const pages = new Set<number>()
+  const pages = new Map<number, RenderSlide>()
   for (const rec of records ?? []) {
     const prefix = rec.target?.split('/')[0] ?? ''
     if (/^\d+$/.test(prefix)) {
       const idx = Number(prefix)
-      if (slides[idx]) pages.add(idx)
+      const slide = Array.isArray(deck)
+        ? deck[idx]
+        : deck.slides.find((s) => s.partPath === deck.order[idx])
+      if (slide) pages.set(idx, slide)
     }
     if (pages.size >= 4) break
   }
   const failing = [...pages]
-    .sort((a, b) => a - b)
-    .map((idx) => ({ page: idx + 1, issues: auditSlideLayout(slides[idx]!) }))
+    .sort(([a], [b]) => a - b)
+    .map(([idx, slide]) => ({ page: idx + 1, issues: auditSlideLayout(slide) }))
     .filter((a) => a.issues.length > 0)
   if (failing.length === 0) return ''
   return (
@@ -2903,6 +2912,7 @@ async function executeTool(
       const pre = preflightOps(opsIn, slides, state)
       if (!('ops' in pre)) return pre
       const r = await aiEditApi().applyTxn?.({
+        acceptSlideUpdate: true,
         ops: pre.ops,
         ...(call.input.dry_run === true ? { dryRun: true } : {}),
         ...(call.input.isolation === 'per_op' ? { isolation: 'per_op' as const } : {}),
@@ -2929,7 +2939,9 @@ async function executeTool(
       }
       // Ops can delete slides — clamp the current index into the rebuilt deck
       // (page deletion may leave the current index past the end)
-      access.applyDeck(r.slides!, Math.max(0, Math.min(access.getCurrent(), r.slides!.length - 1)))
+      const deck = r.update ?? r.slides!
+      const pageCount = Array.isArray(deck) ? deck.length : deck.order.length
+      access.applyDeck(deck, Math.max(0, Math.min(access.getCurrent(), pageCount - 1)))
       const created = (r.records ?? []).flatMap((rec) => rec.created ?? [])
       const doneStr = (r.records ?? [])
         .map((rec) => `${rec.op}${rec.target ? ` @${rec.target}` : ''}`)
@@ -2940,7 +2952,7 @@ async function executeTool(
           (created.length ? ` New element ids: ${created.join(', ')}.` : '') +
           (failLines ? `\nSkipped (per_op):\n${failLines}` : '') +
           (pre.sampleData ? SAMPLE_DATA_NOTE : '') +
-          auditTouchedPages(r.records, r.slides!),
+          auditTouchedPages(r.records, deck),
         mutated: true,
         summary: applyOpsSummary(pre.ops, r.records?.length ?? 0),
       }

@@ -66,6 +66,19 @@ describe('pictures of the body', () => {
     expect(() => plugin.readPicture(0)).toThrow()
   })
 
+  it.each(['hwp', 'hwpx'])('lists an image added after the first lookup in %s', (format) => {
+    const plugin = open(readFileSync(join(__dirname, 'fixtures', 'memo.' + format)))
+    expect(plugin.listPictures().count).toBe(0)
+    const picture = open(PICTURE_DOC).readPicture(1)
+    if (!picture.ok) throw new Error('Missing PNG in picture fixture')
+    expect(plugin.insertPicture('', null, 'end', picture.base64, 72, 1, 1, 'png').ok).toBe(true)
+    expect(plugin.listPictures()).toMatchObject({
+      count: 1,
+      pictures: [{ picture: 1, type: 'image/png' }],
+    })
+    expect(plugin.readPicture(1)).toMatchObject({ ok: true, base64: picture.base64 })
+  })
+
   it('says a document without pictures has none', () => {
     const empty = HwpDocument.createEmpty()
     empty.createBlankDocument()

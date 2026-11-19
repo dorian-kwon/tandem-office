@@ -30,6 +30,7 @@ import type {
   SectionInfo,
   SetEffectsPatch,
   SlideComment,
+  SlideUpdate,
   TransitionKind,
 } from '../shared/ipc'
 import { baseName } from '../shared/base-name'
@@ -1552,8 +1553,9 @@ export function App() {
     [],
   )
 
-  const applyDeck = useCallback((all: RenderSlide[], goTo?: number) => {
-    setSlides(all)
+  const applyDeck = useCallback((deck: RenderSlide[] | SlideUpdate, goTo?: number) => {
+    if (Array.isArray(deck)) setSlides(deck)
+    else setSlides((current) => mergeSlideUpdate(current, deck))
     if (goTo != null) setCurrent(goTo)
     setSelectedIds([])
     setEditing(null)
@@ -1568,6 +1570,7 @@ export function App() {
       setAnnotationsNonce((n) => n + 1)
       return
     }
+    const all = Array.isArray(deck) ? deck : deck.order.map((partPath) => ({ partPath }))
     const index = notesDraftIndex(draft, all)
     void (index < 0 ? Promise.resolve('') : window.slidesApi.getNotes(index)).then((stored) => {
       const kept = retargetNotesDraft(draft, all, stored)

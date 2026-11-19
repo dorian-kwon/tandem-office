@@ -1,5 +1,7 @@
 /** apply_ops — the AI batch surface over the op transaction executor. */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mergeSlideUpdate } from '../src/shared/slide-update'
+import type { SlideUpdate } from '../src/shared/ipc'
 import type { GroupRenderNode, RenderSlide, ShapeRenderNode } from '@genoffice/pptx-render'
 import {
   createSlidesSkill,
@@ -86,8 +88,8 @@ const access = (slides: RenderSlide[] = [richSlide]): DeckAccess =>
     getCurrent: () => current,
     getSelectedIds: () => [],
     applySlide: () => {},
-    applyDeck: (all: RenderSlide[], goTo: number) => {
-      deckApplied = all
+    applyDeck: (all: RenderSlide[] | SlideUpdate, goTo: number) => {
+      deckApplied = Array.isArray(all) ? all : mergeSlideUpdate(slides, all)
       deckGoTo = goTo
     },
     fitWidthPx: 1280,
@@ -139,7 +141,7 @@ describe('apply_ops', () => {
     ]
     const edited = await createSlidesSkill(access([nested])).executeTool!(call({ ops }))
     expect(edited.mutated).toBe(true)
-    expect(submit).toHaveBeenCalledExactlyOnceWith({ ops })
+    expect(submit).toHaveBeenCalledExactlyOnceWith({ ops, acceptSlideUpdate: true })
   })
 
   it.each([1, 's_9'])('guards a deep withheld shape addressed on slide %s', async (ref) => {
@@ -352,6 +354,29 @@ describe('apply_ops', () => {
     expect(r.output).toContain('page 1:')
     expect(r.output).toContain('Out of bounds')
     expect(r.output).not.toContain('page 2:')
+  })
+
+  it('audits a partial reply at its original page number and keeps other pages', async () => {
+    const a = { ...richSlide, partPath: 'ppt/slides/slide1.xml' }
+    const b = { ...richSlide, partPath: 'ppt/slides/slide2.xml' }
+    const broken = { ...b, nodes: [...b.nodes, textNode('z', 'Past the edge', 1100, 400)] }
+    ;(globalThis as any).window.slidesApi.applyTxn = vi.fn(async () => ({
+      applied: true,
+      records: [{ op: 'setTransform', target: '1/z' }],
+      update: { order: [a.partPath, b.partPath], slides: [broken] },
+    }))
+    current = 1
+    const r = await createSlidesSkill(access([a, b])).executeTool!(
+      call({
+        ops: [
+          { op: 'setTransform', target: { slide: 1, el: 'z' }, box: { x: 0, y: 0, cx: 1, cy: 1 } },
+        ],
+      }),
+    )
+    expect(r.output).toContain('page 2:')
+    expect(r.output).toContain('Out of bounds')
+    expect(deckApplied).toEqual([a, broken])
+    expect(deckGoTo).toBe(1)
   })
 
   it('omits the audit block when every touched page passes', async () => {

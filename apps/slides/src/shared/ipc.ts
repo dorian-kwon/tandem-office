@@ -167,6 +167,8 @@ export interface HistoryBatchRequest {
 
 /** A raw op transaction from the AI batch surface (ops are validated by the registry; coordinates are document-space EMU). */
 export interface ApplyTxnOp {
+  /** The caller can merge a partial render by slide part path. */
+  acceptSlideUpdate?: boolean
   ops: unknown[]
   /** atomic (default): all-or-nothing. per_op: independent, failures skip. */
   isolation?: 'atomic' | 'per_op'
@@ -182,7 +184,9 @@ export interface ApplyTxnResult {
   failures?: Array<{ index: number; error: string }>
   /** compact journal echo: op name, target, ids minted by additive ops */
   records?: Array<{ op: string; target?: string; created?: string[] }>
-  /** full deck after a mutation (a transaction may touch any slide) */
+  /** Only returned to callers that requested partial renders for a page-local edit. */
+  update?: SlideUpdate
+  /** Full deck for all other successful transactions. */
   slides?: RenderSlide[]
 }
 

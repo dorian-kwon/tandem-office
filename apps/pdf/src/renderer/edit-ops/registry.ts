@@ -46,6 +46,8 @@ export interface OpDef {
   /** Context the ops after this one in the batch plan against (a page it deletes, an image it claims) */
   advance?(op: Op, ctx: OpContext): Partial<OpContext>
   apply(op: Op, state: EditSnapshot): Partial<EditSnapshot>
+  /** Equivalent to applying a consecutive run of this op in input order. */
+  applyBatch?(ops: Op[], state: EditSnapshot): Partial<EditSnapshot>
 }
 
 const REGISTRY = new Map<string, OpDef>()
@@ -129,6 +131,28 @@ export function planEditOps(ops: Op[], ctx: OpContext, newId: () => string): Pla
     : { ops: stamped, records, failures, touched }
 }
 
+/** When reducing one bucket, sibling buckets stay at the host's base snapshot. */
+function reducePlannedOps(state: EditSnapshot, ops: Op[], bucket?: Bucket): EditSnapshot {
+  let cur = state
+  for (let i = 0; i < ops.length; i++) {
+    const op = ops[i]!
+    const def = lookup(op.op)
+    if (bucket && !def.touches.includes(bucket)) continue
+    let out: Partial<EditSnapshot>
+    if (def.applyBatch && ops[i + 1]?.op === op.op) {
+      const start = i
+      while (ops[i + 1]?.op === op.op) i++
+      out = def.applyBatch(ops.slice(start, i + 1), cur)
+    } else {
+      out = def.apply(op, cur)
+    }
+    if (bucket) {
+      if (bucket in out) cur = { ...cur, [bucket]: out[bucket] }
+    } else if (Object.keys(out).length > 0) cur = { ...cur, ...out }
+  }
+  return cur
+}
+
 /** Reduce one bucket through a planned batch. */
 export function reduceBucket<K extends Bucket>(
   bucket: K,
@@ -136,24 +160,12 @@ export function reduceBucket<K extends Bucket>(
   ops: Op[],
   base: EditSnapshot,
 ): EditSnapshot[K] {
-  let cur = prev
-  for (const op of ops) {
-    const def = lookup(op.op)
-    if (!def.touches.includes(bucket)) continue
-    const out = def.apply(op, { ...base, [bucket]: cur })
-    if (bucket in out) cur = out[bucket] as EditSnapshot[K]
-  }
-  return cur
+  return reducePlannedOps({ ...base, [bucket]: prev }, ops, bucket)[bucket]
 }
 
 /** Reduce a whole snapshot through a planned batch. */
 export function reduceEditOps(state: EditSnapshot, ops: Op[]): EditSnapshot {
-  let cur = state
-  for (const op of ops) {
-    const out = lookup(op.op).apply(op, cur)
-    if (Object.keys(out).length > 0) cur = { ...cur, ...out }
-  }
-  return cur
+  return reducePlannedOps(state, ops)
 }
 
 export function runEditOps(

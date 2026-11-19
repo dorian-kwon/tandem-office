@@ -146,6 +146,52 @@ describe('pictures of a HWP document', () => {
     expect(sameBytes(jpeg.data, JPEG)).toBe(true)
   })
 
+  it('reads a large contiguous picture by range and rejects a changed source', async () => {
+    const picture = Buffer.alloc(8 * 1024 * 1024, 0x40)
+    JPEG.copy(picture)
+    const path = await save('large.hwp', hwp(0, { '/BinData/BIN0001.jpg': picture }))
+    const [image] = await listEmbeddedImages(path)
+    expect(image!.hwpStream).toMatchObject({ length: picture.length, offset: expect.any(Number) })
+    expect(sameBytes((await readEmbeddedImage(path, image!)).data, picture)).toBe(true)
+    await writeFile(path, hwp(0, { '/BinData/BIN0001.jpg': JPEG }))
+    await expect(readEmbeddedImage(path, image!)).rejects.toThrow(/changed/)
+  })
+
+  it('reads fragmented FAT streams in their logical order', async () => {
+    const sectorSize = 512
+    const picture = Buffer.alloc(8192)
+    for (let at = 0; at < picture.length; at++) picture[at] = Math.floor(at / sectorSize)
+    JPEG.copy(picture)
+    const file = Buffer.from(hwp(0, { '/BinData/BIN0001.jpg': picture }))
+    const start = CFB.find(CFB.read(file, { type: 'buffer' }), '/BinData/BIN0001.jpg')!.start
+    // The fixture fits in one FAT sector. Swap two physical sectors and adjust
+    // the chain so the logical stream is identical but no longer contiguous.
+    const fat = (file.readUInt32LE(76) + 1) * sectorSize
+    const second = (start + 2) * sectorSize
+    const third = second + sectorSize
+    const temp = Buffer.from(file.subarray(second, third))
+    file.copy(file, second, third, third + sectorSize)
+    temp.copy(file, third)
+    file.writeUInt32LE(start + 2, fat + start * 4)
+    file.writeUInt32LE(start + 1, fat + (start + 2) * 4)
+    file.writeUInt32LE(start + 3, fat + (start + 1) * 4)
+    const path = await save('fragmented.hwp', file)
+    const [image] = await listEmbeddedImages(path)
+    expect(image!.hwpStream).toHaveProperty('stored')
+    expect(sameBytes((await readEmbeddedImage(path, image!)).data, picture)).toBe(true)
+  })
+
+  it('keeps mini-stream data private between reads and refuses stale cached pictures', async () => {
+    const path = await save('small.hwp', hwp(0, { '/BinData/BIN0001.jpg': JPEG }))
+    const [image] = await listEmbeddedImages(path)
+    expect(image!.hwpStream).toHaveProperty('stored')
+    const first = await readEmbeddedImage(path, image!)
+    first.data.fill(0)
+    expect(sameBytes((await readEmbeddedImage(path, image!)).data, JPEG)).toBe(true)
+    await writeFile(path, hwp(0, {}))
+    await expect(readEmbeddedImage(path, image!)).rejects.toThrow(/changed/)
+  })
+
   it('reads pictures of a document whose streams are not deflated', async () => {
     const path = await save('doc.hwp', hwp(0x0, { '/BinData/BIN0001.png': PNG }))
     const [image] = await listEmbeddedImages(path)

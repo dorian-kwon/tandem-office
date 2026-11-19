@@ -346,19 +346,13 @@ describe('the document context sent with a message', () => {
     expect(context).not.toContain('aiMemoContext')
   })
 
-  it('says how many pictures the document has', async () => {
-    const { skill, refreshContext } = setup({
-      listPictures: async () => ({
-        count: 2,
-        limited: false,
-        pictures: [
-          { picture: 1, type: 'image/png', page: 1, near: '', table: null },
-          { picture: 2, type: 'image/jpeg', page: 3, near: '', table: 2 },
-        ],
-      }),
-    })
+  it('points to the picture tool without scanning when preparing a message', async () => {
+    const { bridge, skill, refreshContext, call } = setup()
     await refreshContext()
-    expect(skill.buildContext!()).toContain('Pictures: 2')
+    expect(skill.buildContext!()).toContain('call list_pictures')
+    expect(bridge.listPictures).not.toHaveBeenCalled()
+    expect((await call('list_pictures')).output).toBe('This document has no pictures.')
+    expect(bridge.listPictures).toHaveBeenCalledTimes(1)
   })
 })
 

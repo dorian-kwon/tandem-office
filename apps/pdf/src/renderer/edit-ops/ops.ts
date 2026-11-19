@@ -93,6 +93,8 @@ const color = (v: unknown, field = 'color'): [number, number, number] => {
 
 // ── annotate ──────────────────────────────────────────────────────────
 
+const markupFromOp = (op: Op): LocalMarkup => ({ id: id(op), ...(op.markup as MarkupInput) })
+
 register({
   name: 'addMarkup',
   touches: ['markups'],
@@ -106,9 +108,10 @@ register({
       throw new GuidedError('markup.quads must hold at least one 8-number quad')
   },
   apply(op, s) {
-    const m = op.markup as MarkupInput
-    const added: LocalMarkup = { id: id(op), ...m }
-    return { markups: [...s.markups, added] }
+    return { markups: [...s.markups, markupFromOp(op)] }
+  },
+  applyBatch(ops, s) {
+    return { markups: s.markups.concat(ops.map(markupFromOp)) }
   },
 })
 

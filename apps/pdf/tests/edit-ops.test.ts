@@ -79,14 +79,16 @@ describe('plan', () => {
   })
 
   it('is atomic: one bad op rejects the whole batch and touches nothing', () => {
-    const { state, plan } = run(empty(), [
+    const before = empty()
+    const { state, plan } = run(before, [
+      { op: 'addMarkup', markup: markup() },
       { op: 'addMarkup', markup: markup() },
       { op: 'rotatePages', pages: [9], dir: 90 },
     ])
-    expect(plan.failures.map((f) => f.index)).toEqual([1])
+    expect(plan.failures.map((f) => f.index)).toEqual([2])
     expect(plan.failures[0]!.error).toContain('out of range')
     expect(plan.ops).toEqual([])
-    expect(state.markups).toEqual([])
+    expect(state).toBe(before)
   })
 
   it('rejects everything on a read-only document', () => {
@@ -109,6 +111,52 @@ describe('plan', () => {
 })
 
 describe('annotate', () => {
+  it('applies consecutive markup runs in order across recolors, page deletion and removal', () => {
+    const before = run(empty(), [{ op: 'addMarkup', id: 'old', markup: markup() }]).state
+    const plan = planEditOps(
+      [
+        { op: 'addMarkup', id: 'keep', markup: { ...markup(0), subject: 'Key terms' } },
+        { op: 'addMarkup', id: 'onDeletedPage', markup: markup(1) },
+        { op: 'recolorMarkup', id: 'keep', color: [0, 1, 0] },
+        { op: 'deletePage', pageIndex: 1 },
+        { op: 'addMarkup', markup: { ...markup(2), type: 'underline', subject: 'Dates' } },
+        { op: 'addMarkup', id: 'last', markup: markup() },
+        { op: 'removeMarkup', id: 'old' },
+      ],
+      ctx(),
+      newId,
+    )
+    expect(plan.failures).toEqual([])
+    const addedId = plan.records[4]!.created![0]!
+    const expected = plan.ops.reduce((s, op) => ({ ...s, ...lookup(op.op).apply(op, s) }), before)
+    const whole = reduceEditOps(before, plan.ops)
+    expect(whole).toEqual(expected)
+    for (const bucket of plan.touched) {
+      expect(reduceBucket(bucket, before[bucket], plan.ops, before)).toEqual(expected[bucket])
+    }
+    expect(whole.markups.map((m) => m.id)).toEqual(['keep', addedId, 'last'])
+    expect(whole.markups[0]).toMatchObject({ subject: 'Key terms', color: [0, 1, 0] })
+    expect(whole.markups[1]).toMatchObject({ subject: 'Dates', type: 'underline' })
+    expect(before.markups.map((m) => m.id)).toEqual(['old'])
+  })
+
+  it('appends 4,000 highlights while preserving the 10,000 earlier undo records', () => {
+    const before = empty()
+    before.markups = Array.from({ length: 10_000 }, (_, i) => ({ id: `old${i}`, ...markup(i % 3) }))
+    const ops = Array.from({ length: 4_000 }, (_, i) => ({
+      op: 'addMarkup',
+      id: `new${i}`,
+      markup: { ...markup(i % 3), subject: `Category ${i % 5}` },
+    }))
+    const plan = planEditOps(ops, ctx(), newId)
+    expect(plan.failures).toEqual([])
+    const after = reduceBucket('markups', before.markups, plan.ops, before)
+    expect(before.markups).toHaveLength(10_000)
+    expect(after).toHaveLength(14_000)
+    expect(before.markups.every((m, i) => after[i] === m)).toBe(true)
+    expect(after.slice(10_000)).toEqual(ops.map((op) => ({ id: op.id, ...op.markup })))
+  })
+
   it('adds and removes pending markups by id', () => {
     const a = run(empty(), [
       { op: 'addMarkup', markup: markup() },

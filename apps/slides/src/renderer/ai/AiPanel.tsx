@@ -390,7 +390,7 @@ interface AiPanelProps {
   /** Decoded image cache from App (SlideThumb needs it) — powers AI-vision slide screenshots */
   images: Map<string, HTMLImageElement>
   applySlide: (slideIndex: number, updated: RenderSlide) => void
-  applyDeck: (slides: RenderSlide[], goTo?: number) => void
+  applyDeck: DeckAccess['applyDeck']
   fitWidthPx: number
   settings: AiSettings
   /** Preset instruction pushed from the ribbon/start screen; sent immediately when autoRun. When displayText exists the chat bubble shows only it while the full text still goes to the model.

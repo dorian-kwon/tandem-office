@@ -1,7 +1,8 @@
 import { constants } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { basename, extname, posix } from 'node:path'
-import { crc32, inflateRawSync } from 'node:zlib'
+import { promisify } from 'node:util'
+import { crc32, inflateRaw, inflateRawSync } from 'node:zlib'
 import { decodeEntities } from '@genoffice/docx-engine'
 import { readZipEntries, type ByteSource, type ZipEntry } from '@genoffice/docx-engine/zip-splice'
 import type { OcrPageImage } from '../../shared/translate-ocr'
@@ -17,14 +18,17 @@ const MAX_XML = 4 * 1024 * 1024
 const MAX_XML_TOTAL = 16 * 1024 * 1024
 const LIMITS = { maxParts: 10000, maxPartBytes: MAX_IMAGE, maxTotalBytes: 256 * 1024 * 1024 }
 
-/** Internal descriptors never cross IPC; image bytes are read only when needed. */
+const inflatePicture = promisify(inflateRaw)
+type HwpStream = { offset: number; length: number } | { stored: Uint8Array }
+
+/** Internal descriptors never cross IPC. */
 export interface EmbeddedImage {
   name: string
   location: string
   /** the picture's part of the zip package; absent for a picture of a HWP file */
   entry?: ZipEntry
-  /** reads the picture by itself when it is not a part of a zip package (HWP) */
-  read?: () => Promise<OcrPageImage>
+  /** Contiguous HWP stream in the source, or a detached mini/fragmented stream. */
+  hwpStream?: HwpStream
   signature: string
   /** the package part that holds the reference, for example `word/document.xml` */
   part: string
@@ -100,73 +104,74 @@ function pictureMime(data: Uint8Array): 'image/png' | 'image/jpeg' | null {
   return null
 }
 
-/**
- * The pictures of a HWP 5 file, from its BinData streams in name order. A stream is deflated
- * when the document says so, but a picture can also be stored as it is, so the picture header
- * decides: the bytes as they are, else inflated.
- */
-async function listHwpImages(path: string): Promise<EmbeddedImage[]> {
-  const load = async () => {
-    const src = await source(path)
-    try {
-      const bytes = new Uint8Array(await src.bytes.read(0, src.bytes.size))
-      return { bytes, signature: src.signature }
-    } finally {
-      await src.handle.close()
-    }
+/** Use a file range only when it exactly matches the stream assembled by the
+ * CFB reader. Mini-streams and fragmented entries keep just their stored bytes. */
+function locateHwpStream(
+  file: Buffer,
+  sectorSize: number,
+  start: number,
+  content: Uint8Array,
+): HwpStream {
+  const length = content.length
+  const offset = (start + 1) * sectorSize
+  if (
+    length >= 4096 &&
+    start >= 0 &&
+    (sectorSize === 512 || sectorSize === 4096) &&
+    offset + length <= file.length &&
+    file.subarray(offset, offset + length).equals(content)
+  )
+    return { offset, length }
+  return { stored: Uint8Array.from(content) }
+}
+
+async function decodeHwpPicture(stored: Uint8Array): Promise<OcrPageImage> {
+  const mime = pictureMime(stored)
+  if (mime && stored.length <= MAX_IMAGE) return { data: stored, mime }
+  if (!mime) {
+    const data = await inflatePicture(stored, { maxOutputLength: MAX_IMAGE + 1 }).catch(() => null)
+    const decodedMime = data && pictureMime(data)
+    if (data && decodedMime && data.length <= MAX_IMAGE) return { data, mime: decodedMime }
   }
-  const { bytes, signature } = await load()
-  const opened = openHwp(bytes)
-  if (!opened)
-    throw new Error(
-      'this Hangul document cannot be read: it is encrypted, protected for distribution, or damaged',
-    )
-  const names = opened.cfb.FullPaths.map((full, i) => ({ full, entry: opened.cfb.FileIndex[i]! }))
-    .filter(
-      ({ full, entry }) => /\/BinData\/BIN[^/]*\.(png|jpe?g)$/i.test(full) && (entry.size ?? 0) > 0,
-    )
-    .map(({ full }) => full)
-    .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
-  const images: EmbeddedImage[] = names.map((full) => {
-    const name = basename(full)
-    return {
-      name,
-      location: 'BinData',
-      signature,
-      part: `BinData/${name}`,
-      relId: name,
-      read: async () => {
-        const again = await load()
-        if (again.signature !== signature) throw new Error('OCR source changed after listing')
-        const reopened = openHwp(again.bytes)
-        const entry = reopened?.cfb.FileIndex[reopened.cfb.FullPaths.indexOf(full)]
-        if (!reopened || !entry?.content)
-          throw new Error('this picture is no longer in the document')
-        const stored = new Uint8Array(entry.content as Uint8Array)
-        let data: Uint8Array | null = pictureMime(stored) ? stored : null
-        if (!data) {
-          try {
-            data = new Uint8Array(inflateRawSync(stored, { maxOutputLength: MAX_IMAGE + 1 }))
-          } catch {
-            data = null
-          }
-        }
-        const mime = data ? pictureMime(data) : null
-        if (!data || !mime || data.length > MAX_IMAGE)
-          throw new Error('only PNG and JPEG images can be read')
-        return { data, mime }
-      },
+  throw new Error('only PNG and JPEG images can be read')
+}
+
+async function listHwpImages(path: string): Promise<EmbeddedImage[]> {
+  const src = await source(path)
+  try {
+    const file = await src.bytes.read(0, src.bytes.size)
+    const opened = openHwp(file)
+    if (!opened)
+      throw new Error(
+        'this Hangul document cannot be read: it is encrypted, protected for distribution, or damaged',
+      )
+    const sectorSize = 2 ** file.readUInt16LE(30)
+    const images: EmbeddedImage[] = []
+    for (const [i, full] of opened.cfb.FullPaths.entries()) {
+      const entry = opened.cfb.FileIndex[i]!
+      if (!/\/BinData\/BIN[^/]*\.(png|jpe?g)$/i.test(full) || !entry.content?.length) continue
+      const name = basename(full)
+      images.push({
+        name,
+        location: 'BinData',
+        signature: src.signature,
+        part: `BinData/${name}`,
+        relId: name,
+        hwpStream: locateHwpStream(file, sectorSize, entry.start, entry.content as Uint8Array),
+      })
     }
-  })
-  const fullOf = new Map(names.map((full) => [basename(full), full]))
-  return byLayout(bytes, images, async (image) => {
-    const full = fullOf.get(image.name)!
-    const entry = opened.cfb.FileIndex[opened.cfb.FullPaths.indexOf(full)]
-    const stored = new Uint8Array((entry?.content ?? []) as Uint8Array)
-    return pictureMime(stored)
-      ? stored
-      : new Uint8Array(inflateRawSync(stored, { maxOutputLength: MAX_IMAGE + 1 }))
-  })
+    images.sort((a, b) => a.name.localeCompare(b.name, 'en', { numeric: true }))
+    return await byLayout(file, images, async (image) => {
+      const stream = image.hwpStream!
+      const stored =
+        'stored' in stream
+          ? stream.stored
+          : file.subarray(stream.offset, stream.offset + stream.length)
+      return (await decodeHwpPicture(stored)).data
+    })
+  } finally {
+    await src.handle.close()
+  }
 }
 
 function attrs(tag: string): Record<string, string> {
@@ -401,9 +406,13 @@ export async function listEmbeddedImages(path: string): Promise<EmbeddedImage[]>
         }
       }
     }
-    if (extname(path).toLowerCase() === '.hwpx')
+    if (
+      extname(path).toLowerCase() === '.hwpx' &&
+      images.length &&
+      src.bytes.size <= MAX_LAYOUT_BYTES
+    )
       return await byLayout(
-        new Uint8Array(await src.bytes.read(0, src.bytes.size)),
+        await src.bytes.read(0, src.bytes.size),
         images,
         async (image) => new Uint8Array(await readPart(src.bytes, image.entry!, MAX_IMAGE)),
       )
@@ -449,8 +458,15 @@ async function byLayout(
 export async function readEmbeddedImage(path: string, image: EmbeddedImage): Promise<OcrPageImage> {
   const src = await source(path)
   try {
-    if (image.read) return await image.read()
     if (src.signature !== image.signature) throw new Error('OCR source changed after listing')
+    if (image.hwpStream) {
+      const stream = image.hwpStream
+      return await decodeHwpPicture(
+        'stored' in stream
+          ? stream.stored.slice()
+          : await src.bytes.read(stream.offset, stream.length),
+      )
+    }
     if (!image.entry) throw new Error('this picture has no package part to read')
     const data = new Uint8Array(await readPart(src.bytes, image.entry, MAX_IMAGE))
     const mime =

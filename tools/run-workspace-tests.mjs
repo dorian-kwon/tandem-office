@@ -160,6 +160,12 @@ if (editorsOnly) {
     if (child.error) console.error(child.error.message)
     return child.status === 0
   }
+  // Embedded image OCR runs in the shell, outside the editor workspaces above.
+  if (
+    !run(['run', 'test', '-w', '@genoffice/shell', '--', 'tests/translate-ocr-extracted.test.ts'])
+  ) {
+    process.exitCode = 1
+  }
   const built = run(['run', 'build:all'])
   if (
     !built ||

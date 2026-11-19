@@ -3036,7 +3036,7 @@ export function createHwpSkill(deps: HwpSkillDeps): HwpSkill {
     },
     refreshContext: async () => {
       try {
-        const [text, fields, tables, notes, styles, memos, pictures] = await Promise.all([
+        const [text, fields, tables, notes, styles, memos] = await Promise.all([
           bridge.readText(),
           bridge.listFields(),
           bridge.listTables(),
@@ -3045,7 +3045,6 @@ export function createHwpSkill(deps: HwpSkillDeps): HwpSkill {
           bridge.listStyles().catch(() => null),
           // only the count goes into the context; a failure leaves the rest of it usable
           bridge.listMemos().catch(() => null),
-          bridge.listPictures().catch(() => null),
         ])
         const footnotes = notes?.notes.filter((note) => note.kind === 'footnote').length ?? 0
         // numbered: the number is what fill_field takes, and names repeat
@@ -3062,11 +3061,7 @@ export function createHwpSkill(deps: HwpSkillDeps): HwpSkill {
           tables.count === 0
             ? 'Tables: none.'
             : `Tables: ${tables.count} (list_tables lists them; the text below shows their words but not their empty cells).`,
-          pictures === null
-            ? 'Pictures: could not be listed (list_pictures may still work).'
-            : pictures.count === 0
-              ? 'Pictures: none.'
-              : `Pictures: ${pictures.count} (list_pictures lists them and analyze_picture looks at one; the text below does not show what they show).`,
+          'For pictures in the document body or table cells, call list_pictures.',
           notes === null
             ? 'Footnotes and endnotes: could not be listed (list_notes may still work).'
             : notes.count === 0

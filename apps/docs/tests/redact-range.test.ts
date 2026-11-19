@@ -258,6 +258,25 @@ describe('what a selection sends to the model', () => {
     expect(html).toContain('{{client phone}}')
   })
 
+  it('reads a selection at the end of a 5,000-paragraph DOCX without serializing earlier blocks', async () => {
+    const row = '<w:p><w:r><w:t>Observation</w:t></w:r></w:p>'
+    const parsed = await parseDocx(await buildDocx({ bodyXml: row.repeat(5_000) }))
+    const editor = new Editor({
+      element: null,
+      extensions,
+      content: blocksToPmDoc(parsed.blocks),
+    })
+    editors.add(editor)
+    const doc = editor.state.doc
+    expect(doc.childCount).toBe(5_000)
+    const outside = vi.spyOn(doc.child(0), 'toJSON')
+    const last = doc.childCount - 1
+    const start = doc.resolve(0).posAtIndex(last) + 1
+    const html = serializeRangeToHtml(editor, last, last, { from: start + 2, to: start + 6 })
+    expect(html).toBe('<p>Ob<sel>serv</sel>ation</p>')
+    expect(outside).not.toHaveBeenCalled()
+  })
+
   it('leaves an unmarked document exactly as it was', async () => {
     const editor = await open(false)
     selectSecret(editor)

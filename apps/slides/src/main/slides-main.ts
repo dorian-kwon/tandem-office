@@ -1339,6 +1339,20 @@ function journaledTxn(
   return r
 }
 
+// These ops mutate only the addressed slide. A master/layout target or any
+// other op can affect the rendering of slides outside the transaction's targets.
+const PAGE_LOCAL_OPS = new Set([
+  'setNotes',
+  'setHidden',
+  'setTransition',
+  'setText',
+  'setFont',
+  'setParagraphFormat',
+  'setTransform',
+  'setFill',
+  'setStroke',
+])
+
 /**
  * AI batch surface core, shared by the `slides:apply-txn` IPC handler and the
  * shell's MCP slides bridge (one implementation so both stay behaviorally
@@ -1393,6 +1407,11 @@ export function applySessionTxn(
   if (isolation === 'atomic' ? invalid > 0 : invalid >= ops.length) {
     return { applied: false, failures: compact(plan.failures) }
   }
+  const before =
+    req.acceptSlideUpdate === true &&
+    ops.every((op) => op?.target?.slide != null && !op.target.part && PAGE_LOCAL_OPS.has(op.op))
+      ? session.opened.deck.slides.map((slide) => slide.path)
+      : null
   pushHistory(session)
   const r = journaledTxn(session, 'batch', { ops, isolation })
   if (!r.applied) {
@@ -1414,10 +1433,12 @@ export function applySessionTxn(
       return session.opened.deck.slides.findIndex((s) => slideDurableId(s) === rec.slideId)
     return -1
   }
+  const changed = new Set<number>()
   const renderedByIdx = new Map<number, ReturnType<typeof rebuildSlide>>()
   for (const rec of r.records ?? []) {
     const o = rec.op
-    const idx = slideIdxOf(rec)
+    const idx = before && typeof o.target?.slide === 'number' ? o.target.slide : slideIdxOf(rec)
+    if (before) changed.add(idx)
     if (idx < 0) continue
     if (o.op === 'setTableStyle' || o.op === 'setChart') {
       rebuildSlideWithReparse(session, idx)
@@ -1452,7 +1473,9 @@ export function applySessionTxn(
       ...(rec.created ? { created: rec.created } : {}),
     })),
     ...(r.failures?.length ? { failures: compact(r.failures) } : {}),
-    slides: buildAllRenderSlides(session.opened, session.fitWidthPx),
+    ...(before && changed.size && !changed.has(-1) && !r.failures?.length
+      ? { update: buildSlideUpdate(session, before, [...changed]) }
+      : { slides: buildAllRenderSlides(session.opened, session.fitWidthPx) }),
   }
 }
 

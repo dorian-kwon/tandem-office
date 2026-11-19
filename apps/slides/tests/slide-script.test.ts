@@ -646,7 +646,7 @@ describe('execute_slide_script tool', () => {
       slide = updated
     },
     applyDeck: (all) => {
-      slide = all[0]!
+      slide = Array.isArray(all) ? all[0]! : (all.slides[0] ?? slide)
     },
     fitWidthPx: 1280,
   })
