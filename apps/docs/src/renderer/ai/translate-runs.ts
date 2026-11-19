@@ -9,6 +9,13 @@ import { isTrackedDeleted } from './doc-utils'
 import type { NoteInfo, NoteRun, Run, TextboxDisplay } from '@genoffice/docx-engine'
 import type { CellBox } from '../editor/cell-box-segments'
 import { shrinkBoxToFit } from './box-fit'
+import {
+  draftNestedTable,
+  NestedTableChanges,
+  nestedBatches,
+  nestedTableNode,
+  nestedTablesOf,
+} from './nested-table-draft'
 import { parseTagged, taggedViewOf } from './tagged-runs'
 import type { AiTrack } from './protocol'
 import type { AiNotesAccess, NoteKind } from './note-ops'
@@ -63,6 +70,8 @@ const FIXED_MARK_TYPES = new Set([
 export interface RunParagraph {
   /** top-level block index */
   index: number
+  /** depth-first number of a nested table in this block */
+  nestedTable?: number
   /** the n-th paragraph inside a table block (document order); absent for a plain paragraph */
   paragraph?: number
   /** a text box block: which of its boxes (0-based); `paragraph` is then the paragraph inside that box */
@@ -239,6 +248,15 @@ export function recordTwins(
   }
 }
 
+/** Pairs found in a detached table edit, to commit with the live editor transaction. */
+export function twinPairsOf(editor: Editor): Array<[string, string]> {
+  const pairs = twinPairs.get(originalAiEditor(editor))
+  if (!pairs) return []
+  return [...pairs].flatMap(([source, twins]) =>
+    [...twins].map((twin): [string, string] => [source, twin]),
+  )
+}
+
 /** the fingerprints of every text paragraph of the document (tables included), per document state */
 const docFingerprints = new WeakMap<ProseMirrorNode, Set<string>>()
 
@@ -314,11 +332,19 @@ export function tableTwinRoles(
   const pairs = twinPairs.get(originalAiEditor(editor))
   if (!pairs || pairs.size === 0) return fps.map(() => null)
   const present = new Set(fps.filter((f): f is string => f !== null))
+  const sources = new Set<string>()
+  const twins = new Set<string>()
+  for (const original of present) {
+    for (const twin of pairs.get(original) ?? []) {
+      if (!present.has(twin)) continue
+      sources.add(original)
+      twins.add(twin)
+    }
+  }
   return fps.map((fp) => {
     if (fp === null) return null
-    const mine = pairs.get(fp)
-    if (mine && [...mine].some((t) => present.has(t))) return 'source'
-    for (const [original, twins] of pairs) if (present.has(original) && twins.has(fp)) return 'twin'
+    if (sources.has(fp)) return 'source'
+    if (twins.has(fp)) return 'twin'
     return placedRole(editor, fp)
   })
 }
@@ -473,7 +499,7 @@ export function readRunGroups(
   editor: Editor,
   start: number,
   end: number,
-  options: { review?: boolean } = {},
+  options: { review?: boolean; compact?: boolean } = {},
 ): RunParagraph[] {
   const doc = editor.state.doc
   const out: RunParagraph[] = []
@@ -493,52 +519,22 @@ export function readRunGroups(
       else out.push({ index, skip: String(node.attrs.blockType || node.type.name) })
       continue
     }
+    out.push(...textRunEntries(editor, doc, node, pos, blocks, index, options))
     const inTable = node.type.name === 'docTable'
-    const groupsList = blocks.map((block) => groupsOf(block.node, block.pos))
-    const listed = groupsList.map((groups) => groups.map((g) => g.text))
-    const fps = listed.map((segments) => (segments.length > 0 ? runFingerprint(segments) : null))
-    const roles = inTable ? tableTwinRoles(editor, fps) : []
-    const cells = inTable ? cellInfoOf(node, pos) : null
-    blocks.forEach((block, paragraph) => {
-      const segments = listed[paragraph]
-      const ci = cells?.get(block.pos)
-      const cellFields = ci ? { cell: ci.cell, ...(ci.span ? { span: ci.span } : {}) } : {}
-      // an empty cell paragraph is noise, except a wholly empty cell (listed once: a free destination);
-      // an empty body paragraph is listed so it is seen and left alone
-      if (segments.length === 0) {
-        if (!inTable) out.push({ index, empty: true })
-        else if (ci?.empty && ci.firstPos === block.pos)
-          out.push({ index, ...cellFields, empty: true })
-        return
-      }
-      const fp = fps[paragraph]!
-      const role = inTable ? roles[paragraph] : plainTwinRole(editor, doc, index, fp)
-      if (role && options.review) {
-        // a review lists both sides: the twin is what gets revised, the original is read-only (no fp)
-        const where = inTable ? { index, paragraph, ...cellFields } : { index }
-        out.push(
-          role === 'twin'
-            ? { ...where, role: 'translation', fp, segments }
-            : { ...where, role: 'original', segments },
-        )
-        return
-      }
-      if (role) {
-        out.push(
-          inTable
-            ? { index, paragraph, ...cellFields, skip: TWIN_SKIP[role] }
-            : { index, skip: TWIN_SKIP[role] },
-        )
-        return
-      }
-      const view = taggedViewOf(block.node, block.pos, groupsList[paragraph], isFixed)
-      const tagged = view ? { tagged: view.tagged, tags: view.tags } : {}
-      out.push(
-        inTable
-          ? { index, paragraph, ...cellFields, fp, segments, ...tagged }
-          : { index, fp, segments, ...tagged },
-      )
-    })
+    if (inTable) {
+      nestedTablesOf(node, pos).forEach(({ model }, nestedTable) => {
+        const table = nestedTableNode(editor, model)
+        const paragraphs = textblocksOf(table, 0)
+        if (paragraphs) {
+          out.push(
+            ...textRunEntries(editor, doc, table, 0, paragraphs, index, options).map((entry) => ({
+              ...entry,
+              nestedTable,
+            })),
+          )
+        }
+      })
+    }
     // text boxes inside the cells of this table (the boxes OCR puts over a picture)
     if (inTable) {
       const refs = boxRefsOf(node, pos)
@@ -548,9 +544,72 @@ export function readRunGroups(
   return out
 }
 
+function textRunEntries(
+  editor: Editor,
+  doc: ProseMirrorNode,
+  node: ProseMirrorNode,
+  pos: number,
+  blocks: NonNullable<ReturnType<typeof textblocksOf>>,
+  index: number,
+  options: { review?: boolean; compact?: boolean },
+): RunParagraph[] {
+  const out: RunParagraph[] = []
+  const inTable = node.type.name === 'docTable'
+  const groupsList = blocks.map((block) => groupsOf(block.node, block.pos))
+  const listed = groupsList.map((groups) => groups.map((g) => g.text))
+  const fps = listed.map((segments) => (segments.length > 0 ? runFingerprint(segments) : null))
+  const roles = inTable ? tableTwinRoles(editor, fps) : []
+  const cells = inTable && !options.compact ? cellInfoOf(node, pos) : null
+  blocks.forEach((block, paragraph) => {
+    const segments = listed[paragraph]
+    const ci = cells?.get(block.pos)
+    const cellFields = ci ? { cell: ci.cell, ...(ci.span ? { span: ci.span } : {}) } : {}
+    // an empty cell paragraph is noise, except a wholly empty cell (listed once: a free destination);
+    // an empty body paragraph is listed so it is seen and left alone
+    if (segments.length === 0) {
+      if (!inTable) out.push({ index, empty: true })
+      else if (ci?.empty && ci.firstPos === block.pos)
+        out.push({ index, ...cellFields, empty: true })
+      return
+    }
+    const fp = fps[paragraph]!
+    const role = inTable ? roles[paragraph] : plainTwinRole(editor, doc, index, fp)
+    if (role && options.review) {
+      // a review lists both sides: the twin is what gets revised, the original is read-only (no fp)
+      const where = inTable ? { index, paragraph, ...cellFields } : { index }
+      out.push(
+        role === 'twin'
+          ? { ...where, role: 'translation', fp, segments }
+          : { ...where, role: 'original', segments },
+      )
+      return
+    }
+    if (role) {
+      out.push(
+        inTable
+          ? { index, paragraph, ...cellFields, skip: TWIN_SKIP[role] }
+          : { index, skip: TWIN_SKIP[role] },
+      )
+      return
+    }
+    const view = options.compact
+      ? null
+      : taggedViewOf(block.node, block.pos, groupsList[paragraph], isFixed)
+    const tagged = view ? { tagged: view.tagged, tags: view.tags } : {}
+    out.push(
+      inTable
+        ? { index, paragraph, ...cellFields, fp, segments, ...tagged }
+        : { index, fp, segments, ...tagged },
+    )
+  })
+  return out
+}
+
 /** one paragraph's translation as translate_blocks receives it */
 export interface RunTranslationItem {
   index: number
+  /** depth-first number of a nested table in this block */
+  nestedTable?: number
   /** a text box paragraph: the box inside the block (`paragraph` is the paragraph inside that box) */
   box?: number
   paragraph?: number
@@ -582,6 +641,8 @@ export const TAG_LIKE = new RegExp(
 
 export interface RunTranslationReport {
   index: number
+  /** depth-first number of a nested table in this block */
+  nestedTable?: number
   /** a text box paragraph: the box inside the block */
   box?: number
   paragraph?: number
@@ -1192,7 +1253,7 @@ export type RunTranslationOutcome =
       /** text box items left untouched because revision tracking is on (a box cannot carry revisions) */
       skippedBoxes: string[]
     }
-  | { ok: false; errors: string[] }
+  | { ok: false; errors: string[]; stale?: true }
 
 /**
  * translate_blocks: every item checked first; an invalid item refuses the whole
@@ -1213,7 +1274,38 @@ export function applyRunTranslations(
   const edits: Edit[] = []
   const boxEdits: BoxEdit[] = []
   const seen = new Set<string>()
+  const nested = new NestedTableChanges(doc)
+  let nestedChanged = false
+  for (const batch of nestedBatches(items)) {
+    const { index, nestedTable } = batch[0]
+    const where = `block ${index} nested table ${nestedTable}`
+    const ref = nested.locate(index, nestedTable!)
+    const top = topLevel(doc, index)
+    if (!ref || !top || isTrackedDeleted(top.node)) {
+      errors.push(`${where}: no editable nested table at that number; read_runs again`)
+      continue
+    }
+    const draft = draftNestedTable(editor, ref.model)
+    const outcome = applyRunTranslations(
+      draft.editor,
+      batch.map((item) => ({ ...item, index: 0, nestedTable: undefined })),
+      track,
+    )
+    if (!outcome.ok) {
+      const target = outcome.stale ? stale : errors
+      target.push(...outcome.errors.map((error) => error.replace(/^block 0/, where)))
+      continue
+    }
+    stale.push(...outcome.stale.map((error) => error.replace(/^block 0/, where)))
+    reports.push(...outcome.reports.map((report) => ({ ...report, index, nestedTable })))
+    const updated = draft.result()
+    if (updated !== ref.model) {
+      nested.set(ref, updated)
+      nestedChanged = true
+    }
+  }
   for (const item of items) {
+    if (item.nestedTable !== undefined) continue
     const isBox = item.box !== undefined
     const key = `${item.index}:${isBox ? `box${item.box}:` : ''}${item.paragraph ?? 0}`
     if (seen.has(key)) {
@@ -1246,15 +1338,17 @@ export function applyRunTranslations(
     }
   }
   if (errors.length > 0) return { ok: false, errors }
-  if (stale.length > 0 && reports.length === 0) return { ok: false, errors: stale }
+  if (stale.length > 0 && reports.length === 0) return { ok: false, errors: stale, stale: true }
   if (skippedBoxes.length > 0 && reports.length === 0) return { ok: false, errors: skippedBoxes }
-  if (edits.length > 0 || boxEdits.length > 0) {
+  if (edits.length > 0 || boxEdits.length > 0 || nestedChanged) {
     const tr = edits.length > 0 ? applyEdits(editor, edits, track) : editor.state.tr
     if (boxEdits.length > 0) applyBoxEdits(tr, boxEdits)
+    if (nestedChanged) nested.apply(tr)
+    if (track) tr.setMeta(TRACK_IGNORE, true)
     editor.view.dispatch(tr)
   }
   for (const report of reports) {
-    if (report.empty || report.box !== undefined) continue
+    if (report.empty || report.box !== undefined || report.nestedTable !== undefined) continue
     const fp = currentFingerprint(editor.state.doc, report.index, report.paragraph ?? 0)
     if (fp) report.fp = fp
   }
@@ -1575,16 +1669,18 @@ export function remainingUntranslated(
   }
   const body: string[] = []
   const doc = editor.state.doc
-  for (const entry of readRunGroups(editor, 0, doc.childCount - 1)) {
+  for (const entry of readRunGroups(editor, 0, doc.childCount - 1, { compact: true })) {
     if (!entry.segments || !entry.fp) continue
     if (options.tracking && entry.box !== undefined) continue
     if (pending(entry.segments, entry.fp))
       body.push(
         entry.box !== undefined
           ? `${entry.index} (box ${entry.box} paragraph ${entry.paragraph})`
-          : entry.paragraph === undefined
-            ? `${entry.index}`
-            : `${entry.index} (paragraph ${entry.paragraph})`,
+          : entry.nestedTable !== undefined
+            ? `${entry.index} (nested table ${entry.nestedTable} paragraph ${entry.paragraph})`
+            : entry.paragraph === undefined
+              ? `${entry.index}`
+              : `${entry.index} (paragraph ${entry.paragraph})`,
       )
   }
   const notes: string[] = []

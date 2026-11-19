@@ -1,3 +1,4 @@
+import { draftNestedTable, NestedTableChanges, nestedBatches } from './nested-table-draft'
 import type { Editor } from '@tiptap/core'
 import type { Mark, Node as ProseMirrorNode } from '@tiptap/pm/model'
 import type { Transaction } from '@tiptap/pm/state'
@@ -167,6 +168,7 @@ export function diffSpans(oldText: string, newText: string): SpanChange[] {
 
 export interface ReviseItem {
   index: number
+  nestedTable?: number
   paragraph?: number
   /** the fingerprint read_runs gave; a mismatch refuses the item */
   fp: string
@@ -175,6 +177,7 @@ export interface ReviseItem {
 
 export interface ReviseReport {
   index: number
+  nestedTable?: number
   paragraph?: number
   /** the paragraph has no text; nothing to revise */
   empty?: true
@@ -198,6 +201,27 @@ interface ReviseEdit {
 type Plan =
   | { ok: true; edits: ReviseEdit[]; report: ReviseReport }
   | { ok: false; error: string; stale?: true }
+
+interface ReviewBlock {
+  node: ProseMirrorNode
+  paragraphs: ReturnType<typeof textblocksOf>
+  deleted?: boolean
+  roles?: ReturnType<typeof tableTwinRoles>
+}
+
+/** A table can contribute many items to one call. Keep its positions and roles
+ * only for this immutable document snapshot. */
+function reviewBlockLookup(doc: ProseMirrorNode) {
+  const blocks = new Map<number, ReviewBlock | null>()
+  return (index: number): ReviewBlock | null => {
+    const cached = blocks.get(index)
+    if (cached !== undefined) return cached
+    const top = topLevel(doc, index)
+    const block = top ? { node: top.node, paragraphs: textblocksOf(top.node, top.pos) } : null
+    blocks.set(index, block)
+    return block
+  }
+}
 
 export interface ReviseOptions {
   /** the document's source language script test (sourceScriptOf): a paragraph mostly in it is not revised */
@@ -228,6 +252,7 @@ function planParagraph(
   doc: ProseMirrorNode,
   item: ReviseItem,
   options: ReviseOptions,
+  lookup: ReturnType<typeof reviewBlockLookup>,
 ): Plan {
   const where =
     item.paragraph === undefined
@@ -235,15 +260,15 @@ function planParagraph(
       : `block ${item.index} paragraph ${item.paragraph}`
   const bad = segmentsError(where, item.segments)
   if (bad) return { ok: false, error: bad }
-  const top = topLevel(doc, item.index)
+  const top = lookup(item.index)
   if (!top)
     return {
       ok: false,
       error: `${where}: no such block (the document has ${doc.childCount} blocks)`,
     }
-  if (isTrackedDeleted(top.node))
+  if ((top.deleted ??= isTrackedDeleted(top.node)))
     return { ok: false, error: `${where}: the block is a pending tracked deletion; leave it alone` }
-  const blocks = textblocksOf(top.node, top.pos)
+  const blocks = top.paragraphs
   if (!blocks) return { ok: false, error: `${where}: a ${top.node.type.name} block has no text` }
   const inTable = top.node.type.name === 'docTable'
   if (item.paragraph === undefined && inTable && blocks.length > 1)
@@ -270,15 +295,16 @@ function planParagraph(
       error: `${where} changed since read_runs (fingerprint mismatch); read it again`,
     }
   // the original of a bilingual pair is never edited
-  const role = inTable
-    ? tableTwinRoles(
-        editor,
-        blocks.map((b) => {
-          const g = groupsOf(b.node, b.pos)
-          return g.length > 0 ? runFingerprint(g.map((x) => x.text)) : null
-        }),
-      )[paragraph]
-    : plainTwinRole(editor, doc, item.index, fp)
+  if (inTable && !top.roles) {
+    top.roles = tableTwinRoles(
+      editor,
+      blocks.map((b) => {
+        const g = groupsOf(b.node, b.pos)
+        return g.length > 0 ? runFingerprint(g.map((x) => x.text)) : null
+      }),
+    )
+  }
+  const role = inTable ? top.roles?.[paragraph] : plainTwinRole(editor, doc, item.index, fp)
   if (role === 'source')
     return {
       ok: false,
@@ -373,17 +399,9 @@ function applyRevisionEdits(editor: Editor, edits: ReviseEdit[], author: string)
   return tr
 }
 
-function currentFingerprint(doc: ProseMirrorNode, index: number, paragraph: number): string | null {
-  const top = topLevel(doc, index)
-  const block = top ? textblocksOf(top.node, top.pos)?.[paragraph] : undefined
-  if (!block) return null
-  const groups = groupsOf(block.node, block.pos)
-  return groups.length > 0 ? runFingerprint(groups.map((g) => g.text)) : null
-}
-
 export type ReviseOutcome =
   | { ok: true; reports: ReviseReport[]; author: string; stale: string[] }
-  | { ok: false; errors: string[] }
+  | { ok: false; errors: string[]; stale?: true }
 
 /**
  * revise_blocks: every item is checked first and one bad item refuses the
@@ -395,6 +413,7 @@ export function applyRevisions(
   items: ReviseItem[],
   track?: AiTrack,
   options: ReviseOptions = {},
+  roleEditor: Editor = editor,
 ): ReviseOutcome {
   const doc = editor.state.doc
   const errors: string[] = []
@@ -402,7 +421,42 @@ export function applyRevisions(
   const reports: ReviseReport[] = []
   const edits: ReviseEdit[] = []
   const seen = new Set<string>()
+  const nested = new NestedTableChanges(doc)
+  let nestedChanged = false
+  for (const batch of nestedBatches(items)) {
+    const { index, nestedTable } = batch[0]
+    const where = `block ${index} nested table ${nestedTable}`
+    const ref = nested.locate(index, nestedTable!)
+    const top = topLevel(doc, index)
+    if (!ref || !top || isTrackedDeleted(top.node)) {
+      errors.push(`${where}: no editable nested table at that number; read_runs again`)
+      continue
+    }
+    const draft = draftNestedTable(editor, ref.model)
+    const result = applyRevisions(
+      draft.editor,
+      batch.map((item) => ({ ...item, index: 0, nestedTable: undefined })),
+      track,
+      options,
+      editor,
+    )
+    const relabel = (message: string) => message.replace(/^block 0/, where)
+    if (!result.ok) {
+      const target = result.stale ? stale : errors
+      target.push(...result.errors.map(relabel))
+      continue
+    }
+    stale.push(...result.stale.map(relabel))
+    reports.push(...result.reports.map((report) => ({ ...report, index, nestedTable })))
+    const updated = draft.result()
+    if (updated !== ref.model) {
+      nested.set(ref, updated)
+      nestedChanged = true
+    }
+  }
+  const lookup = reviewBlockLookup(doc)
   for (const item of items) {
+    if (item.nestedTable !== undefined) continue
     const key = `${item.index}:${item.paragraph ?? 0}`
     if (seen.has(key)) {
       errors.push(
@@ -411,7 +465,7 @@ export function applyRevisions(
       continue
     }
     seen.add(key)
-    const plan = planParagraph(editor, doc, item, options)
+    const plan = planParagraph(roleEditor, doc, item, options, lookup)
     if (!plan.ok) (plan.stale ? stale : errors).push(plan.error)
     else {
       reports.push(plan.report)
@@ -419,13 +473,21 @@ export function applyRevisions(
     }
   }
   if (errors.length > 0) return { ok: false, errors }
-  if (stale.length > 0 && reports.length === 0) return { ok: false, errors: stale }
+  if (stale.length > 0 && reports.length === 0) return { ok: false, errors: stale, stale: true }
   const author = reviewAuthor(track)
-  if (edits.length > 0) editor.view.dispatch(applyRevisionEdits(editor, edits, author))
+  if (edits.length > 0 || nestedChanged) {
+    const tr = applyRevisionEdits(editor, edits, author)
+    nested.apply(tr)
+    editor.view.dispatch(tr)
+  }
+  const updatedDoc = editor.state.doc
+  const updated = updatedDoc === doc ? lookup : reviewBlockLookup(updatedDoc)
   for (const report of reports) {
-    if (report.empty) continue
-    const fp = currentFingerprint(editor.state.doc, report.index, report.paragraph ?? 0)
-    if (fp) report.fp = fp
+    if (report.empty || report.nestedTable !== undefined) continue
+    const block = updated(report.index)?.paragraphs?.[report.paragraph ?? 0]
+    if (!block) continue
+    const groups = groupsOf(block.node, block.pos)
+    if (groups.length > 0) report.fp = runFingerprint(groups.map((g) => g.text))
   }
   return { ok: true, reports, author, stale }
 }

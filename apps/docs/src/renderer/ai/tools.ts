@@ -212,6 +212,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     description:
       'Read a block range for TRANSLATION: one JSON line per paragraph with its text as numbered segments, one segment per run of equal formatting (footnote references, tabs, breaks and other inline objects sit between segments and are not shown). Table blocks list each cell paragraph with its "paragraph" number and its grid cell "cell":"r<row>c<column>" (0-based; "span":"<cols>x<rows>" for a merged cell); a wholly empty cell is listed once with "empty":true and its "cell" (a free destination for add_bilingual). Empty paragraphs are listed as "empty":true; leave them alone. ' +
       'A text box block is listed per box paragraph ({"index","box","paragraph","fp","segments"}); translate those with translate_blocks, passing box and paragraph back. ' +
+      'Nested tables have a "nestedTable" number in addition to "index" and "paragraph". Pass all three back unchanged. Read a range once and batch outer and nested entries together in the next writing call. ' +
       'Long ranges are paged: a truncated result says which startBlockIndex to continue from. ' +
       'With notes:true it lists every footnote and endnote the same way ({"note","id","fp","segments"}; no block range needed). ' +
       'With checkRemaining:true (and sourceLanguage) it lists the body paragraphs and notes that still look untranslated; translation is finished only when it reports none. ' +
@@ -243,7 +244,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     name: 'translate_blocks',
     description:
       'The way to translate existing document text (never use replace_blocks or write_document to translate). Read the paragraphs with read_runs first, then pass for each paragraph its "fp" from read_runs unchanged and the translations of its segments, in the same order and the same number: segments[i] replaces the text of segment i, which keeps its own formatting; footnote references, tabs, breaks, paragraph styles and empty paragraphs stay exactly as they are. ' +
-      'Word order may move text between segments of one paragraph, but give every segment a translation; use an empty string only for a piece with no counterpart in the translation. Segments are plain text: no line breaks, no HTML (the only exception is the <i> span of the writing-style rule, when the project has one; it applies to add_bilingual and revise_blocks too). Fewer segments leave the remaining segments untranslated (reported); extra segments are appended to the last one. A table block needs its "paragraph" number. An item whose fp no longer matches is skipped and reported, the other items are applied; read_runs the skipped blocks again. Block indexes do not change. Footnotes and endnotes go in the same call: an entry with "note" (footnote or endnote) and "id" from read_runs notes:true instead of "index", with the same fp and segments.',
+      'Word order may move text between segments of one paragraph, but give every segment a translation; use an empty string only for a piece with no counterpart in the translation. Segments are plain text: no line breaks, no HTML (the only exception is the <i> span of the writing-style rule, when the project has one; it applies to add_bilingual and revise_blocks too). Fewer segments leave the remaining segments untranslated (reported); extra segments are appended to the last one. A table block needs its "paragraph" number. For a nested table, also pass its "nestedTable" number. An item whose fp no longer matches is skipped and reported, the other items are applied; read_runs the skipped blocks again. Block indexes do not change. Footnotes and endnotes go in the same call: an entry with "note" (footnote or endnote) and "id" from read_runs notes:true instead of "index", with the same fp and segments.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -254,6 +255,10 @@ export const AGENT_TOOLS: AgentToolDef[] = [
             type: 'object',
             properties: {
               index: { type: 'integer', description: 'block index from read_runs' },
+              nestedTable: {
+                type: 'integer',
+                description: 'the nested table number from read_runs (also pass paragraph)',
+              },
               box: {
                 type: 'integer',
                 description:
@@ -292,7 +297,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     name: 'revise_blocks',
     description:
       'Translation REVIEW (감수/검수/proofreading) of text that is already translated: correct mistakes in place, every correction recorded as a TRACKED CHANGE (always, whatever the track-changes switch says) under the author "<AI author> (review)", so the person accepts or rejects each one. Never use translate_blocks, replace_blocks or write_document for a review. ' +
-      'Same input as translate_blocks: read_runs first, then per paragraph its "fp" unchanged and the REVISED text of every segment, in the same order and exactly the same number (repeat a correct segment as it is). The tool diffs each segment against its current text word by word and marks only the changed words, inside their own run, so run formatting is kept; a segment you return unchanged makes no change at all. Revise only what is wrong (mistranslation, omission, added content, wrong number/name/date, glossary or style-rule inconsistency, phrasing that is awkward in the target language); do not restyle a correct translation. ' +
+      'Same input as translate_blocks, including nestedTable and paragraph for nested tables: read_runs first, then per paragraph its "fp" unchanged and the REVISED text of every segment, in the same order and exactly the same number (repeat a correct segment as it is). The tool diffs each segment against its current text word by word and marks only the changed words, inside their own run, so run formatting is kept; a segment you return unchanged makes no change at all. Revise only what is wrong (mistranslation, omission, added content, wrong number/name/date, glossary or style-rule inconsistency, phrasing that is awkward in the target language); do not restyle a correct translation. ' +
       'Empty paragraphs, footnote references, tabs and breaks stay as they are. Footnotes and endnotes cannot carry tracked changes: do not revise them, mention a doubt about one in the summary. An item whose fp no longer matches is skipped and reported (the others are applied), and the original of a bilingual pair is never edited. With sourceLanguage, a paragraph that is still mostly in that language is not revised (translate it with translate_blocks first). ' +
       'After a non-trivial correction or a doubt, attach a short reason with add_comment (blockIndex of that paragraph); no comment for trivial fixes, never the same comment twice. Block indexes do not change.',
     inputSchema: {
@@ -310,6 +315,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
             type: 'object',
             properties: {
               index: { type: 'integer', description: 'block index from read_runs' },
+              nestedTable: { type: 'integer', description: 'nested table number from read_runs' },
               paragraph: {
                 type: 'integer',
                 description: 'for a table block: the "paragraph" number from read_runs',
@@ -337,6 +343,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       'Bilingual output: KEEP the original text and ADD its translation next to it (use this, never translate_blocks or replace_blocks, whenever the original must stay). Same input as translate_blocks: read_runs first, then for each paragraph its "fp" unchanged and the translations of its segments, in the same order and number; the original paragraph is never touched. ' +
       'layout "after" (body paragraphs, headings, list items): a new paragraph right after the original with the same paragraph style and run formatting; footnote references, pictures and empty paragraphs are not copied. ' +
       'Table cells: layout "right" puts the translation in a NEW column directly right of each text column (original left, translation right), layout "below" in a NEW row directly below each text row (original top, translation bottom); ask the person which, every time. Pass the WHOLE table (every cell paragraph read_runs lists, with its "paragraph" number) in one call. A table with merged cells cannot take a column: it falls back to "below" and the result says so, tell the person. ' +
+      'Nested tables also support right/below. Include complete outer and nested tables together in one blocks array for a batch. Pass the nestedTable number on each nested entry. ' +
       'ANYWHERE ELSE: an item may carry "target" (instead of the call layout) to put its translation exactly where the person wants. {kind:"cell", index:<table block>, row, column}: an EXISTING table cell, 0-based visual grid, the "cell":"r<row>c<column>" read_runs lists (a merged cell by its top-left anchor; read_runs marks wholly empty cells "empty":true); it must be empty, or add overwrite:true plus target.fp (that cell\'s own fp, one text paragraph, not while changes are tracked) to replace its text; several items for one cell become its paragraphs in order. {kind:"after"|"before", index} a new paragraph after/before ANY block, {kind:"end"} at the end of the document. Items with a target need no layout and no whole-table pass; the destination keeps its own paragraph formatting, else the original\'s. ' +
       'An entry whose fp no longer matches (the person edited it) is skipped and reported, the rest is applied; a table is skipped whole if any of its cells changed. Added paragraphs shift later block indexes: read_runs again before the next call (the added translations are listed as skipped and are never flagged as untranslated). A paragraph that already has its translation is skipped. Footnotes and endnotes are not duplicated. Segments are plain text: no line breaks, no HTML.',
     inputSchema: {
@@ -355,6 +362,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
             type: 'object',
             properties: {
               index: { type: 'integer', description: 'block index from read_runs' },
+              nestedTable: { type: 'integer', description: 'nested table number from read_runs' },
               paragraph: {
                 type: 'integer',
                 description: 'for a table block: the "paragraph" number from read_runs',
@@ -2048,8 +2056,20 @@ function executeSyncTool(
           segments?: unknown
           target?: unknown
           box?: unknown
+          nestedTable?: unknown
         }
         const name = `block ${String(e.index)}`
+        const isNested = e.nestedTable !== undefined && e.nestedTable !== null
+        if (
+          isNested &&
+          (!Number.isInteger(e.nestedTable) ||
+            Number(e.nestedTable) < 0 ||
+            !Number.isInteger(e.paragraph))
+        )
+          return fail(
+            summary,
+            `${name}: a nested table entry requires nestedTable and paragraph numbers`,
+          )
         if (e.box !== undefined && e.box !== null)
           return fail(
             summary,
@@ -2084,6 +2104,7 @@ function executeSyncTool(
           fp: e.fp,
           segments,
           ...(target ? { target } : {}),
+          ...(isNested ? { nestedTable: Number(e.nestedTable) } : {}),
           ...(e.paragraph === undefined || e.paragraph === null
             ? {}
             : { paragraph: Number(e.paragraph) }),
@@ -2109,7 +2130,7 @@ function executeSyncTool(
         )
       for (const table of outcome.tables) {
         lines.push(
-          `Table block ${table.index}: added the translation of ${table.paragraphs} cell paragraph(s) in a new ${table.layout === 'right' ? 'column to the right of each text column' : 'row below each text row'}; the original cells were not touched.` +
+          `Table block ${table.index}${table.nestedTable === undefined ? '' : ` nested table ${table.nestedTable}`}: added the translation of ${table.paragraphs} cell paragraph(s) in a new ${table.layout === 'right' ? 'column to the right of each text column' : 'row below each text row'}; the original cells were not touched.` +
             (table.fellBack
               ? ` FELL BACK from "right" to "below" because ${table.fellBack}: tell the person the table got its translation in rows below instead of columns.`
               : '') +
@@ -2183,12 +2204,24 @@ function executeSyncTool(
         const e = (entry ?? {}) as {
           index?: unknown
           box?: unknown
+          nestedTable?: unknown
           note?: unknown
           paragraph?: unknown
           fp?: unknown
           segments?: unknown
         }
         const name = `block ${String(e.index)}`
+        const isNested = e.nestedTable !== undefined && e.nestedTable !== null
+        if (
+          isNested &&
+          (!Number.isInteger(e.nestedTable) ||
+            Number(e.nestedTable) < 0 ||
+            !Number.isInteger(e.paragraph))
+        )
+          return fail(
+            summary,
+            `${name}: a nested table entry requires nestedTable and paragraph numbers`,
+          )
         if (e.box !== undefined && e.box !== null)
           return fail(
             summary,
@@ -2216,6 +2249,7 @@ function executeSyncTool(
           index: Number(e.index),
           fp: e.fp,
           segments,
+          ...(isNested ? { nestedTable: Number(e.nestedTable) } : {}),
           ...(e.paragraph === undefined || e.paragraph === null
             ? {}
             : { paragraph: Number(e.paragraph) }),
@@ -2237,7 +2271,11 @@ function executeSyncTool(
         outcome.reports.filter((r) => !r.untranslated).map((r) => r.fp),
       )
       const label = (r: ReviseReport) =>
-        r.paragraph === undefined ? `block ${r.index}` : `block ${r.index} paragraph ${r.paragraph}`
+        r.nestedTable !== undefined
+          ? `block ${r.index} nested table ${r.nestedTable} paragraph ${r.paragraph}`
+          : r.paragraph === undefined
+            ? `block ${r.index}`
+            : `block ${r.index} paragraph ${r.paragraph}`
       const revised = outcome.reports.filter((r) => r.changes > 0)
       const changes = revised.reduce((n, r) => n + r.changes, 0)
       const unchanged = outcome.reports.filter(
@@ -2278,6 +2316,7 @@ function executeSyncTool(
         const e = (entry ?? {}) as {
           index?: unknown
           box?: unknown
+          nestedTable?: unknown
           note?: unknown
           id?: unknown
           paragraph?: unknown
@@ -2286,12 +2325,25 @@ function executeSyncTool(
           tagged?: unknown
         }
         const isNote = e.note !== undefined && e.note !== null
+        const isNested = e.nestedTable !== undefined && e.nestedTable !== null
         const isBox = e.box !== undefined && e.box !== null
         const name = isNote
           ? `${String(e.note)} ${String(e.id)}`
           : `block ${String(e.index)}${isBox ? ` box ${String(e.box)}` : ''}`
         if (isBox && !Number.isInteger(e.box))
           return fail(summary, `${name}: box must be an integer`)
+        if (
+          isNested &&
+          (!Number.isInteger(e.nestedTable) ||
+            Number(e.nestedTable) < 0 ||
+            !Number.isInteger(e.paragraph) ||
+            isBox ||
+            isNote)
+        )
+          return fail(
+            summary,
+            'a nested table entry requires a nonnegative nestedTable number and a paragraph, without note or box',
+          )
         if (isBox && isNote) return fail(summary, `${name}: a note entry cannot name a text box`)
         if (isNote) {
           if (e.note !== 'footnote' && e.note !== 'endnote')
@@ -2341,6 +2393,7 @@ function executeSyncTool(
             index: Number(e.index),
             fp: e.fp,
             ...(tagged === undefined ? { segments } : { tagged }),
+            ...(isNested ? { nestedTable: Number(e.nestedTable) } : {}),
             ...(isBox ? { box: Number(e.box) } : {}),
             ...paragraph,
           })

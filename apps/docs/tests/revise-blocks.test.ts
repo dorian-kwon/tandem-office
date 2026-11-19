@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Editor } from '@tiptap/core'
 import { applyAiPanelPrefs } from '@genoffice/ui'
 import type { CommentInfo } from '@genoffice/docx-engine'
 import { BLANK_BULLET_NUM_ID, BLANK_ORDERED_NUM_ID } from '@genoffice/docx-engine'
 import type { PmNode } from '../src/renderer/editor/convert'
 import { addCommentToRange, nextCommentId } from '../src/renderer/editor/comments'
+import { revGroupsOf, syncMarginAnnotations } from '../src/renderer/editor/margin-annotations'
 import { executeTool, AGENT_TOOLS, type AiCommentsAccess } from '../src/renderer/ai/tools'
 import {
   applyRevisions,
@@ -327,6 +328,58 @@ describe('revise_blocks', () => {
     expect(tool.description).toMatch(/never the same comment twice/)
     expect(tool.description).toMatch(/original of a bilingual pair is never edited/)
   })
+
+  it('measures all markup balloons before stacking them and dropping overflow', async () => {
+    const editor = await createEditor([
+      para([text('Original', STYLE_A)]),
+      para([text('Another', STYLE_A)]),
+    ])
+    const outcome = await revise(editor, [
+      { index: 0, fp: runFingerprint(['Original']), segments: ['Updated'] },
+      { index: 1, fp: runFingerprint(['Another']), segments: ['Refined'] },
+    ])
+    expect(outcome.mutated).toBe(true)
+    const [first, second] = revGroupsOf(editor.state.doc)
+    editor.view.coordsAtPos = (pos) => {
+      const top = pos === first.from ? 30 : 80
+      expect([first.from, second.from]).toContain(pos)
+      return { left: 20, right: 30, top, bottom: top + 10 }
+    }
+    const wrap = document.createElement('div')
+    wrap.className = 'rev-balloon'
+    const pm = editor.view.dom
+    wrap.appendChild(pm)
+    wrap.getBoundingClientRect = () => new DOMRect(0, 0, 100, 100)
+    pm.getBoundingClientRect = wrap.getBoundingClientRect
+    const anchor = document.createElement('span')
+    anchor.className = 'doc-comment'
+    anchor.dataset.commentIds = '1'
+    anchor.getClientRects = () => [new DOMRect(20, 10, 30, 10)] as unknown as DOMRectList
+    pm.appendChild(anchor)
+    const readHeight = vi
+      .spyOn(HTMLElement.prototype, 'offsetHeight', 'get')
+      .mockImplementation(() => {
+        expect(wrap.querySelectorAll('.comment-bubble')).toHaveLength(3)
+        return 30
+      })
+    try {
+      syncMarginAnnotations(
+        wrap,
+        pm,
+        [{ id: '1', author: 'Reviewer', text: 'Keep this comment.' }],
+        1,
+        undefined,
+        editor.view,
+      )
+    } finally {
+      readHeight.mockRestore()
+    }
+    const boxes = [...wrap.querySelectorAll<HTMLElement>('.comment-bubble')]
+    expect(boxes.map((box) => box.style.top)).toEqual(['10px', '46px'])
+    expect(boxes[0].classList.contains('rev-bubble')).toBe(false)
+    expect(boxes[1].classList.contains('rev-bubble')).toBe(true)
+    expect(wrap.querySelectorAll('.comment-leaders path')).toHaveLength(2)
+  })
 })
 
 describe('revise_blocks in a bilingual document', () => {
@@ -357,6 +410,67 @@ describe('revise_blocks in a bilingual document', () => {
     const fixed = await revise(editor, [{ index: 1, fp: listed[1].fp, segments: ['ABC right'] }])
     expect(fixed.isError).toBeFalsy()
     expect(nodes(block(editor, 0)).map((n) => n.text)).toEqual(['가나다'])
+  })
+
+  it('looks up bilingual table paragraphs once when reviewing many cells together', async () => {
+    const original = Array.from({ length: 30 }, (_, i) => `원문 ${i}`)
+    const editor = await createEditor([
+      {
+        type: 'docTable',
+        content: original.map((value) => ({
+          type: 'docTableRow',
+          content: [
+            {
+              type: 'docTableCell',
+              attrs: { colwidth: [100] },
+              content: [para([text(value, STYLE_A)])],
+            },
+          ],
+        })),
+      },
+    ])
+    const added = await executeTool(
+      editor,
+      {
+        id: 'b',
+        name: 'add_bilingual',
+        input: {
+          layout: 'right',
+          blocks: original.map((value, paragraph) => ({
+            index: 0,
+            paragraph,
+            fp: runFingerprint([value]),
+            segments: [`Old phrase ${paragraph}`],
+          })),
+        },
+      },
+      NUM_IDS,
+    )
+    expect(added.output).toContain('new column')
+    const listed = readRunGroups(editor, 0, 0, { review: true })
+    const twins = listed.filter((item) => item.role === 'translation')
+    expect(twins).toHaveLength(30)
+    const before = editor.state.doc.child(0)
+    const scans = vi.spyOn(before, 'descendants')
+    try {
+      const result = await revise(
+        editor,
+        twins.map(({ index, paragraph, fp }, i) => ({
+          index,
+          paragraph,
+          fp,
+          segments: [`New phrase ${i}`],
+        })),
+      )
+      expect(result.mutated).toBe(true)
+      expect(scans.mock.calls.length).toBeLessThanOrEqual(3)
+    } finally {
+      scans.mockRestore()
+    }
+    const rows = editor.state.doc.child(0)
+    expect(
+      Array.from({ length: rows.childCount }, (_, i) => rows.child(i).child(0).textContent),
+    ).toEqual(original)
   })
 })
 

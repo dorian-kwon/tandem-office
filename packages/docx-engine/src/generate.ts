@@ -761,17 +761,21 @@ export type CellParaPatch =
     }
   | null
 
-/** per-cell patch: paragraph patches, or nested-table cell texts by nested index */
-export type CellTextsPatch =
-  | readonly CellParaPatch[]
-  | {
-      /** this cell's own text (optional; rewriting the outer text of a cell containing a nested table is not supported yet) */
-      paras?: readonly string[] | null
-      /** one cell grid per direct nested table (null = leave that nested table untouched) */
-      nested?: ReadonlyArray<ReadonlyArray<
-        ReadonlyArray<readonly CellParaPatch[] | null | undefined> | null | undefined
-      > | null>
-    }
+export type TableTextsGrid = ReadonlyArray<
+  ReadonlyArray<CellTextsPatch | null | undefined> | null | undefined
+>
+
+export type NestedTablePatch = TableTextsGrid | { replacement: TableModel }
+
+type NestedCellPatch = {
+  /** A cell's own direct paragraphs, in their existing positions. */
+  paras?: readonly CellParaPatch[] | null
+  /** One entry per direct nested table; null leaves it untouched. */
+  nested?: ReadonlyArray<NestedTablePatch | null>
+}
+
+/** Per-cell patch: direct paragraphs, or edits within a cell that also holds tables. */
+export type CellTextsPatch = readonly CellParaPatch[] | NestedCellPatch
 
 /**
  * Replace cell texts inside a <w:tbl> fragment.
@@ -780,10 +784,7 @@ export type CellTextsPatch =
  * untouched. Indexes follow document order of w:tr / w:tc (matching
  * TableModel.rows, which includes vMerge-continue cells).
  */
-export function patchTableCellTexts(
-  tableXml: string,
-  texts: ReadonlyArray<ReadonlyArray<CellTextsPatch | null | undefined> | null | undefined>,
-): string {
+export function patchTableCellTexts(tableXml: string, texts: TableTextsGrid): string {
   const trSegs = xmlSegments(tableXml, 'w:tr', 0, tableXml.length)
   let out = ''
   let cursor = 0
@@ -797,7 +798,7 @@ export function patchTableCellTexts(
       const tcXml = tableXml.slice(tc.start, tc.end)
       const patched = Array.isArray(entry)
         ? patchCellXml(tcXml, entry as CellParaPatch[])
-        : patchNestedInCell(tcXml, (entry as { nested?: unknown }).nested as never)
+        : patchNestedInCell(tcXml, entry as NestedCellPatch)
       if (patched === null) return
       out += tableXml.slice(cursor, tc.start) + patched
       cursor = tc.end
@@ -806,29 +807,42 @@ export function patchTableCellTexts(
   return out + tableXml.slice(cursor)
 }
 
-/** patch the cell's direct nested tables' cell texts (recursive surgical patch) */
-function patchNestedInCell(
-  tcXml: string,
-  nested:
-    | ReadonlyArray<ReadonlyArray<
-        ReadonlyArray<readonly CellParaPatch[] | null | undefined> | null | undefined
-      > | null>
-    | undefined,
-): string | null {
-  if (!nested || nested.length === 0) return null
-  const openTag = /^<w:tc(?: [^>]*)?>/.exec(tcXml)?.[0]
-  if (!openTag) return null
-  const tblSegs = xmlSegments(tcXml, 'w:tbl', openTag.length, tcXml.length)
-  if (tblSegs.length === 0) return null
+/** Patch direct paragraphs and nested tables without rewriting their siblings. */
+function patchNestedInCell(tcXml: string, patch: NestedCellPatch): string | null {
+  const open = /^<w:tc(?: [^>]*)?>/.exec(tcXml)?.[0]
+  if (!open) return null
+  const children = splitXmlChildren(tcXml.slice(open.length, -'</w:tc>'.length))
+  let paragraphs: string[] | undefined
+  if (patch.paras) {
+    const old = children.filter((child) => child.name === 'w:p').map((child) => child.xml)
+    if (old.length !== patch.paras.length) return null
+    const changed = patchCellXml(`<w:tc>${old.join('')}</w:tc>`, patch.paras)
+    if (changed === null) return null
+    paragraphs = splitXmlChildren(changed.slice('<w:tc>'.length, -'</w:tc>'.length))
+      .filter((child) => child.name === 'w:p')
+      .map((child) => child.xml)
+  }
   let out = ''
   let cursor = 0
-  tblSegs.forEach((seg, i) => {
-    const grid = nested[i]
-    if (!grid) return
-    out +=
-      tcXml.slice(cursor, seg.start) + patchTableCellTexts(tcXml.slice(seg.start, seg.end), grid)
-    cursor = seg.end
-  })
+  let p = 0
+  let t = 0
+  for (const child of children) {
+    const start = tcXml.indexOf(child.xml, Math.max(cursor, open.length))
+    const end = start + child.xml.length
+    let next = child.xml
+    if (child.name === 'w:p' && paragraphs) next = paragraphs[p++] ?? next
+    if (child.name === 'w:tbl') {
+      const nested = patch.nested?.[t++]
+      if (nested) {
+        next =
+          'replacement' in nested
+            ? generateTableModelXml(nested.replacement, child.xml)
+            : patchTableCellTexts(child.xml, nested)
+      }
+    }
+    out += tcXml.slice(cursor, start) + next
+    cursor = end
+  }
   return out + tcXml.slice(cursor)
 }
 

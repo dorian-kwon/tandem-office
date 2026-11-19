@@ -1,3 +1,4 @@
+import { draftNestedTable, NestedTableChanges, nestedBatches } from './nested-table-draft'
 import { originalAiEditor } from './ai-history-gate'
 import type { Editor } from '@tiptap/core'
 import { Fragment, type Mark, type Node as PmNode, type Schema } from '@tiptap/pm/model'
@@ -38,6 +39,7 @@ import {
   segmentsError,
   settleTexts,
   tableTwinRoles,
+  twinPairsOf,
   textblocksOf,
   topLevel,
   type Group,
@@ -111,6 +113,7 @@ export interface BilingualPlainReport {
 
 export interface BilingualTableReport {
   index: number
+  nestedTable?: number
   layout: 'right' | 'below'
   /** the layout asked for, when it could not be kept */
   requested?: 'right'
@@ -140,7 +143,7 @@ export type BilingualOutcome =
       /** body paragraphs inserted by this call: every later block index moved down by up to this many */
       lastShift: number
     }
-  | { ok: false; errors: string[] }
+  | { ok: false; errors: string[]; stale?: true }
 
 /** the marks a twin never takes over from the original text */
 const DROPPED_MARKS = new Set(['comment', 'ins', 'del', 'revisionOriginal', 'rprChange'])
@@ -773,6 +776,74 @@ function planCell(
   }
 }
 
+type NestedBilingualPlan =
+  | {
+      ok: true
+      changes: NestedTableChanges
+      tables: BilingualTableReport[]
+      stale: string[]
+      alreadyDone: string[]
+      pairs: Array<[string, string]>
+    }
+  | Extract<BilingualOutcome, { ok: false }>
+
+function planNestedBilingual(
+  editor: Editor,
+  layout: BilingualLayout | undefined,
+  items: BilingualItem[],
+  track?: AiTrack,
+): NestedBilingualPlan {
+  if (layout !== 'right' && layout !== 'below')
+    return { ok: false, errors: ['Nested tables need layout right or below.'] }
+  const doc = editor.state.doc
+  const changes = new NestedTableChanges(doc)
+  const tables: BilingualTableReport[] = []
+  const stale: string[] = []
+  const alreadyDone: string[] = []
+  const pairs: Array<[string, string]> = []
+  for (const batch of nestedBatches(items)) {
+    const { index, nestedTable } = batch[0]
+    const where = `block ${index} nested table ${nestedTable}`
+    if (batch.some((item) => item.target))
+      return { ok: false, errors: [`${where}: use the table layout without an explicit target`] }
+    const ref = changes.locate(index, nestedTable!)
+    const top = topLevel(doc, index)
+    if (!ref || !top || isTrackedDeleted(top.node))
+      return {
+        ok: false,
+        errors: [`${where}: no editable nested table at that number; read_runs again`],
+      }
+    const draft = draftNestedTable(editor, ref.model)
+    const outcome = applyBilingual(
+      draft.editor,
+      layout,
+      batch.map((item) => ({ ...item, index: 0, nestedTable: undefined })),
+      track,
+      editor,
+    )
+    const relabel = (error: string) => error.replace(/^block 0/, where)
+    if (!outcome.ok) {
+      if (!outcome.stale) return { ok: false, errors: outcome.errors.map(relabel) }
+      stale.push(...outcome.errors.map(relabel))
+      continue
+    }
+    tables.push(
+      ...outcome.tables.map((report) => ({
+        ...report,
+        index,
+        nestedTable,
+        extra: report.extra.map(relabel),
+      })),
+    )
+    stale.push(...outcome.stale.map(relabel))
+    alreadyDone.push(...outcome.alreadyDone.map(relabel))
+    pairs.push(...twinPairsOf(draft.editor))
+    const model = draft.result(true)
+    if (model !== ref.model) changes.set(ref, model)
+  }
+  return { ok: true, changes, tables, stale, alreadyDone, pairs }
+}
+
 /**
  * add_bilingual: every item checked first, one bad item refuses the whole call
  * with nothing changed. All edits land in one transaction (one undo step).
@@ -782,19 +853,24 @@ export function applyBilingual(
   layout: BilingualLayout | undefined,
   items: BilingualItem[],
   track?: AiTrack,
+  roleEditor: Editor = editor,
 ): BilingualOutcome {
+  const nested = items.some((item) => item.nestedTable !== undefined)
+    ? planNestedBilingual(editor, layout, items, track)
+    : undefined
+  if (nested && !nested.ok) return nested
   const doc = editor.state.doc
   const schema = editor.schema
   const date = track ? revisionDate() : undefined
   const errors: string[] = []
-  const stale: string[] = []
-  const alreadyDone: string[] = []
+  const stale: string[] = nested?.stale ?? []
+  const alreadyDone: string[] = nested?.alreadyDone ?? []
   const seen = new Set<string>()
   const bodyOps: BodyOp[] = []
   const tableOps: TableOp[] = []
   const tableItems = new Map<number, Array<{ item: BilingualItem; index: number }>>()
-  const pairs: Array<[string, string]> = []
-  const tableReports: BilingualTableReport[] = []
+  const pairs: Array<[string, string]> = nested?.pairs ?? []
+  const tableReports: BilingualTableReport[] = nested?.tables.slice() ?? []
   const placeOps: PlaceOp[] = []
   const placedReports: BilingualPlacedReport[] = []
   const cellDests = new Map<string, CellDestination>()
@@ -803,6 +879,7 @@ export function applyBilingual(
   let seq = 0
 
   for (const item of items) {
+    if (item.nestedTable !== undefined) continue
     const index = locate(editor, doc, item)
     const where = label(index, item.paragraph)
     const key = `${index}:${item.paragraph ?? 0}`
@@ -856,7 +933,7 @@ export function applyBilingual(
       const ownFp = runFingerprint(groups.map((g) => g.text))
       const role = isTable
         ? tableTwinRoles(
-            editor,
+            roleEditor,
             blocks.map((b) => {
               const g = groupsOf(b.node, b.pos)
               return g.length > 0 ? runFingerprint(g.map((x) => x.text)) : null
@@ -985,7 +1062,7 @@ export function applyBilingual(
       const g = groupsOf(b.node, b.pos)
       return g.length > 0 ? runFingerprint(g.map((x) => x.text)) : null
     })
-    const roles = tableTwinRoles(editor, fps)
+    const roles = tableTwinRoles(roleEditor, fps)
     if (roles.some((r) => r !== null)) {
       alreadyDone.push(`block ${index} (table)`)
       continue
@@ -1086,12 +1163,13 @@ export function applyBilingual(
   if (errors.length > 0) return { ok: false, errors }
   if (
     stale.length > 0 &&
-    bodyOps.length + tableOps.length + placeOps.length + cellOps.length === 0 &&
+    bodyOps.length + tableReports.length + placeOps.length + cellOps.length === 0 &&
     alreadyDone.length === 0
   )
-    return { ok: false, errors: stale }
+    return { ok: false, errors: stale, stale: true }
 
   const tr = editor.state.tr
+  nested?.changes.apply(tr)
   // last position first, so an edit never shifts the ones still ahead; a table starts where the
   // paragraph before it ends, and its own edits must run before that paragraph's insertion
   const opPos = (o: BodyOp | TableOp | PlaceOp | CellOp): number =>
@@ -1113,7 +1191,7 @@ export function applyBilingual(
     else applyBelow(tr, op, schema, track, date)
   }
   if (track) tr.setMeta(TRACK_IGNORE, true)
-  if (ops.length > 0) editor.view.dispatch(tr)
+  if (tr.docChanged) editor.view.dispatch(tr)
   if (pairs.length > 0) recordTwins(editor, pairs)
   if (placedPairsList.length > 0) recordTwins(editor, placedPairsList, { placed: true })
   const inserted = bodyOps.length + placeOps.length

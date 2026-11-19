@@ -14,6 +14,7 @@ import {
   patchTableCellTexts,
   type CellParaPatch,
   type CellTextsPatch,
+  type NestedTablePatch,
   patchDrawingExtent,
   patchTextboxSizes,
   patchShapeStyles,
@@ -3076,26 +3077,52 @@ function parsedCellParaTexts(cell: TableCell): string[] {
     : cell.paras
 }
 
-/** per-cell text diff of one nested table; null = untouched cell, null entry = untouched paragraph */
-function nestedTextsDiff(
-  current: TableModel,
-  original: TableModel,
-): (CellParaPatch[] | null)[][] | null {
-  if (current.rows.length !== original.rows.length) return null
+/** Diff a nested table recursively; a bilingual grid change replaces only that table. */
+function nestedTextsDiff(current: TableModel, original: TableModel): NestedTablePatch | null {
+  if (current === original) return null
+  if (
+    current.rows.length !== original.rows.length ||
+    current.rows.some((row, r) => {
+      const source = original.rows[r]
+      return (
+        row.length !== source.length ||
+        row.some(
+          (cell, c) =>
+            cell.colSpan !== source[c].colSpan ||
+            cell.vMerge !== source[c].vMerge ||
+            !!cell.gridGap !== !!source[c].gridGap ||
+            (cell.nestedTables?.length ?? 0) !== (source[c].nestedTables?.length ?? 0),
+        )
+      )
+    })
+  )
+    return { replacement: current }
   let changed = false
   const grid = current.rows.map((row, r) => {
     const origRow = patchableCells(original.rows[r])
-    return patchableCells(row).map((cell, c): CellParaPatch[] | null => {
-      const originalCell = origRow[c]
-      if (!originalCell || cell.vMerge === 'continue') return null
-      const text = cell.paras.join('\n')
-      const richTexts = parsedCellParaTexts(originalCell)
-      if (text === originalCell.paras.join('\n') || text === richTexts.join('\n')) return null
-      changed = true
-      if (cell.paras.length !== originalCell.paras.length) return cell.paras
-      return cell.paras.map((p, i) =>
-        p === originalCell.paras[i] || p === richTexts[i] ? null : p,
+    return patchableCells(row).map((cell, c): CellTextsPatch | null => {
+      const source = origRow[c]
+      if (cell === source || cell.vMerge === 'continue') return null
+      const sourceTexts = parsedCellParaTexts(source)
+      const own = cell.paras.map((text, p): CellParaPatch => {
+        const runs = cell.richParas?.[p]?.runs
+        const originalRuns = source.richParas?.[p]?.runs
+        if (runs && originalRuns && runs !== originalRuns) {
+          if (JSON.stringify(normalizedRuns(runs)) !== JSON.stringify(normalizedRuns(originalRuns)))
+            return { runs }
+        }
+        if (text === source.paras[p] || text === sourceTexts[p]) return null
+        return runs?.map((run) => run.text).join('') === text ? { runs } : text
+      })
+      const resized = cell.paras.length !== source.paras.length
+      const paras = resized || own.some((p) => p !== null) ? own : null
+      const children = cell.nestedTables?.map((table, i) =>
+        nestedTextsDiff(table, source.nestedTables![i]),
       )
+      const nested = children?.some((table) => table !== null) ? children : undefined
+      if (!paras && !nested) return null
+      changed = true
+      return cell.nestedTables?.length ? { paras, nested } : paras
     })
   })
   return changed ? grid : null

@@ -145,6 +145,7 @@ export {
   type TextboxSizePatch,
   type CellParaPatch,
   type CellTextsPatch,
+  type NestedTablePatch,
   type FieldTextPatch,
   type GenerateContext,
   type ImagePatch,

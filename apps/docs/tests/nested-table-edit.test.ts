@@ -5,6 +5,7 @@ import { parseDocx, saveDocx, type TableModel } from '@genoffice/docx-engine'
 import { editorExtensions } from '../src/renderer/editor/extensions'
 import { blocksToPmDoc, pmDocToSavePlan, type PmNode } from '../src/renderer/editor/convert'
 import { buildDocx, NESTED_TABLE_XML } from '../../../packages/docx-engine/tests/helpers/build-docx'
+import { executeTool } from '../src/renderer/ai/tools'
 
 async function openNestedDoc() {
   const bytes = await buildDocx({ bodyXml: NESTED_TABLE_XML })
@@ -35,6 +36,158 @@ function editNestedCell(editor: Editor, newText: string) {
 }
 
 describe('nested table editing end to end', () => {
+  it('applies outer and inner bilingual translations in one document transaction', async () => {
+    const { editor, parsed } = await openNestedDoc()
+    try {
+      const run = (name: string, input: Record<string, unknown>) =>
+        executeTool(editor, { id: name, name, input }, { bullet: null, ordered: null })
+      const read = await run('read_runs', { startBlockIndex: 0, endBlockIndex: 0 })
+      const blocks = read.output
+        .split('\n')
+        .filter((line) => line.startsWith('{'))
+        .map((line) => JSON.parse(line))
+        .filter((entry) => entry.fp && entry.segments)
+        .map((entry) => ({
+          ...entry,
+          segments: entry.segments.map((text: string) => `Translation of ${text}`),
+        }))
+      expect(blocks).toHaveLength(4)
+      let writes = 0
+      editor.on('transaction', ({ transaction }) => {
+        if (transaction.docChanged) writes++
+      })
+      const result = await run('add_bilingual', { layout: 'right', blocks })
+      expect(result.isError).toBeFalsy()
+      expect(writes).toBe(1)
+      const { saved } = await savedBodyXml(parsed, editor)
+      const table = (await parseDocx(saved)).blocks[0].table!
+      expect(table.rows[0].map((cell) => cell.paras[0])).toEqual([
+        'Outer',
+        'Translation of Outer',
+        'RightCell',
+        'Translation of RightCell',
+      ])
+      expect(table.rows[0][0].nestedTables![0].rows[0].map((cell) => cell.paras[0])).toEqual([
+        'InnerA',
+        'Translation of InnerA',
+        'InnerB',
+        'Translation of InnerB',
+      ])
+    } finally {
+      editor.destroy()
+    }
+  })
+
+  it('adds bilingual columns to the inner table and saves tracked corrections only on the translations', async () => {
+    const { editor, parsed } = await openStyledHost()
+    const run = (name: string, input: Record<string, unknown>) =>
+      executeTool(editor, { id: name, name, input }, { bullet: null, ordered: null })
+    const read = async (review = false) => {
+      const result = await run('read_runs', { startBlockIndex: 0, endBlockIndex: 0, review })
+      return result.output
+        .split('\n')
+        .filter((line) => line.startsWith('{'))
+        .map((line) => JSON.parse(line))
+        .filter((line) => line.nestedTable === 0 && line.segments)
+    }
+    try {
+      const initial = await read()
+      expect(initial.map((entry) => entry.segments[0])).toEqual(['InnerA', 'InnerB'])
+      const bilingual = await run('add_bilingual', {
+        layout: 'right',
+        blocks: initial.map((entry, i) => ({ ...entry, segments: [i === 0 ? 'Old A' : 'Old B'] })),
+      })
+      expect(bilingual.output).toContain('nested table 0')
+      expect(bilingual.output).toContain('in a new column')
+      expect(bilingual.mutated).toBe(true)
+      const reviewed = await read(true)
+      expect(reviewed.map((entry) => entry.role)).toEqual([
+        'original',
+        'translation',
+        'original',
+        'translation',
+      ])
+      const translated = reviewed.find((entry) => entry.segments[0] === 'Old B')
+      const revision = await run('revise_blocks', {
+        blocks: [{ ...translated, segments: ['New B'] }],
+      })
+      expect(revision.mutated).toBe(true)
+      const { saved, xml } = await savedBodyXml(parsed, editor)
+      expect(xml).toContain(RIGHT_CELL_XML)
+      const table = (await parseDocx(saved)).blocks[0].table!
+      expect(table.rows[0]).toHaveLength(2)
+      const row = table.rows[0][0].nestedTables![0].rows[0]
+      expect(row).toHaveLength(4)
+      expect(row[0].paras).toEqual(['InnerA'])
+      expect(row[1].paras).toEqual(['Old A'])
+      expect(row[2].paras).toEqual(['InnerB'])
+      expect(row[3].richParas?.[0].runs).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            text: 'New',
+            ins: expect.objectContaining({ author: 'AI Assistant (review)' }),
+          }),
+          expect.objectContaining({
+            text: 'Old',
+            del: expect.objectContaining({ author: 'AI Assistant (review)' }),
+          }),
+        ]),
+      )
+    } finally {
+      editor.destroy()
+    }
+  })
+
+  it('reads and translates deeply nested cells through the normal AI tools and saves the result', async () => {
+    const deep =
+      '<w:tbl><w:tr><w:tc><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>깊은 표</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
+    const bodyXml = NESTED_TABLE_XML.replace(
+      '<w:t>InnerA</w:t></w:r></w:p>',
+      '<w:t>InnerA</w:t></w:r></w:p>' + deep + '<w:p/>',
+    )
+    const parsed = await parseDocx(await buildDocx({ bodyXml }))
+    const editor = new Editor({
+      element: document.createElement('div'),
+      extensions: editorExtensions,
+      content: blocksToPmDoc(parsed.blocks) as never,
+    })
+    const run = (name: string, input: Record<string, unknown>) =>
+      executeTool(editor, { id: name, name, input }, { bullet: null, ordered: null })
+    try {
+      const read = await run('read_runs', { startBlockIndex: 0, endBlockIndex: 0 })
+      const entries = read.output
+        .split('\n')
+        .filter((line) => line.startsWith('{'))
+        .map((line) => JSON.parse(line))
+      const inner = entries.find((entry) => entry.segments?.includes('InnerA'))
+      const leaf = entries.find((entry) => entry.segments?.includes('깊은 표'))
+      expect(inner).toMatchObject({ index: 0, nestedTable: 0, paragraph: 0 })
+      expect(leaf).toMatchObject({ index: 0, nestedTable: 1, paragraph: 0 })
+      const remaining = await run('read_runs', { checkRemaining: true, sourceLanguage: 'ko' })
+      expect(remaining.output).toContain('nested table 1')
+      const result = await run('translate_blocks', {
+        blocks: [
+          { ...inner, segments: ['Translated parent'] },
+          { ...leaf, segments: ['Deep table'] },
+        ],
+      })
+      expect(result.isError).toBeFalsy()
+      expect(result.mutated).toBe(true)
+      const plan = pmDocToSavePlan(editor.getJSON() as PmNode, parsed.blocks)
+      expect(plan.changedCount).toBe(1)
+      const reopened = await parseDocx(await saveDocx(parsed, plan.saveBlocks))
+      const outer = reopened.blocks[0].table!
+      expect(outer.rows[0][1].paras).toEqual(['RightCell'])
+      const nested = outer.rows[0][0].nestedTables![0]
+      expect(nested.rows[0][0].paras[0]).toBe('Translated parent')
+      expect(nested.rows[0][1].paras).toEqual(['InnerB'])
+      const restored = nested.rows[0][0].nestedTables![0].rows[0][0]
+      expect(restored.richParas?.[0].runs[0]).toMatchObject({ text: 'Deep table', bold: true })
+    } finally {
+      editor.destroy()
+    }
+  })
+
   it('untouched round-trip is byte-identical', async () => {
     const { editor, parsed, bytes } = await openNestedDoc()
     const plan = pmDocToSavePlan(editor.getJSON() as PmNode, parsed.blocks)
