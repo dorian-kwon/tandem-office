@@ -94,6 +94,7 @@ afterEach(() => {
 })
 
 interface PanelState {
+  onCitation?: (href: string) => void
   chat: readonly AiChatMessage[]
   prompt: string
   aiBusy: boolean
@@ -134,7 +135,7 @@ function panel(initial: PanelState) {
           scopeColumns: null,
           scopeLocked: false,
           onScopeDismiss: () => undefined,
-          onCitation: () => undefined,
+          onCitation: state.onCitation ?? (() => undefined),
           onExpand: () => undefined,
           onCollapse: () => undefined,
         }),
@@ -159,6 +160,23 @@ const pressEnter = () =>
         new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
       )
   })
+
+it('a citation in a completed reply uses the current grid after the composer changes', () => {
+  const first = vi.fn()
+  const current = vi.fn()
+  const p = panel({
+    chat: [{ role: 'assistant', text: '[B12](sheetnav://B12)', tools: [] }],
+    prompt: '',
+    aiBusy: false,
+    subscription: subscriptionOf(settings(), statuses('ready', 'not-installed')),
+    onCitation: first,
+  })
+  const citation = host.querySelector<HTMLAnchorElement>('a.ai-md-nav')!
+  p.set({ prompt: 'new question', onCitation: current })
+  act(() => citation.click())
+  expect(current).toHaveBeenCalledWith('sheetnav://B12')
+  expect(first).not.toHaveBeenCalled()
+})
 
 describe('sheets AI panel: not connected', () => {
   it('shows the connect prompt and scrolls to it each time a send was answered by it', () => {

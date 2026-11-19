@@ -171,6 +171,12 @@ function aiApi(): Partial<EpubAiApi> {
   return (window.epubApi as Partial<EpubAiApi> | undefined) ?? {}
 }
 
+const chatNavs = [
+  createFileNav((path) => {
+    void aiApi().openSourcePath?.(path)
+  }),
+]
+
 /** The project folder bridge (decision 0088), or null outside the shell or with an older preload */
 function folderApi(): ProjectFolderApi | null {
   return window.projectFolderApi ?? null
@@ -1489,11 +1495,6 @@ export function AiPanel({ host, filePath, onCollapse }: AiPanelProps): ReactElem
     />
   ) : null
 
-  // a file link in an answer opens that file in its own tab
-  const fileNav = createFileNav((path) => {
-    void aiApi().openSourcePath?.(path)
-  })
-
   const copyMessage = (text: string, idx: number): void => {
     void navigator.clipboard?.writeText(text)
     setCopiedIdx(idx)
@@ -1685,7 +1686,7 @@ export function AiPanel({ host, filePath, onCollapse }: AiPanelProps): ReactElem
               ) : (
                 entry.text && (
                   <div dir="auto">
-                    <Markdown text={entry.text} navs={[fileNav]} />
+                    <Markdown text={entry.text} navs={chatNavs} />
                   </div>
                 )
               )}

@@ -16,7 +16,7 @@ import {
   useAiPanelPrefs,
   useAiSendGate,
 } from '@genoffice/ui'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent, ReactElement, ReactNode } from 'react'
 import {
   AgentLoop,
@@ -1184,19 +1184,22 @@ export function AiPanel({
     }
   }, [])
 
-  /** [label](mdnav://block/N) links in replies select and scroll to that block */
-  const docNav = {
-    scheme: DOC_NAV_SCHEME,
-    onNavigate: (href: string) => {
-      const index = parseDocNavHref(href)
-      const current = depsRef.current.getEditor()
-      if (index !== null && current) navigateToBlock(current, index)
-    },
-  }
-  // [name](filenav:///abs/path) citations open the cited file in its own app
-  const fileNav = createFileNav((path) => {
-    void window.markdownApi.openSourcePath(path)
-  })
+  const chatNavs = useMemo(() => {
+    /** [label](mdnav://block/N) links in replies select and scroll to that block */
+    const docNav = {
+      scheme: DOC_NAV_SCHEME,
+      onNavigate: (href: string) => {
+        const index = parseDocNavHref(href)
+        const current = depsRef.current.getEditor()
+        if (index !== null && current) navigateToBlock(current, index)
+      },
+    }
+    // [name](filenav:///abs/path) citations open the cited file in its own app
+    const fileNav = createFileNav((path) => {
+      void window.markdownApi.openSourcePath(path)
+    })
+    return [docNav, fileNav]
+  }, [])
 
   /** submit every still-anchored queued edit as one batch run */
   const sendQueue = (): void => {
@@ -1431,7 +1434,7 @@ export function AiPanel({
               ) : (
                 entry.text && (
                   <div dir="auto">
-                    <Markdown text={entry.text} navs={[docNav, fileNav]} />
+                    <Markdown text={entry.text} navs={chatNavs} />
                   </div>
                 )
               )}

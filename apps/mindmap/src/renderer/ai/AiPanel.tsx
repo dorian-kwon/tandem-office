@@ -190,6 +190,12 @@ function aiApi(): Partial<MindmapAiApi> {
   return (window.mindmapApi as Partial<MindmapAiApi> | undefined) ?? {}
 }
 
+const chatNavs = [
+  createFileNav((path) => {
+    void aiApi().openSourcePath?.(path)
+  }),
+]
+
 /** The project folder bridge (decision 0088), or null outside the shell or with an older preload */
 function folderApi(): ProjectFolderApi | null {
   return window.projectFolderApi ?? null
@@ -1684,11 +1690,6 @@ export function AiPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request])
 
-  // a file link in an answer opens that file in its own tab
-  const fileNav = createFileNav((path) => {
-    void aiApi().openSourcePath?.(path)
-  })
-
   const copyMessage = (text: string, idx: number): void => {
     void navigator.clipboard?.writeText(text)
     setCopiedIdx(idx)
@@ -1897,7 +1898,7 @@ export function AiPanel({
               ) : (
                 entry.text && (
                   <div dir="auto">
-                    <Markdown text={entry.text} navs={[fileNav]} />
+                    <Markdown text={entry.text} navs={chatNavs} />
                   </div>
                 )
               )}

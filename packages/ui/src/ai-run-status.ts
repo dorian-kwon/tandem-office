@@ -42,7 +42,12 @@ export const IDLE_RUN_STATUS: RunStatusState = {
 export type RunStatusAction =
   | { type: 'begin'; at: number }
   | { type: 'tool-start'; name: string }
-  | { type: 'tool-done'; awaitingUser?: boolean | undefined; note?: string | undefined; at?: number }
+  | {
+      type: 'tool-done'
+      awaitingUser?: boolean | undefined
+      note?: string | undefined
+      at?: number
+    }
   | { type: 'text' }
   | { type: 'done'; cancelled: boolean }
   | { type: 'error' }
@@ -73,21 +78,21 @@ export function reduceRunStatus(s: RunStatusState, a: RunStatusAction): RunStatu
       return next
     }
     case 'text':
-      if (s.phase !== 'running') return s
+      if (s.phase !== 'running' || s.writing) return s
       return { ...s, writing: true, tool: undefined }
     case 'done':
       if (!inRun(s)) return s
-      if (a.cancelled) return { ...s, phase: 'stopped', awaiting: false, ended: true, tool: undefined }
-      if (s.awaiting) return { ...s, phase: 'waiting', ended: true, tool: undefined, writing: false }
+      if (a.cancelled)
+        return { ...s, phase: 'stopped', awaiting: false, ended: true, tool: undefined }
+      if (s.awaiting)
+        return { ...s, phase: 'waiting', ended: true, tool: undefined, writing: false }
       return { ...s, phase: 'done', ended: true, tool: undefined, writing: false }
     case 'error':
       if (!inRun(s)) return s
       return { ...s, phase: 'error', awaiting: false, ended: true, tool: undefined }
     case 'resolve-waiting':
       if (s.phase !== 'waiting') return s
-      return s.ended
-        ? IDLE_RUN_STATUS
-        : { ...s, phase: 'running', awaiting: false }
+      return s.ended ? IDLE_RUN_STATUS : { ...s, phase: 'running', awaiting: false }
     case 'idle':
       return inRun(s) && !s.awaiting ? IDLE_RUN_STATUS : s
     case 'dismiss':

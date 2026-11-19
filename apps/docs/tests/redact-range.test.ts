@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Editor } from '@tiptap/core'
 import { TextSelection } from '@tiptap/pm/state'
 import { parseDocx } from '@genoffice/docx-engine'
@@ -10,6 +10,7 @@ import { buildDocContext, serializeRangeToHtml } from '../src/renderer/ai/protoc
 import { listRevisionEntries } from '../src/renderer/ai/revision-ops'
 import { resolveQueueItem } from '../src/renderer/ai/edit-queue'
 import { addQueueAnchor } from '../src/renderer/editor/ai-queue-anchors'
+import { createSelectionPreviewReader } from '../src/renderer/ai/selection-preview'
 import { REDACT_MARK } from '../src/renderer/ai/redact'
 import { executeTool } from '../src/renderer/ai/tools'
 
@@ -159,6 +160,28 @@ describe('a range with nothing withheld reads as ProseMirror reads it', () => {
 })
 
 describe('a range with a withheld span in it', () => {
+  it('reuses a selection preview until its range or document changes, including mark-only edits', async () => {
+    const editor = await open(true)
+    const serialize = vi.spyOn(editor, 'getJSON')
+    const read = createSelectionPreviewReader(editor)
+    const masked = read()
+    expect(masked?.text).toBe('{{client phone}}')
+    expect(read()).toBe(masked)
+    expect(serialize).toHaveBeenCalledTimes(1)
+
+    editor.commands.unsetMark(REDACT_MARK)
+    expect(read()?.text).toBe(SECRET)
+    editor.commands.setRedaction('new label')
+    expect(read()?.text).toBe('{{new label}}')
+    editor.commands.setTextSelection({ from: 1, to: 5 })
+    expect(read()?.text).toBe('Call')
+    expect(serialize).toHaveBeenCalledTimes(4)
+
+    editor.commands.setTextSelection(1)
+    expect(read()).toBeUndefined()
+    expect(serialize).toHaveBeenCalledTimes(4)
+  })
+
   it('never returns the words the reader hid', async () => {
     const editor = await open(true)
     const doc = json(editor)

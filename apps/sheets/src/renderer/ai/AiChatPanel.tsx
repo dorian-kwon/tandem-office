@@ -21,7 +21,7 @@ import {
   type SkillChipRef,
   type SkillUse,
 } from '@genoffice/ui'
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AiBlockedNotice,
   AiComposer,
@@ -661,6 +661,21 @@ export function AiChatPanel({
     stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
   }
 
+  const onCitationRef = useRef(onCitation)
+  onCitationRef.current = onCitation
+  const chatNavs = useMemo(() => {
+    /** [B12](sheetnav://B12) links in answers jump the grid to the cited range */
+    const citationNav = {
+      scheme: SHEET_NAV_SCHEME,
+      onNavigate: (href: string) => onCitationRef.current(href),
+    }
+    // [name](filenav:///abs/path) citations open the cited file in its own app
+    const fileNav = createFileNav((path) => {
+      void window.desktopApi.openSourcePath(path)
+    })
+    return [citationNav, fileNav]
+  }, [])
+
   if (!isOpen) {
     // the sidebar setting is off: nothing to show until an explicit AI action opens the panel
     if (hideRail) return <></>
@@ -679,13 +694,6 @@ export function AiChatPanel({
   }
 
   const canSend = prompt.trim().length > 0 && !aiBusy
-
-  /** [B12](sheetnav://B12) links in answers jump the grid to the cited range */
-  const citationNav = { scheme: SHEET_NAV_SCHEME, onNavigate: onCitation }
-  // [name](filenav:///abs/path) citations open the cited file in its own app
-  const fileNav = createFileNav((path) => {
-    void window.desktopApi.openSourcePath(path)
-  })
 
   const send = (): void => {
     if (!canSend) return
@@ -828,7 +836,7 @@ export function AiChatPanel({
                   <div dir="auto">
                     <Markdown
                       text={entry.role === 'user' ? choiceBubbleText(entry.text, lang) : entry.text}
-                      navs={[citationNav, fileNav]}
+                      navs={chatNavs}
                     />
                   </div>
                 )}
@@ -902,7 +910,7 @@ export function AiChatPanel({
                   />
                 ) : entry.text ? (
                   <div dir="auto">
-                    <Markdown text={entry.text} navs={[citationNav, fileNav]} />
+                    <Markdown text={entry.text} navs={chatNavs} />
                   </div>
                 ) : (
                   entry.streaming && (

@@ -78,11 +78,11 @@ import type {
   AttachmentAddResult,
   AttachmentMeta,
 } from '../../shared/ipc'
-import { redactTextBetween, type RedactableNode } from './redact-view'
+import { createSelectionPreviewReader } from './selection-preview'
 import { ATTACHMENT_IMAGE_EXTS } from '../../shared/ipc'
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { captureRollbackSnapshot, restoreRollbackSnapshot } from './rollback-snapshot'
-import { countWords, findNumId, type AiProfile, type NumIds } from './protocol'
+import { findNumId, type AiProfile, type NumIds } from './protocol'
 import { TRANSLATION_PAST_TOOL_OUTPUT_LIMITS } from './translation-profile'
 import { DOC_NAV_SCHEME, navigateToBlock, parseDocNavHref } from './doc-nav'
 import {
@@ -1474,19 +1474,8 @@ export function AiPanel({
     }
   }, [editor])
 
-  // scope chip data, recomputed per render (the scope tick above keeps it fresh)
-  const liveSelection = editor.state.selection
-  const selectionText = liveSelection.empty
-    ? ''
-    : redactTextBetween(
-        editor.getJSON() as RedactableNode,
-        liveSelection.from,
-        liveSelection.to,
-        '\n',
-      )
-        .replace(/\s+/g, ' ')
-        .trim()
-  const hasScopeSelection = selectionText.length > 0
+  const readSelectionPreview = useMemo(() => createSelectionPreviewReader(editor), [editor])
+  const selectionPreview = readSelectionPreview()
 
   /** the × on the scope chip: collapse the selection so the run targets the whole document */
   const clearScopeSelection = () => {
@@ -1494,14 +1483,11 @@ export function AiPanel({
   }
 
   const selectionScopeQuote = (): AiScopeQuoteData | undefined => {
-    const { from, to, empty } = editor.state.selection
-    if (empty) return undefined
-    const text = redactTextBetween(editor.getJSON() as RedactableNode, from, to, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-    if (!text) return undefined
+    const preview = readSelectionPreview()
+    if (!preview) return undefined
+    const { words, text } = preview
     return {
-      label: t('aiScopeSelection', { words: countWords(text) }),
+      label: t('aiScopeSelection', { words }),
       text: text.length > SCOPE_TEXT_MAX ? `${text.slice(0, SCOPE_TEXT_MAX)}…` : text,
     }
   }
@@ -2388,9 +2374,9 @@ export function AiPanel({
           onQueue={enqueueDraft}
           queuePlaceholder={AI_QUEUE_LABELS[lang].queuePlaceholder}
           header={
-            (hasScopeSelection || attachments.length > 0) && (
+            (selectionPreview || attachments.length > 0) && (
               <>
-                {hasScopeSelection && (
+                {selectionPreview && (
                   <div className="ai-scope-row">
                     <span className="ai-scope-hint">
                       <button
@@ -2400,7 +2386,7 @@ export function AiPanel({
                         aria-expanded={scopePreviewOpen}
                         data-tip={t('aiScopeSelectionTip')}
                       >
-                        {t('aiScopeSelection', { words: countWords(selectionText) })}
+                        {t('aiScopeSelection', { words: selectionPreview.words })}
                       </button>
                       <button
                         type="button"
@@ -2419,9 +2405,9 @@ export function AiPanel({
                     </span>
                     {scopePreviewOpen && (
                       <div className="ai-scope-preview">
-                        {selectionText.length > 400
-                          ? `${selectionText.slice(0, 400)}…`
-                          : selectionText}
+                        {selectionPreview.text.length > 400
+                          ? `${selectionPreview.text.slice(0, 400)}…`
+                          : selectionPreview.text}
                       </div>
                     )}
                   </div>

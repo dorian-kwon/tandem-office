@@ -6,7 +6,7 @@ import {
   AiModelPicker,
   type AiModelPickerBridge,
 } from '@genoffice/ui'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent, ReactElement, ReactNode } from 'react'
 import {
   AgentLoop,
@@ -1126,20 +1126,23 @@ export function AiPanel({
 
   const onCitationRef = useRef(onCitation)
   onCitationRef.current = onCitation
-  /** [p.N](pdfnav://page/N?q=…) links in replies scroll the reading view to that page (and quote) */
-  const pdfNav = {
-    scheme: PDF_NAV_SCHEME,
-    onNavigate: (href: string) => {
-      const target = parsePdfNavHref(href)
-      if (!target) return
-      if (onCitationRef.current) onCitationRef.current(target)
-      else apiRef.current.gotoPage(target.page)
-    },
-  }
-  // [name](filenav:///abs/path) citations open the cited file in its own app
-  const fileNav = createFileNav((path) => {
-    void window.pdfApi.openSourcePath(path)
-  })
+  const chatNavs = useMemo(() => {
+    /** [p.N](pdfnav://page/N?q=…) links in replies scroll the reading view to that page (and quote) */
+    const pdfNav = {
+      scheme: PDF_NAV_SCHEME,
+      onNavigate: (href: string) => {
+        const target = parsePdfNavHref(href)
+        if (!target) return
+        if (onCitationRef.current) onCitationRef.current(target)
+        else apiRef.current.gotoPage(target.page)
+      },
+    }
+    // [name](filenav:///abs/path) citations open the cited file in its own app
+    const fileNav = createFileNav((path) => {
+      void window.pdfApi.openSourcePath(path)
+    })
+    return [pdfNav, fileNav]
+  }, [])
 
   return (
     <aside
@@ -1288,7 +1291,7 @@ export function AiPanel({
               ) : (
                 entry.text && (
                   <div dir="auto">
-                    <Markdown text={entry.text} navs={[pdfNav, fileNav]} />
+                    <Markdown text={entry.text} navs={chatNavs} />
                   </div>
                 )
               )}

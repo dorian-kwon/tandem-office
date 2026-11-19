@@ -32,6 +32,15 @@ describe('run status state machine', () => {
     expect(s.note).toBe('Nothing is left')
   })
 
+  it('reuses the writing state across text chunks and resumes writing after a tool', () => {
+    const writing = run({ type: 'begin', at: 1 }, { type: 'text' })
+    expect(reduceRunStatus(writing, { type: 'text' })).toBe(writing)
+    const tool = reduceRunStatus(writing, { type: 'tool-start', name: 'read_runs' })
+    expect(tool).toMatchObject({ writing: false, tool: 'read_runs' })
+    const endedTool = reduceRunStatus(tool, { type: 'tool-done' })
+    expect(reduceRunStatus(endedTool, { type: 'text' })).toEqual(writing)
+  })
+
   it('stays waiting after the run ends until the person answers', () => {
     let s = run(
       { type: 'begin', at: 1 },

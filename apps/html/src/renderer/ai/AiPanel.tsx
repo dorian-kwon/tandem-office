@@ -58,7 +58,7 @@ import {
   type ProjectMemoryLine,
   type ProjectRunPrepared,
 } from '@genoffice/ui'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent, ReactElement, ReactNode } from 'react'
 import {
   AgentLoop,
@@ -2019,18 +2019,21 @@ export function AiPanel({
     />
   ) : null
 
-  /** [label](htmlnav://sid/N) links in replies select that element */
-  const docNav = {
-    scheme: DOC_NAV_SCHEME,
-    onNavigate: (href: string) => {
-      const sid = parseDocNavHref(href)
-      if (sid !== null) depsRef.current.navigateTo(sid)
-    },
-  }
-  // [name](filenav:///abs/path) citations open the cited file in its own app
-  const fileNav = createFileNav((path) => {
-    void window.htmlApi.openSourcePath(path)
-  })
+  const chatNavs = useMemo(() => {
+    /** [label](htmlnav://sid/N) links in replies select that element */
+    const docNav = {
+      scheme: DOC_NAV_SCHEME,
+      onNavigate: (href: string) => {
+        const sid = parseDocNavHref(href)
+        if (sid !== null) depsRef.current.navigateTo(sid)
+      },
+    }
+    // [name](filenav:///abs/path) citations open the cited file in its own app
+    const fileNav = createFileNav((path) => {
+      void window.htmlApi.openSourcePath(path)
+    })
+    return [docNav, fileNav]
+  }, [])
 
   const draftNonceRef = useRef(0)
   useEffect(() => {
@@ -2110,7 +2113,11 @@ export function AiPanel({
     resizer.setPointerCapture(e.pointerId)
   }
 
-  const docEmpty = chat.length === 0 && isDocEmpty(deps.access.getText())
+  const initialPageText = chat.length === 0 ? deps.access.getText() : null
+  const docEmpty = useMemo(
+    () => initialPageText !== null && isDocEmpty(initialPageText),
+    [initialPageText],
+  )
 
   return (
     <aside
@@ -2300,7 +2307,7 @@ export function AiPanel({
               ) : (
                 entry.text && (
                   <div dir="auto">
-                    <Markdown text={entry.text} navs={[docNav, fileNav]} />
+                    <Markdown text={entry.text} navs={chatNavs} />
                   </div>
                 )
               )}
