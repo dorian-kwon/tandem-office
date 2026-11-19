@@ -1,9 +1,9 @@
 /** One bounded job per utility process; large pixel buffers stay on local disk. */
 import { constants, createReadStream } from 'node:fs'
 import { createHash } from 'node:crypto'
-import { lstat, open, readFile, rm, writeFile } from 'node:fs/promises'
+import { lstat, open, readFile, rm, writeFile, type FileHandle } from 'node:fs/promises'
 import { join } from 'node:path'
-import { inspectHwpBmp, optimizeHwpBmp } from '../../../../hwp/src/main/embedded-bmp'
+import { inspectHwpBmpFile, optimizeHwpBmp } from '../../../../hwp/src/main/embedded-bmp'
 import { decodeBmpForJpeg } from './bmp'
 import { inspectZipBmp, optimizeZipBmp } from './zip'
 import { fileIdentity, MAX_SOURCE_BYTES, type ImageChildMessage, type ImageJob } from './protocol'
@@ -23,27 +23,36 @@ async function hashFile(path: string): Promise<string> {
   for await (const chunk of createReadStream(path)) hash.update(chunk)
   return hash.digest('hex')
 }
-/** Read only the checked extent, even if another process grows or replaces the file. */
-async function readHwp(path: string, size: number, identity: string): Promise<Buffer> {
+/** Read from the descriptor whose identity was verified, even if the path is replaced. */
+async function withHwpSource<T>(
+  path: string,
+  identity: string,
+  read: (input: FileHandle) => Promise<T>,
+): Promise<T> {
   const input = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))
   try {
     if (fileIdentity(await input.stat()) !== identity) throw new Error('Source changed')
-    const bytes = Buffer.allocUnsafe(size)
-    let offset = 0
-    while (offset < size) {
-      const { bytesRead } = await input.read(
-        bytes,
-        offset,
-        Math.min(size - offset, 8 * 1024 ** 2),
-        offset,
-      )
-      if (!bytesRead) throw new Error('Source changed')
-      offset += bytesRead
-    }
-    return bytes
+    return await read(input)
   } finally {
     await input.close()
   }
+}
+
+/** Conversion needs the original bytes for inventory verification. */
+async function readHwp(input: FileHandle, size: number): Promise<Buffer> {
+  const bytes = Buffer.allocUnsafe(size)
+  let offset = 0
+  while (offset < size) {
+    const { bytesRead } = await input.read(
+      bytes,
+      offset,
+      Math.min(size - offset, 8 * 1024 ** 2),
+      offset,
+    )
+    if (!bytesRead) throw new Error('Source changed')
+    offset += bytesRead
+  }
+  return bytes
 }
 
 async function run(job: ImageJob): Promise<void> {
@@ -51,15 +60,21 @@ async function run(job: ImageJob): Promise<void> {
   if (!stat.isFile() || stat.size > MAX_SOURCE_BYTES) throw new Error('Unsupported source')
   const identity = fileIdentity(stat)
   if (job.identity && identity !== job.identity) throw new Error('Source changed')
-  const hwp = job.kind === 'hwp' ? await readHwp(job.input, stat.size, identity) : null
   const zipKind = job.kind as Exclude<ImageJob['kind'], 'hwp'>
   if (job.mode === 'inspect') {
-    const found = hwp ? inspectHwpBmp(hwp) : await inspectZipBmp(job.input, zipKind)
+    const found =
+      job.kind === 'hwp'
+        ? await withHwpSource(job.input, identity, (input) => inspectHwpBmpFile(input, stat.size))
+        : await inspectZipBmp(job.input, zipKind)
     if (identity !== fileIdentity(await lstat(job.input))) throw new Error('Source changed')
     port!.postMessage({ type: 'result', value: found ? { ...found, identity } : null })
     return
   }
 
+  const hwp =
+    job.kind === 'hwp'
+      ? await withHwpSource(job.input, identity, (input) => readHwp(input, stat.size))
+      : null
   const originalHash = hwp
     ? createHash('sha256').update(hwp).digest('hex')
     : await hashFile(job.input)

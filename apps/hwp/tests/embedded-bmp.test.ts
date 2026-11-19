@@ -1,11 +1,13 @@
 import { deflateRawSync, inflateRawSync } from 'node:zlib'
 import { readFileSync } from 'node:fs'
+import { mkdtemp, open, rm, writeFile, type FileHandle } from 'node:fs/promises'
 import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import * as CFB from 'cfb'
 import init, { HwpDocument } from '@rhwp/core'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
-import { inspectHwpBmp, optimizeHwpBmp } from '../src/main/embedded-bmp'
+import { inspectHwpBmp, inspectHwpBmpFile, optimizeHwpBmp } from '../src/main/embedded-bmp'
 import { openHwp, recordsOf, streamOf, writeContainer } from '../src/main/hwp5-file'
 
 function record(tag: number, payload: Buffer): Buffer {
@@ -21,8 +23,8 @@ function bin(id: number, attr: number, extension = 'bmp'): Buffer {
   data.write(extension, 6, 'utf16le')
   return record(18, data)
 }
-function bmp(seed = 0): Buffer {
-  const data = Buffer.alloc(128, seed)
+function bmp(seed = 0, length = 128): Buffer {
+  const data = Buffer.alloc(length, seed)
   for (let i = 6; i < data.length; i++) data[i] = (i * 37 + seed * 41) % 256
   data.write('BM')
   data.writeUInt32LE(data.length, 2)
@@ -70,18 +72,83 @@ function raw(bytes: Uint8Array): Map<string, Buffer> {
   )
 }
 
+async function withHwpFile(bytes: Buffer, inspect: (file: FileHandle) => Promise<void>) {
+  const dir = await mkdtemp(join(tmpdir(), 'hwp-bmp-'))
+  const path = join(dir, 'source.hwp')
+  try {
+    await writeFile(path, bytes)
+    const file = await open(path, 'r')
+    try {
+      await inspect(file)
+    } finally {
+      await file.close()
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+}
+
+async function inspectBoth(source: Buffer) {
+  const expected = inspectHwpBmp(source)
+  await withHwpFile(source, async (file) => {
+    expect(await inspectHwpBmpFile(file, source.length)).toEqual(expected)
+  })
+  return expected
+}
+
 describe('HWP embedded BMP copies', () => {
   it.each([true, false])(
     'counts on-disk BMP bytes with compression overrides (header=%s)',
-    (compressed) => {
+    async (compressed) => {
       const source = fixture(compressed)
       const total = [...raw(source)].reduce(
         (sum, [path, bytes]) => sum + (path.endsWith('.bmp') ? bytes.length : 0),
         0,
       )
-      expect(inspectHwpBmp(source)).toEqual({ count: 3, bmpBytes: total })
+      expect(await inspectBoth(source)).toEqual({ count: 3, bmpBytes: total })
     },
   )
+
+  it('skips the raw pixel data and body text when inspecting a large file', async () => {
+    const cfb = openHwp(fixture())!.cfb
+    const size = 4 * 1024 * 1024
+    const image = Buffer.alloc(size, 0xba)
+    bmp().copy(image)
+    image.writeUInt32LE(size, 2)
+    CFB.utils.cfb_add(cfb, '/BinData/BIN0009.bmp', image)
+    CFB.utils.cfb_add(cfb, '/BodyText/Section0', Buffer.alloc(size, 0xcd))
+    const source = writeContainer(cfb)
+    const expected = inspectHwpBmp(source)
+    expect(expected?.count).toBe(3)
+    expect(expected!.bmpBytes).toBeGreaterThan(size)
+
+    await withHwpFile(source, async (file) => {
+      const wholeFile = vi.spyOn(file, 'readFile')
+      const reads = vi.spyOn(file, 'read')
+      expect(await inspectHwpBmpFile(file, source.length)).toEqual(expected)
+      expect(wholeFile).not.toHaveBeenCalled()
+      const ranges = await Promise.all(
+        reads.mock.calls.map(async (args: readonly unknown[], i) => {
+          const opts = args.find((a) => typeof a === 'object' && a !== null && 'position' in a)
+          const start = Number(args[3] ?? (opts as { position?: number } | undefined)?.position)
+          const { bytesRead } = await reads.mock.results[i]!.value
+          expect(Number.isSafeInteger(start)).toBe(true)
+          return { start, end: start + bytesRead, bytesRead }
+        }),
+      )
+      const totalRead = ranges.reduce((sum, r) => sum + r.bytesRead, 0)
+      expect(totalRead).toBeGreaterThan(0)
+      expect(totalRead).toBeLessThan(size / 4)
+      for (const byte of [0xba, 0xcd]) {
+        // Locate each stream in this fixture, allowing read-ahead at its first and last sectors.
+        const marker = Buffer.alloc(512, byte)
+        const first = source.indexOf(marker)
+        const last = source.lastIndexOf(marker)
+        expect(last - first).toBeGreaterThan(size - 1024)
+        expect(ranges.some((r) => r.start < last - 65536 && r.end > first + 65536)).toBe(false)
+      }
+    })
+  })
 
   it.each([true, false])(
     'only changes image streams and same-length extensions (header=%s)',
@@ -147,7 +214,7 @@ describe('HWP embedded BMP copies', () => {
     'rejects protected/signed header flags %s',
     async (flag) => {
       const source = fixture(true, flag)
-      expect(inspectHwpBmp(source)).toBeNull()
+      expect(await inspectBoth(source)).toBeNull()
       const encode = vi.fn()
       await expect(optimizeHwpBmp(source, encode)).rejects.toThrow()
       expect(encode).not.toHaveBeenCalled()
@@ -160,7 +227,13 @@ describe('HWP embedded BMP copies', () => {
     'duplicate-id',
     'missing',
     'signature',
+    'wrong-header',
+    'view-text',
     'bad-deflate',
+    'wrong-bmp-prefix',
+    'short-bmp',
+    'truncated-bmp-deflate',
+    'truncated-docinfo-deflate',
     'orphan',
   ])('rejects %s before encoding', async (kind) => {
     const cfb = openHwp(fixture())!.cfb
@@ -168,16 +241,37 @@ describe('HWP embedded BMP copies', () => {
     if (kind === 'directory-collision') CFB.utils.cfb_add(cfb, '/BinData/BIN0007.jpg/child', jpeg)
     if (kind === 'signature')
       CFB.utils.cfb_add(cfb, '/DocOptions/_SignDigit', Buffer.from('signed'))
+    if (kind === 'wrong-header') {
+      const header = Buffer.from(CFB.find(cfb, '/FileHeader')!.content as Uint8Array)
+      header.write('Other')
+      CFB.utils.cfb_add(cfb, '/FileHeader', header)
+    }
+    if (kind === 'view-text') CFB.utils.cfb_add(cfb, '/ViewText/Section0', Buffer.from('view'))
     if (kind === 'missing') CFB.utils.cfb_del(cfb, '/BinData/BIN0007.bmp')
     if (kind === 'orphan') CFB.utils.cfb_add(cfb, '/BinData/BIN0033.bmp', bmp())
     if (kind === 'bad-deflate')
       CFB.utils.cfb_add(cfb, '/BinData/BIN0007.bmp', Buffer.from('not compressed'))
+    if (kind === 'wrong-bmp-prefix')
+      CFB.utils.cfb_add(cfb, '/BinData/BIN0009.bmp', Buffer.alloc(256))
+    if (kind === 'short-bmp')
+      CFB.utils.cfb_add(cfb, '/BinData/BIN0007.bmp', deflateRawSync(Buffer.from('BM')))
+    if (kind === 'truncated-bmp-deflate') {
+      // Valid BMP prefix and several complete DEFLATE blocks precede the missing last byte.
+      const compressed = deflateRawSync(bmp(1, 256 * 1024), { level: 0 })
+      CFB.utils.cfb_add(cfb, '/BinData/BIN0007.bmp', compressed)
+      expect((await inspectBoth(writeContainer(cfb)))?.count).toBe(3)
+      CFB.utils.cfb_add(cfb, '/BinData/BIN0007.bmp', compressed.subarray(0, -1))
+    }
+    if (kind === 'truncated-docinfo-deflate') {
+      const stored = Buffer.from(CFB.find(cfb, '/DocInfo')!.content as Uint8Array)
+      CFB.utils.cfb_add(cfb, '/DocInfo', stored.subarray(0, -1))
+    }
     if (kind === 'duplicate-id') {
       const info = inflateRawSync(Buffer.from(CFB.find(cfb, '/DocInfo')!.content as Uint8Array))
       CFB.utils.cfb_add(cfb, '/DocInfo', deflateRawSync(Buffer.concat([info, bin(7, 0x101)])))
     }
     const source = writeContainer(cfb)
-    expect(inspectHwpBmp(source)).toBeNull()
+    expect(await inspectBoth(source)).toBeNull()
     const encode = vi.fn()
     await expect(optimizeHwpBmp(source, encode)).rejects.toThrow()
     expect(encode).not.toHaveBeenCalled()
@@ -199,7 +293,7 @@ describe('HWP embedded BMP copies', () => {
   })
 
   it('fails closed on malformed input and propagates encoder failures', async () => {
-    expect(inspectHwpBmp(Buffer.from('not a document'))).toBeNull()
+    expect(await inspectBoth(Buffer.from('not a document'))).toBeNull()
     const source = fixture(),
       before = Buffer.from(source)
     await expect(
@@ -235,7 +329,7 @@ describe('HWP embedded BMP copies', () => {
   it('keeps the exact source bytes when there are no BMP records', async () => {
     const source = (await optimizeHwpBmp(fixture(), async () => jpeg)).bytes
     const encode = vi.fn()
-    expect(inspectHwpBmp(source)).toEqual({ count: 0, bmpBytes: 0 })
+    expect(await inspectBoth(source)).toEqual({ count: 0, bmpBytes: 0 })
     expect((await optimizeHwpBmp(source, encode)).bytes.equals(source)).toBe(true)
     expect(encode).not.toHaveBeenCalled()
   })
@@ -287,7 +381,7 @@ describe('real engine opens the optimized copy', () => {
     try {
       doc.insertPicture(0, 0, 0, '[]', image, 3000, 3000, 2, 2, 'bmp', 'fixture')
       const source = Buffer.from(doc.exportHwp())
-      expect(inspectHwpBmp(source)!.count).toBeGreaterThan(0)
+      expect((await inspectBoth(source))!.count).toBeGreaterThan(0)
       const optimized = await optimizeHwpBmp(source, async (data) =>
         data.equals(image) ? realJpeg : null,
       )

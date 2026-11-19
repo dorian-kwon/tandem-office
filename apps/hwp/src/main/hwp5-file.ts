@@ -31,27 +31,32 @@ export interface HwpRecord {
   end: number
 }
 
-/** The records of a stream, or null when the bytes are not a whole list of records. */
-export function recordsOf(data: Buffer): HwpRecord[] | null {
-  const out: HwpRecord[] = []
+/** Visits each complete record. False means the stream ended partway through a record. */
+export function visitHwpRecords(data: Buffer, visit: (record: HwpRecord) => void): boolean {
   let at = 0
   while (at < data.length) {
-    if (at + 4 > data.length) return null
+    if (at + 4 > data.length) return false
     const start = at
     const word = data.readUInt32LE(at)
     let size = word >>> 20
     at += 4
     if (size === 0xfff) {
-      if (at + 4 > data.length) return null
+      if (at + 4 > data.length) return false
       size = data.readUInt32LE(at)
       at += 4
     }
     const body = at
     at += size
-    if (at > data.length) return null
-    out.push({ tag: word & 0x3ff, level: (word >>> 10) & 0x3ff, start, body, end: at })
+    if (at > data.length) return false
+    visit({ tag: word & 0x3ff, level: (word >>> 10) & 0x3ff, start, body, end: at })
   }
-  return out
+  return true
+}
+
+/** The records of a stream, or null when the bytes are not a whole list of records. */
+export function recordsOf(data: Buffer): HwpRecord[] | null {
+  const out: HwpRecord[] = []
+  return visitHwpRecords(data, (record) => out.push(record)) ? out : null
 }
 
 export interface OpenedHwp {
