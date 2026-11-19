@@ -1,22 +1,17 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { FileIndexer } from '../src/main/file-index/indexer'
 import { FileIndexStore } from '../src/main/file-index/store'
 
-const WORKER = join(__dirname, 'file-index-oom-worker.mjs')
-
-let indexer: FileIndexer | null
-afterEach(() => {
-  indexer?.stop()
-  indexer = null
-})
+const WORKER = join(__dirname, 'file-index-test-worker.mjs')
 
 describe('FileIndexer when a parse exhausts the worker heap', () => {
   it('records the file as an error, keeps indexing, and does not retry it unchanged', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'genoffice-indexer-oom-'))
     const storeDir = mkdtempSync(join(tmpdir(), 'genoffice-indexer-oom-db-'))
+    let indexer: FileIndexer | undefined
     const store = new FileIndexStore(join(storeDir, 'index.db'))
     try {
       const hog = join(dir, 'hog.xlsx')
@@ -24,7 +19,7 @@ describe('FileIndexer when a parse exhausts the worker heap', () => {
       writeFileSync(hog, 'x')
       writeFileSync(notes, 'y')
       indexer = new FileIndexer(
-        store,
+        store.dbPath,
         WORKER,
         { roots: () => [dir], extraPaths: () => [] },
         30_000,
@@ -48,9 +43,10 @@ describe('FileIndexer when a parse exhausts the worker heap', () => {
         },
         { timeout: 5_000, interval: 25 },
       )
-      const extracted = ask.mock.calls.filter((c) => (c[0] as { type: string }).type === 'extract')
+      const extracted = ask.mock.calls.filter((c) => (c[0] as { type: string }).type === 'index')
       expect(extracted).toHaveLength(0)
     } finally {
+      await indexer?.stop()
       store.close()
       rmSync(dir, { recursive: true, force: true })
       rmSync(storeDir, { recursive: true, force: true })

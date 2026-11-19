@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -267,8 +267,7 @@ describe('evaluate', () => {
 describe('SearchReranker', () => {
   let dir: string
   let store: FileIndexStore
-  const meta = (path: string) => ({ path, mtimeMs: 1, sizeBytes: 10 })
-  const SHOWN = ['/n/first.md', '/n/second.md', '/n/third.md']
+  let shown: string[]
   const settings = normalizeFileSearchSettings({
     rerank: true,
     endpoint: 'openrouter',
@@ -278,9 +277,14 @@ describe('SearchReranker', () => {
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'genoffice-decision-'))
     store = new FileIndexStore(join(dir, 'index.db'))
-    store.upsert(meta('/n/first.md'), 'budget notes and more budget', 'ok')
-    store.upsert(meta('/n/second.md'), 'the budget answer is here', 'ok')
-    store.upsert(meta('/n/third.md'), 'budget', 'ok')
+    shown = ['first.md', 'second.md', 'third.md'].map((name) => join(dir, name))
+    const bodies = ['budget notes and more budget', 'the budget answer is here', 'budget']
+    for (const [i, path] of shown.entries()) {
+      const text = bodies[i]!
+      writeFileSync(path, text)
+      const st = statSync(path)
+      store.upsert({ path, mtimeMs: st.mtimeMs, sizeBytes: st.size }, text, 'ok')
+    }
   })
   afterEach(() => {
     store.close()
@@ -298,10 +302,10 @@ describe('SearchReranker', () => {
       return { status: 200, body: answer(scores) }
     }
     const reranker = new SearchReranker(store, send)
-    const r = await reranker.rerank('budget', SHOWN, settings)
-    expect(r!.order).toEqual(['/n/second.md', '/n/third.md', '/n/first.md'])
-    expect(r!.scores['/n/second.md']).toBe(2)
-    await reranker.rerank('budget', SHOWN, settings)
+    const r = await reranker.rerank('budget', shown, settings)
+    expect(r!.order).toEqual([shown[1]!, shown[2]!, shown[0]!])
+    expect(r!.scores[shown[1]!]).toBe(2)
+    await reranker.rerank('budget', shown, settings)
     expect(sent).toBe(1)
   })
 
@@ -314,8 +318,8 @@ describe('SearchReranker', () => {
     }
     const reranker = new SearchReranker(store, send)
     const [a, b] = await Promise.all([
-      reranker.rerank('budget', SHOWN, settings),
-      reranker.rerank('budget', SHOWN, settings),
+      reranker.rerank('budget', shown, settings),
+      reranker.rerank('budget', shown, settings),
     ])
     expect(sent).toBe(1)
     expect(a).toBe(b)
@@ -323,31 +327,31 @@ describe('SearchReranker', () => {
 
   it('returns null when off, without a key, or when the model answer is unusable', async () => {
     const broken = new SearchReranker(store, async () => ({ status: 200, body: '{}' }))
-    expect(await broken.rerank('budget', SHOWN, settings)).toBeNull()
+    expect(await broken.rerank('budget', shown, settings)).toBeNull()
     const off = new SearchReranker(store, ok(answer([2, 1, 0])))
-    expect(await off.rerank('budget', SHOWN, { ...settings, rerank: false })).toBeNull()
+    expect(await off.rerank('budget', shown, { ...settings, rerank: false })).toBeNull()
     expect(
-      await off.rerank('budget', SHOWN, {
+      await off.rerank('budget', shown, {
         ...settings,
         keys: { ...settings.keys, openrouter: '' },
       }),
     ).toBeNull()
     // the judged set is exactly the shown one: unknown paths drop, a single survivor is not judged
-    expect(await off.rerank('budget', ['/n/first.md', '/gone.md'], settings)).toBeNull()
+    expect(await off.rerank('budget', [shown[0]!, '/gone.md'], settings)).toBeNull()
   })
 
   it('serves local endpoints with no key and refuses an unconfigured custom endpoint', async () => {
     const kev = normalizeFileSearchSettings({ rerank: true, endpoint: 'kev' })
     const off = new SearchReranker(store, ok(answer([2, 1, 0])))
-    expect((await off.rerank('budget', SHOWN, kev))!.order).toEqual([
-      '/n/first.md',
-      '/n/second.md',
-      '/n/third.md',
+    expect((await off.rerank('budget', shown, kev))!.order).toEqual([
+      shown[0]!,
+      shown[1]!,
+      shown[2]!,
     ])
     const custom = normalizeFileSearchSettings({ rerank: true, endpoint: 'custom' })
-    expect(await off.rerank('budget', SHOWN, custom)).toBeNull()
+    expect(await off.rerank('budget', shown, custom)).toBeNull()
     const cloudflare = normalizeFileSearchSettings({ rerank: true, endpoint: 'cloudflare' })
-    expect(await off.rerank('budget', SHOWN, cloudflare)).toBeNull()
+    expect(await off.rerank('budget', shown, cloudflare)).toBeNull()
   })
 
   it('normalizes settings from loose JSON and migrates the pre-decision-model shape', () => {

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import JSZip from 'jszip'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   UNSAVED_CHANGES_MESSAGE,
   setOpenFilesSource,
@@ -176,22 +176,20 @@ describe('an index built before withholding was honoured is rebuilt once', () =>
     const note = join(root, 'note.md')
     writeFileSync(note, MD)
     leaveOldIndex([note])
-    store = new FileIndexStore(dbPath)
-    // the worker double answers every extraction with "body of <path>"
-    const indexer = new FileIndexer(store, join(__dirname, 'file-index-test-worker.mjs'), {
+    const indexer = new FileIndexer(dbPath, join(__dirname, 'file-index-real-worker.mjs'), {
       roots: () => [root],
       extraPaths: () => [],
     })
     try {
+      const reader = await indexer.open()
+      expect(reader?.search(SECRET).total).toBe(0)
       await indexer.scan()
-      await vi.waitFor(() => expect(store.listAll().get(note)?.status).toBe('ok'), {
-        timeout: 5_000,
-        interval: 25,
-      })
-      expect(store.search(SECRET).total).toBe(0)
-      expect(store.excerptsFor([note], 'body', 400)[0]?.excerpt).toContain('body of')
+      expect(reader?.listAll().get(note)?.status).toBe('ok')
+      expect(reader?.search(SECRET).total).toBe(0)
+      expect(reader?.excerptsFor([note], 'confirm', 400)[0]?.excerpt).toContain(MARKER)
     } finally {
-      indexer.stop()
+      await indexer.stop()
+      store = new FileIndexStore(dbPath)
     }
   })
 })
@@ -292,6 +290,41 @@ describe('a file open with unsaved changes is not read', () => {
       expect(seen[0]!.join('\n')).not.toContain(SECRET)
       expect(seen[0]!.join('\n')).not.toContain('second.md')
       expect(result!.order.sort()).toEqual([paths[0], paths[2]].sort())
+    })
+
+    it('checks the version of the excerpt after the project filter finishes', async () => {
+      const paths = ['first.md', 'second.md', 'third.md'].map((name) => write(name, 'budget'))
+      for (const path of paths) store.upsert(fileMeta(path), 'budget ' + SECRET, 'ok')
+      const seen: string[][] = []
+      const filter = async (requested: readonly string[]) => {
+        await Promise.resolve()
+        writeFileSync(paths[1]!, MD)
+        return requested
+      }
+      const result = await new SearchReranker(store, judge(seen), filter).rerank(
+        'budget',
+        store.pathsIndexedAsOnDisk(paths),
+        settings,
+      )
+      expect(seen).toHaveLength(1)
+      expect(seen[0]).toHaveLength(2)
+      expect(seen[0]!.join('\n')).not.toContain('second.md')
+      expect(result?.order.sort()).toEqual([paths[0], paths[2]].sort())
+    })
+
+    it('does not resend an outdated excerpt after a rate-limit wait', async () => {
+      const paths = ['first.md', 'second.md'].map((name) => write(name, 'budget'))
+      for (const path of paths) store.upsert(fileMeta(path), 'budget ' + SECRET, 'ok')
+      let requests = 0
+      const rateLimited: JevTransport = async () => {
+        requests++
+        writeFileSync(paths[1]!, MD)
+        return { status: 429, retryAfter: '0', body: '' }
+      }
+      expect(
+        await new SearchReranker(store, rateLimited).rerank('budget', paths, settings),
+      ).toBeNull()
+      expect(requests).toBe(1)
     })
 
     it('sends nothing when fewer than two saved files are left', async () => {

@@ -1,11 +1,10 @@
 import { readFile, stat } from 'node:fs/promises'
 import { extname } from 'node:path'
 import { parseFileToText, redactHtmlSource } from '@genoffice/file-parse'
+import { MAX_BODY_CHARS } from './limits'
 
 /** larger files are indexed by name and folder only */
 export const MAX_EXTRACT_BYTES = 64 * 1024 * 1024
-/** body text kept for snippets and indexed; longer files are cut */
-export const MAX_BODY_CHARS = 1_000_000
 
 export type Extracted =
   { kind: 'text'; text: string } | { kind: 'name-only' } | { kind: 'error'; error: string }

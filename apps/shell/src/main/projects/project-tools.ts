@@ -13,6 +13,7 @@ import type {
   ProjectSearchHit,
   ProjectSearchResult,
 } from '@genoffice/project-store'
+import { isFileVersionOnDisk } from '../file-index/scan'
 import type { FileIndexStore } from '../file-index/store'
 import { isSupportedTreeFile } from '../folder-tree'
 import { kbReadMaxBytes, readKnowledgeFilePage, type KbRunScopes } from '../knowledge-base'
@@ -69,12 +70,14 @@ export interface DownloadAsk {
   relPath: string
 }
 
+type SearchStore = Pick<FileIndexStore, 'search'> | null
+
 export interface ProjectToolsDeps {
   guide: Pick<ProjectGuide, 'aiVisibility'>
   /** the run scopes (may be shared with the knowledge-base channel) */
   scopes: KbRunScopes
   /** the home search index, or null while it is unavailable */
-  store: () => Pick<FileIndexStore, 'search' | 'pathsIndexedAsOnDisk'> | null
+  store: () => SearchStore | Promise<SearchStore>
   /**
    * The check right before a read opens a file; never cached. Default:
    * `resolveCloudOnly` (one detector run per call)
@@ -223,7 +226,7 @@ export class ProjectFolderTools {
     const { visibility } = await this.scoped(owner, raw)
     const args = argsOf(raw)
     const query = typeof args.query === 'string' ? args.query.trim().slice(0, QUERY_MAX_CHARS) : ''
-    const store = this.deps.store()
+    const store = await this.deps.store()
     if (!query || !store) return { hits: [], total: 0 }
     const exts = Array.isArray(args.exts)
       ? args.exts.filter((ext): ext is string => typeof ext === 'string' && ext !== '')
@@ -237,10 +240,8 @@ export class ProjectFolderTools {
     })
     const paths = result.hits.map((hit) => hit.path)
     // an excerpt is quoted only from a file indexed as it is on disk and not open with unsaved changes
-    const quotable = new Set(
-      await withoutUnsavedFiles(store.pathsIndexedAsOnDisk(paths), (path) => path),
-    )
     const cloud = await this.cloudVerdicts(paths, this.listCloud)
+    const quotable = new Set(await withoutUnsavedFiles(paths, (path) => path))
     const hits: ProjectSearchHit[] = []
     for (const hit of result.hits) {
       const relPath = this.relOf(visibility, hit.path)
@@ -251,9 +252,10 @@ export class ProjectFolderTools {
         ext: hit.ext,
         mtimeMs: hit.mtimeMs,
         cloudOnly: cloud ? cloud.get(hit.path) !== false : true,
-        snippet: quotable.has(hit.path)
-          ? (hit.snippet ?? []).map((part) => part.text).join('')
-          : '',
+        snippet:
+          quotable.has(hit.path) && isFileVersionOnDisk(hit)
+            ? (hit.snippet ?? []).map((part) => part.text).join('')
+            : '',
       })
     }
     return { hits, total: result.total }

@@ -262,8 +262,9 @@ describe('shell wiring (src/main/index.ts needs a running Electron, so the text 
     const flat = handler.replace(/\s+/g, ' ')
     expect(flat).toContain('const projectId = kbRunScopes.projectOf(event.sender.id, raw)')
     expect(flat).toContain('projectFolderServices().tools.visibleTest(projectId)')
-    // project hits are quoted only from files indexed as they are on disk
-    expect(flat).toContain('(paths) => store.pathsIndexedAsOnDisk(paths)')
+    // The final check uses the version that supplied the snippet.
+    expect(flat).toContain('mtimeMs: h.mtimeMs')
+    expect(flat).toContain('sizeBytes: h.sizeBytes')
   })
 
   it('reads a starred file only within the scope, and anything else only as a project file', () => {

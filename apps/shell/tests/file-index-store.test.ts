@@ -19,6 +19,36 @@ afterEach(() => {
 const meta = (path: string) => ({ path, mtimeMs: 1, sizeBytes: 10 })
 
 describe('FileIndexStore', () => {
+  it('keeps the same snapshot for matched metadata and excerpts during a worker commit', () => {
+    const old = meta('/one.md')
+    store.upsert(old, 'quarterly budget', 'ok')
+    const reader = new FileIndexStore(store.dbPath, { readOnly: true })
+    try {
+      const result = reader.search('quarterly', {
+        within: () => {
+          store.remove([old.path])
+          store.upsert(meta('/two.md'), 'unrelated body', 'ok')
+          return true
+        },
+        excerptChars: 100,
+      })
+      expect(result.hits[0]).toMatchObject({ path: old.path, excerpt: 'quarterly budget' })
+      expect(reader.search('unrelated').hits[0]?.path).toBe('/two.md')
+    } finally {
+      reader.close()
+    }
+  })
+
+  it('preserves an extracted row committed just before the worker lost its reply', () => {
+    const file = meta('/one.md')
+    store.upsert(file, 'quarterly budget', 'ok')
+    store.recordInterruptedExtraction(file)
+    expect(store.search('quarterly').total).toBe(1)
+    store.recordInterruptedExtraction({ ...file, mtimeMs: 2 })
+    expect(store.listAll().get(file.path)?.status).toBe('error')
+    expect(store.search('quarterly').total).toBe(0)
+  })
+
   it('finds CJK content inside a longer run and ranks name hits first', () => {
     store.upsert(
       meta('/docs/plan.docx'),

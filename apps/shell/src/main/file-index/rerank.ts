@@ -3,11 +3,13 @@ import { withoutUnsavedFiles } from '@genoffice/electron-utils/unsaved-files'
 import type { DecisionEndpoint, FileSearchRerank, FileSearchSettings } from '../../shared/home-api'
 import {
   evaluate,
+  fetchTransport,
   isLocalEndpoint,
   MAX_DOCS,
   type DecisionCallOptions,
   type JevTransport,
 } from './decider'
+import { isFileVersionOnDisk } from './scan'
 import type { FileIndexStore } from './store'
 
 const EXCERPT_CHARS = 1200
@@ -102,7 +104,7 @@ export class SearchReranker {
    */
   constructor(
     private readonly store: FileIndexStore,
-    private readonly send?: JevTransport,
+    private readonly send: JevTransport = fetchTransport,
     private readonly sendable?: (paths: readonly string[]) => Promise<readonly string[]>,
   ) {}
 
@@ -118,8 +120,8 @@ export class SearchReranker {
     if (settings.endpoint === 'cloudflare' && !settings.cloudflareAccountId.trim()) return null
     // the index holds a file as it was last saved; one being edited may carry a
     // withholding mark that has not reached the disk, so its excerpt stays here
-    const savedOnly = await withoutUnsavedFiles(paths, (path) => path)
-    const saved = this.sendable ? await this.sendable(savedOnly) : savedOnly
+    const sendable = this.sendable ? await this.sendable(paths) : paths
+    const saved = await withoutUnsavedFiles(sendable, (path) => path)
     const hits = this.store.excerptsFor(saved.slice(0, MAX_DOCS), q, EXCERPT_CHARS)
     if (hits.length < 2) return null
     const cacheKey = [
@@ -129,7 +131,7 @@ export class SearchReranker {
       settings.cloudflareAccountId,
       settings.cloudflareModel,
       q,
-      ...hits.map((h) => h.path),
+      ...hits.map((h) => JSON.stringify([h.path, h.mtimeMs, h.sizeBytes])),
     ].join('\n')
     const cached = this.cache.get(cacheKey)
     if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.result
@@ -153,7 +155,19 @@ export class SearchReranker {
     }))
     let scores: number[]
     try {
-      scores = (await evaluate(q, docs, opts, this.send)).scores
+      // evaluate can retry the same payload after a rate-limit wait. Check the
+      // original source versions again before sending those excerpts a second time.
+      let retry = false
+      const send: JevTransport = async (...args) => {
+        if (retry) {
+          const saved = await withoutUnsavedFiles(hits, (hit) => hit.path)
+          if (saved.length !== hits.length || !saved.every(isFileVersionOnDisk))
+            throw new Error('document changed before retry')
+        }
+        retry = true
+        return this.send(...args)
+      }
+      scores = (await evaluate(q, docs, opts, send)).scores
     } catch {
       return null
     }

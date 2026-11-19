@@ -604,6 +604,24 @@ describe('project_search', () => {
     for (const hit of found.hits) expect(hit.snippet).toBe('')
   })
 
+  it('drops the old snippet if the file is saved and reindexed while checking cloud status', async () => {
+    const path = join(root, 'notes.md')
+    const changed = makeTools({
+      listCloudOnly: async (paths) => {
+        await Promise.resolve()
+        writeFileSync(path, 'updated with a withholding mark')
+        index(path, 'new body')
+        return new Map(paths.map((p) => [p, false]))
+      },
+    })
+    const scope = await changed.openScope(WIN, { projectId })
+    const result = await changed.search(WIN, { scope, query: 'budget' })
+    expect(result.hits.find((hit) => hit.relPath === 'notes.md')?.snippet).toBe('')
+    expect(result.hits.find((hit) => hit.relPath === 'reports/plan.md')?.snippet).toContain(
+      'budget',
+    )
+  })
+
   it('marks cloud-only hits', async () => {
     cloud.add(join(root, 'notes.md'))
     const scope = await tools.openScope(WIN, { projectId })
@@ -727,16 +745,11 @@ describe('home ask: project folder plus the starred scope', () => {
         path: h.path,
         name: h.name,
         ext: h.ext,
+        mtimeMs: h.mtimeMs,
+        sizeBytes: h.sizeBytes,
         snippetText: (h.snippet ?? []).map((p) => p.text).join(''),
       }))
-    const hits = await searchSavedKnowledgeWithProject(
-      search,
-      'budget',
-      [starredA],
-      8,
-      within,
-      (paths) => store.pathsIndexedAsOnDisk(paths),
-    )
+    const hits = await searchSavedKnowledgeWithProject(search, 'budget', [starredA], 8, within)
     expect(hits.map((h) => h.path).sort()).toEqual([starredA, join(root, 'notes.md')].sort())
     // no project: exactly the starred search of today
     const starredOnly = await searchSavedKnowledgeWithProject(
@@ -745,8 +758,24 @@ describe('home ask: project folder plus the starred scope', () => {
       [starredA, starredB],
       8,
       null,
-      (paths) => store.pathsIndexedAsOnDisk(paths),
     )
     expect(starredOnly.map((h) => h.path).sort()).toEqual([starredA, starredB].sort())
+
+    let checks = 0
+    setOpenFilesSource(async () => {
+      if (++checks === 2) {
+        // The search has selected both snippets. Saving and reindexing them
+        // while looking for dirty editors must invalidate both old hits.
+        for (const path of [starredA, join(root, 'notes.md')]) {
+          writeFileSync(path, 'updated with a withholding mark')
+          index(path, 'new body')
+        }
+      }
+      return []
+    })
+    expect(await searchSavedKnowledgeWithProject(search, 'budget', [starredA], 8, within)).toEqual(
+      [],
+    )
+    expect(checks).toBe(2)
   })
 })

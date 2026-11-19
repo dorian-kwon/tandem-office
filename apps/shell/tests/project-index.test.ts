@@ -86,8 +86,8 @@ beforeEach(async () => {
   indexer = null
 })
 
-afterEach(() => {
-  indexer?.stop()
+afterEach(async () => {
+  await indexer?.stop()
   store.close()
   rmSync(base, { recursive: true, force: true })
 })
@@ -152,7 +152,7 @@ describe('indexer with project folders', () => {
     const resolve = vi.fn(
       async (paths: readonly string[]) => new Map(paths.map((p) => [p, cloud.has(p)])),
     )
-    return new FileIndexer(store, WORKER, {
+    return new FileIndexer(store.dbPath, WORKER, {
       roots: () => mergeIndexRoots([homeRoot], projectFolderRoots(settingsPath)),
       extraPaths: () => [],
       ...(nameOnly
@@ -172,8 +172,6 @@ describe('indexer with project folders', () => {
       timeout: 5_000,
       interval: 20,
     })
-    // the last queued file may still be on its way in
-    await new Promise((r) => setTimeout(r, 50))
   }
 
   beforeEach(() => {

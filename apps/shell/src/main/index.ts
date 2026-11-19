@@ -489,7 +489,6 @@ import {
 } from './folder-roots'
 import extractWorkerPath from './file-index/extract-worker?modulePath'
 import { FileIndexer } from './file-index/indexer'
-import { FileIndexStore } from './file-index/store'
 import { normalizeFileSearchSettings, probeDecision, SearchReranker } from './file-index/rerank'
 import {
   createKnowledgeDocument,
@@ -4669,7 +4668,6 @@ function afterFolderMoved(oldDir: string, newDir: string, filesBefore: readonly 
 
 const folderWatchers = new Map<string, FolderWatcher>()
 
-let fileIndexStore: FileIndexStore | null = null
 let fileIndexer: FileIndexer | null = null
 let searchReranker: SearchReranker | null = null
 
@@ -4680,27 +4678,24 @@ function readFileSearchSettings(): FileSearchSettings {
 }
 
 /** the search index lives in userData and follows the save folder plus recents/starred */
-function ensureFileIndexer(): FileIndexer | null {
-  if (fileIndexer) return fileIndexer
-  try {
-    fileIndexStore = new FileIndexStore(join(app.getPath('userData'), 'file-index.db'))
-  } catch (e) {
-    console.warn('[file-index] unavailable:', e instanceof Error ? e.message : e)
-    return null
-  }
-  fileIndexer = new FileIndexer(fileIndexStore, extractWorkerPath, {
-    // the listed project folders join the walk (not the home folder list, spec 5.9)
-    roots: () =>
-      mergeIndexRoots(
-        folderRootPaths().filter((root) => existsSync(root)),
-        projectFolderRoots(APP_SETTINGS_PATH()),
-      ),
-    extraPaths: () => [...readRecentFiles(), ...readStarredFiles()],
-    // inside a project folder a file that is not on this PC is indexed by name only (spec 5.8)
-    nameOnly: createProjectNameOnly({
-      projectRoots: () => projectFolderRoots(APP_SETTINGS_PATH()),
-    }),
-  })
+function ensureFileIndexer(): FileIndexer {
+  fileIndexer ??= new FileIndexer(
+    join(app.getPath('userData'), 'file-index.db'),
+    extractWorkerPath,
+    {
+      // the listed project folders join the walk (not the home folder list, spec 5.9)
+      roots: () =>
+        mergeIndexRoots(
+          folderRootPaths().filter((root) => existsSync(root)),
+          projectFolderRoots(APP_SETTINGS_PATH()),
+        ),
+      extraPaths: () => [...readRecentFiles(), ...readStarredFiles()],
+      // inside a project folder a file that is not on this PC is indexed by name only (spec 5.8)
+      nameOnly: createProjectNameOnly({
+        projectRoots: () => projectFolderRoots(APP_SETTINGS_PATH()),
+      }),
+    },
+  )
   return fileIndexer
 }
 
@@ -5970,9 +5965,10 @@ function projectFolderServices(): ProjectFolderRuntime {
   const tools = new ProjectFolderTools({
     guide,
     scopes,
-    store: () => {
-      ensureFileIndexer()?.refreshIfStale(60_000)
-      return fileIndexStore
+    store: async () => {
+      const indexer = ensureFileIndexer()
+      indexer.refreshIfStale(60_000)
+      return indexer.open()
     },
     // list and search marks may reuse recent verdicts; a read always asks afresh
     listCloudOnly: projectListCloudOnly,
@@ -6185,27 +6181,31 @@ function registerHomeIpc(): void {
     pageRecentPaths(readRecentFiles(), query, new Set(readStarredFiles())),
   )
 
-  ipcMain.handle(HOME_CHANNELS.searchFiles, (_event, raw: unknown): FileSearchPage => {
-    const query = (raw && typeof raw === 'object' ? raw : {}) as Partial<FileSearchQuery>
-    const indexer = ensureFileIndexer()
-    if (!indexer || !fileIndexStore) {
-      return { hits: [], total: 0, index: { indexed: 0, pending: 0, scanning: false } }
-    }
-    // an open search box is the moment a stale index shows; rescan at most once a minute
-    indexer.refreshIfStale(60_000)
-    const q = typeof query.q === 'string' ? query.q.trim().slice(0, 200) : ''
-    const filter = typeof query.ext === 'string' ? query.ext : ''
-    const exts = filter && filter !== 'all' ? (SEARCH_EXT_FAMILY[filter] ?? [filter]) : undefined
-    const offset = Number.isFinite(query.offset) ? Math.max(0, Math.floor(query.offset!)) : 0
-    const limit = Number.isFinite(query.limit) ? Math.max(0, Math.floor(query.limit!)) : 50
-    const starred = new Set(readStarredFiles())
-    const result = q ? fileIndexStore.search(q, { exts, offset, limit }) : { hits: [], total: 0 }
-    return {
-      hits: result.hits.map((h) => ({ ...h, starred: starred.has(h.path) })),
-      total: result.total,
-      index: indexer.progress(),
-    }
-  })
+  ipcMain.handle(
+    HOME_CHANNELS.searchFiles,
+    async (_event, raw: unknown): Promise<FileSearchPage> => {
+      const query = (raw && typeof raw === 'object' ? raw : {}) as Partial<FileSearchQuery>
+      const indexer = ensureFileIndexer()
+      const fileIndexStore = await indexer.open()
+      if (!fileIndexStore) {
+        return { hits: [], total: 0, index: { indexed: 0, pending: 0, scanning: false } }
+      }
+      // an open search box is the moment a stale index shows; rescan at most once a minute
+      indexer.refreshIfStale(60_000)
+      const q = typeof query.q === 'string' ? query.q.trim().slice(0, 200) : ''
+      const filter = typeof query.ext === 'string' ? query.ext : ''
+      const exts = filter && filter !== 'all' ? (SEARCH_EXT_FAMILY[filter] ?? [filter]) : undefined
+      const offset = Number.isFinite(query.offset) ? Math.max(0, Math.floor(query.offset!)) : 0
+      const limit = Number.isFinite(query.limit) ? Math.max(0, Math.floor(query.limit!)) : 50
+      const starred = new Set(readStarredFiles())
+      const result = q ? fileIndexStore.search(q, { exts, offset, limit }) : { hits: [], total: 0 }
+      return {
+        hits: result.hits.map((h) => ({ ...h, starred: starred.has(h.path) })),
+        total: result.total,
+        index: indexer.progress(),
+      }
+    },
+  )
 
   // Knowledge-base channel: the AI-side read access to the reader's starred
   // files (docs wires these into its panel; see knowledge-base.ts). Path
@@ -6245,9 +6245,11 @@ function registerHomeIpc(): void {
     const q = typeof query.q === 'string' ? query.q : ''
     const limitRaw = Number(query.limit)
     const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.floor(limitRaw)) : 8
-    const store = fileIndexStore
-    if (!q.trim() || !store) return []
-    ensureFileIndexer()?.refreshIfStale(60_000)
+    if (!q.trim()) return []
+    const indexer = ensureFileIndexer()
+    const store = await indexer.open()
+    if (!store) return []
+    indexer.refreshIfStale(60_000)
     // a file saved since its last scan is still indexed as it was before the
     // save, so only the files the index holds as they are on disk are quoted
     const starred = store.pathsIndexedAsOnDisk(readStarredFiles())
@@ -6261,6 +6263,8 @@ function registerHomeIpc(): void {
     const hits = await searchSavedKnowledgeWithProject(
       (qq, pool, inside) =>
         store.search(qq, { limit: pool, ...(inside ? { within: inside } : {}) }).hits.map((h) => ({
+          mtimeMs: h.mtimeMs,
+          sizeBytes: h.sizeBytes,
           path: h.path,
           name: h.name,
           ext: h.ext,
@@ -6270,7 +6274,6 @@ function registerHomeIpc(): void {
       inScope,
       Math.min(limit, 20),
       within,
-      (paths) => store.pathsIndexedAsOnDisk(paths),
     )
     return hits
   })
@@ -6345,7 +6348,9 @@ function registerHomeIpc(): void {
       const paths = Array.isArray(query.paths)
         ? query.paths.filter((p): p is string => typeof p === 'string').slice(0, 20)
         : []
-      if (!q || paths.length < 2 || !ensureFileIndexer() || !fileIndexStore) return null
+      if (!q || paths.length < 2) return null
+      const fileIndexStore = await ensureFileIndexer().open()
+      if (!fileIndexStore) return null
       // what a project's `ignore` lists stays out of the excerpts sent out (spec 5.9)
       searchReranker ??= new SearchReranker(
         fileIndexStore,
@@ -9640,7 +9645,7 @@ app.whenReady().then(async () => {
     return
   }
   // first scan waits for the windows to come up; later ones follow folder changes
-  setTimeout(() => ensureFileIndexer()?.refresh(), 4000)
+  setTimeout(() => ensureFileIndexer().refresh(), 4000)
   // private OCR copies of documents are kept for a week at most
   void pruneOcrWorkDir(chatOcrWorkDir(), Date.now())
   installRendererProtocol({
@@ -10323,8 +10328,7 @@ function releaseAppResources(): void {
   } catch {
     // the settings file is not writable now; the list order is only a convenience
   }
-  fileIndexer?.stop()
-  fileIndexStore?.close()
+  void fileIndexer?.stop()
   for (const watcher of folderWatchers.values()) watcher.close()
   controlServer?.close()
   // a second instance that lost the lock quits too; it must not delete the running editor's list

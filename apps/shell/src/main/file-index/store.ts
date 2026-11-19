@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite'
 import { basename, dirname, extname } from 'node:path'
-import { MAX_BODY_CHARS } from './extract'
-import { statOrNull } from './scan'
+import { MAX_BODY_CHARS } from './limits'
+import { isFileVersionOnDisk, statOrNull, type ScannedFile } from './scan'
 import { buildSnippet, containsAny, excerpt, type SnippetPart } from './snippet'
 import {
   parseQuery,
@@ -125,19 +125,31 @@ CREATE VIRTUAL TABLE IF NOT EXISTS file_fts USING fts5(
 export class FileIndexStore {
   private readonly db: DatabaseSync
 
-  constructor(dbPath: string) {
-    this.db = new DatabaseSync(dbPath)
-    this.db.exec('PRAGMA journal_mode = WAL')
-    this.db.exec(SCHEMA)
-    if (this.meta('tokenizer') !== String(TOKENIZER_VERSION)) {
-      this.db.exec('DROP TABLE IF EXISTS file_fts; DELETE FROM files;')
-      this.setMeta('tokenizer', String(TOKENIZER_VERSION))
+  constructor(
+    readonly dbPath: string,
+    options: { readOnly?: boolean } = {},
+  ) {
+    this.db = new DatabaseSync(dbPath, options)
+    if (options.readOnly) return
+    try {
+      this.db.exec('PRAGMA journal_mode = WAL')
+      this.db.exec('BEGIN IMMEDIATE')
+      this.db.exec(SCHEMA)
+      if (
+        this.meta('tokenizer') !== String(TOKENIZER_VERSION) ||
+        this.meta('extract') !== String(EXTRACT_VERSION)
+      ) {
+        this.db.exec('DROP TABLE IF EXISTS file_fts; DELETE FROM files;')
+        this.setMeta('tokenizer', String(TOKENIZER_VERSION))
+        this.setMeta('extract', String(EXTRACT_VERSION))
+      }
+      this.db.exec(FTS_SCHEMA)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      // Closing rolls back any unfinished migration before a later open retries.
+      this.db.close()
+      throw error
     }
-    if (this.meta('extract') !== String(EXTRACT_VERSION)) {
-      this.db.exec('DROP TABLE IF EXISTS file_fts; DELETE FROM files;')
-      this.setMeta('extract', String(EXTRACT_VERSION))
-    }
-    this.db.exec(FTS_SCHEMA)
   }
 
   private meta(key: string): string | null {
@@ -218,6 +230,16 @@ export class FileIndexStore {
     }
   }
 
+  /** A lost acknowledgement can follow a successful commit. Preserve that row. */
+  recordInterruptedExtraction(file: ScannedFile): void {
+    const committed = this.db
+      .prepare(
+        "SELECT 1 FROM files WHERE path = ? AND mtime_ms = ? AND size_bytes = ? AND status != 'cloud'",
+      )
+      .get(file.path, file.mtimeMs, file.sizeBytes)
+    if (!committed) this.upsert(file, null, 'error')
+  }
+
   remove(paths: readonly string[]): void {
     if (paths.length === 0) return
     const select = this.db.prepare('SELECT id FROM files WHERE path = ?')
@@ -245,6 +267,17 @@ export class FileIndexStore {
    * query, then name/folder hits, then more exact terms, then BM25 and recency.
    */
   search(input: string, opts: SearchOptions = {}): SearchResult {
+    // Match rowids, metadata and excerpts must come from one WAL snapshot.
+    // The writer can otherwise replace a row between these SELECTs.
+    this.db.exec('BEGIN')
+    try {
+      return this.searchSnapshot(input, opts)
+    } finally {
+      this.db.exec('END')
+    }
+  }
+
+  private searchSnapshot(input: string, opts: SearchOptions): SearchResult {
     const parsed = parseQuery(input)
     if (parsed.include.length === 0) return { hits: [], total: 0 }
     const candidates = new Map<number, Candidate>()
@@ -337,28 +370,30 @@ export class FileIndexStore {
     return { hits, total: rows.length }
   }
 
-  /** name and body excerpt for the given paths, in that order; unknown paths are skipped */
+  /** Excerpts for outbound reranking. Check the metadata from the same row as the body. */
   excerptsFor(
     paths: readonly string[],
     q: string,
     chars: number,
-  ): Array<{ path: string; name: string; excerpt: string }> {
+  ): Array<ScannedFile & { name: string; excerpt: string }> {
     if (paths.length === 0) return []
     const parsed = parseQuery(q)
     const needles = parsed.include.flatMap((t) => [t.text, ...t.tokens.bi])
     const rows = this.db
       .prepare(
-        `SELECT path, name, body FROM files WHERE path IN (${paths.map(() => '?').join(',')})`,
+        `SELECT path, name, body, mtime_ms AS mtimeMs, size_bytes AS sizeBytes FROM files WHERE path IN (${paths.map(() => '?').join(',')})`,
       )
-      .all(...paths) as unknown as Array<{ path: string; name: string; body: string | null }>
+      .all(...paths) as unknown as Array<ScannedFile & { name: string; body: string | null }>
     const byPath = new Map(rows.map((r) => [r.path, r]))
-    const out: Array<{ path: string; name: string; excerpt: string }> = []
+    const out: Array<ScannedFile & { name: string; excerpt: string }> = []
     for (const p of paths) {
       const r = byPath.get(p)
-      if (r)
+      if (r && isFileVersionOnDisk(r))
         out.push({
           path: r.path,
           name: r.name,
+          mtimeMs: r.mtimeMs,
+          sizeBytes: r.sizeBytes,
           excerpt: r.body ? excerpt(r.body, needles, chars) : '',
         })
     }

@@ -1,37 +1,23 @@
-// test double for the file-index worker: walks the root like the real scan, and
-// answers every extraction except the one for the poison file, which never
-// answers — a wedged parse
-import { parentPort } from 'node:worker_threads'
-import { readdirSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+// Use the production scan and database writer. Only the expensive parser is a
+// double, so these fixtures can wedge or exhaust a worker without large files.
+import { existsSync } from 'node:fs'
+import { readFile, writeFile } from 'node:fs/promises'
+import { setTimeout as delay } from 'node:timers/promises'
+import { basename } from 'node:path'
+import { require as loadTs } from 'tsx/cjs/api'
 
-parentPort?.on('message', (req) => {
-  if (req.type === 'scan') {
-    const files = []
-    const walk = (dir) => {
-      let ents
-      try {
-        ents = readdirSync(dir, { withFileTypes: true })
-      } catch {
-        return
-      }
-      for (const ent of ents) {
-        const p = join(dir, ent.name)
-        if (ent.isDirectory()) walk(p)
-        else if (ent.isFile()) {
-          const st = statSync(p)
-          files.push({ path: p, mtimeMs: st.mtimeMs, sizeBytes: st.size })
-        }
-      }
-    }
-    walk(req.root)
-    parentPort.postMessage({ id: req.id, type: 'scan', files })
-    return
+const { runIndexWorker } = loadTs('../src/main/file-index/worker.ts', import.meta.url)
+const hoard = []
+runIndexWorker(async (path) => {
+  if (basename(path) === 'poison.pdf') return new Promise(() => {})
+  if (basename(path) === 'hog.xlsx') {
+    for (;;) hoard.push(new Array(1 << 18).fill(1))
   }
-  if (req.path.includes('poison')) return
-  parentPort.postMessage({
-    id: req.id,
-    type: 'extract',
-    result: { kind: 'text', text: `body of ${req.path}` },
-  })
+  if (basename(path) === 'paused.md') {
+    const text = await readFile(path, 'utf8')
+    await writeFile(path + '.started', '')
+    while (!existsSync(path + '.release')) await delay(5)
+    return { kind: 'text', text }
+  }
+  return { kind: 'text', text: 'body of ' + path }
 })

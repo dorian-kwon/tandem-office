@@ -71,3 +71,9 @@ export function statOrNull(path: string): ScannedFile | null {
     return null
   }
 }
+
+/** Compare the metadata of the specific row that supplied a search excerpt. */
+export function isFileVersionOnDisk(file: ScannedFile): boolean {
+  const now = statOrNull(file.path)
+  return !!now && now.mtimeMs === file.mtimeMs && now.sizeBytes === file.sizeBytes
+}

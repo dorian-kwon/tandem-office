@@ -22,6 +22,7 @@ import {
 } from '@genoffice/electron-utils/unsaved-files'
 import { attachableMaxBytes, parseFileToText } from '@genoffice/file-parse'
 import type { ProjectId, ProjectReadResult } from '@genoffice/project-store'
+import { isFileVersionOnDisk, type ScannedFile } from './file-index/scan'
 
 /** characters of parsed text one read_knowledge_file page returns (aligned
  *  with the chat-attachment reader, files-skill.ts, so models meet one paging
@@ -362,24 +363,31 @@ export async function searchSavedKnowledgeWithProject(
     q: string,
     limit: number,
     within?: (path: string) => boolean,
-  ) => ReadonlyArray<{ path: string; name: string; ext: string; snippetText?: string }>,
+  ) => ReadonlyArray<ScannedFile & { name: string; ext: string; snippetText?: string }>,
   query: string,
   starredPaths: readonly string[],
   limit: number,
   within: ((path: string) => boolean) | null,
-  indexedAsOnDisk: (paths: readonly string[]) => readonly string[],
 ): Promise<KbSearchHit[]> {
-  if (!within) return searchSavedKnowledgeBase((q, n) => search(q, n), query, starredPaths, limit)
+  if (!within)
+    return searchSavedKnowledgeBase(
+      (q, n) => search(q, n).filter(isFileVersionOnDisk),
+      query,
+      starredPaths,
+      limit,
+    )
   const q = query.trim().slice(0, KB_QUERY_MAX_CHARS)
   if (!q) return []
   const starred = new Set(await withoutUnsavedFiles(starredPaths, (path) => path))
   const pool = search(q, KB_SEARCH_POOL, (path) => starred.has(path) || within(path))
-  const fromProject = pool.map((hit) => hit.path).filter((path) => !starred.has(path))
-  const projectOk = new Set(await withoutUnsavedFiles(indexedAsOnDisk(fromProject), (path) => path))
-  const allowed = pool
-    .map((hit) => hit.path)
-    .filter((path) => starred.has(path) || projectOk.has(path))
-  return searchKnowledgeBase(() => pool, q, allowed, limit)
+  const saved = await withoutUnsavedFiles(pool, (hit) => hit.path)
+  const current = saved.filter(isFileVersionOnDisk)
+  return searchKnowledgeBase(
+    () => current,
+    q,
+    current.map((hit) => hit.path),
+    limit,
+  )
 }
 
 /**
