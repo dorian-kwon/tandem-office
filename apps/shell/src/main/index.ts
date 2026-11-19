@@ -6812,7 +6812,7 @@ function registerHomeIpc(): void {
       openInNewDocs: 'openInNewDocs' in raw ? raw.openInNewDocs : prev.openInNewDocs,
       showAiSidebar: 'showAiSidebar' in raw ? raw.showAiSidebar : prev.showAiSidebar,
       aiEditUndoHistory:
-        'aiEditUndoHistory' in raw ? raw.aiEditUndoHistory : prev.aiEditUndoHistory,
+        typeof raw.aiEditUndoHistory === 'boolean' ? raw.aiEditUndoHistory : prev.aiEditUndoHistory,
     })
     if (sameAiPanelPrefs(next, prev)) return prev
     cachedAiPanelPrefs = next

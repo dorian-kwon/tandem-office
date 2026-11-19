@@ -22,7 +22,7 @@ function createEditor(): Editor {
 
 const src = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8')
 
-afterEach(() => applyAiPanelPrefs({ aiEditUndoHistory: false }))
+afterEach(() => applyAiPanelPrefs({}))
 
 describe('AI edit undo history in the Word editor', () => {
   it('keeps no undo entry for an AI tool edit while the setting is off', () => {
@@ -75,6 +75,7 @@ describe('AI edit undo history in the Word editor', () => {
   })
 
   it('keeps typing and toolbar edits during an awaited AI call, tagging only its later commit', async () => {
+    applyAiPanelPrefs({ aiEditUndoHistory: false })
     const editor = createEditor()
     const ai = aiEditor(editor)
     let release!: () => void

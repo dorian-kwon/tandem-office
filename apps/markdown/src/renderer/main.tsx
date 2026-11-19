@@ -18,7 +18,7 @@ import '@genoffice/ui/image-viewer.css'
 import 'katex/dist/katex.min.css'
 import './styles.css'
 import './markdown-themes.css'
-import { applyAiPanelPrefs, installScreenTips } from '@genoffice/ui'
+import { initializeAiPanelPrefs, installScreenTips } from '@genoffice/ui'
 import type { MarkdownTheme } from '../shared/markdown-theme'
 
 installScreenTips()
@@ -54,11 +54,7 @@ void (async () => {
   applyMarkdownTheme(mdTheme)
   window.markdownApi.onThemeChanged(applyTheme)
   window.markdownApi.onDocumentThemeChanged?.(applyDocumentTheme)
-  await window.markdownApi
-    ?.getAiPanelPrefs?.()
-    .then(applyAiPanelPrefs)
-    .catch(() => {})
-  window.markdownApi?.onAiPanelPrefsChanged?.(applyAiPanelPrefs)
+  await initializeAiPanelPrefs(window.markdownApi)
   createRoot(document.getElementById('root')!).render(
     <LocaleProvider initial={lang}>
       <App />

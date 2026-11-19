@@ -15,10 +15,10 @@ describe('AI edit request source', () => {
     const op = { ops: [] }
     applyAiPanelPrefs({})
     await api.applyTxn(op)
-    expect(aiEdit).toHaveBeenLastCalledWith('applyTxn', [op], false)
-    applyAiPanelPrefs({ aiEditUndoHistory: true })
-    await api.applyTxn(op)
     expect(aiEdit).toHaveBeenLastCalledWith('applyTxn', [op], true)
+    applyAiPanelPrefs({ aiEditUndoHistory: false })
+    await api.applyTxn(op)
+    expect(aiEdit).toHaveBeenLastCalledWith('applyTxn', [op], false)
     await window.slidesApi.applyTxn(op)
     expect(human).toHaveBeenCalledOnce()
     expect(aiEdit).toHaveBeenCalledTimes(2)

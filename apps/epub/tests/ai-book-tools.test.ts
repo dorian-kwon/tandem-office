@@ -34,7 +34,7 @@ import {
 import type { EpubBookSummary } from '../src/shared/ipc'
 import { FakeBook, type ChapterSpec } from './helpers/edit-backend'
 
-beforeEach(() => applyAiPanelPrefs({ aiEditUndoHistory: true }))
+beforeEach(() => applyAiPanelPrefs({}))
 
 interface Setup {
   book: FakeBook
@@ -686,8 +686,8 @@ describe('a run with a fake model', () => {
 })
 
 describe('AI undo preference', () => {
-  it('defaults off, keeps human entries, and clears redo after an AI edit', async () => {
-    applyAiPanelPrefs({})
+  it('keeps human entries and clears redo when AI history is explicitly off', async () => {
+    applyAiPanelPrefs({ aiEditUndoHistory: false })
     const s = setup(THREE)
     const chapter = await s.book.readChapter(0)
     if (!chapter.ok || chapter.broken) throw new Error('chapter unavailable')

@@ -1,6 +1,11 @@
 import ReactDOM from 'react-dom/client'
 import { htmlDir, htmlLang, type Lang } from '@genoffice/i18n'
-import { applyAiPanelPrefs, installScreenTips, normalizeAiPanelPrefs } from '@genoffice/ui'
+import {
+  applyAiPanelPrefs,
+  initializeAiPanelPrefs,
+  installScreenTips,
+  normalizeAiPanelPrefs,
+} from '@genoffice/ui'
 
 import '@genoffice/ui/tokens.css'
 import '@genoffice/ui/screentip.css'
@@ -100,11 +105,7 @@ async function bootstrap(): Promise<void> {
     applyAiPanelPrefs(raw)
     setAiEditUndoHistory(normalizeAiPanelPrefs(raw).aiEditUndoHistory)
   }
-  await window.desktopApi
-    ?.getAiPanelPrefs?.()
-    .then(applyPrefs)
-    .catch(() => {})
-  window.desktopApi?.onAiPanelPrefsChanged?.(applyPrefs)
+  await initializeAiPanelPrefs(window.desktopApi, applyPrefs)
   ReactDOM.createRoot(root!).render(
     <LocaleProvider initial={lang}>
       <App queuedWorkbookAtBoot={queuedWorkbookAtBoot === true} />

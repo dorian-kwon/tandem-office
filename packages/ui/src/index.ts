@@ -219,6 +219,7 @@ export {
 } from './ai-panel-prefs'
 export {
   applyAiPanelPrefs,
+  initializeAiPanelPrefs,
   aiEditUndoHistoryEnabled,
   aiPanelInitiallyOpen,
   rememberAiPanelOpen,

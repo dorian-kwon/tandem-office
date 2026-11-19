@@ -7,10 +7,14 @@ beforeEach(() => applyAiPanelPrefs({ aiEditUndoHistory: true }))
  * user's edit goes, through the controller, reconciling and the history.
  * No model is involved; the tools are called the way the agent loop calls them.
  */
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AgentToolCall } from '@genoffice/agent-core'
 import type { XmindSheet, XmindTopic } from '@genoffice/xmind-engine'
-import { DocumentSession } from '../src/renderer/document/session'
+import {
+  DocumentSession,
+  MAX_AI_HISTORY_CHARS,
+  MAX_AI_HISTORY_TOPICS,
+} from '../src/renderer/document/session'
 import { newMap } from '../src/renderer/document/open'
 import { MapController } from '../src/renderer/map/controller'
 import { mapStrings } from '../src/renderer/i18n/map-strings'
@@ -578,8 +582,89 @@ describe('one AI turn', () => {
     const turn = new MapTurn()
     await writeMap(r.host, { outline: '# Added\n\n- Centre\n' }, turn)
     r.session.renameSheet(r.key(2), 'Manual')
+    await editMap(
+      r.host,
+      {
+        sheet: 2,
+        edits: [{ op: 'set_title', id: r.sheet(2).rootTopic.id, title: 'AI after rename' }],
+      },
+      turn,
+    )
     expect(await revertTurn(r.host, turn)).toBe(false)
     expect(r.session.tabs().map((tab) => tab.title)).toEqual(['Plain', 'Manual'])
+  })
+
+  it('skips both histories at the topic limit and invalidates a mixed turn without removing manual history', async () => {
+    const large = plainSheet('Large')
+    // Floating topics are kept in the source and are not drawn.
+    large.rootTopic.children!.detached = Array.from({ length: MAX_AI_HISTORY_TOPICS - 3 }, (_, i) =>
+      topic('floating-' + i, 'Floating'),
+    )
+    const r = await rigOf(richSheet(), large)
+    const turn = new MapTurn()
+    await editMap(
+      r.host,
+      { sheet: 1, edits: [{ op: 'set_title', id: IDS.root, title: 'First AI' }] },
+      turn,
+    )
+    expect(turn.changed).toBe(true)
+    r.host.showSheet(r.key(2))
+    const map = r.controller()
+    expect(map.setTitle(large.rootTopic.id, 'Manual before')).toBe(true)
+    const operation = vi.fn()
+    map.mind.bus.addListener('operation', operation)
+    // The result crosses the limit by one even though the starting sheet fits.
+    const added = await editMap(
+      r.host,
+      { sheet: 2, edits: [{ op: 'add', parentId: large.rootTopic.id, title: 'New by AI' }] },
+      turn,
+    )
+    expect(added.output).toContain('Undo history was skipped')
+    expect(operation).not.toHaveBeenCalled()
+    expect(r.session.sheetBeforeSteps(r.key(2), 2)).toBeUndefined()
+    expect(turn.changed).toBe(false)
+    await editMap(
+      r.host,
+      { sheet: 1, edits: [{ op: 'set_title', id: IDS.root, title: 'Another AI edit' }] },
+      turn,
+    )
+    expect(await revertTurn(r.host, turn)).toBe(false)
+    expect(r.sheet(1).rootTopic.title).toBe('Another AI edit')
+    expect(map.setTitle(large.rootTopic.id, 'Manual after')).toBe(true)
+    expect(map.undo()).toBe(true)
+    expect(r.sheet(2).rootTopic.title).toBe('Manual before')
+    expect(titles(r.sheet(2).rootTopic)).toContain('New by AI')
+    expect(map.redo()).toBe(true)
+    expect(r.sheet(2).rootTopic.title).toBe('Manual after')
+  })
+
+  it('bounds cumulative AI history on a sheet and reuses the budget of a replaced redo branch', async () => {
+    const sheet = plainSheet()
+    sheet.preservedData = 'x'.repeat(Math.floor(MAX_AI_HISTORY_CHARS * 0.8))
+    const r = await rigOf(sheet)
+    const map = r.controller()
+    const change = (title: string) =>
+      editMap(
+        r.host,
+        { edits: [{ op: 'set_title', id: sheet.rootTopic.id, title }] },
+        new MapTurn(),
+      )
+    const operation = vi.fn()
+    map.mind.bus.addListener('operation', operation)
+    for (let i = 0; i < 20; i++) await change('AI ' + i)
+    const recorded = operation.mock.calls.length
+    expect(recorded).toBeGreaterThan(1)
+    expect(recorded).toBeLessThan(10)
+    expect(r.sheet(1).rootTopic.title).toBe('AI 19')
+    expect(map.undo()).toBe(true)
+    expect(map.redo()).toBe(true)
+    expect((await change('Still at the limit')).output).toContain('Undo history was skipped')
+    expect(map.undo()).toBe(true)
+    expect(map.setTitle(sheet.rootTopic.id, 'Manual branch')).toBe(true)
+    expect(map.canRedo).toBe(false)
+    expect((await change('New AI branch')).output).not.toContain('Undo history was skipped')
+    expect(map.undo()).toBe(true)
+    expect(r.sheet(1).rootTopic.title).toBe('Manual branch')
   })
 
   it('takes back the filling of a blank new map, name included', async () => {

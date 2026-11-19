@@ -222,7 +222,7 @@ describe('home settings gear', () => {
     expect(host.querySelector('.set-nav-item.active')?.textContent).toContain('AI')
   })
 
-  it('shows the AI edit undo history switch off by default and persists a toggle', async () => {
+  it('shows the AI edit undo history switch on by default and persists a toggle', async () => {
     const setAiPanelPrefs = vi.fn(async (patch: Record<string, unknown>) => ({
       ...DEFAULT_AI_PANEL_PREFS,
       ...patch,
@@ -235,10 +235,10 @@ describe('home settings gear', () => {
     const toggle = host.querySelector<HTMLButtonElement>(
       '[role="switch"][aria-label="AI edit undo history"]',
     )!
-    expect(toggle.getAttribute('aria-checked')).toBe('false')
-    await click(toggle)
-    expect(setAiPanelPrefs).toHaveBeenCalledWith({ aiEditUndoHistory: true })
     expect(toggle.getAttribute('aria-checked')).toBe('true')
+    await click(toggle)
+    expect(setAiPanelPrefs).toHaveBeenCalledWith({ aiEditUndoHistory: false })
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
   })
 })
 

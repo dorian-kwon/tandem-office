@@ -4,7 +4,7 @@ import App from './App'
 import { PresentView } from './PresentView'
 import { LocaleProvider } from './i18n/locale'
 import type { UiTheme } from '../shared/ipc'
-import { applyAiPanelPrefs, installScreenTips } from '@genoffice/ui'
+import { initializeAiPanelPrefs, installScreenTips } from '@genoffice/ui'
 import '@genoffice/ui/tokens.css'
 import '@genoffice/ui/screentip.css'
 import '@genoffice/ui/ai-model-picker.css'
@@ -35,11 +35,7 @@ void (async () => {
   document.documentElement.dir = htmlDir(lang)
   applyTheme(theme)
   window.htmlApi.onThemeChanged(applyTheme)
-  await window.htmlApi
-    ?.getAiPanelPrefs?.()
-    .then(applyAiPanelPrefs)
-    .catch(() => {})
-  window.htmlApi?.onAiPanelPrefsChanged?.(applyAiPanelPrefs)
+  await initializeAiPanelPrefs(window.htmlApi)
   // a present tab/window (opened by Present → New tab) renders only its owner's preview
   const params = new URLSearchParams(location.search)
   const present = params.has('present')

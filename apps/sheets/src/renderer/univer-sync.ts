@@ -2077,6 +2077,9 @@ interface VisualUndoStep {
 // at these steps (their params are registry tokens resolving to closures
 // over the pre-save session state).
 const visualUndoRegistry = new Map<number, VisualUndoStep>()
+// AI entries can expire by cell budget, redo invalidation or workbook close.
+// The actual stack item's token owns these closures, including demo snapshots.
+const aiVisualUndoSteps = new WeakMap<object, VisualUndoStep>()
 let visualUndoSequence = 0
 const visualUndoRuntimes = new WeakSet<object>()
 
@@ -2192,7 +2195,7 @@ function ensureVisualUndoCommand(
         type: unknown
         handler: (
           accessor: unknown,
-          params?: { token: number; direction: 'undo' | 'redo' },
+          params?: { token: number | object; direction: 'undo' | 'redo' },
         ) => boolean
       }): unknown
     }>(ICommandService)
@@ -2200,12 +2203,17 @@ function ensureVisualUndoCommand(
       id: VISUAL_UNDO_COMMAND_ID,
       type: CommandType.MUTATION,
       handler: (_accessor, params) => {
-        const entry = params ? visualUndoRegistry.get(params.token) : undefined
-        if (!entry || !params) return false
+        if (!params) return false
+        const { token } = params
+        const entry =
+          typeof token === 'number' ? visualUndoRegistry.get(token) : aiVisualUndoSteps.get(token)
+        if (!entry) return false
         // Refresh recency so a step the user is stepping through is never the
         // one evicted ahead of untouched entries.
-        visualUndoRegistry.delete(params.token)
-        visualUndoRegistry.set(params.token, entry)
+        if (typeof token === 'number') {
+          visualUndoRegistry.delete(token)
+          visualUndoRegistry.set(token, entry)
+        }
         if (params.direction === 'undo') entry.undo()
         else entry.redo()
         return true
@@ -2213,7 +2221,11 @@ function ensureVisualUndoCommand(
     })
 }
 
-export function pushVisualUndo(runtime: UniverRuntime, step: VisualUndoStep): void {
+export function pushVisualUndo(
+  runtime: UniverRuntime,
+  step: VisualUndoStep,
+  cost?: { retainedCells: number; adapterSnapshot?: true },
+): void {
   const unitId = runtime.univerAPI.getActiveWorkbook()?.getId()
   if (!unitId) return
   const injector = (
@@ -2230,19 +2242,30 @@ export function pushVisualUndo(runtime: UniverRuntime, step: VisualUndoStep): vo
     return
   }
   ensureVisualUndoCommand(injector, runtime)
-  const token = registerVisualUndoStep(step)
+  const token = aiUndoSource.current ? {} : registerVisualUndoStep(step)
+  if (typeof token === 'object') aiVisualUndoSteps.set(token, step)
   injector
     .get<{
       pushUndoRedo(item: {
         unitID: string
-        undoMutations: { id: string; params: { token: number; direction: 'undo' | 'redo' } }[]
-        redoMutations: { id: string; params: { token: number; direction: 'undo' | 'redo' } }[]
+        undoMutations: {
+          id: string
+          params: { token: number | object; direction: 'undo' | 'redo' }
+        }[]
+        redoMutations: {
+          id: string
+          params: { token: number | object; direction: 'undo' | 'redo' }
+        }[]
       }): void
     }>(IUndoRedoService)
     .pushUndoRedo({
       unitID: unitId,
-      undoMutations: [{ id: VISUAL_UNDO_COMMAND_ID, params: { token, direction: 'undo' } }],
-      redoMutations: [{ id: VISUAL_UNDO_COMMAND_ID, params: { token, direction: 'redo' } }],
+      undoMutations: [
+        { id: VISUAL_UNDO_COMMAND_ID, params: { ...cost, token, direction: 'undo' } },
+      ],
+      redoMutations: [
+        { id: VISUAL_UNDO_COMMAND_ID, params: { ...cost, token, direction: 'redo' } },
+      ],
     })
 }
 

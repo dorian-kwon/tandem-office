@@ -1338,11 +1338,14 @@ export default function App() {
     // file-text round-trip) so a rollback also reverts set_frontmatter and
     // an untouched block restores byte-for-byte
     getManualVersion: () => manualVersionRef.current,
-    getSnapshot: () => {
+    getSnapshot: (cache) => {
       flushSource()
+      const current = editorRef.current
       return {
         manualVersion: manualVersionRef.current,
-        body: editorRef.current ? bodyMarkdown(editorRef.current) : '',
+        body: current
+          ? cache.read(current.state.doc, sourceMapRef.current, () => bodyMarkdown(current))
+          : '',
         frontmatter: envelopeRef.current.frontmatter,
       }
     },

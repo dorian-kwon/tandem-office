@@ -37,6 +37,27 @@ export function applyAiPanelPrefs(raw: unknown): void {
   for (const listener of listeners) listener()
 }
 
+/** Initialize once per editor window, before mounting it. A live change can
+ * arrive while the persisted preferences are still in flight. */
+export async function initializeAiPanelPrefs(
+  bridge:
+    | {
+        getAiPanelPrefs?(): Promise<unknown>
+        onAiPanelPrefsChanged?(listener: (prefs: unknown) => void): unknown
+      }
+    | undefined,
+  apply: (prefs: unknown) => void = applyAiPanelPrefs,
+): Promise<void> {
+  let receivedChange = false
+  bridge?.onAiPanelPrefsChanged?.((prefs) => {
+    receivedChange = true
+    apply(prefs)
+  })
+  if (!bridge?.getAiPanelPrefs) return
+  const prefs = await bridge.getAiPanelPrefs().catch(() => undefined)
+  if (!receivedChange && prefs !== undefined) apply(prefs)
+}
+
 /** Panels meet the window edge on either side; each app retains its own width limits. */
 export function aiPanelWidthAtPointer(clientX: number): number {
   return current.side === 'right' ? window.innerWidth - clientX : clientX
@@ -61,7 +82,7 @@ export function rememberAiPanelOpen(storageKey: string, open: boolean): void {
 
 /**
  * Whether an editor should keep undo entries for the edits the AI applies
- * (the shell's "AI edit undo history" switch, default off). Editors read it at
+ * (the shell's "AI edit undo history" switch, default on). Editors read it at
  * the moment an AI edit lands, not once at start-up, because the switch can be
  * flipped in Settings while a document is open.
  */

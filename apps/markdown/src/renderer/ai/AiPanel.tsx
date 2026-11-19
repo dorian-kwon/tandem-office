@@ -81,6 +81,7 @@ import sendStop from '../assets/send-stop.png'
 import { clearAiHighlights } from '../editor/aiHighlight'
 import { setInactiveSelectionShown } from '../editor/inactiveSelection'
 import { uiOp } from '../editor/ops'
+import { SnapshotBody } from './snapshot-body'
 import { createMarkdownSkill, MARKDOWN_RULES } from './markdown-skill'
 import { MindMapCard } from './MindMapCard'
 import { mindMapToMermaid } from './mind-map'
@@ -232,7 +233,7 @@ export interface MarkdownAiDeps {
   setFrontmatter(raw: string): void
   /** document body + frontmatter, for pre-mutation snapshots */
   getManualVersion(): number
-  getSnapshot(): DocSnapshot
+  getSnapshot(body: SnapshotBody): DocSnapshot
   /** rollback: replace the document (body and frontmatter) with a snapshot */
   restoreSnapshot(snapshot: DocSnapshot): boolean
   /** fired when a run with at least one mutation finishes (auto-save hook) */
@@ -350,11 +351,15 @@ export function AiPanel({
   /** the skills of the last send: a retry sends the same skill text */
   const lastSkillUseRef = useRef<SkillUse>(NO_SKILL_USE)
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
+  const snapshotBodyRef = useRef<SnapshotBody | null>(null)
   const [snapshots, setSnapshots] = useState<Snapshot[]>([])
   // rollback points exist only while the "AI edit undo history" setting is on
   const undoHistoryOn = useAiPanelPrefs().aiEditUndoHistory
   useEffect(() => {
-    if (!undoHistoryOn) setSnapshots([])
+    if (!undoHistoryOn) {
+      snapshotBodyRef.current = null
+      setSnapshots([])
+    }
   }, [undoHistoryOn])
   // bumped on selection/doc changes so the scope chip & queue rows stay fresh
   const [, setScopeTick] = useState(0)
@@ -724,8 +729,10 @@ export function AiPanel({
         ...panelProjectSkill({ run: projectPanel.chat.run, lang: () => langRef.current }),
       ]),
       // no rollback point while the "AI edit undo history" setting is off
-      captureSnapshot: () =>
-        aiEditUndoHistoryEnabled() ? depsRef.current.getSnapshot() : undefined,
+      captureSnapshot: () => {
+        if (!aiEditUndoHistoryEnabled()) return undefined
+        return depsRef.current.getSnapshot((snapshotBodyRef.current ??= new SnapshotBody()))
+      },
       systemSuffix: () =>
         aiLangDirective(langRef.current) +
         (aiEditUndoHistoryEnabled()
@@ -743,7 +750,10 @@ export function AiPanel({
           }))
         },
         onToolExecuted: ({ call, execution, snapshotBefore }) => {
-          if (execution.mutated) runMutatedRef.current = true
+          if (execution.mutated) {
+            snapshotBodyRef.current = null
+            runMutatedRef.current = true
+          }
           if (aiEditUndoHistoryEnabled() && snapshotBefore !== undefined) {
             const label = runInstructionRef.current.slice(0, 40)
             const time = new Date().toLocaleTimeString([], {
@@ -781,6 +791,7 @@ export function AiPanel({
           patchLast({ usage: runUsageRef.current })
         },
         onDone: ({ text, cancelled, turnLimit, truncated }) => {
+          snapshotBodyRef.current = null
           const base = turnLimit
             ? [text, tGlobal('aiTurnLimit')].filter(Boolean).join('\n\n')
             : text || (cancelled ? tGlobal('aiStopped') : '')
@@ -804,6 +815,7 @@ export function AiPanel({
           setBusy(false)
         },
         onError: (error) => {
+          snapshotBodyRef.current = null
           const blocked = blockedRunOf(streamErrorRef.current, error)
           streamErrorRef.current = null
           if (blocked) {

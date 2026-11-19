@@ -57,7 +57,12 @@ import {
   viewToMind,
   XMIND_ID,
 } from '../document/convert'
-import type { DocumentSession } from '../document/session'
+import {
+  aiSheetHistoryCost,
+  MAX_AI_HISTORY_TOTAL_CHARS,
+  MAX_HISTORY_STEPS,
+  type DocumentSession,
+} from '../document/session'
 import { type DecorationStrings, TopicDecorator } from './decorate'
 import { PictureStore } from './images'
 import { libraryTheme, lookOfSheet } from './look'
@@ -186,6 +191,10 @@ export class MapController {
   #cutStash: CutStash | null = null
   /** set while a step the session already recorded is announced to the library's history */
   #recordedBySession = false
+  // mind-elixir keeps even operations older than the session's undo limit. Only a
+  // new recorded operation after undo releases its abandoned redo branch.
+  #historyPosition = 0
+  readonly #aiHistoryCosts: { position: number; chars: number }[] = []
   /** an input method is composing in the edit box */
   #composing = false
   /** the look the sheet is drawn with */
@@ -808,29 +817,57 @@ export class MapController {
    */
   edit(
     change: (root: MapNode) => void,
-    options: { restyled?: readonly string[]; aiEdit?: boolean } = {},
-  ): void {
+    options: { restyled?: readonly string[]; aiEdit?: boolean; beforeRecord?: () => void } = {},
+  ): 'recorded' | 'disabled' | 'large' {
     const mind = this.mind
     const selected = this.selectedTopicIds()
     // topics whose text format `change` set: the engine writes it only for these
     for (const id of options.restyled ?? []) this.#restyled.add(id)
     change(mind.nodeData as MapNode)
-    normaliseTree(mind.nodeData, topicIdsOf(this.#lastView))
+    const previousTopics = topicIdsOf(this.#lastView)
+    const nextCount = normaliseTree(mind.nodeData, previousTopics)
     mind.refresh()
     // drawn again, the topics that were selected and are still there stay selected
     const again = selected.map((id) => this.#element(id)).filter((topic) => topic !== null)
     if (again.length > 0) mind.selectNodes(again)
-    if (options.aiEdit && !aiEditUndoHistoryEnabled()) {
-      this.#sync({ step: false })
-      this.#session.discardRedo(this.#key)
-      this.#host.onStateChange()
-      return
+    let cost = 0
+    if (options.aiEdit) {
+      const data = mind.getDataString()
+      const enabled = aiEditUndoHistoryEnabled()
+      if (enabled) {
+        cost = aiSheetHistoryCost(
+          this.#session.sheet(this.#key),
+          nextCount - previousTopics.size,
+          this.#syncedData.length,
+          data.length,
+        )
+      }
+      if (!enabled || !this.#canRecordAi(cost)) {
+        this.#sync({ step: false }, data)
+        this.#session.discardRedo(this.#key)
+        this.#host.onStateChange()
+        return enabled ? 'large' : 'disabled'
+      }
     }
+    options.beforeRecord?.()
     mind.bus.fire('operation', {
       name: 'reshapeNode',
       obj: mind.nodeData,
       origin: mind.nodeData,
     })
+    if (cost > 0) this.#aiHistoryCosts.push({ position: this.#historyPosition, chars: cost })
+    return 'recorded'
+  }
+
+  #canRecordAi(cost: number): boolean {
+    let used = cost
+    let steps = 1
+    for (const point of this.#aiHistoryCosts) {
+      if (point.position > this.#historyPosition) break
+      used += point.chars
+      steps++
+    }
+    return steps <= MAX_HISTORY_STEPS && used <= MAX_AI_HISTORY_TOTAL_CHARS
   }
 
   // ---- history ----
@@ -839,6 +876,7 @@ export class MapController {
   undo(): boolean {
     if (!this.canUndo) return false
     this.#libraryUndo()
+    this.#historyPosition = Math.max(0, this.#historyPosition - 1)
     const view = this.#session.undo(this.#key)
     if (view) this.#afterHistoryMove(view)
     return true
@@ -848,6 +886,7 @@ export class MapController {
   redo(): boolean {
     if (!this.canRedo) return false
     this.#libraryRedo()
+    this.#historyPosition++
     const view = this.#session.redo(this.#key)
     if (view) this.#afterHistoryMove(view)
     return true
@@ -1194,6 +1233,10 @@ export class MapController {
       this.#beginTitleEdit(operation.obj)
       return
     }
+    while ((this.#aiHistoryCosts.at(-1)?.position ?? 0) > this.#historyPosition) {
+      this.#aiHistoryCosts.pop()
+    }
+    this.#historyPosition++
     // The session recorded this step and the screen was drawn from it: nothing to reconcile.
     if (this.#recordedBySession) return
     const cut = this.#cutPending
@@ -1327,13 +1370,13 @@ export class MapController {
     }, QUIET_SYNC_DELAY_MS)
   }
 
-  #sync(options: { step: boolean; reshaped?: string[] }): void {
+  #sync(options: { step: boolean; reshaped?: string[] }, drawnData?: string): void {
     if (this.#destroyed) return
     if (this.#quietTimer) {
       clearTimeout(this.#quietTimer)
       this.#quietTimer = null
     }
-    const data = this.mind.getDataString()
+    const data = drawnData ?? this.mind.getDataString()
     if (!options.step && !this.#layoutPicked && data === this.#syncedData) return
     const started = performance.now()
     const state = mindToState(JSON.parse(data), {

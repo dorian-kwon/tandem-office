@@ -130,6 +130,7 @@ describe('stale tolerance: revise_blocks', () => {
 
 describe('stale tolerance: add_bilingual', () => {
   it('with history off, manual undo removes the earlier typing and preserves later AI twins', async () => {
+    applyAiPanelPrefs({ aiEditUndoHistory: false })
     const editor = await createEditor([plain('가'), plain('나'), plain('다')])
     userTypes(editor, 1)
     const result = await run(editor, 'add_bilingual', {

@@ -60,6 +60,9 @@ export const EDIT_BATCH_LIMIT = 50
 /** The most sheets one `write_map` call may make. */
 export const WRITE_SHEET_LIMIT = 10
 
+const SHEET_UNDO_LIMIT_NOTE =
+  'Undo history was skipped because the sheet reached its AI history limit. This AI turn cannot be rolled back.'
+
 /** What the AI needs from the screen around the map. The app provides it. */
 export interface MapAiHost {
   /** the open map; null while it is loading or when the file did not open */
@@ -609,13 +612,17 @@ export async function editMap(
     textBase: (depth) => controller.textBaseAt(depth),
   })
   const applied = outcomes.filter((outcome) => outcome.ok).length
+  let history: ReturnType<MapController['edit']> | undefined
   if (applied > 0) {
-    turn?.noteEdit(session, key)
     const restyled = outcomes
       .filter((outcome) => outcome.ok && outcome.op === 'set_format' && outcome.id)
       .map((outcome) => outcome.id!)
-    controller.edit((root) => takeTree(root, data.nodeData), { restyled, aiEdit: true })
-    turn?.finishEdit(session, key)
+    history = controller.edit((root) => takeTree(root, data.nodeData), {
+      restyled,
+      aiEdit: true,
+      beforeRecord: () => turn?.noteEdit(session, key),
+    })
+    turn?.finishEdit(session, key, history)
     confirmApplied(session, key, outcomes, edits)
   }
   const done = outcomes.filter((outcome) => outcome.ok).length
@@ -627,6 +634,7 @@ export async function editMap(
         : `#${outcome.index} ${outcome.op || '?'} FAILED${outcome.id ? ` (id ${outcome.id})` : ''}: ${outcome.reason}`,
     ),
   ]
+  if (history === 'large') lines.push(SHEET_UNDO_LIMIT_NOTE)
   return {
     output: lines.join('\n'),
     isError: done === 0,
@@ -812,6 +820,7 @@ export async function setTopicPicture(
   // the entry exists before the edit, so the reconciler can verify the
   // reference; an edit that does not land takes the entry back out again
   const entryName = picture ? session.addPicture(picture.bytes, picture.ext) : null
+  let history: ReturnType<MapController['edit']>
   try {
     if (entryName !== null) {
       found.node.metadata = {
@@ -824,10 +833,11 @@ export async function setTopicPicture(
         },
       }
     }
-    turn?.noteEdit(session, key)
-    controller.edit((root) => takeTree(root, data.nodeData), { aiEdit: source === 'ai' })
-
-    turn?.finishEdit(session, key)
+    history = controller.edit((root) => takeTree(root, data.nodeData), {
+      aiEdit: source === 'ai',
+      beforeRecord: () => turn?.noteEdit(session, key),
+    })
+    turn?.finishEdit(session, key, history)
     const shown = topicInView(session.view(key).root, topicId)
     if (entryName !== null && shown?.image?.entryName !== entryName) {
       session.removePicture(entryName)
@@ -839,15 +849,16 @@ export async function setTopicPicture(
     if (entryName !== null) session.removePicture(entryName)
     throw error
   }
+  const undoNote = history === 'large' ? ' ' + SHEET_UNDO_LIMIT_NOTE : ''
   if (entryName === null) {
     return {
-      output: `Changed the title of topic ${topicId} of sheet ${position}.`,
+      output: `Changed the title of topic ${topicId} of sheet ${position}.${undoNote}`,
       mutated: true,
       detail: { done: 1, total: 1 },
     }
   }
   return {
-    output: `Put the picture on topic ${topicId} of sheet ${position}. It is saved inside the map file (${entryName}).`,
+    output: `Put the picture on topic ${topicId} of sheet ${position}. It is saved inside the map file (${entryName}).${undoNote}`,
     mutated: true,
     detail: { done: 1, total: 1 },
   }
@@ -956,20 +967,23 @@ export async function writeMap(
     const controller = await controllerFor(host, key)
     if (!controller) return fail('the new sheet could not be opened for writing')
     const nodes = nodesOf(sheet, controller.layout === 'both')
-    turn?.noteEdit(session, key)
-    controller.edit((root) => takeTree(root, nodes), { aiEdit: true })
+    const history = controller.edit((root) => takeTree(root, nodes), {
+      aiEdit: true,
+      beforeRecord: () => turn?.noteEdit(session, key),
+    })
     if (fill && typeof sheet.title === 'string' && sheet.title !== session.tabs()[0]!.title) {
       turn?.noteRename(key, session.tabs()[0]!.title, sheet.title)
       session.renameSheet(key, sheet.title)
     }
     const position = session.indexOf(key) + 1
-    turn?.finishEdit(session, key)
+    turn?.finishEdit(session, key, history)
     const count = countSheetTopics(session.sheet(key))
     written.push(
       fill
         ? `The new map was empty, so its sheet ${position} was filled: ${count} topic(s).`
         : `Added sheet ${position}: ${count} topic(s). No existing sheet was changed.`,
     )
+    if (history === 'large') written.push(SHEET_UNDO_LIMIT_NOTE)
   }
   const last = session.tabs().at(-1)
   if (last && !blank) host.showSheet(last.key)
@@ -1013,6 +1027,11 @@ export class MapTurn {
   readonly renamedSheets = new Map<string, { before: string; after: string }>()
   readonly #after = new Map<string, string>()
   #interleaved = false
+  #unrecorded = false
+
+  get unrecorded(): boolean {
+    return this.#unrecorded
+  }
 
   get changed(): boolean {
     return this.addedSheets.size > 0 || this.editedSheets.size > 0
@@ -1025,11 +1044,13 @@ export class MapTurn {
   }
 
   noteSheetAdded(session: DocumentSession, key: string): void {
+    if (this.#unrecorded) return
     this.addedSheets.add(key)
     this.#after.set(key, this.#fingerprint(session, key))
   }
 
   noteEdit(session: DocumentSession, key: string): void {
+    if (this.#unrecorded) return
     const current = this.#fingerprint(session, key)
     if (this.#after.has(key) && this.#after.get(key) !== current) this.#interleaved = true
     if (!this.addedSheets.has(key) && !this.editedSheets.has(key)) {
@@ -1037,18 +1058,32 @@ export class MapTurn {
     }
   }
 
-  finishEdit(session: DocumentSession, key: string): void {
+  finishEdit(
+    session: DocumentSession,
+    key: string,
+    history: ReturnType<MapController['edit']>,
+  ): void {
+    if (this.#unrecorded) return
+    if (history !== 'recorded') {
+      this.#unrecorded = true
+      this.editedSheets.clear()
+      this.addedSheets.clear()
+      this.renamedSheets.clear()
+      this.#after.clear()
+      return
+    }
     const edited = this.editedSheets.get(key)
     if (edited) edited.steps++
     this.#after.set(key, this.#fingerprint(session, key))
   }
 
   noteRename(key: string, before: string, after: string): void {
-    this.renamedSheets.set(key, { before, after })
+    if (!this.#unrecorded) this.renamedSheets.set(key, { before, after })
   }
 
   canRevert(session: DocumentSession): boolean {
-    if (this.#interleaved || session.tabs().length <= this.addedSheets.size) return false
+    if (this.#unrecorded || this.#interleaved || session.tabs().length <= this.addedSheets.size)
+      return false
     for (const [key, after] of this.#after) {
       if (session.indexOf(key) < 0 || this.#fingerprint(session, key) !== after) return false
     }

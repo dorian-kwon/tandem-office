@@ -33,6 +33,7 @@
  * pushUndoRedo empties the unit's redo stack on every call, so the redo
  * items land directly in the service's stack map after the undo pushes.
  */
+import { carryAiEntryCost } from './ai-undo-scope'
 import { IUndoRedoService } from '@univerjs/core'
 
 import type { UniverRuntime } from './univer-state'
@@ -165,8 +166,11 @@ export function captureUndoCarry(runtime: UniverRuntime | null, newSha: string):
     const redoable = carriableSuffix(service._redoStacks?.get(oldUnitId) ?? [])
     if (undoable.length === 0 && redoable.length === 0) return null
     const styles = (workbook.getSnapshot().styles ?? {}) as Record<string, unknown>
-    const rewrite = (item: CarriedUndoItem): unknown =>
-      rewriteCarriedValue(item, oldUnitId, newUnitId, styles)
+    const rewrite = (item: CarriedUndoItem): unknown => {
+      const replacement = rewriteCarriedValue(item, oldUnitId, newUnitId, styles)
+      carryAiEntryCost(item, replacement)
+      return replacement
+    }
     return {
       unitId: newUnitId,
       items: undoable.map(rewrite),

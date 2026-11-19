@@ -17,7 +17,7 @@ import '@genoffice/ui/markdown.css'
 import '@genoffice/ui/ai-panel-prefs.css'
 import '@genoffice/ui/ai-scope-quote.css'
 import './styles.css'
-import { applyAiPanelPrefs, installScreenTips } from '@genoffice/ui'
+import { initializeAiPanelPrefs, installScreenTips } from '@genoffice/ui'
 
 installScreenTips()
 
@@ -61,11 +61,7 @@ async function bootstrap(): Promise<void> {
   if (mode !== 'audience') {
     applyTheme(theme)
     window.slidesApi?.onThemeChanged(applyTheme)
-    await window.slidesApi
-      ?.getAiPanelPrefs?.()
-      .then(applyAiPanelPrefs)
-      .catch(() => {})
-    window.slidesApi?.onAiPanelPrefsChanged?.(applyAiPanelPrefs)
+    await initializeAiPanelPrefs(window.slidesApi)
   }
   createRoot(document.getElementById('root')!).render(
     <React.StrictMode>

@@ -18,7 +18,7 @@ import '@genoffice/ui/ai-scope-quote.css'
 import '@genoffice/ui/image-viewer.css'
 import './styles.css'
 import './fonts/fonts.css'
-import { applyAiPanelPrefs, installScreenTips } from '@genoffice/ui'
+import { initializeAiPanelPrefs, installScreenTips } from '@genoffice/ui'
 import { setAltChunkHtmlConverter } from '@genoffice/docx-engine'
 import { registerTemplateFonts } from './template-fonts'
 
@@ -62,11 +62,7 @@ async function bootstrap(): Promise<void> {
   applyDocumentTheme(docTheme ?? 'follow')
   window.desktop?.onThemeChanged(applyTheme)
   window.desktop?.onDocumentThemeChanged?.(applyDocumentTheme)
-  await window.desktop
-    ?.getAiPanelPrefs?.()
-    .then(applyAiPanelPrefs)
-    .catch(() => {})
-  window.desktop?.onAiPanelPrefsChanged?.(applyAiPanelPrefs)
+  await initializeAiPanelPrefs(window.desktop)
   await window.desktop
     ?.getAuthorName?.()
     .then(setAuthorName)

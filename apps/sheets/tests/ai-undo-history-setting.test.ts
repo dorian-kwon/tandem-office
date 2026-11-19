@@ -9,19 +9,21 @@ const runtime = {
   univerAPI: { getActiveWorkbook: () => null },
 } as unknown as Parameters<typeof beginUndoBatch>[0]
 
+it('records AI edits with the app default', () => {
+  expect(aiUndoHistory.enabled).toBe(true)
+  expect(shouldDropUndoBatch({ aiEdit: true })).toBe(false)
+})
+
 describe('AI edit undo history setting', () => {
   beforeEach(() => {
     aiBulkUndoGate.active = false
     aiBulkUndoGate.dropAll = false
     aiBulkUndoGate.dropped = false
-    setAiEditUndoHistory(false)
-  })
-
-  it('defaults to off', () => {
-    expect(aiUndoHistory.enabled).toBe(false)
+    setAiEditUndoHistory(true)
   })
 
   it('drops an AI apply from the start while the setting is off', () => {
+    setAiEditUndoHistory(false)
     expect(shouldDropUndoBatch({ aiEdit: true })).toBe(true)
   })
 

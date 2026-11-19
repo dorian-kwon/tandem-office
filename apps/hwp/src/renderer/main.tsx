@@ -15,7 +15,7 @@ import '@genoffice/ui/ai-panel-prefs.css'
 import './styles.css'
 import './ai-panel.css'
 import './dialog-theme.css'
-import { applyAiPanelPrefs, installScreenTips } from '@genoffice/ui'
+import { initializeAiPanelPrefs, installScreenTips } from '@genoffice/ui'
 
 installScreenTips()
 
@@ -33,11 +33,7 @@ void (async () => {
   document.documentElement.dir = htmlDir(lang)
   applyTheme(theme)
   window.hwpApi.onThemeChanged(applyTheme)
-  await window.hwpApi
-    .getAiPanelPrefs()
-    .then(applyAiPanelPrefs)
-    .catch(() => {})
-  window.hwpApi.onAiPanelPrefsChanged(applyAiPanelPrefs)
+  await initializeAiPanelPrefs(window.hwpApi)
   createRoot(document.getElementById('root')!).render(
     <LocaleProvider initial={lang}>
       <App />

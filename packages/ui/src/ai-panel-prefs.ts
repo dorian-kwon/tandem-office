@@ -45,7 +45,7 @@ export const DEFAULT_AI_PANEL_PREFS: AiPanelPrefs = {
   spellcheck: true,
   openInNewDocs: true,
   showAiSidebar: true,
-  aiEditUndoHistory: false,
+  aiEditUndoHistory: true,
 }
 
 /** The one choice the settings screen shows, read from the two switches it stores. */

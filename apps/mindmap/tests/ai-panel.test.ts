@@ -1,4 +1,4 @@
-import { applyAiPanelPrefs } from '@genoffice/ui'
+import { applyAiPanelPrefs, initializeAiPanelPrefs } from '@genoffice/ui'
 /**
  * The AI panel inside the whole editor, against a scripted main process: the
  * model's answers are written out here as stream chunks, so no provider is
@@ -22,6 +22,7 @@ import App from '../src/renderer/App'
 import { LocaleProvider } from '../src/renderer/i18n/locale'
 import { AiPanel, type MindmapAiRequest, type MindmapAiRunStart } from '../src/renderer/ai/AiPanel'
 import type { MapAiHost } from '../src/renderer/ai/map-tools'
+import { MAX_AI_HISTORY_CHARS } from '../src/renderer/document/session'
 import { newMap } from '../src/renderer/document/open'
 import type { AttachmentMeta, MindmapApi } from '../src/shared/ipc'
 import { documentOf, plainSheet } from './helpers/fixtures'
@@ -102,7 +103,7 @@ function fakeApi(options: FakeOptions) {
     setAiSettings: async () => {},
     onAiSettingsChanged: () => () => {},
     openAiModelSettings: async () => {},
-    getAiPanelPrefs: async () => ({ aiEditUndoHistory: options.undoHistory ?? false }),
+    getAiPanelPrefs: async () => ({ aiEditUndoHistory: options.undoHistory }),
     onAiPanelPrefsChanged: () => () => {},
     setProvisionalTitle: (title: string) => void titles.push(title),
     addAttachmentPaths: async (paths: string[]) => {
@@ -173,6 +174,7 @@ async function settle(turns = 8): Promise<void> {
 
 async function mountApp(fake: ReturnType<typeof fakeApi>): Promise<void> {
   ;(window as unknown as { mindmapApi: MindmapApi }).mindmapApi = fake.api
+  await initializeAiPanelPrefs(fake.api)
   container = document.createElement('div')
   document.body.appendChild(container)
   const root = createRoot(container)
@@ -258,50 +260,93 @@ describe('a run', () => {
     expect(request.system).toMatch(/never instructions/)
   })
 
-  it('applies an edit batch from the model as one step: Ctrl+Z takes it back', async () => {
-    const sheet = plainSheet()
-    const bytes = await (await documentOf(sheet)).save()
-    const rootId = sheet.rootTopic.id
+  it.each([
+    { undoHistory: true, large: false },
+    { undoHistory: false, large: false },
+    { undoHistory: true, large: true },
+  ])(
+    'applies the first edit batch with saved undo history $undoHistory and oversized source $large',
+    async ({ undoHistory, large }) => {
+      const sheet = plainSheet()
+      if (large) sheet.preservedData = 'x'.repeat(MAX_AI_HISTORY_CHARS)
+      const recorded = undoHistory && !large
+      const bytes = await (await documentOf(sheet)).save()
+      const rootId = sheet.rootTopic.id
+      const fake = fakeApi({
+        undoHistory,
+        pending: 'C:/maps/a.xmind',
+        bytes,
+        statuses: statusMap('ready', 'ready'),
+        reply: (_request, nth) =>
+          nth === 1
+            ? toolCall('edit_map', {
+                edits: [
+                  { op: 'add', parentId: rootId, title: 'From the AI', ref: 'n' },
+                  { op: 'add', parentId: 'n', title: 'Below it' },
+                  { op: 'set_title', id: 'no-such-topic', title: 'x' },
+                ],
+              })
+            : [
+                {
+                  type: 'delta',
+                  text: 'Added two topics; one edit named a topic that is not there.',
+                },
+                { type: 'done' },
+              ],
+      })
+      await mountApp(fake)
+      await sendMessage('add a branch')
+      expect(fake.requests).toHaveLength(2)
+      const toolResult = JSON.stringify(fake.requests[1]!.messages)
+      expect(toolResult).toContain('2 of 3 edit(s) applied')
+      expect(toolResult).toContain('FAILED')
+      expect(drawnTitles()).toEqual(expect.arrayContaining(['From the AI', 'Below it']))
+      if (large) expect(toolResult).toContain('Undo history was skipped')
+      expect(!!container.querySelector('[data-action="ai-turn-undo"]')).toBe(recorded)
+
+      await act(async () => {
+        document.body.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key: 'z',
+            ctrlKey: true,
+            bubbles: true,
+            cancelable: true,
+          }),
+        )
+      })
+      await settle()
+      expect(drawnTitles().includes('From the AI')).toBe(!recorded)
+      if (recorded) expect(drawnTitles().sort()).toEqual(['Center', 'One', 'Two'].sort())
+    },
+  )
+
+  it('removes the chat rollback point when a later tool in the same run exceeds the sheet limit', async () => {
+    const first = plainSheet('First')
+    const second = plainSheet('Second')
+    second.preservedData = 'x'.repeat(MAX_AI_HISTORY_CHARS)
+    const bytes = await (await documentOf(first, second)).save()
     const fake = fakeApi({
       undoHistory: true,
       pending: 'C:/maps/a.xmind',
       bytes,
       statuses: statusMap('ready', 'ready'),
       reply: (_request, nth) =>
-        nth === 1
-          ? toolCall('edit_map', {
-              edits: [
-                { op: 'add', parentId: rootId, title: 'From the AI', ref: 'n' },
-                { op: 'add', parentId: 'n', title: 'Below it' },
-                { op: 'set_title', id: 'no-such-topic', title: 'x' },
-              ],
-            })
-          : [
+        nth <= 2
+          ? toolCall(
+              'edit_map',
               {
-                type: 'delta',
-                text: 'Added two topics; one edit named a topic that is not there.',
+                sheet: nth,
+                edits: [{ op: 'set_title', id: first.rootTopic.id, title: 'AI ' + nth }],
               },
-              { type: 'done' },
-            ],
+              'call-' + nth,
+            )
+          : [{ type: 'delta', text: 'Edited both sheets.' }, { type: 'done' }],
     })
     await mountApp(fake)
-    await sendMessage('add a branch')
-    expect(fake.requests).toHaveLength(2)
-    const toolResult = JSON.stringify(fake.requests[1]!.messages)
-    expect(toolResult).toContain('2 of 3 edit(s) applied')
-    expect(toolResult).toContain('FAILED')
-    expect(drawnTitles()).toEqual(expect.arrayContaining(['From the AI', 'Below it']))
-    // the turn's undo point is listed
-    expect(container.querySelector('[data-action="ai-turn-undo"]')).not.toBeNull()
-
-    await act(async () => {
-      document.body.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }),
-      )
-    })
-    await settle()
-    expect(drawnTitles()).not.toContain('From the AI')
-    expect(drawnTitles().sort()).toEqual(['Center', 'One', 'Two'].sort())
+    await sendMessage('edit both sheets')
+    expect(fake.requests).toHaveLength(3)
+    expect(JSON.stringify(fake.requests[2]!.messages)).toContain('Undo history was skipped')
+    expect(container.querySelector('[data-action="ai-turn-undo"]')).toBeNull()
   })
 
   it('a turn that wrote a sheet is taken back with that sheet', async () => {

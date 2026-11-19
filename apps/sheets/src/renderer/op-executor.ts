@@ -29,7 +29,7 @@ import type {
   StructuralChange,
 } from '@genoffice/xlsx-gateway/domain/workbook.types'
 import { pushBulkFillUndo } from './bulk-fill-undo'
-import { createAiUndoScope } from './ai-undo-scope'
+import { createAiUndoScope, undoCapacityNotice } from './ai-undo-scope'
 import {
   journalCellContentAt,
   plainCellValue,
@@ -549,13 +549,7 @@ async function applyChangePlanNow(
     }
     undoBatch.settle()
     if (aiScope) options.onUndoEntries?.(aiScope.entryIds)
-    if (dropped()) {
-      notices.push(
-        dropUndo
-          ? 'undo history for AI edits is turned off in the settings — the [Undo] button and ⌘Z will not revert this change'
-          : 'this change is too large for the undo history — the [Undo] button and ⌘Z will not revert it',
-      )
-    }
+    if (dropped()) notices.push(undoCapacityNotice(!dropUndo))
     return notices.length > 0 ? { ok: true, notices } : { ok: true }
   } catch (error: unknown) {
     const reason = error instanceof Error ? error.message : t('appApplyTxFailed')
@@ -1040,17 +1034,21 @@ async function executeOp(op: PlannedOp, run: OpRun): Promise<void> {
         // in-session closure path; undo-carry intentionally truncates it
         // at Save rather than pretending the old values are recoverable.
         run.commit(() =>
-          pushVisualUndo(runtime, {
-            undo: () => {
-              removeBulkConstantFill(lazyState.editJournal, fill)
-              restoreJournalCells(lazyState.editJournal, fill.sheetId, purgedCells)
-              refresh('undo')
+          pushVisualUndo(
+            runtime,
+            {
+              undo: () => {
+                removeBulkConstantFill(lazyState.editJournal, fill)
+                restoreJournalCells(lazyState.editJournal, fill.sheetId, purgedCells)
+                refresh('undo')
+              },
+              redo: () => {
+                recordBulkConstantFill(lazyState.editJournal, fill)
+                refresh()
+              },
             },
-            redo: () => {
-              recordBulkConstantFill(lazyState.editJournal, fill)
-              refresh()
-            },
-          }),
+            { retainedCells: purgedCells.length },
+          ),
         )
       }
       ctx.queueChartDataSync(op.sheetId, dst)

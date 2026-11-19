@@ -177,7 +177,10 @@ describe('Slides main-process history batching', () => {
     beginHistoryBatch(session)
     pushHistory(session)
     setValue(session, 'ai edited')
-    const id = registerAiSnapshot(session, endHistoryBatch(session)!)
+    const before = endHistoryBatch(session)!
+    const id = registerAiSnapshot(session, before)
+    expect(session.aiSnapshots!.get(id)).toBe(before)
+    expect(session.undoStack.at(-1)).toBe(before)
 
     expect(restoreAiSnapshot(session, id)).toBe(true)
     expect(valueOf(session)).toBe('before')
@@ -185,6 +188,14 @@ describe('Slides main-process history batching', () => {
 
     restoreSnapshot(session, session.undoStack.pop()!) // ⌘Z returns to the pre-rollback state
     expect(valueOf(session)).toBe('ai edited')
+  })
+
+  it('detaches rollback points supplied from outside the undo stack', () => {
+    const session = sessionWith('before')
+    const external = takeSnapshot(session)
+    const id = registerAiSnapshot(session, external)
+    expect(session.aiSnapshots!.get(id)).not.toBe(external)
+    expect(session.aiSnapshots!.get(id)!.slides).not.toBe(external.slides)
   })
 
   it('keeps the preceding uninterrupted turn available after a panel rewind', async () => {

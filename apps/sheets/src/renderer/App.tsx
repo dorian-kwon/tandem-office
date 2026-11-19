@@ -1,7 +1,16 @@
 import { isWorkbookHistoryComposer } from './clear-selection-keyboard'
 import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
-import { restoreAdapterSnapshot, withAdapterAiHistory } from './adapter-ai-history'
-import { appendAiUndoEntries, createAiUndoScope, matchesAiUndoEntries } from './ai-undo-scope'
+import {
+  adapterHistoryCells,
+  restoreAdapterSnapshot,
+  withAdapterAiHistory,
+} from './adapter-ai-history'
+import {
+  appendAiUndoEntries,
+  createAiUndoScope,
+  matchesAiUndoEntries,
+  undoCapacityNotice,
+} from './ai-undo-scope'
 import { focusWorksheet } from './sheet-focus'
 import {
   activateFormulaClosure,
@@ -43,6 +52,7 @@ import {
   runHeadlessRendererExport,
 } from '@genoffice/electron-utils/headless-export'
 import {
+  AI_UNDO_CELL_BUDGET,
   commitActiveCellEditor,
   installJournalSuppressionUndoFilter,
   installLoadAutoHeightGate,
@@ -4152,7 +4162,15 @@ export function App({
               queueDemoVisualInstallForActiveSheet()
               setPreview(null)
             }
-            pushVisualUndo(runtime, { undo: () => restore(before), redo: () => restore(after) })
+            pushVisualUndo(
+              runtime,
+              { undo: () => restore(before), redo: () => restore(after) },
+              {
+                retainedCells: adapterHistoryCells(before, after, AI_UNDO_CELL_BUDGET),
+                ...(plan.structuralChanges.length === 0 &&
+                  plan.sheetRenames.length === 0 && { adapterSnapshot: true }),
+              },
+            )
           } else if (!record || scope.dropped) {
             // Visual-only commits also invalidate redo when recording is off.
             runtime.univer.__getInjector().get(IUndoRedoService).pushUndoRedo({
@@ -4197,7 +4215,7 @@ export function App({
           undoIds: appendAiUndoEntries(entry.autoApplied?.undoIds, scope.entryIds),
         },
       }))
-      return Promise.resolve({ ok: true })
+      return scope.dropped ? { ok: true, notices: [undoCapacityNotice(record)] } : { ok: true }
     } catch (error: unknown) {
       // Fall back to leaving the preview up so the user can Apply manually.
       const reason = error instanceof Error ? error.message : t('appApplyTxFailed')

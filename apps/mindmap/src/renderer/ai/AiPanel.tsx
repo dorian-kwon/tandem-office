@@ -881,9 +881,9 @@ export function AiPanel({
     })
   }
 
-  const loopRef = useRef<AgentLoop<MapTurn | undefined> | null>(null)
+  const loopRef = useRef<AgentLoop | null>(null)
   if (!loopRef.current) {
-    loopRef.current = new AgentLoop<MapTurn | undefined>({
+    loopRef.current = new AgentLoop({
       transport: transportRef.current,
       // a local model that reported no tool support answers in text only
       toolsAllowed: () =>
@@ -923,9 +923,6 @@ export function AiPanel({
         choice.skill,
         ...panelProjectSkill({ run: projectChat.run, lang: () => langRef.current }),
       ]),
-      // the run's one undo point: the loop hands it back with the first tool that changed the map
-      captureSnapshot: () =>
-        aiEditUndoHistoryEnabled() ? (turnRef.current ??= new MapTurn()) : undefined,
       systemSuffix: () =>
         aiLangDirective(langRef.current) +
         (aiEditUndoHistoryEnabled()
@@ -941,15 +938,20 @@ export function AiPanel({
             ],
           }))
         },
-        onToolExecuted: ({ call, execution, snapshotBefore }) => {
-          if (aiEditUndoHistoryEnabled() && snapshotBefore !== undefined) {
+        onToolExecuted: ({ call, execution }) => {
+          const turn = turnRef.current
+          if (turn?.unrecorded) {
+            setTurns((points) => points.filter((point) => point.turn !== turn))
+          } else if (aiEditUndoHistoryEnabled() && execution.mutated && turn?.changed) {
             const label = runInstructionRef.current.slice(0, 40)
             const time = new Date().toLocaleTimeString([], {
               hour: '2-digit',
               minute: '2-digit',
             })
             setTurns((prev) =>
-              [...prev, { turn: snapshotBefore, label, time }].slice(-MAX_TURNS_KEPT),
+              prev.some((point) => point.turn === turn)
+                ? prev
+                : [...prev, { turn, label, time }].slice(-MAX_TURNS_KEPT),
             )
           }
           const activity: ToolActivity = {

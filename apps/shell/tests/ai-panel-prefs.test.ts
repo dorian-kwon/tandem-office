@@ -72,11 +72,11 @@ describe('AI panel side', () => {
 })
 
 describe('AI edit undo history', () => {
-  it('is off by default, including for settings files written before the toggle existed', () => {
-    expect(DEFAULT_AI_PANEL_PREFS.aiEditUndoHistory).toBe(false)
-    expect(normalizeAiPanelPrefs({}).aiEditUndoHistory).toBe(false)
-    expect(normalizeAiPanelPrefs(undefined).aiEditUndoHistory).toBe(false)
-    expect(normalizeAiPanelPrefs({ aiEditUndoHistory: 'yes' }).aiEditUndoHistory).toBe(false)
+  it('is on by default, including for settings files written before the toggle existed', () => {
+    expect(DEFAULT_AI_PANEL_PREFS.aiEditUndoHistory).toBe(true)
+    expect(normalizeAiPanelPrefs({}).aiEditUndoHistory).toBe(true)
+    expect(normalizeAiPanelPrefs(undefined).aiEditUndoHistory).toBe(true)
+    expect(normalizeAiPanelPrefs({ aiEditUndoHistory: 'yes' }).aiEditUndoHistory).toBe(true)
   })
 
   it('accepts an explicit boolean and keeps the other fields untouched', () => {

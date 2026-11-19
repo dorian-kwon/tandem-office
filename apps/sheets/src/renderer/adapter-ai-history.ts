@@ -29,3 +29,23 @@ export function restoreAdapterSnapshot(
   Reflect.set(adapter, 'snapshot', { ...structuredClone(snapshot), revision })
   return revision
 }
+
+/** The demo rollback closures retain both complete adapter snapshots even
+ * for a one-cell edit. Count stored values and styles (not empty grid area). */
+export function adapterHistoryCells(
+  before: WorkbookSnapshot,
+  after: WorkbookSnapshot,
+  cap: number,
+): number {
+  let count = 0
+  for (const snapshot of [before, after]) {
+    for (const sheet of snapshot.sheets) {
+      for (const map of [sheet.cells, sheet.styles]) {
+        for (const _address in map) {
+          if (++count > cap) return count
+        }
+      }
+    }
+  }
+  return count
+}

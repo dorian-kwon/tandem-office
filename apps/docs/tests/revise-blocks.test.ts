@@ -265,7 +265,8 @@ describe('revise_blocks', () => {
     expect(editor.state.doc.eq(before)).toBe(true)
   })
 
-  it('does not add an undo step by default', async () => {
+  it('does not add an undo step when AI edit undo history is off', async () => {
+    applyAiPanelPrefs({ aiEditUndoHistory: false })
     const editor = await createEditor([mixed()])
     const result = await revise(editor, [
       { index: 0, fp: FP, segments: ['The quick red fox ', 'jumps over it.'] },

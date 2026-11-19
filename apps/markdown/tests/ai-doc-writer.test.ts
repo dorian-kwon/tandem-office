@@ -16,7 +16,7 @@ import { MARKDOWN_RULES } from '../src/renderer/ai/markdown-skill'
 const editors: Editor[] = []
 afterEach(() => {
   for (const e of editors.splice(0)) e.destroy()
-  applyAiPanelPrefs({ aiEditUndoHistory: false })
+  applyAiPanelPrefs({})
 })
 
 function createEditor(md = ''): Editor {
@@ -129,8 +129,7 @@ describe('write_document tool', () => {
   })
 
   it('lands the streamed markdown as one regular insert on a blank document', async () => {
-    // undo history for AI edits is opt-in (decision 0114)
-    applyAiPanelPrefs({ aiEditUndoHistory: true })
+    applyAiPanelPrefs({})
     const editor = createEditor()
     const exec = await executeTool(
       editor,

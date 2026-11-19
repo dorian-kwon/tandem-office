@@ -1,3 +1,4 @@
+import { applyAiPanelPrefs } from '@genoffice/ui'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Op } from '../src/renderer/edit-ops'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
@@ -2710,7 +2711,10 @@ describe('file-level page operations', () => {
   const fourPages = (over: Partial<PdfAiDeps> = {}) =>
     makeDeps({ pageCount: () => 4, pageOrder: () => [0, 1, 2, 3], ...over })
 
-  it('insert_blank_page is a pending edit: no confirmation card, undoable', async () => {
+  afterEach(() => applyAiPanelPrefs({}))
+
+  it.each([true, false])('insert_blank_page reports the saved undo setting %s', async (on) => {
+    applyAiPanelPrefs({ aiEditUndoHistory: on })
     const deps = fourPages({ insertBlankPage: vi.fn(() => ({ ok: true, pageIndex: 4 })) })
     const result = await executePdfTool(deps, call('insert_blank_page', { after_page: 2 }))
     expect(deps.confirmFileOp).not.toHaveBeenCalled()
@@ -2718,7 +2722,7 @@ describe('file-level page operations', () => {
     expect(result.isError).toBeUndefined()
     expect(result.mutated).toBe(true)
     expect(result.output).toContain('page 3')
-    expect(result.output).toContain('AI undo is off')
+    expect(result.output).toContain(on ? 'undoable' : 'AI undo is off')
     expect(result.output).toContain('original page number, 5')
   })
 

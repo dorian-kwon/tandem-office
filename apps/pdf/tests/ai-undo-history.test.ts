@@ -5,7 +5,7 @@ import { recordEditHistory } from '../src/renderer/edit-ops/history'
 afterEach(() => applyAiPanelPrefs({}))
 describe('PDF pending-edit history', () => {
   it('preserves human history and clears redo without capturing AI snapshots when off', () => {
-    applyAiPanelPrefs({})
+    applyAiPanelPrefs({ aiEditUndoHistory: false })
     const undo: string[] = []
     let redo = ['future']
     const commit = (source: 'human' | 'ai') =>
@@ -26,7 +26,7 @@ describe('PDF pending-edit history', () => {
     applyAiPanelPrefs({ aiEditUndoHistory: true })
     commit('ai')
     expect(undo).toEqual(['human', 'ai'])
-    applyAiPanelPrefs({})
+    applyAiPanelPrefs({ aiEditUndoHistory: false })
     commit('human')
     expect(undo).toEqual(['human', 'ai', 'human'])
   })

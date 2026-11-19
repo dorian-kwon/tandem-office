@@ -24,6 +24,7 @@ import {
   checkContentStructure,
   countPreservedInDocument,
   countPreservedWithTopics,
+  countSheetTopics,
   deleteSheet,
   isRecord,
   newXmindId,
@@ -75,6 +76,33 @@ export const SHEET_KEYS_OUTSIDE_HISTORY: readonly string[] = ['title', 'theme']
 
 /** The most steps kept per sheet; older ones can no longer be undone. */
 export const MAX_HISTORY_STEPS = 200
+
+// Each recorded operation retains both an engine sheet and a mind-elixir drawing tree.
+// Apply this limit only to AI operations, which can arrive repeatedly in one run.
+export const MAX_AI_HISTORY_TOPICS = 2_000
+export const MAX_AI_HISTORY_CHARS = 1_000_000
+export const MAX_AI_HISTORY_TOTAL_CHARS = 8_000_000
+
+/** Estimated serialized size of the source and drawing snapshots held for one AI edit. */
+export function aiSheetHistoryCost(
+  sheet: XmindSheet,
+  addedVisibleTopics: number,
+  beforeDrawingChars: number,
+  afterDrawingChars: number,
+): number {
+  if (
+    Math.max(beforeDrawingChars, afterDrawingChars) > MAX_AI_HISTORY_CHARS ||
+    countSheetTopics(sheet) + Math.max(0, addedVisibleTopics) > MAX_AI_HISTORY_TOPICS
+  )
+    return Infinity
+  const sourceChars = JSON.stringify(sheet).length
+  if (sourceChars > MAX_AI_HISTORY_CHARS) return Infinity
+  return (
+    2 * Math.max(sourceChars, beforeDrawingChars, afterDrawingChars) +
+    beforeDrawingChars +
+    afterDrawingChars
+  )
+}
 
 interface SheetEntry {
   key: string

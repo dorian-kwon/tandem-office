@@ -478,11 +478,11 @@ export function releaseAiSnapshot(session: Session, id: number): void {
 const MAX_AI_SNAPSHOTS = 20
 let nextAiSnapshotId = 1
 
-/** Register a rollback point (stored as its own copy; `snap` typically also sits on the undo stack). */
+/** Reuse a checkpoint already owned by undo. Detach any other caller's input. */
 export function registerAiSnapshot(session: Session, snap: HistorySnapshot): number {
   const map = (session.aiSnapshots ??= new Map())
   const id = nextAiSnapshotId++
-  map.set(id, cloneSnapshot(snap))
+  map.set(id, session.undoStack.includes(snap) ? snap : cloneSnapshot(snap))
   while (map.size > MAX_AI_SNAPSHOTS) map.delete(map.keys().next().value as number)
   scheduleHistoryNotify(session)
   return id

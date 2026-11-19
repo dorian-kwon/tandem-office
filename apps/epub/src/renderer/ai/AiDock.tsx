@@ -13,7 +13,6 @@ import type { MutableRefObject, ReactElement } from 'react'
 import {
   AiMark,
   aiPanelInitiallyOpen,
-  applyAiPanelPrefs,
   effectiveAiPanelOpen,
   onAiRailClick,
   rememberAiPanelOpen,
@@ -24,7 +23,7 @@ import '@genoffice/ui/ai-queue-strip.css'
 import '@genoffice/ui/ai-usage.css'
 import '@genoffice/ui/ai-panel-prefs.css'
 import './ai-panel.css'
-import type { EpubAiApi, EpubBookSummary, EpubChapterResult } from '../../shared/ipc'
+import type { EpubBookSummary, EpubChapterResult } from '../../shared/ipc'
 import { BLOCK_ATTR } from '../reader/chapter-html'
 import { useI18n } from '../i18n/locale'
 import { AiPanel } from './AiPanel'
@@ -90,16 +89,6 @@ export function useEpubAi(wiring: EpubAiWiring): EpubAi {
   const { book, readChapter, editor, shownChapter, frameDoc, startBookTranslation } = wiring
   const [open, setOpen] = useState(() => aiPanelInitiallyOpen(OPEN_KEY))
   useEffect(() => rememberAiPanelOpen(OPEN_KEY, open), [open])
-
-  // the shell's AI panel preferences (text size): read once, then followed
-  useEffect(() => {
-    const api = window.epubApi as Partial<EpubAiApi> | undefined
-    void api
-      ?.getAiPanelPrefs?.()
-      .then(applyAiPanelPrefs)
-      .catch(() => {})
-    return api?.onAiPanelPrefsChanged?.(applyAiPanelPrefs)
-  }, [])
 
   const host = useMemo<BookAiHost>(
     () => ({

@@ -460,7 +460,7 @@ const DRAWN_AS_GIVEN = ['dangerouslySetInnerHTML', 'hyperLink', 'image', 'icons'
  * from them again, and a topic the file does not know gets an id the file can
  * keep. `known` are the topic ids of the last view.
  */
-export function normaliseTree(root: NodeObj, known: ReadonlySet<string>): void {
+export function normaliseTree(root: NodeObj, known: ReadonlySet<string>): number {
   const seen = new Set<string>()
   const visit = (node: NodeObj, depth: number): void => {
     const loose = node as unknown as Record<string, unknown>
@@ -480,6 +480,7 @@ export function normaliseTree(root: NodeObj, known: ReadonlySet<string>): void {
     for (const child of node.children) visit(child, depth + 1)
   }
   visit(root, 0)
+  return seen.size
 }
 
 /** Every topic id of a view. */

@@ -1293,7 +1293,7 @@ describe('when the screen and the file disagree', () => {
 
 describe('AI undo preference', () => {
   it('skips AI steps and retains manual steps before and after them', async () => {
-    applyAiPanelPrefs({})
+    applyAiPanelPrefs({ aiEditUndoHistory: false })
     const { controller, root } = await mount([plainSheet()])
     const original = root().title
     controller.edit((node) => {

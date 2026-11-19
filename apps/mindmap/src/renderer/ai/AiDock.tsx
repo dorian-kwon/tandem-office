@@ -12,7 +12,6 @@ import type { MutableRefObject, ReactElement } from 'react'
 import {
   AiMark,
   aiPanelInitiallyOpen,
-  applyAiPanelPrefs,
   effectiveAiPanelOpen,
   onAiRailClick,
   rememberAiPanelOpen,
@@ -23,7 +22,6 @@ import '@genoffice/ui/ai-queue-strip.css'
 import '@genoffice/ui/ai-usage.css'
 import '@genoffice/ui/ai-panel-prefs.css'
 import './ai-panel.css'
-import type { MindmapAiApi } from '../../shared/ipc'
 import type { DocumentSession } from '../document/session'
 import type { MapController } from '../map/controller'
 import { t as translate, useI18n } from '../i18n/locale'
@@ -59,16 +57,6 @@ export function useMindmapAi(wiring: MindmapAiWiring): MindmapAi {
   const { session, controllers, activeKey, setActiveKey, path, flush } = wiring
   const [open, setOpen] = useState(() => aiPanelInitiallyOpen(OPEN_KEY))
   useEffect(() => rememberAiPanelOpen(OPEN_KEY, open), [open])
-
-  // the shell's AI panel preferences (text size): read once, then followed
-  useEffect(() => {
-    const api = window.mindmapApi as Partial<MindmapAiApi> | undefined
-    void api
-      ?.getAiPanelPrefs?.()
-      .then(applyAiPanelPrefs)
-      .catch(() => {})
-    return api?.onAiPanelPrefsChanged?.(applyAiPanelPrefs)
-  }, [])
 
   const host = useMemo<MapAiHost>(
     () => ({

@@ -1,12 +1,14 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Editor } from '@tiptap/core'
 import { undoDepth } from '@tiptap/pm/history'
 import { applyAiPanelPrefs } from '@genoffice/ui'
 import { buildExtensions } from '../src/renderer/editor/extensions'
 import { runOps, uiOp } from '../src/renderer/editor/ops'
 import { executeTool } from '../src/renderer/ai/tools'
+import { SnapshotBody } from '../src/renderer/ai/snapshot-body'
+import { buildSourceMap } from '../src/renderer/markdown/sourceSplice'
 import type { AiDocWriter } from '../src/renderer/ai/doc-writer'
 
 const editors: Editor[] = []
@@ -206,10 +208,23 @@ describe('AI edit undo history setting (markdown)', () => {
 describe('AI panel rollback points', () => {
   const panel = readFileSync(resolve(process.cwd(), 'src/renderer/ai/AiPanel.tsx'), 'utf8')
 
+  it('serializes a document body once until an edit or replacement of the source map', () => {
+    const editor = createEditor('original')
+    const cache = new SnapshotBody()
+    const serialize = vi.fn(() => editor.getMarkdown())
+    const doc = editor.state.doc
+    expect(cache.read(doc, null, serialize)).toBe('original')
+    expect(cache.read(doc, null, serialize)).toBe('original')
+    const sourceMap = buildSourceMap(editor, doc, 'original')
+    expect(sourceMap).not.toBeNull()
+    expect(cache.read(doc, sourceMap, serialize)).toBe('original')
+    editor.view.dispatch(editor.state.tr.insertText('!', 1))
+    expect(cache.read(editor.state.doc, sourceMap, serialize)).toContain('!')
+    expect(serialize).toHaveBeenCalledTimes(3)
+  })
+
   it('captures and lists them only while the setting is on', () => {
-    expect(panel).toContain(
-      'aiEditUndoHistoryEnabled() ? depsRef.current.getSnapshot() : undefined',
-    )
+    expect(panel).toContain('if (!aiEditUndoHistoryEnabled()) return undefined')
     expect(panel).toContain('{undoHistoryOn && snapshots.length > 0 && (')
     expect(panel).toContain('aiEditUndoHistoryEnabled() && snapshotBefore !== undefined')
   })

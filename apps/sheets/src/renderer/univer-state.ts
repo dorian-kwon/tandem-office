@@ -4,6 +4,7 @@
  * Used by both the App component (App.tsx) and the module-level sync
  * helpers (univer-sync.ts).
  */
+import { DEFAULT_AI_PANEL_PREFS } from '@genoffice/ui/ai-panel-prefs'
 import type { SheetPasswordHash } from '@genoffice/xlsx-gateway/gateway/xlsx-protection-hash'
 import type { SheetProtectionInfo } from './sheet-protection'
 import {
@@ -256,10 +257,8 @@ export const CLOSURE_MAX_CELLS = 50_000
 /// Shared mutable state between App.tsx and univer-sync.ts.
 export const journalSuppression = { active: false }
 
-/// An AI batch whose applied payload exceeds this many cells keeps no undo
-/// entry: the stack retains the full mutation matrices both ways (five
-/// 200k-cell copies held ~336MB), and entries accumulate across proposals.
-/// The apply path surfaces a "too large to undo" notice instead.
+/// Limit the cells retained by AI history in each workbook across proposals.
+/// Each matrix pair costs its larger side; demo snapshots add their full cost.
 export const AI_UNDO_CELL_BUDGET = 100_000
 
 /// Raised around an AI plan apply. Batching merges each command's small item
@@ -275,10 +274,9 @@ export const aiBulkUndoGate = {
   dropAll: false,
 }
 
-/// Mirror of the shell's "AI edit undo history" preference (default off, like
-/// the stored default). main.tsx feeds it from the shell prefs channel before
-/// the first render; AI applies read it when they open their undo batch.
-export const aiUndoHistory = { enabled: false }
+/// Standalone and shell startup share the preference default until main.tsx
+/// receives the stored choice or a live settings update.
+export const aiUndoHistory = { enabled: DEFAULT_AI_PANEL_PREFS.aiEditUndoHistory }
 
 export function setAiEditUndoHistory(enabled: boolean): void {
   aiUndoHistory.enabled = enabled
@@ -286,24 +284,30 @@ export function setAiEditUndoHistory(enabled: boolean): void {
 
 export interface UndoRedoItemLike {
   readonly unitID: string
+  readonly undoMutations?: readonly { params?: unknown }[]
   readonly redoMutations?: readonly { params?: unknown }[]
 }
 
 /// Bounded: stops counting past `cap` (the budget check needs no exact total).
 export function undoPayloadCells(item: UndoRedoItemLike, cap: number): number {
-  let cells = 0
-  for (const mutation of item.redoMutations ?? []) {
-    const cellValue = (mutation.params as { cellValue?: Record<string, object> } | undefined)
-      ?.cellValue
-    if (!cellValue || typeof cellValue !== 'object') continue
-    for (const rowKey in cellValue) {
-      const row = cellValue[rowKey]
-      if (!row || typeof row !== 'object') continue
-      cells += Object.keys(row).length
+  function count(mutations: UndoRedoItemLike['redoMutations']): number {
+    let cells = 0
+    for (const mutation of mutations ?? []) {
+      const params = mutation.params as
+        | { cellValue?: Record<string, object>; retainedCells?: number; purgedCells?: unknown[] }
+        | undefined
+      cells += params?.retainedCells ?? params?.purgedCells?.length ?? 0
       if (cells > cap) return cells
+      for (const row in params?.cellValue) {
+        const values = params.cellValue[row]
+        if (values && typeof values === 'object') cells += Object.keys(values).length
+        if (cells > cap) return cells
+      }
     }
+    return cells
   }
-  return cells
+  const redo = count(item.redoMutations)
+  return redo > cap ? redo : Math.max(redo, count(item.undoMutations))
 }
 
 /** Univer resolves the real service behind a DI proxy. The hook is installed
