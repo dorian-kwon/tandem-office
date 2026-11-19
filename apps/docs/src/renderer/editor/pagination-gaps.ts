@@ -714,25 +714,28 @@ export function syncCutOverlays(
   anchors: LineAnchor[],
   zoomFactor: number,
 ): void {
-  let layer = wrap.querySelector(':scope > .page-cut-overlays') as HTMLElement | null
+  const existing = wrap.querySelector(':scope > .page-cut-overlays') as HTMLElement | null
   if (anchors.length === 0) {
-    layer?.remove()
+    existing?.remove()
     return
   }
-  if (!layer) {
-    layer = document.createElement('div')
-    layer.className = 'page-cut-overlays'
-    wrap.appendChild(layer)
-  }
-  layer.textContent = ''
+  // Keep reads separate from live DOM writes: each inserted marker can make
+  // the next anchor query lay out the surrounding document again.
   const wrapTop = wrap.getBoundingClientRect().top
+  const markers = document.createDocumentFragment()
   for (const a of anchors) {
     const top = anchorTop(a)
     if (top == null) continue
     const el = document.createElement('div')
     el.className = 'page-gap-cut page-cut-overlay'
     el.style.top = `${(top - wrapTop) / zoomFactor}px`
-    layer.appendChild(el)
+    markers.appendChild(el)
+  }
+  const layer = existing ?? document.createElement('div')
+  layer.replaceChildren(markers)
+  if (!existing) {
+    layer.className = 'page-cut-overlays'
+    wrap.appendChild(layer)
   }
 }
 

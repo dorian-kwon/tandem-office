@@ -476,28 +476,35 @@ export function syncMarginAnnotations(
   // stack per page band; a bubble that cannot start within its band is dropped
   // (Word routes those to the overflow pane)
   const bands = pageBandsOf(pm, wrapRect, wrapRect.height / f, f)
+  // Inserting or moving a balloon between height reads can force another
+  // layout. Measure the fixed-width balloons together before positioning them.
+  const pending = document.createDocumentFragment()
+  const bubbles = placed.map((p) => {
+    const bubble = p.make()
+    bubble.style.left = `${bubbleLeft}px`
+    bubble.style.width = `${BUBBLE_W}px`
+    bubble.style.top = '0px'
+    pending.appendChild(bubble)
+    return bubble
+  })
+  layer.appendChild(pending)
+  const heights = bubbles.map((bubble) => bubble.offsetHeight)
   let bandIdx = 0
   let prevBottom = -Infinity
-  for (const p of placed) {
+  for (const [i, p] of placed.entries()) {
     while (bandIdx < bands.length - 1 && p.top >= bands[bandIdx + 1].top) {
       bandIdx++
       prevBottom = -Infinity
     }
-    const bubble = p.make()
-    bubble.style.left = `${bubbleLeft}px`
-    bubble.style.width = `${BUBBLE_W}px`
+    const bubble = bubbles[i]
     const top = Math.max(p.top, prevBottom + BUBBLE_STACK_GAP, bands[bandIdx].top)
-    bubble.style.top = `${top}px`
-    layer.appendChild(bubble)
-    if (
-      !p.sticky &&
-      top + bubble.offsetHeight > bands[bandIdx].bottom &&
-      top > bands[bandIdx].top
-    ) {
+    const bottom = top + heights[i]
+    if (!p.sticky && bottom > bands[bandIdx].bottom && top > bands[bandIdx].top) {
       bubble.remove()
       continue
     }
-    prevBottom = top + bubble.offsetHeight
+    bubble.style.top = `${top}px`
+    prevBottom = bottom
     const path = document.createElementNS(SVG_NS, 'path')
     path.setAttribute(
       'd',

@@ -204,6 +204,26 @@ describe('overlay cut markers (read-only nested-table anchors)', () => {
     syncCutOverlays(wrap, [], 1)
     expect(wrap.querySelector('.page-cut-overlays')).toBeNull()
   })
+
+  it('reads every nested-table anchor before changing the displayed cut markers', () => {
+    const wrap = wrapAt(100)
+    syncCutOverlays(wrap, [anchorAt(200)], 1)
+    const oldMarker = wrap.querySelector('.page-cut-overlay')
+    const anchors = [300, 400, 500].map((top) => {
+      const anchor = anchorAt(top)
+      anchor.node.parentElement!.getBoundingClientRect = () => {
+        // Interleaving marker insertion and geometry reads can force layout
+        // of the entire document again for every nested-table page cut.
+        expect([...wrap.querySelectorAll('.page-cut-overlay')]).toEqual([oldMarker])
+        return rectOf(top)
+      }
+      return anchor
+    })
+    syncCutOverlays(wrap, anchors, 2)
+    expect(
+      Array.from(wrap.querySelectorAll<HTMLElement>('.page-cut-overlay'), (el) => el.style.top),
+    ).toEqual(['100px', '150px', '200px'])
+  })
 })
 
 describe('createLineRectsCache', () => {

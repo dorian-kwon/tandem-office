@@ -2654,7 +2654,10 @@ export function AiPanel({
         aria-orientation="vertical"
         aria-label={aiSubscriptionText(lang, 'aiAssistant')}
       />
-      <div className="ai-panel-header">
+      <div
+        className="ai-panel-header"
+        data-project-chat-menu={projectPanel.chatMenu ? '' : undefined}
+      >
         <span className="ai-panel-title">
           <AiMark size={22} />
           {aiSubscriptionText(lang, 'aiAssistant')}

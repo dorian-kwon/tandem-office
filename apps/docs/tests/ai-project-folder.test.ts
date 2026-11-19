@@ -141,7 +141,9 @@ describe('docs AI panel: project folder', () => {
   it('puts the project chip on the row under the input and the chat menu in the header', async () => {
     await mount(fakeProjectFolder('p1'))
     expect(container.querySelector('.ai-input-below .ai-project-chip')).not.toBeNull()
-    expect(container.querySelector('.ai-panel-header .ai-project-chat-button')).not.toBeNull()
+    expect(
+      container.querySelector('.ai-panel-header[data-project-chat-menu] .ai-project-chat-button'),
+    ).not.toBeNull()
   })
 
   it('reads the project context before the run and sends the project skill with it', async () => {
@@ -169,6 +171,7 @@ describe('docs AI panel: project folder', () => {
     const projectApi = await mount(folder)
     expect(container.querySelector('.ai-input-below .ai-project-chip')).not.toBeNull()
     expect(container.querySelector('.ai-project-chat-button')).toBeNull()
+    expect(container.querySelector('.ai-panel-header[data-project-chat-menu]')).toBeNull()
     await sendStarter()
 
     expect(folder.appended).toEqual([])

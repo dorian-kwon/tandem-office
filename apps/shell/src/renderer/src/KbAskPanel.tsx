@@ -959,7 +959,10 @@ export function KbAskPanel({
   return (
     <div className="kb-ask">
       {corpusCount !== null && (corpusCount > 0 || projectId !== null) && (
-        <div className="kb-ask-headbar">
+        <div
+          className="kb-ask-headbar"
+          data-project-chat-menu={projectId !== null && chat !== null ? '' : undefined}
+        >
           <b>
             {projectId !== null
               ? kbAskProjectText(lang, 'askProjectTitle', { name: projectName })

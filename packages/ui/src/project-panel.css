@@ -24,17 +24,18 @@
 
 /* The chat title in a panel header gives way to the header's buttons: a long
  * title ends in "…" and the buttons beside it never shrink or leave the
- * panel. Anchored on the chat menu, so every header that holds it follows. */
+ * panel. The header marks the presence of the menu explicitly: a global
+ * :has() here can invalidate a whole editor on every draft keystroke. */
 .ai-project-chat-menu {
   flex: 0 1 auto;
   max-width: 100%;
 }
 
-:has(> .ai-project-chat-menu) {
+[data-project-chat-menu] {
   min-width: 0;
 }
 
-:has(> .ai-project-chat-menu) > :not(.ai-project-chat-menu) {
+[data-project-chat-menu] > :not(.ai-project-chat-menu) {
   flex-shrink: 0;
 }
 

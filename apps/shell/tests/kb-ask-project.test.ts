@@ -366,6 +366,7 @@ describe('the home ask without a project', () => {
     expect(chip).not.toBeNull()
     expect(chip!.textContent).toContain(projectPanelText('en', 'noProject'))
     expect(host.querySelector('.ai-project-chat-menu')).toBeNull()
+    expect(host.querySelector('.kb-ask-headbar[data-project-chat-menu]')).toBeNull()
   })
 
   it('keeps the chat in memory: nothing recorded, no project scope, no project tools', async () => {
@@ -402,7 +403,9 @@ describe('the home ask with a project', () => {
     expect(host.querySelector('.ai-input-below .ai-project-chip')!.textContent).toContain(
       PROJECT.name,
     )
-    expect(host.querySelector('.kb-ask-headbar .ai-project-chat-menu')).not.toBeNull()
+    expect(
+      host.querySelector('.kb-ask-headbar[data-project-chat-menu] .ai-project-chat-menu'),
+    ).not.toBeNull()
   })
 
   it('reads the project plus All, prepares the context before the request, and offers the project tools', async () => {
