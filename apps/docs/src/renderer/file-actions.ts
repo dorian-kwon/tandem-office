@@ -8,7 +8,7 @@
 import { restoreNoteRuns } from './ai/note-run-save'
 import type { Editor } from '@tiptap/core'
 import type { EditorState } from '@tiptap/pm/state'
-import { history } from '@tiptap/pm/history'
+import { translationHistory as history } from './editor/translation-history'
 import { Fragment, Slice } from '@tiptap/pm/model'
 import { ReplaceAroundStep } from '@tiptap/pm/transform'
 import {
@@ -88,6 +88,7 @@ import { FORMAT_MARKS, serializeMarks } from './editor/caret-marks'
 import { TRACK_IGNORE } from './editor/revisions'
 import {
   isPhasedContentPending,
+  phasedScrollEnd,
   setContentPhased,
   waitForFullContent,
   type PhasedContentHost,
@@ -402,9 +403,11 @@ export function appendStreamedNodes(editor: Editor, nodes: PmNode[], recover = f
   // forced Track Changes must not record the streamed tail as insertions
   tr.setMeta(TRACK_IGNORE, true)
   tr.setMeta(TABLE_TRAILING_SKIP, true)
+  const endScroller = phasedScrollEnd(editor.view.dom.closest<HTMLElement>('.editor-scroll'))
   try {
     editor.view.dispatch(tr)
   } finally {
+    if (endScroller) endScroller.scrollTop = endScroller.scrollHeight
     if (editor.state.doc !== before) carryDocSeen(editor, before)
   }
 }
@@ -1646,9 +1649,10 @@ export function printDoc(ctx: FileActionContext): void {
   if (!ctx.doc) return
   noticeLabelsBeforeOutput()
   // the print sheet prints the live preview pages: needs the whole document mounted
+  const completeContent = waitForFullContent()
   if (isPhasedContentPending()) {
     const generation = docGeneration
-    void waitForFullContent().then((complete) => {
+    void completeContent.then((complete) => {
       if (complete && docGeneration === generation) printDoc(ctx)
     })
     return

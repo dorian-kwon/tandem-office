@@ -584,7 +584,7 @@ function confirmApplied(
 /** The `edit_map` tool: up to 50 edits on one sheet, as one step of its history. */
 export async function editMap(
   host: MapAiHost,
-  input: { sheet?: unknown; edits?: unknown },
+  input: { sheet?: unknown; edits?: unknown; intent?: unknown },
   turn: MapTurn | null,
 ): Promise<MapToolResult> {
   const edits = input.edits
@@ -595,6 +595,13 @@ export async function editMap(
     return fail(
       `too many edits: ${edits.length}. One edit_map call takes at most ${EDIT_BATCH_LIMIT}; nothing was applied. Split the edits into several calls.`,
     )
+  }
+  const translation = input.intent === 'translation'
+  if (
+    translation &&
+    edits.some((edit) => !isRecord(edit) || (edit.op !== 'set_title' && edit.op !== 'set_note'))
+  ) {
+    return fail('Use set_title or set_note for translated topics, one topic per undo step.')
   }
   host.flush()
   const where = sheetOf(host, input.sheet)
@@ -613,16 +620,29 @@ export async function editMap(
   })
   const applied = outcomes.filter((outcome) => outcome.ok).length
   let history: ReturnType<MapController['edit']> | undefined
+  let steps = translation ? 0 : 1
   if (applied > 0) {
     const restyled = outcomes
       .filter((outcome) => outcome.ok && outcome.op === 'set_format' && outcome.id)
       .map((outcome) => outcome.id!)
     history = controller.edit((root) => takeTree(root, data.nodeData), {
+      translation: translation
+        ? {
+            ids: [
+              ...new Set(
+                outcomes.flatMap((outcome) => (outcome.ok && outcome.id ? [outcome.id] : [])),
+              ),
+            ],
+            recorded: (count) => {
+              steps = count
+            },
+          }
+        : undefined,
       restyled,
       aiEdit: true,
       beforeRecord: () => turn?.noteEdit(session, key),
     })
-    turn?.finishEdit(session, key, history)
+    if (history !== 'recorded' || steps) turn?.finishEdit(session, key, history, steps)
     confirmApplied(session, key, outcomes, edits)
   }
   const done = outcomes.filter((outcome) => outcome.ok).length
@@ -638,7 +658,7 @@ export async function editMap(
   return {
     output: lines.join('\n'),
     isError: done === 0,
-    mutated: done > 0,
+    mutated: done > 0 && (history !== 'recorded' || steps > 0),
     detail: { done, total: edits.length },
   }
 }
@@ -1062,6 +1082,7 @@ export class MapTurn {
     session: DocumentSession,
     key: string,
     history: ReturnType<MapController['edit']>,
+    steps = 1,
   ): void {
     if (this.#unrecorded) return
     if (history !== 'recorded') {
@@ -1073,7 +1094,7 @@ export class MapTurn {
       return
     }
     const edited = this.editedSheets.get(key)
-    if (edited) edited.steps++
+    if (edited) edited.steps += steps
     this.#after.set(key, this.#fingerprint(session, key))
   }
 

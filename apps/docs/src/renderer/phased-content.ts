@@ -95,11 +95,19 @@ function chunkEnd(content: PmNode[], start: number, budget: number): number {
 let token = 0
 let settled = Promise.resolve(true)
 let failed = false
+let finalPageScroll: HTMLElement | null = null
+let phasedDocument = false
+let readingInput: { until: number; wheel?: { scroller: HTMLElement; down: boolean } } | null = null
+let fullContentRequested = false
+// Leave room for the browser to deliver the next input event after a heavy table paints.
+const INPUT_IDLE_MS = 240
 /** clears the loading flag / resolves settled when a load is cancelled mid-stream */
 let cancelPending: (() => void) | null = null
 
 /** False if this load was replaced, destroyed, or could not mount the complete document. */
 export function waitForFullContent(): Promise<boolean> {
+  fullContentRequested = isPhasedContentPending()
+  readingInput = null
   return settled
 }
 
@@ -112,8 +120,57 @@ export function isPhasedContentPending(): boolean {
   return cancelPending !== null
 }
 
+/** A live wheel gesture over already-mounted content takes priority over read-ahead. */
+export function notePhasedWheel(scroller: HTMLElement, deltaY: number): void {
+  if (deltaY && isPhasedContentPending() && !fullContentRequested)
+    readingInput = {
+      until: performance.now() + INPUT_IDLE_MS,
+      wheel: { scroller, down: deltaY > 0 },
+    }
+}
+
+/** Opening the dock can refit the paper and queue several full pagination
+ * passes even after all blocks are mounted. A draft needs neither the tail
+ * nor those passes; sending or printing releases the pending work. */
+export function notePhasedChatInput(): void {
+  if (phasedDocument && !fullContentRequested)
+    readingInput = { until: performance.now() + INPUT_IDLE_MS }
+}
+
+export function phasedReadAheadDelay(): number {
+  if (!readingInput || fullContentRequested) return 0
+  const remaining = Math.ceil(readingInput.until - performance.now())
+  if (remaining <= 0) {
+    readingInput = null
+    return 0
+  }
+  if (!readingInput.wheel) return remaining
+  const { scroller, down } = readingInput.wheel
+  // Keep feeding a reader approaching the last mounted screen.
+  if (down && scroller.scrollHeight - scroller.scrollTop < 2 * scroller.clientHeight) return 0
+  if (!down && scroller.scrollTop <= 1) return 0
+  return remaining
+}
+
+/** Preserve a trip to the current end across a tail append or its final pagination.
+ * Check the live position before each synchronous layout change so scrolling away
+ * takes effect immediately. At the initial top, no size measurement is necessary. */
+export function phasedScrollEnd(scroller: HTMLElement | null): HTMLElement | null {
+  const streaming = isPhasedContentPending()
+  if (!scroller || (!streaming && finalPageScroll !== scroller)) return null
+  const atEnd =
+    scroller.scrollTop > 1 &&
+    scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop <= 1
+  finalPageScroll = streaming && atEnd ? scroller : null
+  return atEnd ? scroller : null
+}
+
 /** Any full content replacement outside the phased path must drop a pending tail. */
 export function cancelPhasedContent(): void {
+  finalPageScroll = null
+  readingInput = null
+  phasedDocument = false
+  fullContentRequested = false
   token++
   cancelPending?.()
   cancelPending = null
@@ -177,6 +234,7 @@ export function setContentPhased(
     settle(true)
     return
   }
+  phasedDocument = true
   host.setLoading(true)
   cancelPending = () => {
     host.setLoading(false)
@@ -185,6 +243,8 @@ export function setContentPhased(
   const finish = () => {
     if (!host.getDirty()) host.resetHistory()
     cancelPending = null
+    fullContentRequested = false
+    if (readingInput?.wheel) readingInput = null
     host.setLoading(false)
     settle(true)
     if (typeof document !== 'undefined')
@@ -194,6 +254,11 @@ export function setContentPhased(
     if (my !== token) return
     if (host.isDestroyed()) {
       settle(false)
+      return
+    }
+    const delay = phasedReadAheadDelay()
+    if (delay) {
+      setTimeout(appendChunk, delay)
       return
     }
     const start = index

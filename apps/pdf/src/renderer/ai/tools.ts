@@ -97,6 +97,7 @@ export interface PdfAiDeps {
   selection(): { page: number; lastPage: number; text: string } | null
   /** One-line summary of this session's unsaved pending edits; '' when none */
   pendingSummary(): string
+  pendingTextOnPage?(index: number): Pick<TextEditInput, 'rect' | 'oldText' | 'newText'>[]
   outline(): OutlineNode[] | null
   searchIndex(): Promise<SearchIndex> | null
   isDeleted(origIdx: number): boolean
@@ -136,7 +137,7 @@ export interface PdfAiDeps {
   /** Delete a note thread root and every reply under it */
   deleteNoteThread(origIdx: number, root: NoteThreadItem): void
   /** Queue a pending text edit (dry-run validated against the file when possible); null = accepted, string = rejection reason */
-  editText(input: TextEditInput): Promise<string | null>
+  editText(input: TextEditInput, signal?: AbortSignal): Promise<string | null>
   /** Queue a pending move of a whole paragraph by a PDF-user-space delta. Stacks onto a
       pending edit that already owns the block, so moveBy is the block's total pending
       displacement (not just this delta) */
@@ -1511,6 +1512,13 @@ async function readPages(
         }
       }
     }
+    const edits = deps.pendingTextOnPage?.(n - 1)
+    if (edits?.length) {
+      const applied = edits
+        .map(({ rect, oldText, newText }) => JSON.stringify({ rect, oldText, newText }))
+        .join('\n')
+      text = `Unsaved replacements on this page (current edits):\n${applied}\nSaved page text:\n${text}`
+    }
     out += `[Page ${n}]\n${text.trim()}\n\n`
     if (out.length > READ_CHUNK_CHARS) {
       out = `${out.slice(0, READ_CHUNK_CHARS)}\n… (truncated; read the rest in further calls)`
@@ -2356,7 +2364,11 @@ function setHeaderFooterTool(deps: PdfAiDeps, input: Record<string, unknown>): T
   }
 }
 
-async function editText(deps: PdfAiDeps, input: Record<string, unknown>): Promise<ToolExecution> {
+async function editText(
+  deps: PdfAiDeps,
+  input: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<ToolExecution> {
   const summary = t('aiToolEditText', { page: Number(input.page) })
   if (deps.readOnly()) return err(READONLY_OUTPUT, summary)
   const r = resolvePage(deps, input.page)
@@ -2402,7 +2414,8 @@ async function editText(deps: PdfAiDeps, input: Record<string, unknown>): Promis
       summary,
     )
   }
-  const reason = await deps.editText({
+  if (signal?.aborted) return err('Translation was stopped before this edit was applied.', summary)
+  const edit: TextEditInput = {
     pageIndex: r.origIdx,
     rect: located.rect,
     oldText: located.oldText,
@@ -2413,7 +2426,8 @@ async function editText(deps: PdfAiDeps, input: Record<string, unknown>): Promis
     newFont,
     newBold: input.bold === true ? true : undefined,
     newItalic: input.italic === true ? true : undefined,
-  })
+  }
+  const reason = signal ? await deps.editText(edit, signal) : await deps.editText(edit)
   if (reason) return err(`The edit could not be applied: ${reason}`, summary)
   deps.gotoPage(r.origIdx + 1)
   const total = countOccurrences(entry, oldText)
@@ -2458,7 +2472,11 @@ async function locateBlock(
 }
 
 /** Rewrite one clustered paragraph, reflowed within the block's original width */
-async function editBlock(deps: PdfAiDeps, input: Record<string, unknown>): Promise<ToolExecution> {
+async function editBlock(
+  deps: PdfAiDeps,
+  input: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<ToolExecution> {
   const summary = t('aiToolEditText', { page: Number(input.page) })
   if (deps.readOnly()) return err(READONLY_OUTPUT, summary)
   const r = resolvePage(deps, input.page)
@@ -2510,7 +2528,8 @@ async function editBlock(deps: PdfAiDeps, input: Record<string, unknown>): Promi
   const lines = newText
     .split('\n')
     .flatMap((p) => (p.trim() ? wrapText(p, widthPt, size, cssFamily, cssStyle) : []))
-  const reason = await deps.editText({
+  if (signal?.aborted) return err('Translation was stopped before this edit was applied.', summary)
+  const edit: TextEditInput = {
     pageIndex: r.origIdx,
     rect: block.rect,
     oldText: joinBlockLines(block.lines.map((l) => l.text)),
@@ -2532,7 +2551,8 @@ async function editBlock(deps: PdfAiDeps, input: Record<string, unknown>): Promi
           }),
     align: align === 'left' ? undefined : align,
     blockSource: newText,
-  })
+  }
+  const reason = signal ? await deps.editText(edit, signal) : await deps.editText(edit)
   if (reason) return err(`The edit could not be applied: ${reason}`, summary)
   deps.gotoPage(r.origIdx + 1)
   return {
@@ -3871,9 +3891,9 @@ export async function executePdfTool(
     case 'markup_text':
       return markupText(deps, input)
     case 'edit_text':
-      return editText(deps, input)
+      return editText(deps, input, signal)
     case 'edit_block':
-      return editBlock(deps, input)
+      return editBlock(deps, input, signal)
     case 'move_text_block':
       return moveTextBlockTool(deps, input)
     case 'insert_text':

@@ -179,13 +179,19 @@ describe('add_bilingual: body paragraphs', () => {
     expect(blockJson(editor, 2).type).toBe('docListItem')
   })
 
-  it('is one undo step', async () => {
+  it('undo removes the last twin first and redo restores each twin', async () => {
     const editor = await createEditor([plain('가'), plain('나')])
     const before = editor.state.doc
     applyBilingual(editor, 'after', [item(0, '가', ['A']), item(1, '나', ['B'])])
     expect(editor.state.doc.childCount).toBe(4)
     editor.commands.undo()
+    expect(editor.state.doc.textContent).toBe('가A나')
+    editor.commands.undo()
     expect(editor.state.doc.eq(before)).toBe(true)
+    editor.commands.redo()
+    expect(editor.state.doc.textContent).toBe('가A나')
+    editor.commands.redo()
+    expect(editor.state.doc.textContent).toBe('가A나B')
   })
 
   it('refuses a stale fingerprint and an incomplete segment list without touching the document', async () => {
@@ -362,6 +368,13 @@ describe('add_bilingual: tables', () => {
     expect(map.problems).toBeNull()
     expect([map.width, map.height]).toEqual([2, 4])
     expect(blockJson(editor, 0).content![2].content![0].attrs?.rowspan).toBe(2)
+    const final = editor.state.doc
+    expect(editor.commands.undo()).toBe(true)
+    const pending = readRunGroups(editor, 0, 0).filter((entry) => entry.fp)
+    expect(pending.map((entry) => entry.segments)).toEqual([['다']])
+    const restored = applyBilingual(editor, 'below', [item(0, '다', ['C'], pending[0].paragraph)])
+    expect(restored.ok && restored.tables[0].paragraphs).toBe(1)
+    expect(editor.state.doc.eq(final)).toBe(true)
   })
 
   it('a table must come whole: missing paragraphs refuse the call', async () => {
@@ -397,7 +410,7 @@ describe('add_bilingual: tables', () => {
     expect(remainingUntranslated(editor, undefined, 'ko').body).toEqual([])
   })
 
-  it('body paragraphs and a table go in one call and one undo step', async () => {
+  it('body paragraphs and table cells are independently undoable after one call', async () => {
     const editor = await createEditor([plain('앞'), grid(), plain('뒤')])
     const before = editor.state.doc
     const out = applyBilingual(editor, 'below', [
@@ -416,7 +429,69 @@ describe('add_bilingual: tables', () => {
     ])
     expect(texts(doc.content![4]).join('')).toBe('Back')
     editor.commands.undo()
+    expect(editor.state.doc.textContent).not.toContain('Back')
+    for (const _entry of gridItems()) expect(editor.commands.undo()).toBe(true)
+    expect(editor.state.doc.child(2).eq(before.child(1))).toBe(true)
+    editor.commands.undo()
     expect(editor.state.doc.eq(before)).toBe(true)
+  })
+
+  it.each(['right', 'below'] as const)(
+    'refills the precise %s slot after undo with identical source and twin text',
+    async (layout) => {
+      const editor = await createEditor([
+        table(row(cell('같음'), cell('같음')), row(cell('같음'), cell('같음'))),
+      ])
+      const first = Array.from({ length: 4 }, (_, i) => item(0, '같음', ['Twin'], i))
+      expect(applyBilingual(editor, layout, first).ok).toBe(true)
+      const final = editor.state.doc
+      expect(editor.commands.undo()).toBe(true)
+      const partial = editor.state.doc
+      const pending = readRunGroups(editor, 0, 0).filter((run) => run.fp)
+      expect(pending).toHaveLength(1)
+      expect(pending[0].segments).toEqual(['같음'])
+      const fill = pending.map((run) => ({
+        index: 0,
+        paragraph: run.paragraph,
+        fp: run.fp!,
+        segments: ['Twin'],
+      }))
+      const output = applyBilingual(editor, layout, fill)
+      expect(output.ok && output.tables[0].paragraphs).toBe(1)
+      expect(editor.state.doc.eq(final)).toBe(true)
+      expect(editor.commands.undo()).toBe(true)
+      expect(editor.state.doc.eq(partial)).toBe(true)
+      expect(editor.commands.redo()).toBe(true)
+      expect(editor.state.doc.eq(final)).toBe(true)
+    },
+  )
+
+  it('refills a skipped nested-table paragraph without duplicating the expanded grid', async () => {
+    const content = table(row(cell('바깥')))
+    content.content![0].content![0].content!.push({
+      type: 'docNestedTable',
+      attrs: {
+        model: { rows: [[{ paras: ['반복'] }, { paras: ['반복'] }]], colWidths: [1000, 1000] },
+      },
+    })
+    const editor = await createEditor([content])
+    const pending = () =>
+      readRunGroups(editor, 0, 0)
+        .filter((run) => run.nestedTable === 0 && run.fp)
+        .map((run) => ({
+          index: 0,
+          nestedTable: 0,
+          paragraph: run.paragraph,
+          fp: run.fp!,
+          segments: ['Twin'],
+        }))
+    expect(pending()).toHaveLength(2)
+    expect(applyBilingual(editor, 'right', pending()).ok).toBe(true)
+    const final = editor.state.doc
+    expect(editor.commands.undo()).toBe(true)
+    expect(pending()).toHaveLength(1)
+    expect(applyBilingual(editor, 'right', pending()).ok).toBe(true)
+    expect(editor.state.doc.eq(final)).toBe(true)
   })
 
   it('with tracking on, new rows and cells are insertions', async () => {

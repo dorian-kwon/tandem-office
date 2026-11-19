@@ -23,8 +23,8 @@ const sha = (text: string): string => createHash('sha256').update(text).digest('
  * Fingerprints of the full profile. Update them for deliberate changes to the
  * shared prompt or tool schemas, such as batched translations of nested tables.
  */
-const NORMAL_PROMPT_SHA = '441612c0b64df301fbe43bd1b00b3670b9363b253302a161898799ea88a27d4c'
-const NORMAL_PROMPT_LENGTH = 24240
+const NORMAL_PROMPT_SHA = '8aa6f23d4022437dd6ec3c2038117255611ba48374f9e127b9401e8244416a7c'
+const NORMAL_PROMPT_LENGTH = 24389
 const NORMAL_TOOLS_SHA = '19332584946e5d817d3f906acf3a247c4336eac2d4d32e84c630fc72aeddfaad'
 
 /** Tools a translation workflow can need: none of them may ever be dropped. */

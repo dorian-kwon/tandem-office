@@ -167,6 +167,8 @@ export interface HistoryBatchRequest {
 
 /** A raw op transaction from the AI batch surface (ops are validated by the registry; coordinates are document-space EMU). */
 export interface ApplyTxnOp {
+  /** Independent native history steps for translated text objects, notes and table cells. */
+  translation?: boolean
   /** The caller can merge a partial render by slide part path. */
   acceptSlideUpdate?: boolean
   ops: unknown[]

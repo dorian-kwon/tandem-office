@@ -10,13 +10,13 @@ import {
 } from '../src'
 
 function scriptedTransport(script: Array<(cb: AgentStreamCallbacks) => void>): AgentTransport & {
-  requests: Array<{ messages: AgentMessage[] }>
+  requests: Array<{ messages: AgentMessage[]; system: string }>
 } {
   let turn = 0
   const transport = {
-    requests: [] as Array<{ messages: AgentMessage[] }>,
-    stream(request: { messages: AgentMessage[] }, cb: AgentStreamCallbacks) {
-      transport.requests.push({ messages: request.messages })
+    requests: [] as Array<{ messages: AgentMessage[]; system: string }>,
+    stream(request: { messages: AgentMessage[]; system: string }, cb: AgentStreamCallbacks) {
+      transport.requests.push({ messages: request.messages, system: request.system })
       const step = script[turn++]
       if (step) queueMicrotask(() => step(cb))
       return { cancel: () => queueMicrotask(() => cb.onDone()) }
@@ -100,4 +100,31 @@ describe('AgentLoop.restore orphan tool calls', () => {
     }
     expect(callIds.length).toBeGreaterThan(0)
   })
+})
+
+it('preserves a confirmed receipt alongside an unconfirmed sibling when resuming a restored batch', async () => {
+  const transport = scriptedTransport([(cb) => cb.onDone()])
+  const loop = new AgentLoop({ transport, skill: makeSkill() })
+  loop.restore([
+    { role: 'user', text: 'Translate both paragraphs' },
+    {
+      role: 'assistant',
+      text: '',
+      toolCalls: [
+        { id: 'p1', name: 'do_thing', input: {} },
+        { id: 'p2', name: 'do_thing', input: {} },
+      ],
+    },
+    { role: 'tool', results: [{ id: 'p1', name: 'do_thing', output: 'Paragraph 1 committed' }] },
+  ])
+  loop.run('Resume.')
+  await flush()
+  const req = transport.requests[0]!
+  expect(req.messages.find((m) => m.role === 'tool')).toMatchObject({
+    results: [
+      { id: 'p1', output: 'Paragraph 1 committed' },
+      { id: 'p2', output: TOOL_ABORTED_OUTPUT, isError: true },
+    ],
+  })
+  expect(req.system).toContain('read the current document')
 })

@@ -6,7 +6,6 @@
  * chapters), without a zip.
  */
 import {
-  applyBlockEdits,
   applyReplacements,
   openChapter,
   remapChapter,
@@ -15,7 +14,7 @@ import {
   type OpenChapter,
   type RangeReplacement,
 } from '@genoffice/epub-engine'
-import { invertReplacements } from '../../src/main/book-session'
+import { applyBookBlockEdits, invertReplacements } from '../../src/main/book-session'
 import type {
   EpubApplyEditsRequest,
   EpubBlockInfo,
@@ -144,7 +143,11 @@ export class FakeBook {
     const target = this.editable(request.spineIndex)
     if ('ok' in target) return target
     const map = target.map as OpenChapter
-    const applied = applyBlockEdits(map, request.edits)
+    const { applied, translationSteps } = applyBookBlockEdits(
+      map,
+      request.edits,
+      request.translation === true,
+    )
     if (!applied.ok) {
       return {
         ok: false,
@@ -154,13 +157,14 @@ export class FakeBook {
         message: applied.refusal.message,
       }
     }
-    return this.commit(
+    const result = this.commit(
       request.spineIndex,
       target,
       applied.map,
       applied.replacements,
       applied.created,
     )
+    return result.ok && translationSteps ? { ...result, translationSteps } : result
   }
 
   replaceRanges = async (request: EpubReplaceRangesRequest): Promise<EpubEditResult> => {

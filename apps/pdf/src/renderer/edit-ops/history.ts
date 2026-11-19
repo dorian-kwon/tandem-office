@@ -26,8 +26,18 @@ export function rebaseEditHistory(
   plan: PlanResult,
   context: (state: EditSnapshot) => OpContext,
 ): EditSnapshot[] {
+  return rebaseFrames(stack, before, after, plan, context) as EditSnapshot[]
+}
+
+export function rebaseFrames(
+  stack: PdfHistoryFrame[],
+  before: EditSnapshot,
+  after: EditSnapshot,
+  plan: PlanResult,
+  context: (state: EditSnapshot) => OpContext,
+): PdfHistoryFrame[] {
   if (!stack.length) return stack
-  const rebased: EditSnapshot[] = []
+  const rebased: PdfHistoryFrame[] = []
   const cache = new Map<Bucket, Map<unknown, unknown>>()
   for (const key of plan.touched) cache.set(key, new Map([[before[key], after[key]]]))
   // AI commonly appends many annotations in one batch. Reuse the actual
@@ -67,9 +77,12 @@ export function rebaseEditHistory(
     }
     next[key] = cacheForKey.get(frame[key]) as EditSnapshot[K]
   }
+  let previous = before
   let newer = after
   for (let index = stack.length - 1; index >= 0; index--) {
-    const frame = stack[index]!
+    const stored = stack[index]!
+    const frame = restoreFrame(stored, previous)
+    previous = frame
     if (
       frame.blankPages !== before.blankPages ||
       frame.deleted !== before.deleted ||
@@ -98,8 +111,60 @@ export function rebaseEditHistory(
     }
     const next = { ...frame }
     for (const key of plan.touched) update(frame, next, key)
-    if (BUCKETS.some((key) => next[key] !== newer[key])) rebased.push(next)
+    if (BUCKETS.some((key) => next[key] !== newer[key])) rebased.push(inverseFrame(stored, next))
+    if ('kind' in stored) cache.get('textEdits')?.delete(frame.textEdits)
     newer = next
   }
   return rebased.reverse()
+}
+
+// A text undo entry owns only the spans this edit touched. Saving a full
+// textEdits array at every heading would retain a triangular number of slots.
+type TextFrame = {
+  kind: 'text'
+  records: Array<{ id: string; index: number; value?: EditSnapshot['textEdits'][number] }>
+}
+export type PdfHistoryFrame = EditSnapshot | TextFrame
+
+export function textFrame(edits: EditSnapshot['textEdits'], ids: readonly string[]): TextFrame {
+  const wanted = new Set(ids)
+  const records: TextFrame['records'] = []
+  edits.forEach((value, index) => {
+    if (wanted.delete(value.id)) records.push({ id: value.id, index, value })
+  })
+  for (const id of wanted) records.push({ id, index: -1 })
+  return { kind: 'text', records }
+}
+
+export function restoreFrame(frame: PdfHistoryFrame, current: EditSnapshot): EditSnapshot {
+  if (!('kind' in frame)) return frame
+  const ids = new Set(frame.records.map((r) => r.id))
+  const textEdits = current.textEdits.filter((r) => !ids.has(r.id))
+  for (const r of frame.records) if (r.value) textEdits.splice(r.index, 0, r.value)
+  return { ...current, textEdits }
+}
+
+export function inverseFrame(frame: PdfHistoryFrame, current: EditSnapshot): PdfHistoryFrame {
+  return 'kind' in frame
+    ? textFrame(
+        current.textEdits,
+        frame.records.map((r) => r.id),
+      )
+    : current
+}
+
+export function appendFrame(stack: PdfHistoryFrame[], frame: PdfHistoryFrame): PdfHistoryFrame[] {
+  // Independent text edits use small deltas. Keep the pre-existing budget
+  // for full-document frames, including interleaved manual operations.
+  let start = Math.max(0, stack.length - 1999)
+  if (!('kind' in frame)) {
+    let full = 1
+    for (let i = stack.length - 1; i >= start; i--) {
+      if (!('kind' in stack[i]!) && ++full > 50) {
+        start = i + 1
+        break
+      }
+    }
+  }
+  return [...stack.slice(start), frame]
 }

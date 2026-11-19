@@ -661,8 +661,8 @@ function registerEpubIpc(): void {
   ipcMain.handle(EPUB_CHANNELS.applyEdits, async (e, request: unknown) => {
     const session = sessionByWc.get(e.sender.id)
     if (!session || !mayWrite(e.sender.id)) return { ok: false, error: 'not-open' }
-    const { spineIndex, edits } = (request ?? {}) as Record<string, unknown>
-    return session.applyEdits(spineIndex, edits)
+    const { spineIndex, edits, translation } = (request ?? {}) as Record<string, unknown>
+    return session.applyEdits(spineIndex, edits, translation === true)
   })
 
   ipcMain.handle(EPUB_CHANNELS.replaceRanges, async (e, request: unknown) => {

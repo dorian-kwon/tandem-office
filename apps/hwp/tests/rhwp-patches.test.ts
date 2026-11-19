@@ -35,6 +35,14 @@ describe('rhwp scheme patches', () => {
     expect(patched).toContain("targetUrl.protocol !== 'http:' && targetUrl.protocol !== 'https:'")
   })
 
+  it('keeps the acknowledgement for a committed AI edit until the plugin replies or the SDK is destroyed', () => {
+    const transport = join(dirname(require.resolve('@rhwp/editor')), 'transport.js')
+    const patched = applyPatch('sdk-edit-ack', readFileSync(transport, 'utf8'))
+    expect(patched).toContain("method === 'plugin.invoke' && params.id === 'ieum-agent'")
+    expect(patched).toContain("params.method === 'invokeAi' || params.method === 'undo'")
+    expect(patched).toContain('const timeout = edit ? undefined : setTimeout')
+  })
+
   it('patch the studio origin check', () => {
     const source = "    return protocol === 'http:' || protocol === 'https:';\n"
     expect(applyPatch('studio-scheme', source)).toBe(
@@ -571,13 +579,53 @@ describe('rhwp PC fonts patch', () => {
   ].join('\n')
   const patched = applyPatch('studio-pc-fonts', main)
 
+  it('reads full SFNT aliases only for explicit studio discovery', async () => {
+    const source = [
+      'export interface DetectLocalFontsOptions {',
+      '}',
+      '    const fontDataList = await queryLocalFonts();',
+      '    const enumeratedRecords = await collectLocalFontRecords(fontDataList);',
+    ].join('\n')
+    const result = applyPatch('studio-pc-font-metadata', source)
+    const body = result.slice(result.indexOf('    const enumeratedRecords'))
+    const run = new Function(
+      'options',
+      'normalizeLocalFontRecords',
+      'queryLocalFonts',
+      'collectLocalFontRecords',
+      'return (async () => {' + body + '\nreturn enumeratedRecords; })()',
+    )
+    const calls: string[] = []
+    const normalize = (records: unknown) => {
+      calls.push('metadata')
+      return records
+    }
+    const query = async () => {
+      calls.push('query')
+      return ['font']
+    }
+    const collect = async () => {
+      calls.push('sfnt')
+      return ['explicit alias']
+    }
+    expect(await run({ enumeratedRecords: ['saved alias'] }, normalize, query, collect)).toEqual([
+      'saved alias',
+    ])
+    expect(calls).toEqual(['metadata'])
+    expect(await run({}, normalize, query, collect)).toEqual(['explicit alias'])
+    expect(calls).toEqual(['metadata', 'query', 'sfnt'])
+    expect(STUDIO_PATCHES).toContain('studio-pc-font-metadata')
+  })
+
   it('looks at the PC once the studio listens for font changes, with its own detection', () => {
     expect(patched).toContain(`import { refreshPcFonts } from '${PC_FONTS_MODULE}';`)
     expect(patched).toContain('  getLocalFontRecords,\n')
     const call = patched.indexOf('void refreshPcFonts({')
     expect(call).toBeGreaterThan(patched.indexOf('setupEventListeners();'))
     expect(call).toBeLessThan(patched.indexOf('setupModalFocusRestore();'))
-    expect(patched).toContain('detect: () => detectLocalFonts({ force: true }),')
+    expect(patched).toContain(
+      'update: (records) => detectLocalFonts({ force: true, enumeratedRecords: records }),',
+    )
     expect(patched).toContain("eventBus.emit('local-fonts-changed'")
   })
 
@@ -698,11 +746,13 @@ describe('the studio source the build fetched', () => {
     'src/main.ts',
     'src/embed/protocol.ts',
     'src/core/wasm-bridge.ts',
+    'src/core/local-fonts.ts',
     'src/engine/input-handler.ts',
     'src/engine/input-handler-keyboard.ts',
     'src/engine/input-handler-text.ts',
     'src/engine/input-handler-table.ts',
     'src/engine/command.ts',
+    'src/engine/history.ts',
     'src/command/commands/edit.ts',
     'src/command/commands/format.ts',
     'src/command/commands/insert.ts',

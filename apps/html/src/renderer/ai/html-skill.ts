@@ -52,6 +52,8 @@ const SYSTEM_PROMPT = [
   "- Anything that changes the DOM structure (columns, card grids, merged sections) goes through plan_page first; the brief's layout fields are where the user confirms it.",
   '- Pages styled by an external CSS framework can only be restyled through their class lists; say so in the reply.',
   '',
+  'Translate existing page text in apply_ops batches with intent "translation". Use set_text on plain-text elements or str_replace on individual passages to keep nested markup and attributes intact. When resuming, read the current source and continue with the remaining passages.',
+  '',
   '## Answer citations',
   '- When an answer draws on specific parts of the document, cite them as markdown links: [short label](htmlnav://sid/N) where N is a sid from the current outline. The user can click these to jump to the element. Only cite sids that exist.',
   '',

@@ -42,6 +42,7 @@ export interface HtmlDocAccess {
   applyOps(
     ops: HtmlOp[],
     label: string,
+    translation?: boolean,
   ): { ok: true; ranges: Array<[number, number]> } | { ok: false; errors: OpError[] }
   replaceAll(html: string, label: string, expectedManualVersion?: number): boolean | void
   /** questionnaire card; resolves with the user's answers or cancelled when skipped */
@@ -301,6 +302,12 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       type: 'object',
       required: ['ops'],
       properties: {
+        intent: {
+          type: 'string',
+          enum: ['translation'],
+          description:
+            'When translating existing text, send the changes together. Each text replacement is a separate undo step.',
+        },
         ops: {
           type: 'array',
           minItems: 1,
@@ -942,6 +949,35 @@ export function createHtmlSkillCore(access: HtmlDocAccess): {
               summary: t('aiToolApplyOpsFailed'),
             }
           }
+          const translation = call.input.intent === 'translation'
+          if (
+            translation &&
+            ops.some((op) => !op || !['set_text', 'str_replace'].includes(op.op))
+          ) {
+            return {
+              output: 'Use set_text or str_replace for in-place translation.',
+              isError: true,
+              summary: t('aiToolApplyOpsFailed'),
+            }
+          }
+          if (
+            translation &&
+            ops.some((op) => {
+              if (op.op !== 'set_text') return false
+              const node = map.bySid.get(op.sid)
+              if (!node || node.inner[0] === node.inner[1]) return false
+              return !node.textNodes.some(
+                ([from, to]) => from === node.inner[0] && to === node.inner[1],
+              )
+            })
+          ) {
+            return {
+              output:
+                'A set_text replacement would remove nested markup. Use str_replace on its text passages.',
+              isError: true,
+              summary: t('aiToolApplyOpsFailed'),
+            }
+          }
           const staleResult = (): ToolExecution => ({
             output: STALE_MESSAGE,
             isError: true,
@@ -976,7 +1012,9 @@ export function createHtmlSkillCore(access: HtmlDocAccess): {
               ? call.input.summary
               : `apply_ops (${ops.length})`
           const finish = (finalOps: HtmlOp[]): ToolExecution => {
-            const result = access.applyOps(finalOps, label)
+            const result = translation
+              ? access.applyOps(finalOps, label, true)
+              : access.applyOps(finalOps, label)
             if (!result.ok) {
               const lines = result.errors.map(
                 (e) =>

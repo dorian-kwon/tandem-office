@@ -33,6 +33,7 @@
  * pushUndoRedo empties the unit's redo stack on every call, so the redo
  * items land directly in the service's stack map after the undo pushes.
  */
+import { translationHistory } from './translation-history'
 import { carryAiEntryCost } from './ai-undo-scope'
 import { IUndoRedoService } from '@univerjs/core'
 
@@ -67,9 +68,10 @@ export function carriableSuffix<T extends CarriedUndoItem>(items: readonly T[]):
   let cut = 0
   for (let index = 0; index < items.length; index += 1) {
     const item = items[index]!
-    const visual = [...item.undoMutations, ...item.redoMutations].some(
-      (mutation) => mutation.id === VISUAL_UNDO_COMMAND_ID,
-    )
+    const hasVisual = (step: CarriedUndoItem) =>
+      [...step.undoMutations, ...step.redoMutations].some((m) => m.id === VISUAL_UNDO_COMMAND_ID)
+    const history = translationHistory(item)
+    const visual = history ? history.steps.some((step) => hasVisual(step.item)) : hasVisual(item)
     if (visual) cut = index + 1
   }
   return items.slice(cut)

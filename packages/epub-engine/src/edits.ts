@@ -424,6 +424,11 @@ export function applyBlockEdit(map: OpenChapter, edit: BlockEdit): EditResult {
 export function applyBlockEdits(
   map: OpenChapter,
   edits: readonly BlockEdit[],
+  onChange?: (
+    before: string,
+    afterLength: number,
+    replacements: readonly RangeReplacement[],
+  ) => void,
 ):
   | { ok: true; map: OpenChapter; replacements: RangeReplacement[]; created: string[] }
   | { ok: false; index: number; refusal: EditRefusal } {
@@ -433,6 +438,8 @@ export function applyBlockEdits(
   for (const [index, edit] of edits.entries()) {
     const result = applyBlockEdit(current, edit)
     if (!result.ok) return { ok: false, index, refusal: result.refusal }
+    if (result.replacements.length)
+      onChange?.(current.source, result.map.source.length, result.replacements)
     replacements = composeReplacements(map.source, replacements, result.replacements)
     for (const id of result.created) created.push(id)
     current = result.map

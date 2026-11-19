@@ -11,7 +11,9 @@ const MAX_TEXTAREA_HEIGHT = 168
 
 /** true where `field-sizing: content` exists (Chromium 123+) */
 const SIZES_TO_CONTENT =
-  typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('field-sizing', 'content')
+  typeof CSS !== 'undefined' &&
+  typeof CSS.supports === 'function' &&
+  CSS.supports('field-sizing', 'content')
 
 /**
  * The AI panel input box shared by docs and sheets: auto-growing textarea
@@ -27,6 +29,7 @@ const SIZES_TO_CONTENT =
 export function AiComposer({
   value,
   busy,
+  sendDisabled = false,
   placeholder,
   hintIdle,
   hintBusy,
@@ -55,6 +58,8 @@ export function AiComposer({
 }: {
   readonly value: string
   readonly busy: boolean
+  /** Keep the draft editable while this editor is not ready to send. */
+  readonly sendDisabled?: boolean
   readonly placeholder: string
   readonly hintIdle: string
   readonly hintBusy: string
@@ -102,7 +107,7 @@ export function AiComposer({
   const ref = textareaRef ?? innerRef
   // a composer that unmounts while focused must not leave the shell believing it is
   useEffect(() => () => reportAiComposerFocus(false), [])
-  const canSend = value.trim().length > 0 && !busy
+  const canSend = value.trim().length > 0 && !busy && !sendDisabled
   const { spellcheck } = useAiPanelPrefs()
   const picker = useComposerPickers({ skills, docs, value, onChange, textareaRef: ref })
 
@@ -161,7 +166,7 @@ export function AiComposer({
           if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault()
             if (canSend) onSend()
-            else if (busy && onQueue) onQueue()
+            else if (busy && !sendDisabled && onQueue) onQueue()
           } else if (e.key === 'Escape' && busy) {
             e.preventDefault()
             onStop()

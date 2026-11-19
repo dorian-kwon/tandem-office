@@ -245,6 +245,26 @@ describe('marks of changes', () => {
     },
   )
 
+  it('yields between large geometry batches and discards pending marks after a manual edit', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    let clock = 0
+    vi.spyOn(performance, 'now').mockImplementation(() => (clock += 2))
+    const { plugin, doc, userEdit } = open(Array.from({ length: 36 }, () => 'target'))
+    const geometry = vi.spyOn(doc, 'getSelectionRects')
+    plugin.replaceAllText('target', 'changed')
+    expect(geometry.mock.calls.length).toBeGreaterThan(0)
+    expect(geometry.mock.calls.length).toBeLessThan(36)
+    vi.advanceTimersByTime(80)
+    expect(marksOnPage()).toHaveLength(36)
+
+    plugin.replaceAllText('changed', 'finished')
+    userEdit()
+    const calls = geometry.mock.calls.length
+    vi.advanceTimersByTime(600)
+    expect(geometry).toHaveBeenCalledTimes(calls)
+    expect(marksOnPage()).toEqual([])
+  })
+
   it('reuses page geometry for redraws, but refreshes it after layout settles or text changes', () => {
     vi.useFakeTimers()
     const { plugin, doc, redraw } = open(['first', 'target'])

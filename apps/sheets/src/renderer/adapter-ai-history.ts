@@ -1,5 +1,5 @@
 import type { InMemoryWorkbookAdapter } from '@genoffice/xlsx-gateway/domain/in-memory-workbook'
-import type { WorkbookSnapshot } from '@genoffice/xlsx-gateway/domain/workbook.types'
+import type { WorkbookSnapshot, CellChange } from '@genoffice/xlsx-gateway/domain/workbook.types'
 
 /** The live grid owns undo order. Consume the adapter's snapshots for this
  * synchronous commit (including default-sheet pruning) as one grid action. */
@@ -48,4 +48,22 @@ export function adapterHistoryCells(
     }
   }
   return count
+}
+
+/** The demo adapter and Univer share one cell undo. Only the affected cell is
+ * rewritten, preserving later changes elsewhere and advancing the plan revision. */
+export function restoreAdapterCell(
+  adapter: InMemoryWorkbookAdapter,
+  change: CellChange,
+  side: 'before' | 'after',
+): number {
+  const snapshot = Reflect.get(adapter, 'snapshot') as WorkbookSnapshot
+  const revision = snapshot.revision + 1
+  const sheets = snapshot.sheets.map((sheet) =>
+    sheet.id === change.sheetId
+      ? { ...sheet, cells: { ...sheet.cells, [change.address]: change[side] } }
+      : sheet,
+  )
+  Reflect.set(adapter, 'snapshot', { revision, sheets })
+  return revision
 }

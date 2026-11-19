@@ -102,6 +102,7 @@ function stampValue() {
   }
   // the app's own plugin and the Hangul keys are compiled into the studio
   hash.update(readFileSync(AGENT_PLUGIN))
+  hash.update(readFileSync(join(APP, 'studio-plugin', 'replacement-history.mjs')))
   hash.update(readFileSync(DIALOG_THEME))
   hash.update(readFileSync(HANCOM_KEYS))
   hash.update(readFileSync(DOCUMENT_INFO))

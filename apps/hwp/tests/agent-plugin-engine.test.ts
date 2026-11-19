@@ -7,7 +7,7 @@
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import init, { HwpDocument } from '@rhwp/core'
 import { agentPlugin, type AgentPluginHost } from '../studio-plugin/agent-plugin.mjs'
 
@@ -163,11 +163,34 @@ describe('replacing text in the real engine', () => {
 
   it('replaces every occurrence and takes the run back', () => {
     const editor = openEditor()
+    const doc = editor.doc()
+    const search = vi.spyOn(doc, 'searchAllText')
+    const begin = vi.spyOn(doc, 'beginBatch')
+    const end = vi.spyOn(doc, 'endBatch')
     const before = editor.plugin.foreignChanges()
     expect(editor.plugin.replaceAllText('문단', '단락')).toMatchObject({ ok: true, count: 3 })
+    expect(search).toHaveBeenCalledTimes(1)
+    expect(begin).toHaveBeenCalledOnce()
+    expect(end).toHaveBeenCalledOnce()
     expect(editor.lines().filter((line) => line.includes('단락'))).toHaveLength(3)
     expect(editor.plugin.undo(1, before)).toMatchObject({ ok: true, undone: 1 })
     expect(editor.lines()).toEqual(ORIGINAL)
+  })
+
+  it('closes the layout batch and rolls back every replacement when a body edit fails', () => {
+    const editor = openEditor()
+    const doc = editor.doc()
+    const original = doc.replaceText.bind(doc)
+    const replace = vi.spyOn(doc, 'replaceText').mockImplementationOnce(original)
+    replace.mockImplementationOnce(() => {
+      throw new Error('second replacement failed')
+    })
+    const end = vi.spyOn(doc, 'endBatch')
+    expect(() => editor.plugin.replaceAllText('문단', '단락')).toThrow('second replacement failed')
+    expect(end).toHaveBeenCalledOnce()
+    expect(editor.steps()).toBe(0)
+    expect(editor.lines()).toEqual(ORIGINAL)
+    expect(editor.plugin.replaceAllText('문단', '단락')).toMatchObject({ ok: true, count: 3 })
   })
 })
 

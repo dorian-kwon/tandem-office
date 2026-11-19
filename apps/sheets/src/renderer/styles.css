@@ -1736,8 +1736,14 @@ button.check-item:hover {
   position: relative;
 }
 
+/* Ribbon, dialogs and context menus stay unavailable while the workbook opens.
+ * The chat dock inside .sheet-body remains available for drafting. */
+.app-shell[data-opening-workbook] > :not(.sheet-body) {
+  interactivity: inert;
+}
+
 .workbook-opening-screen {
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: 35;
   display: grid;

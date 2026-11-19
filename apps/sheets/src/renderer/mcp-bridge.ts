@@ -39,7 +39,7 @@ export interface McpSheetHandlers {
   /** the workbook's worksheets, for resolving name-addressed ops */
   sheets: () => readonly SheetRef[]
   /** apply a workbook DSL batch (planFromOps + applyChangePlan) */
-  applyOps: (ops: WorkbookOperation[], dryRun: boolean) => Promise<unknown>
+  applyOps: (ops: WorkbookOperation[], dryRun: boolean, translation?: boolean) => Promise<unknown>
   /** bring a sheet (and optionally a cell) into view before/after an edit */
   focusSheet: (sheetId: string, address?: string) => void
   /** save to an explicit absolute path (dialog-free) */
@@ -181,7 +181,12 @@ export function installSheetsMcpBridge(handlers: McpSheetHandlers): () => void {
           const dryRun = payload.dryRun === true
           if (sheetId !== undefined && !dryRun)
             handlers.focusSheet(sheetId, primaryCellOf(parsed.data))
-          reply(true, await handlers.applyOps(parsed.data, dryRun))
+          reply(
+            true,
+            await (payload.translation === true
+              ? handlers.applyOps(parsed.data, dryRun, true)
+              : handlers.applyOps(parsed.data, dryRun)),
+          )
           return
         }
         case 'save_sheet': {

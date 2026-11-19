@@ -53,6 +53,8 @@ function applyStamped(op: Op, ctx: OpContext): OpRecord {
 }
 
 export interface TxnRequest {
+  /** Optional in-process observer of successful units within the validated transaction. */
+  beforeOp?: (op: Op) => (record: OpRecord) => void
   /** atomic: all-or-nothing (default). per_op: independent, failures skip. */
   isolation?: 'atomic' | 'per_op'
   /** Validate and return the plan without touching the deck. */
@@ -211,8 +213,11 @@ export function runTxn(opened: OpenedPptx, req: TxnRequest): TxnResult {
     const records: OpRecord[] = []
     for (const [i, op] of req.ops.entries()) {
       try {
-        records.push(applyStamped(op, ctx))
+        const finish = req.beforeOp?.(op)
+        const record = applyStamped(op, ctx)
         hardenTargetIdentity(op, ctx)
+        finish?.(record)
+        records.push(record)
       } catch (e) {
         restoreSnapshot(opened, snap)
         return {
@@ -240,8 +245,11 @@ export function runTxn(opened: OpenedPptx, req: TxnRequest): TxnResult {
   for (const [i, op] of req.ops.entries()) {
     if (failedIdx.has(i)) continue
     try {
-      records.push(applyStamped(op, ctx))
+      const finish = req.beforeOp?.(op)
+      const record = applyStamped(op, ctx)
       hardenTargetIdentity(op, ctx)
+      finish?.(record)
+      records.push(record)
     } catch (e) {
       failures.push({ index: i, op, error: withUsage(op, message(e)) })
     }

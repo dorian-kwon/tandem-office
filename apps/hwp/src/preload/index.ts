@@ -94,6 +94,7 @@ const aiSubscription: SubscriptionApi = {
 }
 
 const api: HwpApi = {
+  fontFamilyInfo: (families) => ipcRenderer.invoke(HWP_CHANNELS.fontFamilyInfo, families),
   consumePending: () => ipcRenderer.invoke(HWP_CHANNELS.consumePending),
   untitledCopy: () => ipcRenderer.invoke(HWP_CHANNELS.untitledCopy),
   readFile: (path) => ipcRenderer.invoke(HWP_CHANNELS.readFile, path),

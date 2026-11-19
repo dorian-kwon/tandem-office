@@ -1,8 +1,10 @@
+import { bilingualSlots, linkBilingualSlots, rememberBilingualSlots } from './bilingual-table-slots'
+import { finishTranslationUnit } from '../editor/translation-history'
 import { draftNestedTable, NestedTableChanges, nestedBatches } from './nested-table-draft'
 import { originalAiEditor } from './ai-history-gate'
 import type { Editor } from '@tiptap/core'
 import { Fragment, type Mark, type Node as PmNode, type Schema } from '@tiptap/pm/model'
-import type { Transaction } from '@tiptap/pm/state'
+import { EditorState, type Transaction } from '@tiptap/pm/state'
 import { TableMap } from '@tiptap/pm/tables'
 import { TRACK_IGNORE } from '../editor/revisions'
 import { PARA_FORMAT_ATTRS, paraFormatIsDefault } from '../editor/caret-marks'
@@ -814,6 +816,9 @@ function planNestedBilingual(
         errors: [`${where}: no editable nested table at that number; read_runs again`],
       }
     const draft = draftNestedTable(editor, ref.model)
+    const beforeTable = draft.editor.state.doc.firstChild!
+    const oldSlots = bilingualSlots(beforeTable, ref.model)
+    if (oldSlots) linkBilingualSlots(beforeTable, oldSlots)
     const outcome = applyBilingual(
       draft.editor,
       layout,
@@ -838,15 +843,18 @@ function planNestedBilingual(
     stale.push(...outcome.stale.map(relabel))
     alreadyDone.push(...outcome.alreadyDone.map(relabel))
     pairs.push(...twinPairsOf(draft.editor))
-    const model = draft.result(true)
-    if (model !== ref.model) changes.set(ref, model)
+    const slots = bilingualSlots(draft.editor.state.doc.firstChild!)
+    draft.forEachResult(!oldSlots, (model) => {
+      if (slots) linkBilingualSlots(model, slots)
+      changes.set(ref, model)
+    })
   }
   return { ok: true, changes, tables, stale, alreadyDone, pairs }
 }
 
 /**
  * add_bilingual: every item checked first, one bad item refuses the whole call
- * with nothing changed. All edits land in one transaction (one undo step).
+ * with nothing changed. Each translated paragraph gets its own undo step.
  */
 export function applyBilingual(
   editor: Editor,
@@ -872,10 +880,13 @@ export function applyBilingual(
   const pairs: Array<[string, string]> = nested?.pairs ?? []
   const tableReports: BilingualTableReport[] = nested?.tables.slice() ?? []
   const placeOps: PlaceOp[] = []
+  const resumed: Array<{ pos: number; node: PmNode }> = []
   const placedReports: BilingualPlacedReport[] = []
   const cellDests = new Map<string, CellDestination>()
   const originals = new Set<number>()
   const placedPairsList: Array<[string, string]> = []
+  const order = new Map(items.map((item, i) => [item, i]))
+  const position = new Map<PmNode, number>()
   let seq = 0
 
   for (const item of items) {
@@ -964,6 +975,7 @@ export function applyBilingual(
         continue
       }
       const { prepared } = made
+      position.set(prepared.node, order.get(item)!)
       originals.add(block.pos)
       if (target.kind === 'cell') {
         const dkey = `${target.index}:${target.row}:${target.column}`
@@ -1043,6 +1055,7 @@ export function applyBilingual(
       continue
     }
     const { prepared } = made
+    position.set(prepared.node, order.get(item)!)
     pairs.push([prepared.fp, prepared.twinFp])
     bodyOps.push({
       kind: 'body',
@@ -1062,6 +1075,47 @@ export function applyBilingual(
       const g = groupsOf(b.node, b.pos)
       return g.length > 0 ? runFingerprint(g.map((x) => x.text)) : null
     })
+    const existing = bilingualSlots(top.node)
+    if (existing) {
+      const pending = new Set(
+        [...existing.sourceToTwin]
+          .filter(([, twin]) => blocks[twin]?.node.content.size === 0)
+          .map(([source]) => source),
+      )
+      if (!pending.size) {
+        alreadyDone.push(`block ${index} (table)`)
+        continue
+      }
+      let restored = 0
+      const extra: string[] = []
+      for (const { item } of list) {
+        const source = item.paragraph!
+        const where = label(index, source)
+        if (!existing.sourceToTwin.has(source) || fps[source] !== item.fp) {
+          stale.push(`${where} changed since read_runs; read this table again`)
+          continue
+        }
+        if (!pending.has(source)) {
+          alreadyDone.push(where)
+          continue
+        }
+        const result = prepare(schema, blocks[source], item, where, track, date)
+        if (!result.ok) {
+          ;(result.stale ? stale : errors).push(result.error)
+          continue
+        }
+        const { prepared } = result
+        const dest = blocks[existing.sourceToTwin.get(source)!]
+        resumed.push({ pos: dest.pos, node: prepared.node })
+        position.set(prepared.node, order.get(item)!)
+        pairs.push([prepared.fp, prepared.twinFp])
+        if (prepared.extra) extra.push(`paragraph ${source} (+${prepared.extra})`)
+        restored++
+      }
+      if (restored)
+        tableReports.push({ index, layout: existing.layout, paragraphs: restored, extra })
+      continue
+    }
     const roles = tableTwinRoles(roleEditor, fps)
     if (roles.some((r) => r !== null)) {
       alreadyDone.push(`block ${index} (table)`)
@@ -1104,6 +1158,7 @@ export function applyBilingual(
       const made = prepare(schema, block, item, where, track, date)
       if (!made.ok) (made.stale ? tableStale : tableErrors).push(made.error)
       else {
+        position.set(made.prepared.node, order.get(item)!)
         prepared.set(n, made.prepared)
         if (made.prepared.extra) extra.push(`paragraph ${n} (+${made.prepared.extra})`)
       }
@@ -1156,6 +1211,7 @@ export function applyBilingual(
       )
       continue
     }
+    plan.op.content.forEach((node, i) => position.set(node, order.get(dest.entries[i]!.item)!))
     cellOps.push(plan.op)
     placedReports.push(...plan.reports)
   }
@@ -1170,25 +1226,74 @@ export function applyBilingual(
 
   const tr = editor.state.tr
   nested?.changes.apply(tr)
-  // last position first, so an edit never shifts the ones still ahead; a table starts where the
-  // paragraph before it ends, and its own edits must run before that paragraph's insertion
-  const opPos = (o: BodyOp | TableOp | PlaceOp | CellOp): number =>
-    o.kind === 'table' ? o.pos : o.at
-  const ops = [...bodyOps, ...tableOps, ...placeOps, ...cellOps].sort(
-    (a, b) =>
-      opPos(b) - opPos(a) ||
-      (a.kind === 'table' || a.kind === 'cell' ? -1 : 1) -
-        (b.kind === 'table' || b.kind === 'cell' ? -1 : 1) ||
-      (b.kind === 'place' ? b.seq : 0) - (a.kind === 'place' ? a.seq : 0),
-  )
-  for (const op of ops) {
-    if (op.kind === 'body' || op.kind === 'place') tr.insert(op.at, op.node)
-    else if (op.kind === 'cell') tr.replaceWith(op.at + 1, op.at + op.cell.nodeSize - 1, op.content)
-    else if (op.fellBack && op.layout === 'below') {
-      // merged cells or an irregular grid: row blocks keep the grid valid
-      applyBlocksBelow(tr, op, schema, track, date)
-    } else if (op.layout === 'right') applyRight(tr, op, schema, track, date)
-    else applyBelow(tr, op, schema, track, date)
+  const actions: Array<{ order: number; run: () => void }> = []
+  const schedule = (node: PmNode, run: () => void) =>
+    actions.push({ order: position.get(node)!, run })
+  for (const op of [...bodyOps, ...placeOps]) {
+    schedule(op.node, () => tr.insert(tr.mapping.map(op.at, 1), op.node))
+  }
+  for (const { pos, node } of resumed)
+    schedule(node, () => {
+      const at = tr.mapping.map(pos, 1)
+      tr.replaceWith(at, at + tr.doc.nodeAt(at)!.nodeSize, node)
+    })
+  for (const op of cellOps) {
+    op.content.forEach((node, i) =>
+      schedule(node, () => {
+        const pos = tr.mapping.map(op.at)
+        const cell = tr.doc.nodeAt(pos)!
+        if (i === 0) tr.replaceWith(pos + 1, pos + cell.nodeSize - 1, node)
+        else tr.insert(pos + cell.nodeSize - 1, node)
+      }),
+    )
+  }
+  for (const op of tableOps) {
+    // Materialize row/column geometry once, with empty paragraphs reserved for
+    // the twins. The first unit owns the geometry, subsequent units own just
+    // their content. Undoing the first unit restores the exact original grid.
+    const placeholders = new Map<PmNode, PmNode>()
+    const reserved = new Map<number, Prepared>()
+    for (const [number, entry] of op.prepared) {
+      const empty = entry.node.copy(Fragment.empty)
+      placeholders.set(empty, entry.node)
+      reserved.set(number, { ...entry, node: empty })
+    }
+    let slots: Map<PmNode, number> | undefined
+    let since = 0
+    const layoutTable = () => {
+      const at = tr.mapping.map(op.pos, 1)
+      const table = tr.doc.nodeAt(at)!
+      const local = EditorState.create({ doc: schema.topNodeType.create(null, [table]) }).tr
+      const numbers = new Map(Array.from(op.numberAt, ([pos, n]) => [pos - op.pos, n]))
+      const draft = { ...op, table, pos: 0, prepared: reserved, numberAt: numbers }
+      if (op.fellBack && op.layout === 'below') applyBlocksBelow(local, draft, schema, track, date)
+      else if (op.layout === 'right') applyRight(local, draft, schema, track, date)
+      else applyBelow(local, draft, schema, track, date)
+      const target = local.doc.firstChild!
+      const originalBlocks = textblocksOf(table, 0)!
+      const pairs = [...reserved]
+        .sort(([a], [b]) => a - b)
+        .map(([i, slot]) => [originalBlocks[i].node, slot.node] as const)
+      rememberBilingualSlots(target, op.layout, pairs)
+      tr.replaceWith(at, at + table.nodeSize, target)
+      slots = new Map()
+      target.descendants((node, offset) => {
+        const twin = placeholders.get(node)
+        if (twin) slots!.set(twin, at + 1 + offset)
+      })
+      since = tr.steps.length
+    }
+    for (const entry of op.prepared.values())
+      schedule(entry.node, () => {
+        if (!slots) layoutTable()
+        const pos = tr.mapping.slice(since).map(slots!.get(entry.node)!, 1)
+        tr.replaceWith(pos + 1, pos + 1, entry.node.content)
+      })
+  }
+  actions.sort((a, b) => a.order - b.order)
+  for (const action of actions) {
+    action.run()
+    finishTranslationUnit(tr)
   }
   if (track) tr.setMeta(TRACK_IGNORE, true)
   if (tr.docChanged) editor.view.dispatch(tr)

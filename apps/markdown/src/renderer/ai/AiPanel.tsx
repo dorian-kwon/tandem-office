@@ -226,6 +226,7 @@ export interface AiPreset {
 }
 
 export interface MarkdownAiDeps {
+  getSource?(): import('../source/translation').SourceTranslation | null | undefined
   getEditor(): Editor | null
   /** Raw YAML block including its fences and following blank lines. */
   getFrontmatter(): string
@@ -706,6 +707,7 @@ export function AiPanel({
           () => ({
             write: (spec, onProgress, signal) => runDocWriterRef.current(spec, onProgress, signal),
           }),
+          () => depsRef.current.getSource?.(),
         ),
         createSearchSkill(),
         // the person's skills: use_skill, read_skill_file, propose_skill (app-run tools)
@@ -730,7 +732,7 @@ export function AiPanel({
       ]),
       // no rollback point while the "AI edit undo history" setting is off
       captureSnapshot: () => {
-        if (!aiEditUndoHistoryEnabled()) return undefined
+        if (!aiEditUndoHistoryEnabled() || depsRef.current.getSource?.()) return undefined
         return depsRef.current.getSnapshot((snapshotBodyRef.current ??= new SnapshotBody()))
       },
       systemSuffix: () =>

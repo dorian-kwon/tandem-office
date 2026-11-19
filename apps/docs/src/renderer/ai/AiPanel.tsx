@@ -120,7 +120,7 @@ import {
 import { setInactiveSelectionShown } from '../editor/inactive-selection'
 import { applyRevisionsBy } from '../editor/revisions'
 import { DOCS_CONTINUE_INSTRUCTION } from './continuation'
-import { waitForFullContent } from '../phased-content'
+import { notePhasedChatInput, waitForFullContent } from '../phased-content'
 import { currentDocGeneration } from '../file-actions'
 import { createFilesSkill } from './files-skill'
 import { boundChatHistory } from './chat-retention'
@@ -1960,6 +1960,8 @@ export function AiPanel({
     return (
       <button
         className="ai-rail"
+        onPointerDown={notePhasedChatInput}
+        onKeyDown={notePhasedChatInput}
         data-tip={t('appExpandAiPanel')}
         aria-label={t('appExpandAiPanel')}
         onClick={onExpand}
@@ -2289,7 +2291,12 @@ export function AiPanel({
         <McpPermissionCard lang={lang} />
       </div>
 
-      <div className="ai-composer">
+      <div
+        className="ai-composer"
+        onPointerDownCapture={notePhasedChatInput}
+        onKeyDownCapture={notePhasedChatInput}
+        onInputCapture={notePhasedChatInput}
+      >
         {sendGate.connectChoice && (
           <AiConnectPrompt
             choice={sendGate.connectChoice}

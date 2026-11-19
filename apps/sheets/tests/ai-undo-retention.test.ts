@@ -180,3 +180,79 @@ it('counts carried AI entries after save, with redo invalidated by the next edit
   expect(currentUndoStack(runtime)).toHaveLength(5)
   expect(service.pitchTopRedoElement()).toBeFalsy()
 })
+
+it('undoes and redoes 72 translated cells one at a time across proposals and ignores the inline editor in chat receipts', async () => {
+  const service = open()
+  const api = runtime.univerAPI
+  const sheet = api.getActiveWorkbook()!.getActiveSheet()
+  const size = 72
+  const range = sheet.getRange(0, 0, size, 1)
+  const original = Array.from({ length: size }, (_, i) => ['Source ' + i])
+  range.setValues(original)
+  sheet.getRange('B1').setValue('manual before')
+  const receipts: string[] = []
+  for (let offset = 0; offset < size; offset += 8) {
+    const scope = createAiUndoScope(true, undefined, 'file-old', true)
+    scope.run(() => {
+      service.pushUndoRedo(cellItem('internal-doc', 1, 'internal'))
+      for (let i = offset; i < offset + 8; i++) sheet.getRange(i, 0, 1, 1).setValue('번역 ' + i)
+    })
+    scope.settle()
+    expect(scope.entryIds).toHaveLength(8)
+    receipts.push(...scope.entryIds)
+  }
+  expect(matchesAiUndoEntries(currentUndoStack(runtime), receipts)).toBe(true)
+  sheet.getRange('B2').setValue('manual after')
+  expect(matchesAiUndoEntries(currentUndoStack(runtime), receipts)).toBe(false)
+  await api.undo()
+  expect(matchesAiUndoEntries(currentUndoStack(runtime), receipts)).toBe(true)
+  const verify = (translated: number) =>
+    expect(range.getValues()).toEqual(original.map((v, i) => (i < translated ? ['번역 ' + i] : v)))
+  verify(size)
+  for (let n = size - 1; n >= 0; n--) {
+    expect(await api.undo()).toBe(true)
+    verify(n)
+  }
+  expect(sheet.getRange('B1').getValue()).toBe('manual before')
+  for (let n = 1; n <= size; n++) {
+    expect(await api.redo()).toBe(true)
+    verify(n)
+  }
+  expect(await api.redo()).toBe(true)
+  expect(sheet.getRange('B2').getValue()).toBe('manual after')
+})
+
+it('keeps a demo adapter change together with its translated grid cell', async () => {
+  open()
+  const api = runtime.univerAPI
+  const sheet = api.getActiveWorkbook()!.getActiveSheet()
+  const mirrors = ['a', 'b']
+  sheet.getRange('A1:A2').setValues([['a'], ['b']])
+  const scope = createAiUndoScope(true, undefined, 'file-old', true)
+  for (let i = 0; i < 2; i++)
+    scope.cell(() => {
+      const old = mirrors[i]!
+      const next = 'translation ' + i
+      mirrors[i] = next
+      sheet.getRange(i, 0, 1, 1).setValue(next)
+      pushVisualUndo(
+        runtime,
+        {
+          undo: () => {
+            mirrors[i] = old
+          },
+          redo: () => {
+            mirrors[i] = next
+          },
+        },
+        { retainedCells: 2, adapterSnapshot: true },
+      )
+    })
+  scope.settle()
+  expect(scope.entryIds).toHaveLength(2)
+  expect(await api.undo()).toBe(true)
+  expect(sheet.getRange('A1:A2').getValues().flat()).toEqual(['translation 0', 'b'])
+  expect(mirrors).toEqual(['translation 0', 'b'])
+  expect(await api.redo()).toBe(true)
+  expect(mirrors).toEqual(['translation 0', 'translation 1'])
+})

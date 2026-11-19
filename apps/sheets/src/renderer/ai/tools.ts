@@ -242,6 +242,7 @@ export interface SheetsSkillDeps {
   proposeOperations(
     operations: readonly WorkbookOperation[],
     summary: string,
+    translation?: boolean,
   ): { ok: true; plan: ChangePlan; applied?: Promise<ApplyOutcome> } | { ok: false; error: string }
   /**
    * The path of an image file attached to this chat, by the exact name the attachment
@@ -524,6 +525,11 @@ export const WORKBOOK_TOOLS: AgentToolDef[] = [
           description: 'Array of operations in the workbook DSL discriminated-union format',
         },
         summary: { type: 'string', description: 'One-sentence summary of this batch of changes' },
+        translation: {
+          type: 'boolean',
+          description:
+            'Set true when writing translated text into cells; each cell can be undone independently.',
+        },
       },
       required: ['operations', 'summary'],
     },
@@ -1329,7 +1335,10 @@ export function executeWorkbookTool(
         )
       }
       const operations: WorkbookOperation[] = parsedOps.data
-      const outcome = deps.proposeOperations(operations, summaryInput.trim())
+      const outcome =
+        call.input.translation === true
+          ? deps.proposeOperations(operations, summaryInput.trim(), true)
+          : deps.proposeOperations(operations, summaryInput.trim())
       if (!outcome.ok) {
         return fail(
           t('aiToolPropose'),

@@ -47,7 +47,8 @@ export type AgentReplaceResult =
     }
 
 export type AgentReplaceAllResult =
-  { ok: true; count: number; place: AgentPlace } | { ok: false; reason: 'not_found'; count: 0 }
+  | { ok: true; count: number; place: AgentPlace; undoSteps?: number }
+  | { ok: false; reason: 'not_found'; count: 0 }
 
 /** Why a paragraph edit did nothing: the anchor could not be decided, or an object is in the way. */
 export interface AgentPlaceRefusal {
@@ -403,7 +404,7 @@ export type AgentSelectionResult =
     }
 
 export type AgentReplaceSelectionResult =
-  | { ok: true; segments: AgentSegment[]; place: AgentPlace }
+  | { ok: true; segments: AgentSegment[]; place: AgentPlace; undoSteps?: number }
   /** a run no longer holds the text it held when the selection was read */
   | { ok: false; reason: 'changed' }
   /** the texts are not as many as the runs, and the runs are not one stretch of paragraphs */
@@ -651,6 +652,7 @@ export type AgentMemoSelectionResult =
 
 /** What an AI change may be told about memos: the default asks before taking one away. */
 export interface AgentChangeOptions {
+  undoUnit?: 'paragraph'
   /** the user approved the memos this change takes: only for the one retried change */
   allowMemoRemoval?: boolean
   /** "ask" (the default) refuses and asks; "allow" is the same as allowMemoRemoval */

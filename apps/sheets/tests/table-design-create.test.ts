@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { createEditJournal } from '../src/renderer/edit-journal'
 import { t } from '../src/renderer/i18n/locale'
+import { handleTableDesignCommand } from '../src/renderer/table-design-actions'
 import type { LazyWorkbookState, UniverRuntime } from '../src/renderer/univer-state'
 
 vi.mock('../src/renderer/univer-sync', () => ({
@@ -49,7 +50,6 @@ function fakeSheet(rows: number) {
 
 describe('Create Table completion signal', () => {
   it('fires onTableCreated after the asynchronous create succeeds', async () => {
-    const { handleTableDesignCommand } = await import('../src/renderer/table-design-actions')
     const { runtime, state, activated } = fakeSheet(10)
     const created = vi.fn()
     const messages: string[] = []
@@ -72,7 +72,6 @@ describe('Create Table completion signal', () => {
   })
 
   it('does not signal when the create fails', async () => {
-    const { handleTableDesignCommand } = await import('../src/renderer/table-design-actions')
     const { runtime, state } = fakeSheet(10)
     const created = vi.fn()
     handleTableDesignCommand(

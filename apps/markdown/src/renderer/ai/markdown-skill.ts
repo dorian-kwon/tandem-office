@@ -1,3 +1,4 @@
+import { sourceTools, type SourceTranslation } from '../source/translation'
 import type { AgentSkill } from '@genoffice/agent-core'
 import { brandText } from '@genoffice/i18n'
 import type { Editor } from '@tiptap/core'
@@ -37,7 +38,7 @@ const AGENT_SYSTEM_PROMPT = [
   '## Editing rules',
   '- The per-message document state lists every block as `index | type | preview`. Previews are truncated — use read_blocks when you need full text.',
   '- All edits go through apply_ops: one call carries an ordered batch of ops (the op catalogue is in the tool description). Every index in a batch refers to the document as shown before the call, so batch related edits into one call and list them in any order.',
-  '- When the document state shows a user selection, edit/rewrite-style requests ("polish this", "translate", "make it shorter", "make this a heading") apply to the selected blocks by default — use target "selection"; only widen to the whole document when the user clearly asks for it.',
+  '- When the document state shows a user selection, edit/rewrite-style requests ("polish this", "make it shorter", "make this a heading") apply to the selected blocks by default — use target "selection"; only widen to the whole document when the user clearly asks for it.',
   '- Prefer replaceText for small in-place fixes (a word, a number, a phrase): it keeps the block structure and the surrounding formatting. Use setStyle with find for character-level formatting across matches (e.g. bold every "TODO"), setLink to link text.',
   '- Prefer the structural ops (setBlockType, toggleList, moveBlocks, editTable, insertTable, insertHorizontalRule) over rewriting markdown when the user asks for a formatting or layout change: they keep the existing text untouched. Use replaceBlocks for full rewrites and insertContent for new content.',
   '- After a call that added, removed or moved blocks, indexes change — refresh with get_document_context before more index-based edits.',
@@ -61,9 +62,11 @@ const AGENT_SYSTEM_PROMPT = [
   '- Only cite block indexes that exist in the block list — never guess; prefer heading blocks as citation anchors. Whole-document answers may omit citations.',
   '',
   '## Writing a new document',
-  '- Long new content (a whole document, a chapter, a full report/article/translation — anything beyond a few paragraphs) goes through write_document: you pass the plan and the reference material, and the system writer streams the markdown into the document while the user watches; never paste long content into insertContent. When the document is blank and the user asks for content, use write_document.',
+  '- Long new content (a whole document, a chapter, a full report/article — anything beyond a few paragraphs) goes through write_document: you pass the plan and the reference material, and the system writer streams the markdown into the document while the user watches; never paste long content into insertContent. When the document is blank and the user asks for content, use write_document.',
   '- The plan: a single `#` title, `##` sections with the key points of each, tone and target length; tables for comparisons, task lists for actionable items, blockquotes for important notes.',
   '- Never invent facts or numbers; use web_search when the topic needs current information, put the findings into context, and attribute sources.',
+  '',
+  'Translate existing Markdown with apply_ops, intent "translation": read the blocks, send their replacements together in numbered block order, one op per block. For a selection, use its numbered blocks and replace only the selected text. Keep inline formatting and links. When resuming, read the current blocks and translate only the remaining passages. Use write_document for newly authored content.',
   '',
   '## Mind map',
   '- When the user asks for a mind map / knowledge structure / overview diagram of the document or a topic, call generate_mindmap with the whole tree in one call — never draw it with text and never ask the user to confirm first;',
@@ -88,11 +91,14 @@ export function createMarkdownSkill(
   imageGenAvailable?: () => boolean,
   /** streaming long-form writer behind write_document (panel-owned: progress chip, partial keep/discard) */
   getWriter?: () => AiDocWriter | undefined,
+  getSource?: () => SourceTranslation | null | undefined,
 ): AgentSkill {
   return {
     id: 'markdown',
     // live: the predicate is re-read before every model request
     get systemPrompt() {
+      if (getSource?.())
+        return 'You edit the open TXT or JSON source. Use read_source_units to read it. For translation and resume, always read with remaining:true for the requested target language first. Send translate_source_units in ordered batches and repeat until no requested units remain. JSON property names stay unchanged.'
       const base =
         imageGenAvailable?.() === false
           ? AGENT_SYSTEM_PROMPT + IMAGE_GEN_OFF_NOTE
@@ -105,17 +111,22 @@ export function createMarkdownSkill(
       return labels.length > 0 ? `${base}\n\n${placeholderInstruction(labels)}` : base
     },
     get tools() {
+      if (getSource?.()) return sourceTools
       return imageGenAvailable?.() === false
         ? AGENT_TOOLS.filter((t) => t.name !== 'generate_image')
         : AGENT_TOOLS
     },
     buildContext: () => {
+      if (getSource?.())
+        return 'The source file is open. Read its current units before translating or resuming.'
       const editor = getEditor()
       if (!editor) return ''
       markDocSeen(editor)
       return buildDocContext(editor)
     },
     executeTool: (call, signal) => {
+      const source = getSource?.()
+      if (source) return source.execute(call)
       const editor = getEditor()
       if (!editor) {
         return { output: 'editor not ready', isError: true, summary: call.name }

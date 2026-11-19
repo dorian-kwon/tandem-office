@@ -160,3 +160,94 @@ for (const format of ['hwp', 'hwpx'] as const) {
     }
   })
 }
+
+for (const format of ['hwp', 'hwpx'] as const) {
+  test(`${format.toUpperCase()} keeps individual translation units across the studio snapshot limit`, async () => {
+    test.setTimeout(120_000)
+    const fixture = join(__dirname, '..', 'apps', 'hwp', 'tests', 'fixtures', 'memo.' + format)
+    const file = test.info().outputPath('translation.' + format)
+    await copyFile(fixture, file)
+    await chmod(file, 0o444)
+    const launched = await launchShell({
+      onboardingSeen: true,
+      hideUpdateWindows: true,
+      recordVideo: false,
+      openFile: file,
+      videoDir: 'hwp-translation-history',
+    })
+    try {
+      await stubEverything(launched.app)
+      const page = await waitForPageWithUrl(launched.app, '://hwp/')
+      await page.waitForSelector('.hwp-app[data-phase="ready"]', { timeout: 90_000 })
+      // The initial manual edit must still be the next native undo after the whole AI run.
+      const initial = await readHangulText(page)
+      const rows = Array.from(
+        { length: 100 },
+        (_, i) => `Row ${i + 1}. Translate this sentence. Translate this sentence.`,
+      )
+      await page
+        .frameLocator('iframe')
+        .locator('body')
+        .evaluate(async (body, rows) => {
+          const studio = (body.ownerDocument.defaultView as any).rhwpStudio
+          const result = await studio.plugins.invoke('ieum-agent', 'insertParagraphs', [
+            '',
+            null,
+            'end',
+            rows,
+          ])
+          if (!result.ok) throw new Error('Cannot insert source paragraphs')
+        }, rows)
+      const before = await readHangulText(page)
+      const from = 'Translate this sentence.'
+      const to = '이 문장을 번역했습니다.'
+      await queueTurns(launched.app, [
+        {
+          toolCalls: [
+            {
+              id: 'translate',
+              name: 'replace_all',
+              input: { find: from, replace: to, undo_unit: 'paragraph' },
+            },
+          ],
+        },
+        { text: 'Finished the translation.' },
+      ])
+      const input = page.locator('.ai-composer textarea')
+      if (!(await input.isVisible())) await page.locator('.ai-rail').click()
+      await input.fill('Translate the repeated sentence in each paragraph.')
+      await page.locator('.ai-composer .ai-send-btn').click()
+      await expect(page.getByText('Finished the translation.', { exact: true })).toBeVisible()
+      const after = before.replaceAll(from, to)
+      expect(await readHangulText(page)).toBe(after)
+      await page.locator('.ai-changes-revert').click()
+      await expect(page.locator('.ai-changes-reverted')).toBeVisible()
+      expect(await readHangulText(page)).toBe(before)
+
+      const native = (command: string, count = 1) =>
+        page
+          .frameLocator('iframe')
+          .locator('body')
+          .evaluate(
+            async (body, { command, count }) => {
+              const studio = (body.ownerDocument.defaultView as any).rhwpStudio
+              for (let i = 0; i < count; i++) await studio.automation.execute(command)
+            },
+            { command, count },
+          )
+      await native('edit:undo')
+      expect(await readHangulText(page)).toBe(initial)
+      await native('edit:redo')
+      expect(await readHangulText(page)).toBe(before)
+      await native('edit:redo')
+      const one = await readHangulText(page)
+      expect(one.split(to)).toHaveLength(3)
+      expect(one).toContain(`Row 1. ${to} ${to}`)
+      await native('edit:redo', 99)
+      expect(await readHangulText(page)).toBe(after)
+      expect(await readFile(file)).toEqual(await readFile(fixture))
+    } finally {
+      await closeAndSaveVideo(launched, 'hwp-translation-history')
+    }
+  })
+}

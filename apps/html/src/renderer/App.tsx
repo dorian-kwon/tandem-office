@@ -557,13 +557,14 @@ export default function App() {
     (
       ops: HtmlOp[],
       manual: boolean,
+      translation = false,
     ): { ok: true; ranges: Array<[number, number]> } | { ok: false; errors: OpError[] } => {
       const base = textRef.current
       const compiled = compileOps(base, getMap(), ops)
       if (compiled.errors.length > 0) return { ok: false, errors: compiled.errors }
       const editor = editorRef.current
       const ranges = editor
-        ? editor.applyPatches(compiled.patches, !manual)
+        ? editor.applyPatches(compiled.patches, !manual, translation)
         : compiled.patches.map((p) => [p.from, p.from + p.text.length] as [number, number])
       commitText(applyPatches(base, compiled.patches), manual)
       return { ok: true, ranges }
@@ -1789,9 +1790,9 @@ export default function App() {
       getLastManualVersion: () => lastManualVersionRef.current,
       getFilePath: () => pathRef.current,
       getSelectedSid: () => selectedSidRef.current,
-      applyOps: (ops) => {
+      applyOps: (ops, _label, translation) => {
         flushPending()
-        return applyOps(ops, false)
+        return applyOps(ops, false, translation)
       },
       replaceAll: (html, _label, version) => replaceAll(html, true, version),
       measurePages: async () => {

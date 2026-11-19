@@ -435,6 +435,54 @@ describe('completion check', () => {
     expect(out.output).toMatch(/Body blocks: 1$/m)
   })
 
+  it('checks the live address when two paragraphs contain the same Latin-script text', async () => {
+    const editor = await createEditor([paragraph('Paris'), paragraph('Paris')])
+    const read = JSON.parse(
+      (await exec(editor, 'read_runs', { startBlockIndex: 0, endBlockIndex: 0 })).output,
+    )
+    await exec(editor, 'translate_blocks', {
+      blocks: [{ index: 0, fp: read.fp, segments: ['Paris'] }],
+    })
+    const check = () =>
+      exec(editor, 'read_runs', { checkRemaining: true, sourceLanguage: 'French' })
+    expect((await check()).output).toMatch(/Body blocks: 1$/m)
+  })
+
+  it('undoes each note paragraph and lists it again on resume', async () => {
+    const editor = await createEditor([paragraph('Title')])
+    const n = notesAccess([richNote('1', [run('가')], [run('나')])])
+    const entries = [
+      { note: 'footnote', id: '1', paragraph: 0, segments: ['First'] },
+      { note: 'footnote', id: '1', paragraph: 1, segments: ['Second'] },
+    ]
+    const lines = (await exec(editor, 'read_runs', { notes: true }, n.access)).output
+      .split('\n')
+      .filter((x) => x.startsWith('{'))
+      .map((x) => JSON.parse(x))
+    const res = await exec(
+      editor,
+      'translate_blocks',
+      { blocks: entries.map((entry, i) => ({ ...entry, fp: lines[i].fp })) },
+      n.access,
+    )
+    expect(res.isError).toBeFalsy()
+    expect(n.state.footnote[0]!.text).toBe('First\nSecond')
+    expect(editor.commands.undo()).toBe(true)
+    expect(n.state.footnote[0]!.text).toBe('First\n나')
+    const remaining = await exec(
+      editor,
+      'read_runs',
+      { checkRemaining: true, sourceLanguage: 'ko' },
+      n.access,
+    )
+    expect(remaining.output).toContain('footnote 1 paragraph 1')
+    expect(editor.commands.undo()).toBe(true)
+    expect(n.state.footnote[0]!.text).toBe('가\n나')
+    expect(editor.commands.redo()).toBe(true)
+    expect(editor.commands.redo()).toBe(true)
+    expect(n.state.footnote[0]!.text).toBe('First\nSecond')
+  })
+
   it('recognises common source scripts', () => {
     expect(sourceScriptOf('ko')?.test('한')).toBe(true)
     expect(sourceScriptOf('Japanese')?.test('かな')).toBe(true)

@@ -440,7 +440,13 @@ import {
   registerOcrHistoryHandlers,
 } from './ocr-history-state'
 import { BlockIndex } from './pagination-index'
-import { hasPhasedContentFailed, isPhasedContentPending } from './phased-content'
+import {
+  hasPhasedContentFailed,
+  isPhasedContentPending,
+  notePhasedWheel,
+  phasedReadAheadDelay,
+  phasedScrollEnd,
+} from './phased-content'
 import { sameSectionInfos } from './pagination-sections'
 import {
   blocksKeepSlicing,
@@ -1864,7 +1870,17 @@ export function App() {
   useEffect(() => {
     const zoomWheel = createZoomWheelClassifier()
     const onWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey && !e.metaKey) return
+      if (!e.ctrlKey && !e.metaKey) {
+        const scroller = scrollContainerRef.current
+        if (
+          isPhasedContentPending() &&
+          scroller &&
+          e.target instanceof Node &&
+          scroller.contains(e.target)
+        )
+          notePhasedWheel(scroller, e.deltaY)
+        return
+      }
       if (!(e.target as HTMLElement | null)?.closest?.('.editor-scroll')) return
       e.preventDefault()
       const intent = zoomWheel.feed(e, e.timeStamp)
@@ -3901,7 +3917,7 @@ export function App() {
       pageLayoutRef.current = null
       return
     }
-    const scroller = document.querySelector('.editor-scroll')
+    const scroller = document.querySelector<HTMLElement>('.editor-scroll')
     if (!scroller) return
     const factor = zoom / 100
     const passGovernor = passGovernorRef.current
@@ -4123,12 +4139,18 @@ export function App() {
       return blocksKeepSlicing(items, slices, factor) || reject('geometry')
     }
     const remeasure = () => {
+      const delay = phasedReadAheadDelay()
+      if (delay) {
+        timer = window.setTimeout(remeasure, delay)
+        return
+      }
       timer = null
       lastPassAt = performance.now()
       const edited = fastEdits
       fastEdits = new Set()
       const dirty = dirtyFrom
       dirtyFrom = Infinity
+      const endScroller = phasedScrollEnd(scroller)
       try {
         if (edited && edited.size > 0 && tryFastPass(edited)) {
           fastPasses++
@@ -4145,6 +4167,7 @@ export function App() {
         // a pass that threw between the add and the pre-setPageGaps remove
         // must not leave the gap widgets hidden
         pmEl()?.classList.remove('measuring-natural')
+        if (endScroller) endScroller.scrollTop = endScroller.scrollHeight
       }
     }
     const remeasurePass = (dirty: number | null) => {

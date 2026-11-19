@@ -11,10 +11,10 @@ import { EditorView } from '@codemirror/view'
 import { redo, redoDepth, undo, undoDepth } from '@codemirror/commands'
 import { External, buildExtensions } from './cm-setup'
 import { addAiRanges, clearAiRanges } from './cm-highlight'
-import { sourceEditAnnotations } from './ai-history'
+import { applyTranslationPatches, sourceEditAnnotations } from './ai-history'
 import { cmFindTarget } from './find-target'
 import { useI18n } from '../i18n/locale'
-import type { FindTarget } from '@genoffice/ui'
+import { aiEditUndoHistoryEnabled, type FindTarget } from '@genoffice/ui'
 import type { Patch } from '../document/patch'
 
 /** a source range and the text it covers, as the reader sees it */
@@ -32,7 +32,11 @@ export interface SourceEditorHandle {
   replaceDoc(text: string, highlight: boolean): void
   /** apply validated patches as one undoable step; returns the post-edit ranges. AI patches
    * (`highlight`) keep no undo step while the "AI edit undo history" setting is off */
-  applyPatches(patches: readonly Patch[], highlight: boolean): Array<[number, number]>
+  applyPatches(
+    patches: readonly Patch[],
+    highlight: boolean,
+    translation?: boolean,
+  ): Array<[number, number]>
   clearHighlights(): void
   /** select and scroll a source range into view; focus only when the user asked for the editor */
   revealRange(from: number, to: number, focus?: boolean): void
@@ -205,7 +209,7 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
           : [clearAiRanges.of(null)],
       })
     },
-    applyPatches(patches, highlight) {
+    applyPatches(patches, highlight, translation) {
       const view = viewRef.current
       if (!view) return []
       const sorted = [...patches].sort((a, b) => a.from - b.from || a.to - b.to)
@@ -214,6 +218,10 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
       for (const p of sorted) {
         ranges.push([p.from + delta, p.from + delta + p.text.length])
         delta += p.text.length - (p.to - p.from)
+      }
+      if (translation && aiEditUndoHistoryEnabled()) {
+        applyTranslationPatches(view, patches)
+        return ranges
       }
       view.dispatch({
         changes: sorted.map((p) => ({ from: p.from, to: p.to, insert: p.text })),

@@ -103,6 +103,19 @@ describe('read_pages structured path', () => {
     expect(access.tree).not.toHaveBeenCalled()
   })
 
+  it('shows live pending translations separately from saved text on resume and drops undone ones', async () => {
+    const doc = { current: fakeDoc(['A']) }
+    const edits: ReturnType<NonNullable<PdfAiDeps['pendingTextOnPage']>> = [
+      { rect: [0, 0, 10, 10], oldText: 'A', newText: 'Translated' },
+    ]
+    const deps = makeDeps(doc, null, { pendingTextOnPage: () => edits })
+    expect((await executePdfTool(deps, call({ start: 1 }))).output).toContain(
+      '"newText":"Translated"',
+    )
+    edits.pop()
+    expect((await executePdfTool(deps, call({ start: 1 }))).output).toBe('[Page 1]\nA')
+  })
+
   it('keeps the structured text per file and drops it when a save reloads the document', async () => {
     const doc = { current: fakeDoc(plainTexts(3)) }
     const access = makeAccess()

@@ -1,4 +1,12 @@
-import { rebaseEditHistory } from '../src/renderer/edit-ops/history'
+import {
+  rebaseEditHistory,
+  rebaseFrames,
+  appendFrame,
+  restoreFrame,
+  inverseFrame,
+  textFrame,
+  type PdfHistoryFrame,
+} from '../src/renderer/edit-ops/history'
 import { describe, expect, it } from 'vitest'
 import {
   BUCKETS,
@@ -873,6 +881,38 @@ describe('link drawings', () => {
 })
 
 describe('undo after unrecorded AI batches', () => {
+  it('retains each text replacement above 50 and preserves a later unrecorded annotation', () => {
+    let current = empty()
+    let stack: PdfHistoryFrame[] = []
+    for (let i = 0; i < 80; i++) {
+      const id = 'translation-' + i
+      stack = appendFrame(stack, textFrame(current.textEdits, [id]))
+      current = run(current, [
+        {
+          op: 'putTextEdit',
+          id,
+          input: { pageIndex: 0, rect: [i, 0, i + 1, 1], oldText: 'A', newText: String(i) },
+        },
+      ]).state
+    }
+    const added = run(current, [{ op: 'addMarkup', id: 'later', markup: markup() }])
+    stack = rebaseFrames(stack, current, added.state, added.plan, () => ctx())
+    current = added.state
+    expect(stack).toHaveLength(80)
+    const redo: PdfHistoryFrame[] = []
+    while (stack.length) {
+      const frame = stack.pop()!
+      redo.push(inverseFrame(frame, current))
+      current = restoreFrame(frame, current)
+      expect(current.textEdits).toHaveLength(stack.length)
+      expect(current.markups[0]!.id).toBe('later')
+    }
+    while (redo.length) current = restoreFrame(redo.pop()!, current)
+    expect(current.textEdits.map((e) => e.input.newText)).toEqual(
+      Array.from({ length: 80 }, (_, i) => String(i)),
+    )
+  })
+
   it('carries AI annotations into past states while preserving later manual undo and redo', () => {
     const start = empty()
     const human = run(start, [{ op: 'addMarkup', id: 'human', markup: markup() }]).state

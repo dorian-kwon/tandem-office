@@ -1,4 +1,4 @@
-import { Annotation, EditorState, type Extension } from '@codemirror/state'
+import { Annotation, Compartment, EditorState, type Extension } from '@codemirror/state'
 import {
   EditorView,
   crosshairCursor,
@@ -29,6 +29,7 @@ import { findHighlight } from './cm-find'
 
 /** Marks transactions that replace the document from outside the editor (load, patches) */
 export const External = Annotation.define<boolean>()
+export const sourceHistory = new Compartment()
 
 /** Colors come from --cm-* custom properties (tokens.css palette, light/dark aware) */
 const highlight = HighlightStyle.define([
@@ -80,7 +81,7 @@ export function buildExtensions(onDocChanged: (view: EditorView) => void): Exten
     lineNumbers(),
     highlightActiveLineGutter(),
     highlightSpecialChars(),
-    history(),
+    sourceHistory.of(history()),
     foldGutter(),
     drawSelection(),
     dropCursor(),

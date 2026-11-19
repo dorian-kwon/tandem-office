@@ -190,6 +190,27 @@ describe('detectFurniture: page-tracking mixed headers (P30 B)', () => {
     expect(hf[0]!.text).toBe(`REF${HF_PAGE_MARK} Page ${HF_PAGE_MARK} of the 2021 report`)
   })
 
+  it('keeps data rows with a page-tracking sector and an independent measurement', () => {
+    const pages = Array.from({ length: 7 }, (_, i) =>
+      pageOf(
+        i,
+        header(`Survey plate ${i + 1} of 7`),
+        body(`Transect 19 | sector ${i + 1} | elevation ${242 + i} m`, 86),
+        // Even a measurement that differs on only one non-probe page needs to survive.
+        body(`Transect 20 | sector ${i + 1} | elevation ${i === 1 ? 252 : 251} m`, 73),
+        footer(`Form 42 — Page ${i + 1} of 7`),
+      ),
+    )
+    const { drop, droppedLines, hf } = detectFurniture(pages)
+    expect(droppedLines).toBe(2 * pages.length)
+    expect(hf.map(({ text }) => text)).toEqual([
+      `Survey plate ${HF_PAGE_MARK} of 7`,
+      `Form 42 — Page ${HF_PAGE_MARK} of 7`,
+    ])
+    for (const chars of drop)
+      expect([...chars].map((c) => c.text).join('')).not.toContain('Transect')
+  })
+
   it('keeps numbered captions whose digits do NOT track the page', () => {
     const pages = [0, 1, 2, 3].map((i) =>
       pageOf(i, header(`Form No.${i + 7} Attachment`), body(`Body ${'z'.repeat(i)}`)),

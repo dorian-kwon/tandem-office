@@ -29,7 +29,7 @@ import type {
   StructuralChange,
 } from '@genoffice/xlsx-gateway/domain/workbook.types'
 import { pushBulkFillUndo } from './bulk-fill-undo'
-import { createAiUndoScope, undoCapacityNotice } from './ai-undo-scope'
+import { createAiUndoScope, undoCapacityNotice, translationCellPlan } from './ai-undo-scope'
 import {
   journalCellContentAt,
   plainCellValue,
@@ -170,6 +170,7 @@ export interface ApplyPlanOptions {
    * bridge), not from a ribbon click or dialog. While the "AI edit undo
    * history" setting is off such an apply keeps no undo entry. */
   onUndoEntries?: (ids: string[]) => void
+  translation?: boolean
   aiEdit?: boolean
 }
 
@@ -407,9 +408,15 @@ async function applyChangePlanNow(
 ): Promise<ApplyOutcome> {
   const dropUndo = shouldDropUndoBatch(options)
   const aiScope = options.aiEdit
-    ? createAiUndoScope(!dropUndo, () => {
-        if (ctx.lazyWorkbookRef.current !== ctx.state) throw new Error(t('appPreviewOtherWorkbook'))
-      })
+    ? createAiUndoScope(
+        !dropUndo,
+        () => {
+          if (ctx.lazyWorkbookRef.current !== ctx.state)
+            throw new Error(t('appPreviewOtherWorkbook'))
+        },
+        ctx.workbook.getId(),
+        options.translation === true && translationCellPlan(plan),
+      )
     : null
   // Only facade methods carry the source; the original runtime stays available
   // to listeners and deferred UI work installed by the apply.

@@ -99,6 +99,7 @@ afterEach(() => {
 })
 
 interface PanelState {
+  openingWorkbook?: boolean
   onUndo?: (ids: readonly string[]) => void
   canUndoAiEntries?: (ids: readonly string[]) => boolean
   onCitation?: (href: string) => void
@@ -120,6 +121,7 @@ function panel(initial: PanelState) {
       root.render(
         createElement(AiChatPanel, {
           isOpen: true,
+          openingWorkbook: state.openingWorkbook ?? false,
           hasContent: true,
           chat: state.chat,
           attachments: [],
@@ -168,6 +170,31 @@ const pressEnter = () =>
         new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
       )
   })
+
+it('keeps a draft while the workbook opens and enables sending once it is ready', () => {
+  const p = panel({
+    openingWorkbook: true,
+    chat: [],
+    prompt: '한글 초안',
+    aiBusy: false,
+    subscription: subscriptionOf(settings(), statuses('ready', 'not-installed')),
+  })
+  const input = host.querySelector('textarea')!
+  const send = host.querySelector<HTMLButtonElement>('.ai-send-btn')!
+  expect(input.disabled).toBe(false)
+  expect(send.disabled).toBe(true)
+  pressEnter()
+  act(() => send.click())
+  p.set({ aiBusy: true })
+  pressEnter()
+  expect(p.onSendQueued).not.toHaveBeenCalled()
+  expect(p.onSend).not.toHaveBeenCalled()
+  expect(input.value).toBe('한글 초안')
+  p.set({ openingWorkbook: false, aiBusy: false })
+  expect(send.disabled).toBe(false)
+  pressEnter()
+  expect(p.onSend).toHaveBeenCalledOnce()
+})
 
 it('a citation in a completed reply uses the current grid after the composer changes', () => {
   const first = vi.fn()

@@ -792,6 +792,7 @@ const TOOLS: AgentToolDef[] = [
     name: 'apply_ops',
     description:
       '[Canonical edit surface] Apply a list of canonical edit ops as ONE transaction — atomic by default: any failure rolls everything back, nothing is half-applied. Set dry_run:true to validate the plan without touching the deck (rehearse risky batches). This is THE tool for every edit without a dedicated tool (fill, stroke, transform, delete, z-order, grouping, crop, opacity, effects, links, table cells, structure and styling, page background, speaker notes, page delete/move/duplicate, transitions, sections, theme) and for multi-page or many-element batches; a single op is a perfectly fine batch. For one-page layout math prefer execute_slide_script.\n' +
+      'For translation pass translation:true on the batch so each text object, table cell and speaker note can be undone independently. ' +
       'Addressing: every op takes target:{slide, el?} — slide = 0-based index or durable "s_<n>"; el = an element id from the outline/read_slide (e_* ids are durable). Group children: put the child id in target.el and add group:"<group id>". For setText on a nested shape, use the outermost group id shown by read_slide. Collect translations in one ops batch and retain the group hierarchy.\n' +
       'Units are document-space EMU. read_slide reports px and its exact "1 px = N EMU" factor — convert with that N (9525 only on a standard 16:9 deck; other page sizes differ). Font sizes are pt.\n' +
       'Full op reference (the same executor every editing surface uses), one signature per op; ? marks optional fields:\n' +
@@ -802,6 +803,10 @@ const TOOLS: AgentToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        translation: {
+          type: 'boolean',
+          description: 'Set true for batches of translated shapes, notes or table cells.',
+        },
         ops: {
           type: 'array',
           items: { type: 'object' },
@@ -2914,6 +2919,7 @@ async function executeTool(
       const r = await aiEditApi().applyTxn?.({
         acceptSlideUpdate: true,
         ops: pre.ops,
+        ...(call.input.translation === true && { translation: true }),
         ...(call.input.dry_run === true ? { dryRun: true } : {}),
         ...(call.input.isolation === 'per_op' ? { isolation: 'per_op' as const } : {}),
       })

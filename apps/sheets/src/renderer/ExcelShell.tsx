@@ -933,8 +933,7 @@ export function ExcelShell({
   return (
     <main
       className={`app-shell ${aiDock.open ? '' : 'copilot-collapsed'}${presenting ? ' sheet-presenting' : ''}`}
-      inert={openingWorkbook}
-      aria-busy={openingWorkbook}
+      data-opening-workbook={openingWorkbook || undefined}
     >
       <header className={`excel-header ${collapse.rootClass}`} ref={collapse.rootRef}>
         <nav
@@ -1056,6 +1055,7 @@ export function ExcelShell({
       <div className={`sheet-body${!aiSidebarEnabled && !aiDock.open ? ' ai-dock-off' : ''}`}>
         <AiChatPanel
           isOpen={aiDock.open}
+          openingWorkbook={openingWorkbook}
           focusRequest={openAiRequest}
           hideRail={!aiSidebarEnabled}
           hasContent={sheetHasContent}
@@ -1084,7 +1084,7 @@ export function ExcelShell({
           onSendQueued={(text, atts, skillUse) => {
             // the panel asks the send gate first: a message stays queued while it asks to
             // connect or shows the first-use notice
-            if (aiBusy) return false
+            if (aiBusy || openingWorkbookRef.current) return false
             onSend(text, atts, undefined, skillUse)
             return true
           }}
@@ -1102,7 +1102,7 @@ export function ExcelShell({
           project={aiProject}
         />
         <div className="sheet-main">
-          <section className="workbook-area">
+          <section className="workbook-area" inert={openingWorkbook} aria-busy={openingWorkbook}>
             <div id="univer-container" className="spreadsheet" />
             {emptyCsvNotice && (
               <div className="csv-empty-notice" role="status">
@@ -1135,7 +1135,7 @@ export function ExcelShell({
             )}
           </section>
           {/* Status bar spans the sheet column only — the AI dock keeps the full window height (unified with docs/slides). */}
-          <footer className="status-bar" onContextMenu={openStatsMenu}>
+          <footer className="status-bar" onContextMenu={openStatsMenu} inert={openingWorkbook}>
             <div className="status-left">
               <span className="status-msg">{statusMessage}</span>
             </div>
@@ -1206,7 +1206,12 @@ export function ExcelShell({
               </button>
             </div>
           </footer>
-          {statsMenuAt && (
+          {openingWorkbook && (
+            <div className="workbook-opening-screen" role="status" aria-live="polite">
+              {t('appOpeningWorkbook')}
+            </div>
+          )}
+          {statsMenuAt && !openingWorkbook && (
             <StatusBarStatsMenu
               at={statsMenuAt}
               enabled={statusBarFuncs}

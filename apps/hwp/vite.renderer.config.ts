@@ -6,7 +6,7 @@ import { rhwpPatches } from './scripts/rhwp-patches.mjs'
 // renderer-only dev server (embedded by shell via HWP_RENDERER_URL for HMR; no standalone Electron)
 export default defineConfig({
   root: 'src/renderer',
-  plugins: [react(), rhwpPatches('sdk-scheme')],
+  plugins: [react(), rhwpPatches('sdk-scheme', 'sdk-edit-ack')],
   // holds the rhwp-studio build (scripts/build-studio.mjs)
   publicDir: resolve(__dirname, 'public'),
   server: {

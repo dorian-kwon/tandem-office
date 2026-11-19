@@ -1,3 +1,4 @@
+import { installTranslationHistory } from './translation-history'
 /**
  * Shared Univer runtime types and lazy-workbook streaming state.
  *
@@ -319,7 +320,11 @@ export interface AiUndoStacks {
 }
 export const aiUndoSource: {
   current?: {
-    push(service: AiUndoStacks, item: IUndoRedoItem, push: () => void): void
+    push(
+      service: AiUndoStacks,
+      item: IUndoRedoItem,
+      push: (replacement?: IUndoRedoItem) => void,
+    ): void
     discarding(): boolean
   }
 } = {}
@@ -338,12 +343,13 @@ export function installJournalSuppressionUndoFilter(): void {
   const proto = LocalUndoRedoService.prototype as unknown as {
     pushUndoRedo(item: UndoRedoItemLike): void
   }
+  installTranslationHistory(proto as unknown as Parameters<typeof installTranslationHistory>[0])
   const originalPush = proto.pushUndoRedo
   proto.pushUndoRedo = function (this: unknown, item: UndoRedoItemLike) {
     if (journalSuppression.active) return
     if (aiUndoSource.current) {
-      aiUndoSource.current.push(this as AiUndoStacks, item as IUndoRedoItem, () =>
-        originalPush.call(this, item),
+      aiUndoSource.current.push(this as AiUndoStacks, item as IUndoRedoItem, (replacement) =>
+        originalPush.call(this, replacement ?? item),
       )
       return
     }

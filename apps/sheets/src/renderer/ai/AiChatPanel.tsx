@@ -345,6 +345,7 @@ const NO_STATUSES: AiSubscriptionStatuses = {}
 
 export function AiChatPanel({
   isOpen,
+  openingWorkbook = false,
   focusRequest = 0,
   hideRail = false,
   hasContent,
@@ -385,6 +386,7 @@ export function AiChatPanel({
   project,
 }: {
   readonly isOpen: boolean
+  readonly openingWorkbook?: boolean
   /** An explicit AI action focuses the composer, including when already open. */
   readonly focusRequest?: number | undefined
   /** true suppresses even the collapsed rail (the "show the AI sidebar" setting is off) */
@@ -478,7 +480,7 @@ export function AiChatPanel({
   subscriptionRef.current = subscription
   /** messages queued while a reply runs; the pump re-sends them through onSend on settle */
   const msgQueue = useChatRunQueue<QueuedMeta>({
-    busy: aiBusy,
+    busy: aiBusy || openingWorkbook,
     submit: (text, { atts, skillUse }) => {
       // nothing can run right now: the message stays queued, and in front of "not connected"
       // the queue is paused so it does not start by itself after a sign-in
@@ -697,7 +699,7 @@ export function AiChatPanel({
     )
   }
 
-  const canSend = prompt.trim().length > 0 && !aiBusy
+  const canSend = prompt.trim().length > 0 && !aiBusy && !openingWorkbook
 
   const send = (): void => {
     if (!canSend) return
@@ -816,7 +818,7 @@ export function AiChatPanel({
         </div>
       </header>
 
-      <div className="ai-chat" ref={chatRef} onScroll={onChatScroll}>
+      <div className="ai-chat" ref={chatRef} onScroll={onChatScroll} inert={openingWorkbook}>
         <EarlierChatMessages hidden={chatWindow.hidden} expand={chatWindow.expand} lang={lang} />
         {/* Past conversation (read-only transcript), shown continuously with the current turn */}
         {chatWindow.history.length > 0 && (
@@ -1056,7 +1058,7 @@ export function AiChatPanel({
               onMove={msgQueue.move}
             />
           }
-          onQueue={enqueueDraft}
+          onQueue={openingWorkbook ? undefined : enqueueDraft}
           queuePlaceholder={AI_QUEUE_LABELS[lang].queuePlaceholder}
           header={
             <>
@@ -1163,8 +1165,9 @@ export function AiChatPanel({
           }
           value={prompt}
           busy={aiBusy}
+          sendDisabled={openingWorkbook}
           placeholder={t(hasContent ? 'aiComposerPlaceholder' : 'aiComposerPlaceholderBuild')}
-          hintIdle={t('aiHintIdle')}
+          hintIdle={t(openingWorkbook ? 'appOpeningWorkbook' : 'aiHintIdle')}
           hintBusy={t('aiHintBusy')}
           hintIdleTitle={t('aiHintIdleTitle')}
           sendLabel={t('aiSend')}

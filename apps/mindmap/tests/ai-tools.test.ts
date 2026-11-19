@@ -208,6 +208,44 @@ describe('read_topic', () => {
 })
 
 describe('edit_map', () => {
+  it('restores individual translated topics, rich source data, and adjacent manual steps', async () => {
+    const r = await rigOf(richSheet())
+    const controller = r.controller()
+    const original = copyOf(r.sheet(1))
+    controller.setTitle(IDS.root, 'Manual before')
+    const before = copyOf(r.sheet(1))
+    const turn = new MapTurn()
+    const result = await editMap(
+      r.host,
+      {
+        intent: 'translation',
+        edits: [
+          { op: 'set_title', id: IDS.b, title: '둘' },
+          { op: 'set_title', id: IDS.a, title: '하나' },
+          { op: 'set_note', id: IDS.a, note: '같은 주제 설명' },
+        ],
+      },
+      turn,
+    )
+    expect(result.detail).toEqual({ done: 3, total: 3 })
+    const translated = copyOf(r.sheet(1))
+    controller.setTitle(IDS.c, 'Manual after')
+    expect(await revertTurn(r.host, turn)).toBe(false)
+    expect(controller.undo()).toBe(true)
+    expect(copyOf(r.sheet(1))).toEqual(translated)
+    expect(controller.undo()).toBe(true)
+    expect(findTopic(r.sheet(1).rootTopic, IDS.a)).toEqual(findTopic(before.rootTopic, IDS.a))
+    expect(findTopic(r.sheet(1).rootTopic, IDS.b)?.title).toBe('둘')
+    expect(controller.undo()).toBe(true)
+    expect(copyOf(r.sheet(1))).toEqual(before)
+    expect(controller.undo()).toBe(true)
+    expect(copyOf(r.sheet(1))).toEqual(original)
+    for (let i = 0; i < 3; i++) expect(controller.redo()).toBe(true)
+    expect(copyOf(r.sheet(1))).toEqual(translated)
+    expect(await revertTurn(r.host, turn)).toBe(true)
+    expect(copyOf(r.sheet(1))).toEqual(before)
+  })
+
   it('checks each edit on its own: invalid ones fail with a reason, the rest apply', async () => {
     const r = await rigOf(richSheet())
     const out = await editMap(

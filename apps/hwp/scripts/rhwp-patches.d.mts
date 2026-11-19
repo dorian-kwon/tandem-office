@@ -2,6 +2,8 @@ import type { Plugin } from 'vite'
 
 export type RhwpPatchName =
   | 'sdk-scheme'
+  | 'sdk-edit-ack'
+  | 'studio-replacement-history'
   | 'studio-scheme'
   | 'studio-password-flag'
   | 'studio-plugin-allow'
@@ -10,6 +12,8 @@ export type RhwpPatchName =
   | 'studio-nested-table-cut'
   | 'studio-nested-table-command'
   | 'studio-format-copy-safety'
+  | 'studio-pc-font-metadata'
+  | 'studio-pc-fonts'
   | 'studio-format-copy'
   | 'studio-format-copy-state'
   | 'studio-memo-command'

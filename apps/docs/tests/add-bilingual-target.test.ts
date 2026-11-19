@@ -147,7 +147,7 @@ describe('add_bilingual target: cell', () => {
     )
   })
 
-  it('writes into a far cell of another table; one undo step', async () => {
+  it('writes into a far cell of another table and undoes each destination in order', async () => {
     const editor = await createEditor([
       plain('앞'),
       table(row(cell('가'))),
@@ -167,6 +167,8 @@ describe('add_bilingual target: cell', () => {
     ])
     expect(out.ok).toBe(true)
     expect(cellTexts(blockJson(editor, 2))).toEqual([['Front', 'A']])
+    editor.commands.undo()
+    expect(cellTexts(blockJson(editor, 2))).toEqual([['x', 'A']])
     editor.commands.undo()
     expect(editor.state.doc.eq(before)).toBe(true)
   })
@@ -350,7 +352,7 @@ describe('add_bilingual target: after / before / end', () => {
     expect(editor.state.doc).toBe(before)
   })
 
-  it('tracking marks the new paragraph text as insertions; undo is one step', async () => {
+  it('tracking marks the new paragraph text as insertions with an undo step per paragraph', async () => {
     const editor = await createEditor([plain('가'), plain('나')])
     const start = editor.state.doc
     applyBilingual(
@@ -361,6 +363,8 @@ describe('add_bilingual target: after / before / end', () => {
     )
     const last = blockJson(editor, 3)
     expect(last.content!.every((c) => c.marks?.some((m) => m.type === 'ins'))).toBe(true)
+    editor.commands.undo()
+    expect(bodyTexts(editor)).toEqual(['가', '나', 'A'])
     editor.commands.undo()
     expect(editor.state.doc.eq(start)).toBe(true)
   })

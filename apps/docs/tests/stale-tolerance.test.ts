@@ -154,8 +154,13 @@ describe('stale tolerance: add_bilingual', () => {
     expect(result.isError).toBeFalsy()
     expect(bodyTexts(editor)).toEqual(['가', 'A', '!나', '다', 'C'])
     expect(result.output).toMatch(/SKIPPED 1 item.*block 1/)
-    editor.commands.undo()
+    expect(editor.commands.undo()).toBe(true)
+    expect(bodyTexts(editor)).toEqual(['가', 'A', '!나', '다'])
+    expect(editor.commands.undo()).toBe(true)
     expect(editor.state.doc.eq(before)).toBe(true)
+    expect(editor.commands.redo()).toBe(true)
+    expect(editor.commands.redo()).toBe(true)
+    expect(bodyTexts(editor)).toEqual(['가', 'A', '!나', '다', 'C'])
   })
 
   it('an unrelated doc change does not refuse; explicit targets work too', async () => {

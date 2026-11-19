@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { printDoc } from '../src/renderer/file-actions'
 import { tableModelToPmNode, type PmNode } from '../src/renderer/editor/convert'
 import {
   PHASED_CONTENT_SETTLED_EVENT,
@@ -7,6 +8,10 @@ import {
   PHASED_MIN_BLOCKS,
   cancelPhasedContent,
   isPhasedContentPending,
+  notePhasedChatInput,
+  notePhasedWheel,
+  phasedReadAheadDelay,
+  phasedScrollEnd,
   setContentPhased,
   waitForFullContent,
   type PhasedContentHost,
@@ -88,6 +93,102 @@ describe('setContentPhased', () => {
     expect(state.loading).toBe(false)
     expect(state.events).toContain('resetHistory')
     await expect(waitForFullContent()).resolves.toBe(true)
+  })
+
+  it('defers read-ahead during a wheel gesture and resumes after it or on demand', async () => {
+    vi.useFakeTimers()
+    try {
+      const scroller = document.createElement('main')
+      Object.defineProperties(scroller, {
+        clientHeight: { value: 400 },
+        scrollHeight: { value: 2400 },
+      })
+      const s = makeScheduler()
+      const { host, state } = makeHost()
+      setContentPhased(host, docOf(500), s.schedule)
+      scroller.scrollTop = 300
+      notePhasedWheel(scroller, 100)
+      s.drain()
+      expect(state.mounted).toHaveLength(PHASE1_BLOCKS)
+      vi.advanceTimersByTime(500)
+      expect(state.mounted.length).toBeGreaterThan(PHASE1_BLOCKS)
+      notePhasedWheel(scroller, 100)
+      scroller.scrollTop = 1900
+      expect(phasedReadAheadDelay()).toBe(0) // the next screen needs the tail
+      scroller.scrollTop = 300
+      expect(phasedReadAheadDelay()).toBeGreaterThan(0)
+      vi.advanceTimersByTime(500)
+      expect(phasedReadAheadDelay()).toBe(0)
+      notePhasedChatInput()
+      expect(phasedReadAheadDelay()).toBeGreaterThan(0)
+      const complete = waitForFullContent()
+      notePhasedChatInput()
+      expect(phasedReadAheadDelay()).toBe(0)
+      while (s.pending()) s.drain()
+      await expect(complete).resolves.toBe(true)
+      // Opening the dock after loading also queues width-dependent page passes.
+      notePhasedChatInput()
+      expect(phasedReadAheadDelay()).toBeGreaterThan(0)
+      vi.advanceTimersByTime(500)
+      expect(phasedReadAheadDelay()).toBe(0)
+      notePhasedChatInput()
+      await waitForFullContent() // an explicit send, save or print can proceed
+      expect(phasedReadAheadDelay()).toBe(0)
+      setContentPhased(makeHost().host, docOf(1), s.schedule)
+      notePhasedChatInput()
+      expect(phasedReadAheadDelay()).toBe(0)
+    } finally {
+      cancelPhasedContent()
+      vi.useRealTimers()
+    }
+  })
+
+  it('opens print preview for the whole document when chat typing has deferred layout', async () => {
+    const { host, state } = makeHost()
+    const s = makeScheduler()
+    const dialogs: number[] = []
+    const ctx = {
+      doc: { fileName: 'report.docx' },
+      printAutoOpenedPreviewRef: { current: false },
+      setShowPagePreview() {},
+      setShowPrintDialog: () => dialogs.push(state.mounted.length),
+    } as unknown as Parameters<typeof printDoc>[0]
+    setContentPhased(host, docOf(500), s.schedule)
+    notePhasedChatInput()
+    expect(phasedReadAheadDelay()).toBeGreaterThan(0)
+    printDoc(ctx)
+    expect(phasedReadAheadDelay()).toBe(0)
+    expect(dialogs).toEqual([])
+    while (s.pending()) s.drain()
+    await Promise.resolve()
+    expect(dialogs).toEqual([500])
+    notePhasedChatInput()
+    expect(phasedReadAheadDelay()).toBeGreaterThan(0)
+    printDoc(ctx)
+    expect(phasedReadAheadDelay()).toBe(0)
+    expect(dialogs).toEqual([500, 500])
+  })
+
+  it('keeps an explicit scroll to the end through streaming and its final layout only', () => {
+    const scroller = document.createElement('main')
+    Object.defineProperties(scroller, {
+      clientHeight: { value: 400 },
+      scrollHeight: { value: 1400 },
+    })
+    const s = makeScheduler()
+    setContentPhased(makeHost().host, docOf(500), s.schedule)
+    expect(phasedScrollEnd(scroller)).toBeNull() // first screen
+    scroller.scrollTop = 999.5
+    expect(phasedScrollEnd(scroller)).toBe(scroller) // browser fractional pixels
+    scroller.scrollTop = 600
+    expect(phasedScrollEnd(scroller)).toBeNull() // scrolled away
+    scroller.scrollTop = 1000
+    expect(phasedScrollEnd(scroller)).toBe(scroller)
+    while (s.pending()) s.drain()
+    expect(phasedScrollEnd(scroller)).toBe(scroller) // last pagination follows the last append
+    expect(phasedScrollEnd(scroller)).toBeNull() // subsequent typing and layout are independent
+    setContentPhased(makeHost().host, docOf(1), s.schedule)
+    expect(phasedScrollEnd(scroller)).toBeNull()
   })
 
   it('counts nested table content while streaming whole blocks and preserving the save gate', async () => {

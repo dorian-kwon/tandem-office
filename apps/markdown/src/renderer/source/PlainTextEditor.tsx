@@ -1,3 +1,4 @@
+import { SourceTranslation } from './translation'
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import { Annotation, Compartment, EditorState } from '@codemirror/state'
 import {
@@ -40,6 +41,7 @@ const Loaded = Annotation.define<boolean>()
 
 export interface PlainTextEditorHandle {
   /** replace the buffer without marking the document dirty (the initial file load) */
+  translation(): SourceTranslation | null
   setDoc(text: string): void
   focus(): void
   undo(): boolean
@@ -94,7 +96,7 @@ function extensionsFor(mode: Props['mode']) {
     lineNumbers(),
     highlightActiveLineGutter(),
     highlightSpecialChars(),
-    history(),
+    history({ minDepth: 2000 }),
     drawSelection(),
     dropCursor(),
     indentOnInput(),
@@ -118,6 +120,7 @@ export const PlainTextEditor = forwardRef<PlainTextEditorHandle, Props>(function
   { initialText, mode, onChange, className, spellcheck },
   ref,
 ) {
+  const translation = useRef<SourceTranslation | null>(null)
   const hostRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const spellRef = useRef<Compartment | null>(null)
@@ -149,6 +152,7 @@ export const PlainTextEditor = forwardRef<PlainTextEditorHandle, Props>(function
         ],
       }),
     })
+    translation.current = new SourceTranslation(view, mode === 'json')
     viewRef.current = view
     spellRef.current = spellCompartment
     findTargetRef.current = buildFindTarget(view, (listener) => {
@@ -156,6 +160,7 @@ export const PlainTextEditor = forwardRef<PlainTextEditorHandle, Props>(function
       return () => listeners.delete(listener)
     })
     return () => {
+      translation.current = null
       view.destroy()
       viewRef.current = null
       spellRef.current = null
@@ -177,6 +182,7 @@ export const PlainTextEditor = forwardRef<PlainTextEditorHandle, Props>(function
   }, [spellcheck])
 
   useImperativeHandle(ref, () => ({
+    translation: () => translation.current,
     setDoc(text) {
       const view = viewRef.current
       if (!view || view.state.doc.toString() === text) return

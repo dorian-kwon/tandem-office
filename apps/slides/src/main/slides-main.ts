@@ -286,6 +286,8 @@ import {
   journalOps,
   makeMediaResolver,
   markMetaDirty,
+  moveHistoryStep,
+  translationHistoryEnabled,
   pushHistory,
   rebuildSlide,
   readSlideMedia,
@@ -301,11 +303,11 @@ import {
   setActiveSlidesWebContents,
   sessions,
   showChrome,
-  takeSnapshot,
   windowRefs,
   type OpLogEntry,
   type Session,
 } from './session-state'
+import { beforeTranslationStep, type TranslationStep } from './translation-history'
 import { registerAiIpc, registerSlidesOnlyAiIpc } from './ai-ipc'
 import { followTemplateSelection, inheritTemplateSelection } from './template-selection-ipc'
 import { listPrivateFontFaces, getPrivateFontData, registerEmbeddedFonts } from './fonts'
@@ -1374,7 +1376,7 @@ export function applySessionTxn(
     const undo = session.undoStack
     session.undoStack = []
     try {
-      return applySessionTxn(session, req)
+      return applySessionTxn(session, { ...req, translation: false })
     } finally {
       session.undoStack = undo
       scheduleHistoryNotify(session)
@@ -1413,11 +1415,53 @@ export function applySessionTxn(
       ? session.opened.deck.slides.map((slide) => slide.path)
       : null
   pushHistory(session)
-  const r = journaledTxn(session, 'batch', { ops, isolation })
+  const steps: TranslationStep[] = []
+  const initiallyDirty = !!session.metaDirty
+  const independent =
+    req.translation === true &&
+    translationHistoryEnabled(session) &&
+    ops.every(
+      (op) =>
+        op.target?.slide != null &&
+        !op.target.part &&
+        ['setText', 'setNotes', 'setTableCell'].includes(op.op),
+    )
+  const r = journaledTxn(session, 'batch', {
+    ops,
+    isolation,
+    ...(independent && {
+      beforeOp: (op) => {
+        const ref = op.target!.slide
+        const index =
+          typeof ref === 'number'
+            ? ref
+            : session.opened.deck.slides.findIndex((s) => slideDurableId(s) === ref)
+        const finish = beforeTranslationStep(session, op, index)
+        return (rec) => {
+          // Commit autofit at each text boundary: a subsequent translation of the
+          // same object must see the previous edit's geometry when undoing.
+          const id = op.target?.el
+          if (
+            op.op === 'setText' &&
+            id &&
+            !op.group &&
+            !(rec.after as { levelDirty?: boolean })?.levelDirty
+          ) {
+            const rendered = applyAutofitResize(session, index, id, rebuildSlide(session, index))
+            syncAutofitScale(session, index, id, rendered)
+          }
+          steps.push(finish())
+          markMetaDirty(session)
+        }
+      },
+    }),
+  })
   if (!r.applied) {
+    if (independent) session.metaDirty = initiallyDirty
     session.undoStack.pop()
     return { applied: false, failures: compact(r.failures) }
   }
+  if (steps.length) session.undoStack.at(-1)!.translation = steps
   // Some ops change only package state (setNotes, a theme commit) and leave no
   // element dirty, so without this the session would still look clean and a
   // close could discard the edit. Element-level ops set their own flags; this
@@ -1446,7 +1490,7 @@ export function applySessionTxn(
       continue
     }
     const id = o.target?.el
-    if (!id || o.group) continue
+    if (independent || !id || o.group) continue
     if (o.op !== 'setText' && o.op !== 'setFont' && o.op !== 'setParagraphFormat') continue
     if (o.op === 'setText' && (rec.after as { levelDirty?: boolean } | undefined)?.levelDirty)
       continue
@@ -4898,8 +4942,7 @@ export function registerSlidesIpc(): void {
     if (!session || session.masterEdit) return null
     settleStaleHistoryBatch(session)
     if (session.undoStack.length === 0) return null
-    session.redoStack.push(takeSnapshot(session))
-    restoreSnapshot(session, session.undoStack.pop()!)
+    moveHistoryStep(session, session.undoStack, session.redoStack)
     scheduleHistoryNotify(session)
     scheduleDeckBroadcast(session)
     return buildAllRenderSlides(session.opened, session.fitWidthPx)
@@ -4910,8 +4953,7 @@ export function registerSlidesIpc(): void {
     if (!session || session.masterEdit) return null
     settleStaleHistoryBatch(session)
     if (session.redoStack.length === 0) return null
-    session.undoStack.push(takeSnapshot(session))
-    restoreSnapshot(session, session.redoStack.pop()!)
+    moveHistoryStep(session, session.redoStack, session.undoStack)
     scheduleHistoryNotify(session)
     scheduleDeckBroadcast(session)
     return buildAllRenderSlides(session.opened, session.fitWidthPx)

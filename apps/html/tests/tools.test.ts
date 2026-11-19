@@ -133,6 +133,19 @@ describe('html skill tools', () => {
     expect(doc.text).toContain('Closing remarks.')
   })
 
+  it('keeps inline tags intact when a translation tries to replace their parent as plain text', () => {
+    const html = '<p>Keep <strong>emphasis</strong> here.</p>'
+    const doc = fakeAccess(html),
+      core = createHtmlSkillCore(doc.access)
+    core.buildContext()
+    const sid = doc.access.getMap().elements.find((e) => e.tag === 'p')!.sid
+    const result = core.executeTool(
+      call('apply_ops', { intent: 'translation', ops: [{ op: 'set_text', sid, text: '번역' }] }),
+    )
+    expect(result.isError).toBe(true)
+    expect(doc.text).toBe(html)
+  })
+
   it('a failing op rejects the whole batch with per-op reasons', () => {
     const doc = fakeAccess(DOC)
     const core = createHtmlSkillCore(doc.access)

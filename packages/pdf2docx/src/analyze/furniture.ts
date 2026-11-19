@@ -221,6 +221,24 @@ function pageNoHf(band: 'top' | 'bottom', slot: Slot, firstTextPage: number): Fu
   if (tracking.length === 0) return null
   const rep = runsPer[0]!
   if (rep.text.length > HF_MAX_TEXT_LEN || HAS_RTL_RE.test(rep.text)) return null
+  // Masking every number clusters data rows too. A mixed header is safe to
+  // re-emit only if replacing its page fields would reproduce every other number.
+  if (!rep.l.pageNo) {
+    const fixed = rep.runs.map((run) => rep.text.slice(run.index, run.index + run.length))
+    for (const line of slot.lines) {
+      const text = lineText(line.chars)
+      const runs = digitRuns(text)
+      if (
+        runs.length !== n ||
+        runs.some((run, i) =>
+          tracking.includes(i)
+            ? run.value !== line.page + 1
+            : text.slice(run.index, run.index + run.length) !== fixed[i],
+        )
+      )
+        return null
+    }
+  }
   let text = rep.text
   for (const i of tracking.reverse()) {
     const run = rep.runs[i]!
@@ -327,8 +345,8 @@ export function detectFurniture(
     }
     // page-tracking mixed headers (P30 B): "Form X (Rev. …) Page N" repeats
     // with a varying page number, so the verbatim pass above never groups it.
-    // Digit-masked grouping + the pageNoHf tracking proof (some digit run
-    // equals the physical page number on every probe) identifies it without
+    // Digit-masked grouping plus a page field and otherwise fixed numbers
+    // on every member of the slot identifies it without
     // reviving the digit-normalized false merges ("Form No.1" vs "No.2"
     // captions do not track the page and stay apart).
     const masked = band

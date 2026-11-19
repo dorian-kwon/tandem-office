@@ -1,5 +1,13 @@
 import { withEditorAiWork } from '@genoffice/ui'
-import { recordEditHistory, rebaseEditHistory } from './edit-ops/history'
+import {
+  recordEditHistory,
+  rebaseFrames,
+  appendFrame,
+  inverseFrame,
+  restoreFrame,
+  textFrame,
+  type PdfHistoryFrame,
+} from './edit-ops/history'
 import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
 import {
   Fragment,
@@ -1331,8 +1339,8 @@ export default function App() {
   const [searchMatches, setSearchMatches] = useState<SearchMatch[]>([])
   const [searchCur, setSearchCur] = useState(0)
   const [printing, setPrinting] = useState(false)
-  const [undoStack, setUndoStack] = useState<EditSnapshot[]>([])
-  const [redoStack, setRedoStack] = useState<EditSnapshot[]>([])
+  const [undoStack, setUndoStack] = useState<PdfHistoryFrame[]>([])
+  const [redoStack, setRedoStack] = useState<PdfHistoryFrame[]>([])
   const [pwInput, setPwInput] = useState('')
   const [pwWrong, setPwWrong] = useState(false)
   const [extractDlg, setExtractDlg] = useState(false)
@@ -2673,11 +2681,11 @@ export default function App() {
     metadata: metadataRef.current,
   })
 
-  const pushUndo = (coalesceKey?: string) => {
+  const pushUndo = (coalesceKey?: string, textIds?: string[]) => {
     if (coalesceKey && coalesceKeyRef.current === coalesceKey) return
     coalesceKeyRef.current = coalesceKey ?? null
-    const snap = snapshot()
-    setUndoStack((prev) => [...prev.slice(-49), snap])
+    const snap = textIds ? textFrame(textEditsRef.current, textIds) : snapshot()
+    setUndoStack((prev) => appendFrame(prev, snap))
     setRedoStack([])
   }
 
@@ -2737,7 +2745,14 @@ export default function App() {
     let unrecorded = false
     recordEditHistory(
       opts?.aiEdit === true,
-      () => pushUndo(opts?.coalesceKey),
+      () =>
+        pushUndo(
+          opts?.coalesceKey,
+          opts?.aiEdit &&
+            plan.ops.every((op) => op.op === 'putTextEdit' || op.op === 'removeTextEdit')
+            ? plan.ops.map((op) => String(op.id))
+            : undefined,
+        ),
       () => {
         unrecorded = true
         coalesceKeyRef.current = null
@@ -2799,7 +2814,7 @@ export default function App() {
     }
     if (unrecorded) {
       const after = snapshot()
-      setUndoStack((stack) => rebaseEditHistory(stack, base, after, plan, editOpContext))
+      setUndoStack((stack) => rebaseFrames(stack, base, after, plan, editOpContext))
     }
     return plan
   }
@@ -2886,9 +2901,13 @@ export default function App() {
     if (!top) return
     // Taken before applySnapshot rewrites the refs; the updater may run after it
     const cur = snapshot()
-    setRedoStack((r) => [...r, cur])
+    setRedoStack((r) => [...r, inverseFrame(top, cur)])
     setUndoStack((u) => u.slice(0, -1))
-    applySnapshot(top)
+    if ('kind' in top) {
+      const restored = restoreFrame(top, cur)
+      applyTextEdits(() => restored.textEdits)
+      setTextDraft(null)
+    } else applySnapshot(top)
     coalesceKeyRef.current = null
   }
 
@@ -2896,9 +2915,13 @@ export default function App() {
     const top = redoStack[redoStack.length - 1]
     if (!top) return
     const cur = snapshot()
-    setUndoStack((u) => [...u, cur])
+    setUndoStack((u) => [...u, inverseFrame(top, cur)])
     setRedoStack((r) => r.slice(0, -1))
-    applySnapshot(top)
+    if ('kind' in top) {
+      const restored = restoreFrame(top, cur)
+      applyTextEdits(() => restored.textEdits)
+      setTextDraft(null)
+    } else applySnapshot(top)
     coalesceKeyRef.current = null
   }
 
@@ -7950,6 +7973,8 @@ export default function App() {
     },
     selection: () => aiSelection,
     pendingSummary: aiPendingSummary,
+    pendingTextOnPage: (index) =>
+      textEditsRef.current.filter((e) => e.input.pageIndex === index).map((e) => e.input),
     annotationSummary: aiAnnotationSummary,
     annotationsOn: async (origIdx) => {
       // one pdf.js pass per uncached page: notes and markups come from the same load
@@ -8049,8 +8074,9 @@ export default function App() {
         },
       ])
     },
-    editText: async (raw) => {
-      const resolved = resolveTextEdit(textEditsRef.current, raw)
+    editText: async (raw, signal) => {
+      const initial = textEditsRef.current
+      const resolved = resolveTextEdit(initial, raw)
       if ('reason' in resolved) return resolved.reason
       const { input, replaces, moveBy } = resolved
       let cover: [number, number, number, number] | undefined
@@ -8062,6 +8088,16 @@ export default function App() {
         } catch {
           /* best-effort: the save path skips-and-reports unmatched edits anyway */
         }
+      }
+      if (signal?.aborted) return 'Translation stopped before committing this edit.'
+      if (textEditsRef.current !== initial) {
+        const live = resolveTextEdit(textEditsRef.current, raw)
+        if (
+          'reason' in live ||
+          live.replaces.length !== replaces.length ||
+          live.replaces.some((e, i) => e !== replaces[i])
+        )
+          return 'The text changed during validation. Read the current page and retry.'
       }
       const te: LocalTextEdit = { id: newId(), input, cover, moveBy }
       const gone = new Set(replaces.map((e) => e.id))

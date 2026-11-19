@@ -150,7 +150,7 @@ describe('translation and anchored text boxes', () => {
     expect(textsOf(boxesOf(editor, 1)[0]!)).toEqual(['Welt'])
   })
 
-  it('a text box translation is one undo step together with body translations', () => {
+  it('a translated text box paragraph undoes before the preceding body translation', () => {
     const editor = createEditor([body('Hallo'), boxBlock([{ paras: [para({ text: 'Welt' })] }])])
     const [bodyEntry] = readRunGroups(editor, 0, 0)
     const [boxEntry] = readRunGroups(editor, 1, 1)
@@ -162,7 +162,9 @@ describe('translation and anchored text boxes', () => {
     expect(textsOf(boxesOf(editor, 1)[0]!)).toEqual(['World'])
 
     editor.commands.undo()
-
+    expect(editor.state.doc.child(0).textContent).toBe('Hello')
+    expect(textsOf(boxesOf(editor, 1)[0]!)).toEqual(['Welt'])
+    editor.commands.undo()
     expect(editor.state.doc.child(0).textContent).toBe('Hallo')
     expect(textsOf(boxesOf(editor, 1)[0]!)).toEqual(['Welt'])
   })
@@ -175,11 +177,7 @@ describe('translation and anchored text boxes', () => {
     const outcome = applyRunTranslations(editor, [
       { index: 0, box: 0, paragraph: 0, fp: entry!.fp, segments: ['Hello'] },
     ])
-    if (outcome.ok)
-      recordHandled(
-        editor,
-        outcome.reports.map((r) => r.fp),
-      )
+    if (outcome.ok) recordHandled(editor, outcome.reports)
 
     expect(remainingUntranslated(editor, undefined, 'ko').body).toEqual([])
   })

@@ -4,7 +4,7 @@ import { EditorView } from '@codemirror/view'
 import { redo, undo, undoDepth } from '@codemirror/commands'
 import { applyAiPanelPrefs, normalizeAiPanelPrefs } from '@genoffice/ui'
 import { buildExtensions, External } from '../src/renderer/source/cm-setup'
-import { sourceEditAnnotations } from '../src/renderer/source/ai-history'
+import { applyTranslationPatches, sourceEditAnnotations } from '../src/renderer/source/ai-history'
 
 function setHistory(enabled: boolean): void {
   applyAiPanelPrefs(normalizeAiPanelPrefs({ aiEditUndoHistory: enabled }))
@@ -35,6 +35,40 @@ afterEach(() => {
 })
 
 describe('source edit annotations', () => {
+  it('retains every translated passage beyond CodeMirror’s default history depth', () => {
+    setHistory(true)
+    const view = makeView('a'.repeat(160))
+    for (let start = 0; start < 160; start += 40) {
+      applyTranslationPatches(
+        view,
+        Array.from({ length: 40 }, (_, i) => ({ from: start + i, to: start + i + 1, text: 'b' })),
+      )
+    }
+    expect(undoDepth(view.state)).toBe(160)
+    for (let i = 0; i < 160; i++) expect(undo(view)).toBe(true)
+    expect(view.state.doc.toString()).toBe('a'.repeat(160))
+  })
+
+  it('keeps the order of translated passages, including different lengths and surrounding typing', () => {
+    setHistory(true)
+    const view = makeView('one/two/three')
+    view.dispatch({ changes: { from: 3, insert: '!' }, userEvent: 'input.type' })
+    applyTranslationPatches(view, [
+      { from: 9, to: 14, text: '셋' },
+      { from: 5, to: 8, text: 'two' },
+      { from: 0, to: 3, text: '하나' },
+    ])
+    view.dispatch({ changes: { from: 0, insert: '?' }, userEvent: 'input.type' })
+    for (const source of ['하나!/two/셋', 'one!/two/셋', 'one!/two/three', 'one/two/three']) {
+      expect(undo(view)).toBe(true)
+      expect(view.state.doc.toString()).toBe(source)
+    }
+    for (const source of ['one!/two/three', 'one!/two/셋', '하나!/two/셋', '?하나!/two/셋']) {
+      expect(redo(view)).toBe(true)
+      expect(view.state.doc.toString()).toBe(source)
+    }
+  })
+
   it('always marks the edit as coming from outside the typing path', () => {
     setHistory(false)
     expect(sourceEditAnnotations(true).some((a) => a.type === External)).toBe(true)

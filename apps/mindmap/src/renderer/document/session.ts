@@ -51,9 +51,16 @@ export interface SheetTab {
   title: string
 }
 
+export interface TopicTranslationSteps {
+  ids: readonly string[]
+  recorded: (count: number) => void
+}
+
 export interface ApplyOptions {
   /** true for a change the drawing library recorded in its history; false for one it did not (folding, the layout) */
   step: boolean
+  /** Existing topics whose translated titles or notes get individual source-history steps. */
+  translation?: TopicTranslationSteps
   /** ids of relationships whose curve the user moved */
   reshapedRelationships?: readonly string[]
   /** ids of topics whose picture the user took off */
@@ -74,7 +81,7 @@ export interface SaveBytesOptions {
  */
 export const SHEET_KEYS_OUTSIDE_HISTORY: readonly string[] = ['title', 'theme']
 
-/** The most steps kept per sheet; older ones can no longer be undone. */
+/** Full drawing-history steps retained per sheet, in addition to translated topics. */
 export const MAX_HISTORY_STEPS = 200
 
 // Each recorded operation retains both an engine sheet and a mind-elixir drawing tree.
@@ -108,6 +115,8 @@ interface SheetEntry {
   key: string
   /** `snapshots[n]` is the sheet after `n` steps; `snapshots[cursor]` is where the sheet stands */
   snapshots: XmindSheet[]
+  /** Whether a transition is recorded only in the source, without a drawing-library snapshot. */
+  sourceSteps: boolean[]
   cursor: number
   /** the tree changed without a step since `snapshots[cursor]` was taken */
   stale: boolean
@@ -201,7 +210,7 @@ export class DocumentSession {
     const { entry, index } = this.#at(key)
     const sheet = this.#document.sheets[index]!
     let before: XmindSheet | undefined
-    if (options.step) {
+    if (options.step || options.translation) {
       before =
         entry.snapshots.length === 0 || entry.stale
           ? structuredClone(sheet)
@@ -213,7 +222,23 @@ export class DocumentSession {
       restyledTopics: options.restyledTopics,
     })
     const changed = result.ok && result.changed
-    if (before) {
+    if (before && options.translation) {
+      let count = 0
+      if (changed) {
+        const paths = translatedPaths(sheet.rootTopic, options.translation.ids)
+        for (const id of options.translation.ids) {
+          const target = paths.get(id)
+          if (!target) continue
+          const rootTopic = withTranslatedTopic(before.rootTopic, target.topic, target.path)
+          if (rootTopic === before.rootTopic) continue
+          const after: XmindSheet = { ...before, rootTopic }
+          this.#record(entry, before, after, true)
+          before = after
+          count++
+        }
+      }
+      options.translation.recorded(count)
+    } else if (before) {
       // A refused state is a step too: the library recorded one, and the two histories must stay in line.
       this.#record(entry, before, changed ? structuredClone(this.#document.sheets[index]!) : before)
     } else if (changed) {
@@ -227,7 +252,13 @@ export class DocumentSession {
   discardRedo(key: string): void {
     const { entry } = this.#at(key)
     entry.snapshots.splice(entry.cursor + 1)
+    entry.sourceSteps.splice(entry.cursor)
     entry.stale = true
+  }
+
+  hasSourceStep(key: string, direction: 'undo' | 'redo'): boolean {
+    const { entry } = this.#at(key)
+    return entry.sourceSteps[direction === 'undo' ? entry.cursor - 1 : entry.cursor] === true
   }
 
   /** The sheet an exact number of undo steps would restore, if still retained. */
@@ -490,15 +521,26 @@ export class DocumentSession {
   }
 
   /** One more step: the sheet as it was before it and as it is after it. Steps that were undone are dropped. */
-  #record(entry: SheetEntry, before: XmindSheet, after: XmindSheet): void {
+  #record(entry: SheetEntry, before: XmindSheet, after: XmindSheet, sourceOnly = false): void {
+    entry.sourceSteps.length = entry.cursor
+    entry.sourceSteps.push(sourceOnly)
     entry.snapshots.length = entry.cursor + 1
     entry.snapshots[entry.cursor] = before
     entry.snapshots.push(after)
     entry.cursor++
     entry.stale = false
-    if (entry.snapshots.length > MAX_HISTORY_STEPS + 1) {
-      entry.snapshots.shift()
-      entry.cursor--
+    // The limit bounds full sheet/drawing snapshots. Structurally shared
+    // translated topics are retained alongside them without consuming a slot.
+    if (!sourceOnly && entry.cursor > MAX_HISTORY_STEPS) {
+      let ordinary = 0
+      for (let i = entry.cursor - 1; i >= 0; i--) {
+        if (!entry.sourceSteps[i] && ++ordinary > MAX_HISTORY_STEPS) {
+          entry.sourceSteps.splice(0, i + 1)
+          entry.snapshots.splice(0, i + 1)
+          entry.cursor -= i + 1
+          break
+        }
+      }
     }
   }
 
@@ -514,7 +556,7 @@ export class DocumentSession {
 }
 
 function newEntry(): SheetEntry {
-  return { key: `sheet-${++nextKey}`, snapshots: [], cursor: 0, stale: false }
+  return { key: `sheet-${++nextKey}`, snapshots: [], sourceSteps: [], cursor: 0, stale: false }
 }
 
 /**
@@ -547,6 +589,58 @@ function putInPlace(live: XmindSheet, next: XmindSheet): void {
       configurable: true,
     })
   }
+}
+
+/** Only attached topics can be retitled by edit_map. Look up their paths once per batch. */
+function translatedPaths(root: XmindTopic, ids: readonly string[]) {
+  const wanted = new Set(ids)
+  const found = new Map<string, { topic: XmindTopic; path: number[] }>()
+  const path: number[] = []
+  function visit(topic: XmindTopic): void {
+    if (wanted.delete(topic.id)) found.set(topic.id, { topic, path: [...path] })
+    const attached = topic.children?.attached
+    if (!wanted.size || !Array.isArray(attached) || path.length > MAX_WALK_DEPTH) return
+    for (const [index, child] of attached.entries()) {
+      path.push(index)
+      visit(child)
+      path.pop()
+      if (!wanted.size) break
+    }
+  }
+  visit(root)
+  return found
+}
+
+/** Share the immutable tree between consecutive translated topics. The engine has
+ * already reconciled the complete drawing once, including any rich title runs. */
+function withTranslatedTopic(
+  previous: XmindTopic,
+  translated: XmindTopic,
+  path: readonly number[],
+  depth = 0,
+): XmindTopic {
+  if (depth === path.length) {
+    if (
+      previous.title === translated.title &&
+      JSON.stringify(previous.notes) === JSON.stringify(translated.notes)
+    )
+      return previous
+    const next = { ...previous }
+    for (const field of ['title', 'attributedTitle', 'notes'] as const) {
+      if (JSON.stringify(previous[field]) === JSON.stringify(translated[field])) continue
+      if (translated[field] === undefined) delete next[field]
+      else Object.assign(next, { [field]: structuredClone(translated[field]) })
+    }
+    return next
+  }
+  const attached = previous.children!.attached!
+  const index = path[depth]!
+  const child = attached[index]!
+  const next = withTranslatedTopic(child, translated, path, depth + 1)
+  if (next === child) return previous
+  const children = attached.slice()
+  children[index] = next
+  return { ...previous, children: { ...previous.children, attached: children } }
 }
 
 /** The topic with this id among the topics the editor shows: the central topic and the branches below it. */

@@ -26,6 +26,7 @@ import {
   type RenderSlide,
 } from '@genoffice/pptx-render'
 import { createSystemFontMetrics, resetFontRegistry } from './fonts'
+import { swapTranslationStep, type TranslationStep } from './translation-history'
 import { tiffToPng } from './tiff-decode'
 import { neutralizeJpegOrientation } from './jpeg-orientation'
 import { displayMime } from './media-mime'
@@ -184,6 +185,7 @@ export function journalOps(
 // slides needs a deep copy (elements are mutated in place); entries only needs a shallow Map
 // copy (byte Buffers are never mutated in place, only replaced wholesale).
 export interface HistorySnapshot {
+  translation?: TranslationStep[]
   slides: Slide[]
   entries: Map<string, Uint8Array>
   size: { cx: number; cy: number }
@@ -318,7 +320,14 @@ export function withRecordedAiUndo<T>(run: () => T): T {
 /** Keep the first snapshot of each uninterrupted run of batch edits. */
 function collapseBatchEntries(stack: HistorySnapshot[], entries: WeakSet<HistorySnapshot>): void {
   for (let i = stack.length - 1; i > 0; i--) {
-    if (entries.has(stack[i]!) && entries.has(stack[i - 1]!)) stack.splice(i, 1)
+    const newer = stack[i]!
+    const older = stack[i - 1]!
+    if (!entries.has(newer) || !entries.has(older)) continue
+    if (newer.translation || older.translation) {
+      if (!newer.translation || !older.translation) continue
+      for (const step of newer.translation) older.translation.push(step)
+    }
+    stack.splice(i, 1)
   }
 }
 
@@ -515,6 +524,33 @@ export function restoreAiSnapshot(
   return true
 }
 
+export function moveHistoryStep(
+  session: Session,
+  from: HistorySnapshot[],
+  to: HistorySnapshot[],
+): void {
+  const checkpoint = from.at(-1)!
+  if (!checkpoint.translation?.length) {
+    to.push(takeSnapshot(session))
+    restoreSnapshot(session, from.pop()!)
+    return
+  }
+  invalidateAiRollback(session)
+  let inverse = to.at(-1)
+  if (!inverse?.translation) {
+    inverse = takeSnapshot(session)
+    inverse.translation = []
+    to.push(inverse)
+  }
+  inverse.translation!.push(swapTranslationStep(session, checkpoint.translation.pop()!))
+  if (!checkpoint.translation.length) from.pop()
+  recordSnapshotJump(session)
+}
+
+export function translationHistoryEnabled(session: Session): boolean {
+  return aiHistorySource.getStore()?.record !== false && !session.historyBatch?.dropUndo
+}
+
 export function restoreSnapshot(session: Session, snap: HistorySnapshot): void {
   // Clone: the live deck mutates elements in place, so handing a snapshot's own
   // arrays over would let later edits rewrite history still referenced by the
@@ -527,6 +563,10 @@ export function restoreSnapshot(session: Session, snap: HistorySnapshot): void {
   const entries = session.opened.archive.entries
   entries.clear()
   for (const [k, v] of fresh.entries) entries.set(k, v)
+  recordSnapshotJump(session)
+}
+
+function recordSnapshotJump(session: Session): void {
   // The journal cannot express a snapshot jump as ops; mark the divergence so a
   // future consumer knows to full-resync rather than replay across it.
   if (session.opLog?.length) {
@@ -742,8 +782,11 @@ export function pruneMediaSources(session: Session): void {
     ...(session.aiSnapshots?.values() ?? []),
   ]
   const retained = new Set(session.opened.archive.entries.values())
-  for (const snapshot of snapshots)
+  for (const snapshot of snapshots) {
     for (const bytes of snapshot.entries.values()) retained.add(bytes)
+    for (const step of snapshot.translation ?? [])
+      for (const bytes of step.entries.values()) if (bytes) retained.add(bytes)
+  }
   for (const [key, url] of urls) {
     const bytes = mediaSources.get(url)?.bytes.deref()
     if (!bytes || !retained.has(bytes)) {

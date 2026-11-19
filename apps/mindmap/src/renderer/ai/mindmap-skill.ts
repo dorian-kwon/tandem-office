@@ -54,7 +54,8 @@ const SYSTEM_PROMPT = [
   `- One call carries up to ${EDIT_BATCH_LIMIT} edits, applied in order: ${EDIT_OPS.join(', ')}. Use as few calls as you can; split longer work into several calls.`,
   '- Each edit is checked on its own. An invalid edit (an unknown id, a missing title, …) fails with its reason and the others still apply. Read the per-edit results and resend only the failed edits, corrected.',
   '- To build a branch in one call, give a new topic a "ref" name and use that name as the parentId (or id) of later edits in the same call.',
-  '- A whole batch is one step the user can undo with Ctrl+Z, and your whole turn can be taken back from the panel. Do not ask for confirmation before ordinary edits.',
+  '- To translate existing topic titles or notes, set intent to "translation" and batch set_title/set_note edits. Each changed topic is one undo step. When resuming, read the current map and translate only remaining topics.',
+  '- An ordinary batch is one step the user can undo with Ctrl+Z, and your whole turn can be taken back from the panel. Do not ask for confirmation before ordinary edits.',
   '- You cannot delete a topic that carries elements the editor does not show (floating topics, callouts, boundaries, branches under a summary, hidden relationships). Such a deletion is refused; tell the user they have to delete that topic themselves.',
   '- You cannot delete sheets, and the central topic cannot be deleted or moved.',
   '- Titles, labels and notes are plain text: markup and markdown are shown as typed, never rendered. Keep titles short (a few words); put explanations in the note.',
@@ -115,10 +116,11 @@ const TOOLS: AgentToolDef[] = [
   },
   {
     name: MAP_TOOL_NAMES.editMap,
-    description: `Change topics of one sheet with up to ${EDIT_BATCH_LIMIT} edits, applied in order as one undoable step. Each edit is checked on its own; the result lists each edit as ok (with the id of a new topic) or FAILED with the reason. Edits: add {parentId, title, index?, note?, labels?, link?, ref?}; set_title {id, title}; move {id, parentId, index?}; delete {id}; set_note {id, note|null}; set_labels {id, labels}; set_link {id, link|null}; fold {id}; unfold {id}; set_format {id, bold?, italic?, underline?, strike?, color? "#rrggbb"|null, size? points|null, font? name|null, align? left|center|right, case? none|uppercase|lowercase|capitalize, clear? true} — the text format of the whole topic; null or clear puts the theme's look back. index is the 0-based position among the parent's subtopics (the end when left out).`,
+    description: `Change topics of one sheet with up to ${EDIT_BATCH_LIMIT} edits, applied in order. Ordinary edits share an undo step; intent="translation" records one per changed topic. Each edit is checked on its own; the result lists each edit as ok (with the id of a new topic) or FAILED with the reason. Edits: add {parentId, title, index?, note?, labels?, link?, ref?}; set_title {id, title}; move {id, parentId, index?}; delete {id}; set_note {id, note|null}; set_labels {id, labels}; set_link {id, link|null}; fold {id}; unfold {id}; set_format {id, bold?, italic?, underline?, strike?, color? "#rrggbb"|null, size? points|null, font? name|null, align? left|center|right, case? none|uppercase|lowercase|capitalize, clear? true} — the text format of the whole topic; null or clear puts the theme's look back. index is the 0-based position among the parent's subtopics (the end when left out).`,
     inputSchema: {
       type: 'object',
       properties: {
+        intent: { type: 'string', enum: ['translation'] },
         sheet: SHEET_PROPERTY,
         edits: {
           type: 'array',

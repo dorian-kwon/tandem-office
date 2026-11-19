@@ -3,10 +3,12 @@ import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
 import {
   adapterHistoryCells,
   restoreAdapterSnapshot,
+  restoreAdapterCell,
   withAdapterAiHistory,
 } from './adapter-ai-history'
 import {
   appendAiUndoEntries,
+  translationCellPlan,
   createAiUndoScope,
   matchesAiUndoEntries,
   undoCapacityNotice,
@@ -1262,8 +1264,9 @@ export function App({
   function proposeOperations(
     operations: readonly WorkbookOperation[],
     summary: string,
+    translation = false,
   ): { ok: true; plan: ChangePlan } | { ok: false; error: string } {
-    return proposeOperationsImpl(planContext(), operations, summary)
+    return proposeOperationsImpl(planContext(), operations, summary, translation)
   }
 
   function runDeterministicPlan(instruction: string): { text: string; isError?: boolean } {
@@ -3840,7 +3843,7 @@ export function App({
     onAdmitted?: () => void,
   ): void {
     const instruction = (overrideInstruction ?? prompt).trim()
-    if (!instruction || aiBusy) return
+    if (!instruction || aiBusy || openingWorkbook || workbookOpeningRef.current) return
     // a retried message that carried skills sends the same skill text again
     const skillUse =
       retryIndex !== undefined &&
@@ -4071,7 +4074,7 @@ export function App({
    * — auto-apply never bypasses the "workbook changed since preview" check.
    * When apply fails, the preview card stays up as a manual fallback.
    */
-  async function autoApplySafePlan(plan: ChangePlan): Promise<ApplyOutcome> {
+  async function autoApplySafePlan(plan: ChangePlan, translation = false): Promise<ApplyOutcome> {
     if (!(await commitActiveEditor())) {
       return { ok: false, reason: t('appApplyTxFailed') }
     }
@@ -4085,9 +4088,13 @@ export function App({
       let undoIds: string[] = []
       // Lazy path reads lazyPreviewRef (a ref, already set by the caller) —
       // safe to invoke synchronously right after propose.
-      const apply = handleLazyApply(state, (ids) => {
-        undoIds = ids
-      }).then((outcome) => {
+      const apply = handleLazyApply(
+        state,
+        (ids) => {
+          undoIds = ids
+        },
+        translation,
+      ).then((outcome) => {
         if (outcome.ok) {
           // Patch last assistant message with inline undo button.
           patchLastAssistant((entry) => ({
@@ -4115,6 +4122,7 @@ export function App({
       const workbook = runtime?.univerAPI.getActiveWorkbook()
       if (!runtime || !workbook) return { ok: false, reason: t('appNoWorkbookOpen') }
       const record = aiEditUndoHistoryEnabled()
+      const separateCells = translation && translationCellPlan(plan)
       const {
         result: { receipt, prunedRevision },
         before,
@@ -4124,10 +4132,10 @@ export function App({
           receipt: adapterRef.current.apply(plan),
           prunedRevision: pruneEmptyDefaultSheet(plan),
         }),
-        record,
+        record && !separateCells,
       )
       const after = adapterRef.current.getSnapshot()
-      const scope = createAiUndoScope(record)
+      const scope = createAiUndoScope(record, undefined, workbook.getId(), separateCells)
       const sheetById = (id: string) => {
         const sheet = workbook.getSheetBySheetId(id)
         if (!sheet) throw new Error(`Unknown sheet: ${id}`)
@@ -4147,10 +4155,24 @@ export function App({
           if (prunedRevision !== null) workbook.deleteSheet('sheet-1')
           for (const rename of plan.sheetRenames) sheetById(rename.sheetId).setName(rename.after)
           for (const change of plan.cellChanges) {
-            const range = sheetById(change.sheetId).getRange(change.address)
-            if (change.after.formula) range.setFormula(change.after.formula)
-            else if (change.after.value === null) range.clearContent()
-            else range.setValue(change.after.value)
+            scope.cell(() => {
+              const range = sheetById(change.sheetId).getRange(change.address)
+              if (change.after.formula) range.setFormula(change.after.formula)
+              else if (change.after.value === null) range.clearContent()
+              else range.setValue(change.after.value)
+              if (separateCells && record && !scope.dropped) {
+                const adapter = adapterRef.current
+                const restore = (side: 'before' | 'after') => {
+                  setRevision(restoreAdapterCell(adapter, change, side))
+                  setPreview(null)
+                }
+                pushVisualUndo(
+                  runtime,
+                  { undo: () => restore('before'), redo: () => restore('after') },
+                  { retainedCells: 2, adapterSnapshot: true },
+                )
+              }
+            })
           }
           for (const format of plan.formatChanges) {
             applyFormatPatchToRange(sheetById(format.sheetId).getRange(format.range), format.format)
@@ -4227,6 +4249,7 @@ export function App({
   async function handleLazyApply(
     state: LazyWorkbookState,
     onUndoEntries?: (ids: string[]) => void,
+    translation = false,
   ): Promise<ApplyOutcome> {
     const stored = lazyPreviewRef.current
     const runtime = univerRef.current
@@ -4266,6 +4289,7 @@ export function App({
         // In-app AI apply (chat auto-apply, translation view): undo follows
         // the "AI edit undo history" setting.
         aiEdit: true,
+        translation,
         ...(onUndoEntries && { onUndoEntries }),
         verifyBeforeApply: () => {
           if (lazyPreviewRef.current !== stored || lazyWorkbookRef.current !== state) {
@@ -4303,6 +4327,7 @@ export function App({
     ops: readonly WorkbookOperation[],
     successMessage?: string | null,
     aiEdit = false,
+    translation = false,
   ): Promise<ApplyOutcome> {
     const runtime = univerRef.current
     const state = lazyWorkbookRef.current
@@ -4320,7 +4345,7 @@ export function App({
     }
     return applyChangePlan(plan, opExecutorContext(runtime, workbook, state), {
       userFacing: true,
-      ...(aiEdit ? { aiEdit: true } : {}),
+      ...(aiEdit ? { aiEdit: true, translation } : {}),
       ...(successMessage === undefined ? {} : { successMessage }),
       // The apply queues behind in-flight applies; the file may be closed or
       // replaced meanwhile — drop the click silently rather than mutate the
@@ -5115,7 +5140,7 @@ export function App({
   // leave document focus on a node Univer no longer reads keys from; hand it
   // back to the cell editor unless chrome (AI composer, dialogs) holds it.
   // Runs from finishOpening, in the same tick that clears openingWorkbook: the
-  // <main inert> that guarded the load is still in the DOM until React commits,
+  // inert workbook area that guarded the load is still in the DOM until React commits,
   // and an inert subtree refuses focus. The shell also hands webContents focus
   // to an adopted spare asynchronously, so the document may not have focus yet.
   function focusSheetGrid(framesLeft = 10): void {
@@ -5306,7 +5331,7 @@ export function App({
         /* the address is malformed, or the workbook closed mid-jump */
       }
     },
-    applyOps: async (ops, dryRun) => {
+    applyOps: async (ops, dryRun, translation) => {
       const runtime = univerRef.current
       const state = lazyWorkbookRef.current
       const workbook = runtime?.univerAPI.getActiveWorkbook()
@@ -5332,7 +5357,7 @@ export function App({
         }
       }
       // The MCP bridge is an AI source: undo follows the AI edit setting.
-      const outcome = await runUiOps(ops, undefined, true)
+      const outcome = await runUiOps(ops, undefined, true, translation)
       if (!outcome.ok) return outcome
       // A formula's text lands synchronously but its result is computed
       // asynchronously, so an immediate read of the cells this batch targeted
@@ -5361,8 +5386,11 @@ export function App({
       readCells: (addresses, sheetId) => handlers.current?.readCells(addresses, sheetId) ?? {},
       sheets: () => handlers.current?.sheets() ?? [],
       focusSheet: (sheetId, address) => handlers.current?.focusSheet(sheetId, address),
-      applyOps: async (ops, dryRun) =>
-        (await handlers.current?.applyOps(ops, dryRun)) ?? { ok: false, reason: 'not ready' },
+      applyOps: async (ops, dryRun, translation) =>
+        (await handlers.current?.applyOps(ops, dryRun, translation)) ?? {
+          ok: false,
+          reason: 'not ready',
+        },
       saveTo: async (path, overwrite) =>
         (await handlers.current?.saveTo(path, overwrite)) ?? {
           ok: false,
@@ -5778,11 +5806,6 @@ export function App({
         onGetConsolidateDefault={() => consolidateDefaultReferenceImpl(dataToolsContext())}
         onApplyHeaderFooter={(result) => handleApplyHeaderFooterImpl(pageLayoutContext(), result)}
       />
-      {openingWorkbook && (
-        <div className="workbook-opening-screen" role="status" aria-live="polite">
-          {t('appOpeningWorkbook')}
-        </div>
-      )}
       <ThreadedCommentsPane getRuntime={getRuntime} />
       <NotePicturesPane
         file={workbookFile}

@@ -46,6 +46,7 @@ const CHANGE_TEXT_CHARS = 200
 
 /** One change a run made to the document, as the panel lists it. */
 export interface HwpChange {
+  undoSteps?: number
   kind:
     | 'replace'
     | 'replaceAll'
@@ -231,6 +232,7 @@ const SYSTEM_PROMPT = [
   '## Editing rules',
   '- Text you pass to find or anchor must match the document exactly: letters, spaces and punctuation. Copy it from what you read; never retype it from memory.',
   '- Change as little as possible: find the shortest piece that says what must change and is still unambiguous. When it occurs more than once, call find_text and pass the occurrence you mean, or use replace_all when every occurrence should change.',
+  '- For translation, use replace_text for unique passages. When the same source occurs in several paragraphs or cells, use replace_all with undo_unit set to paragraph so each translated paragraph can be undone and redone independently. Use replace_selection with undo_unit set to paragraph for a selected translation, one string per original paragraph. For a table cell containing text, these translation tools retain character formatting. Check remaining source occurrences with find_text before resuming interrupted work.',
   '- To reword part of a paragraph use replace_text. Do not delete a paragraph and insert a new one for that: the paragraph would lose formatting that differs inside it.',
   '- Leave numbers, dates, names, amounts and legal references as they are unless the user asks to change them.',
   '- Never invent a fact to fill a field or a blank. Fill what the user gave you and ask for the rest in one question.',
@@ -413,6 +415,12 @@ const TOOLS: AgentToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        undo_unit: {
+          type: 'string',
+          enum: ['paragraph'],
+          description:
+            'For translation, record each distinct body paragraph or table-cell paragraph as its own Undo step. Omit for one ordinary document-wide replacement.',
+        },
         find: { type: 'string', description: 'the exact text to replace, within one paragraph' },
         replace: { type: 'string', description: 'the new text, one line' },
       },
@@ -601,6 +609,12 @@ const TOOLS: AgentToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        undo_unit: {
+          type: 'string',
+          enum: ['paragraph'],
+          description:
+            'For translation, give exactly one string per selected paragraph and keep an individual undo entry for each changed paragraph.',
+        },
         paragraphs: {
           type: 'array',
           items: { type: 'string' },
@@ -1738,9 +1752,18 @@ export function createHwpSkill(deps: HwpSkillDeps): HwpSkill {
         const replace = textArg(call, 'replace')
         if (!find || replace === null) return bad(call, 'find and replace must be strings')
         if (hasLineBreak(find) || hasLineBreak(replace)) return bad(call, ONE_LINE_HELP)
+        const perParagraph = call.input.undo_unit === 'paragraph'
         const outcome = await changeWithMemoApproval(
-          () => bridge.replaceAllText(find, replace),
-          (options) => bridge.replaceAllText(find, replace, options),
+          () =>
+            perParagraph
+              ? bridge.replaceAllText(find, replace, { undoUnit: 'paragraph' })
+              : bridge.replaceAllText(find, replace),
+          (options) =>
+            bridge.replaceAllText(
+              find,
+              replace,
+              perParagraph ? { ...options, undoUnit: 'paragraph' } : options,
+            ),
         )
         if (outcome.kind !== 'done')
           return bad(call, memoRemovalDeclined(outcome.refusal, outcome.kind))
@@ -1751,6 +1774,7 @@ export function createHwpSkill(deps: HwpSkillDeps): HwpSkill {
           from: find,
           to: replace,
           count: result.count,
+          ...(result.undoSteps ? { undoSteps: result.undoSteps } : {}),
           place: result.place,
         })
         return {
@@ -2074,10 +2098,26 @@ export function createHwpSkill(deps: HwpSkillDeps): HwpSkill {
         if (!part && paragraphs.length !== selection.length && !selectionContiguous) {
           return bad(call, SELECTION_COUNT_HELP(selection.length))
         }
+        const perParagraph = call.input.undo_unit === 'paragraph'
+        if (perParagraph && target.length !== paragraphs.length)
+          return bad(call, SELECTION_COUNT_HELP(target.length))
+        if (perParagraph && target.every((segment, index) => segment.text === paragraphs[index]))
+          return {
+            output: 'The selected paragraphs already contain that text.',
+            summary: 'The selected text is unchanged.',
+          }
         const before = target.map((segment) => segment.text).join(' ⏎ ')
         const outcome = await changeWithMemoApproval(
-          () => bridge.replaceSelection(target, paragraphs),
-          (options) => bridge.replaceSelection(target, paragraphs, options),
+          () =>
+            perParagraph
+              ? bridge.replaceSelection(target, paragraphs, { undoUnit: 'paragraph' })
+              : bridge.replaceSelection(target, paragraphs),
+          (options) =>
+            bridge.replaceSelection(
+              target,
+              paragraphs,
+              perParagraph ? { ...options, undoUnit: 'paragraph' } : options,
+            ),
         )
         if (outcome.kind !== 'done')
           return bad(call, memoRemovalDeclined(outcome.refusal, outcome.kind))
@@ -2104,7 +2144,8 @@ export function createHwpSkill(deps: HwpSkillDeps): HwpSkill {
           kind: 'replace',
           from: changeText(before),
           to: changeText(after),
-          count: 1,
+          count: result.undoSteps ?? 1,
+          ...(result.undoSteps ? { undoSteps: result.undoSteps } : {}),
           place: result.place,
         })
         return {

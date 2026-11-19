@@ -312,6 +312,8 @@ export type EpubChapterResult =
 // ---- edits ----
 
 export interface EpubApplyEditsRequest {
+  /** Return a separate inverse for each translated block in this batch. */
+  translation?: boolean
   spineIndex: number
   /** applied in order, all or nothing; later edits see the blocks as the earlier ones left them */
   edits: BlockEdit[]
@@ -340,6 +342,7 @@ export type EpubEditResult =
       replacements: RangeReplacement[]
       /** the replacements that undo this edit, against the text after it */
       inverse: RangeReplacement[]
+      translationSteps?: { length: number; inverse: RangeReplacement[] }[]
       /** the book now differs from the saved file */
       dirty: boolean
     }

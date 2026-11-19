@@ -1,11 +1,12 @@
 import type { AiSettings, AiStreamChunk, AiStreamRequest } from '@genoffice/ai-provider'
 import type { AiToolCapabilities, MediaToolErrorCode } from '@genoffice/ai-search'
 import type { Lang } from '@genoffice/i18n'
-import type { AiPanelPrefs, AutoSaveDefault } from '@genoffice/ui'
+import type { AiPanelPrefs, AutoSaveDefault, FontFamilyInfo } from '@genoffice/ui'
 import type { SubscriptionApi } from './subscription-api'
 
 export const HWP_CHANNELS = {
   consumePending: 'hwp:consume-pending',
+  fontFamilyInfo: 'hwp:font-family-info',
   /** invoke → `{ name, format } | null`: the pending path is an untitled copy (spec 5.7) */
   untitledCopy: 'hwp:untitled-copy',
   readFile: 'hwp:read-file',
@@ -302,6 +303,7 @@ export type ReadUrlResult =
   | { ok: false; error: string; errorCode: string }
 
 export interface HwpApi {
+  fontFamilyInfo(families: readonly string[]): Promise<Array<[string, FontFamilyInfo]>>
   /** path queued for this view when its tab was created; null for a view opened without a file */
   consumePending(): Promise<string | null>
   /** the pending path is an untitled copy (a skill template's): its name and format; null otherwise */

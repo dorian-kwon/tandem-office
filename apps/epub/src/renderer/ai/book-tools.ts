@@ -40,7 +40,7 @@ export interface BookAiEditor {
   flush(): Promise<void>
   applyEditGroups(
     groups: readonly EditGroup[],
-    options?: { atomic?: boolean; aiEdit?: boolean },
+    options?: { atomic?: boolean; aiEdit?: boolean; translation?: boolean },
   ): Promise<EditGroupsOutcome>
 }
 
@@ -480,6 +480,7 @@ export class BookTools {
         { done: 0 },
       )
     }
+    const translation = input.intent === 'translation'
     const raw = input.ops
     if (!Array.isArray(raw) || raw.length === 0) {
       return err('ops must be a non-empty list of edits', { done: 0 })
@@ -492,6 +493,10 @@ export class BookTools {
       const op = (value ?? {}) as Record<string, unknown>
       const name = op.op
       const label = `op ${i + 1}`
+      if (translation && name !== 'replace') {
+        shapeProblems.push(`${label}: a translation must replace one block`)
+        return
+      }
       if (!EDIT_OP_NAMES.includes(name as never)) {
         shapeProblems.push(`${label}: op must be one of ${EDIT_OP_NAMES.join(', ')}`)
         return
@@ -595,7 +600,11 @@ export class BookTools {
         opOf.push([i])
       }
     }
-    const outcome = await editor.applyEditGroups(groups, { atomic: true, aiEdit: true })
+    const outcome = await editor.applyEditGroups(groups, {
+      atomic: true,
+      aiEdit: true,
+      ...(translation ? { translation: true } : {}),
+    })
     if (!outcome.ok) {
       const failure = outcome.failure
       const opIndex = opOf[outcome.index]?.[failure.index ?? 0] ?? opOf[outcome.index]?.[0] ?? 0

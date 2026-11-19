@@ -41,6 +41,7 @@ export interface SlidesToolDeps {
 
 /** transaction request for the visible deck (executor semantics, ops are EMU-space) */
 export interface SlidesTxnRequest {
+  translation?: boolean
   ops: unknown[]
   isolation?: 'atomic' | 'per_op'
   dryRun?: boolean
@@ -190,6 +191,12 @@ function createDeckContentTools(deps: SlidesToolDeps, host: SessionHost): McpToo
         'changes nothing — fix the op named in the error and resend the whole batch. ' +
         'Use read_deck for ids and geometry first.',
       inputSchema: {
+        translation: z
+          .boolean()
+          .optional()
+          .describe(
+            'Set true for translated text, notes or table cells so each can be undone independently.',
+          ),
         ops: z.array(z.any()).describe('array of op objects (at most 50 per transaction)').max(50),
         isolation: z
           .enum(['atomic', 'per_op'])
@@ -208,6 +215,7 @@ function createDeckContentTools(deps: SlidesToolDeps, host: SessionHost): McpToo
           isolation:
             args.isolation === 'per_op' || args.isolation === 'atomic' ? args.isolation : undefined,
           dryRun: args.dryRun === true,
+          ...(args.translation === true && { translation: true }),
         })) as { applied?: boolean; failures?: Array<{ index: number; error: string }> }
         // a rejected transaction is a tool-level error so the caller reacts to it;
         // dry-run results (plan + failures) stay a normal response

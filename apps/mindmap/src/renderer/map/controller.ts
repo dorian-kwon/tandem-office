@@ -62,6 +62,7 @@ import {
   MAX_AI_HISTORY_TOTAL_CHARS,
   MAX_HISTORY_STEPS,
   type DocumentSession,
+  type TopicTranslationSteps,
 } from '../document/session'
 import { type DecorationStrings, TopicDecorator } from './decorate'
 import { PictureStore } from './images'
@@ -817,7 +818,12 @@ export class MapController {
    */
   edit(
     change: (root: MapNode) => void,
-    options: { restyled?: readonly string[]; aiEdit?: boolean; beforeRecord?: () => void } = {},
+    options: {
+      restyled?: readonly string[]
+      aiEdit?: boolean
+      beforeRecord?: () => void
+      translation?: TopicTranslationSteps
+    } = {},
   ): 'recorded' | 'disabled' | 'large' {
     const mind = this.mind
     const selected = this.selectedTopicIds()
@@ -834,6 +840,12 @@ export class MapController {
     if (options.aiEdit) {
       const data = mind.getDataString()
       const enabled = aiEditUndoHistoryEnabled()
+      if (enabled && options.translation) {
+        if (data === this.#syncedData) return 'recorded'
+        options.beforeRecord?.()
+        this.#sync({ step: false, translation: options.translation }, data)
+        return 'recorded'
+      }
       if (enabled) {
         cost = aiSheetHistoryCost(
           this.#session.sheet(this.#key),
@@ -875,20 +887,32 @@ export class MapController {
   /** One step back. False when there is none. */
   undo(): boolean {
     if (!this.canUndo) return false
-    this.#libraryUndo()
-    this.#historyPosition = Math.max(0, this.#historyPosition - 1)
-    const view = this.#session.undo(this.#key)
-    if (view) this.#afterHistoryMove(view)
+    if (this.#session.hasSourceStep(this.#key, 'undo')) {
+      const view = this.#session.undo(this.#key)
+      if (view) this.#draw(view)
+      this.#host.onStateChange()
+    } else {
+      this.#libraryUndo()
+      this.#historyPosition = Math.max(0, this.#historyPosition - 1)
+      const view = this.#session.undo(this.#key)
+      if (view) this.#afterHistoryMove(view)
+    }
     return true
   }
 
   /** One step forward again. False when there is none. */
   redo(): boolean {
     if (!this.canRedo) return false
-    this.#libraryRedo()
-    this.#historyPosition++
-    const view = this.#session.redo(this.#key)
-    if (view) this.#afterHistoryMove(view)
+    if (this.#session.hasSourceStep(this.#key, 'redo')) {
+      const view = this.#session.redo(this.#key)
+      if (view) this.#draw(view)
+      this.#host.onStateChange()
+    } else {
+      this.#libraryRedo()
+      this.#historyPosition++
+      const view = this.#session.redo(this.#key)
+      if (view) this.#afterHistoryMove(view)
+    }
     return true
   }
 
@@ -1370,7 +1394,14 @@ export class MapController {
     }, QUIET_SYNC_DELAY_MS)
   }
 
-  #sync(options: { step: boolean; reshaped?: string[] }, drawnData?: string): void {
+  #sync(
+    options: {
+      step: boolean
+      reshaped?: string[]
+      translation?: TopicTranslationSteps
+    },
+    drawnData?: string,
+  ): void {
     if (this.#destroyed) return
     if (this.#quietTimer) {
       clearTimeout(this.#quietTimer)
@@ -1388,6 +1419,7 @@ export class MapController {
     })
     const result = this.#session.apply(this.#key, state, {
       step: options.step,
+      translation: options.translation,
       reshapedRelationships: options.reshaped,
       removedPictures: [...this.#removedPictures],
       restyledTopics: [...this.#restyled],

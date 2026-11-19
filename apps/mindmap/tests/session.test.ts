@@ -43,6 +43,30 @@ const retitled = (view: ViewSheet, id: string, title: string): ViewSheet => {
 }
 
 describe('undo restores the source tree, not a rebuilt one', () => {
+  it('retains a manual step before more than 200 translated topics on one sheet', async () => {
+    const sheet = plainSheet()
+    sheet.rootTopic.children = {
+      attached: Array.from({ length: 220 }, (_, i) => ({ id: `t-${i}`, title: `Source ${i}` })),
+    }
+    const session = new DocumentSession(await documentOf(sheet)),
+      key = session.tabs()[0]!.key
+    const original = copyOf(session.sheet(key))
+    const manual = retitled(session.view(key), sheet.rootTopic.id, 'Manual')
+    session.apply(key, manual, { step: true })
+    const translated = copyOf(manual)
+    translated.root.children.forEach((child, i) => {
+      child.title = `번역 ${i}`
+    })
+    const recorded = vi.fn()
+    session.apply(key, translated, {
+      step: false,
+      translation: { ids: translated.root.children.map((t) => t.id), recorded },
+    })
+    expect(recorded).toHaveBeenCalledWith(220)
+    expect(session.sheetBeforeSteps(key, 221)).toEqual(original)
+    expect(session.undo(key)!.root.children[219]!.title).toBe('Source 219')
+  })
+
   it('a deleted topic comes back with its unknown keys and hidden parts, and the save is the original bytes', async () => {
     const { document, original, session, first } = await richSession()
     const before = copyOf(document.sheets[0]!)

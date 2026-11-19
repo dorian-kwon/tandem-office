@@ -1,3 +1,7 @@
+import { applySlotRoles, bilingualSlots } from './bilingual-table-slots'
+import type { Step } from '@tiptap/pm/transform'
+import { noteParagraph, type NoteUnit } from './note-translation-history'
+import { finishTranslationUnit } from '../editor/translation-history'
 import { originalAiEditor } from './ai-history-gate'
 import type { Editor } from '@tiptap/core'
 import type { Mark, Node as ProseMirrorNode } from '@tiptap/pm/model'
@@ -12,6 +16,7 @@ import { shrinkBoxToFit } from './box-fit'
 import {
   draftNestedTable,
   NestedTableChanges,
+  nestedTextUnit,
   nestedBatches,
   nestedTableNode,
   nestedTablesOf,
@@ -178,6 +183,9 @@ export function runFingerprint(segments: readonly string[]): string {
   return (hash >>> 0).toString(36)
 }
 
+type LocatedBlock = { node: ProseMirrorNode; pos: number }
+const tableParagraphs = new WeakMap<ProseMirrorNode, { pos: number; blocks: LocatedBlock[] }>()
+
 /** the textblocks of a top-level block with their positions (a table: every cell paragraph) */
 export function textblocksOf(
   node: ProseMirrorNode,
@@ -185,7 +193,9 @@ export function textblocksOf(
 ): Array<{ node: ProseMirrorNode; pos: number }> | null {
   if (TEXT_BLOCK_TYPES.has(node.type.name)) return [{ node, pos }]
   if (node.type.name !== 'docTable') return null
-  const out: Array<{ node: ProseMirrorNode; pos: number }> = []
+  const cached = tableParagraphs.get(node)
+  if (cached?.pos === pos) return cached.blocks
+  const out: LocatedBlock[] = []
   node.descendants((child, offset) => {
     if (child.isTextblock) {
       out.push({ node: child, pos: pos + 1 + offset })
@@ -193,17 +203,23 @@ export function textblocksOf(
     }
     return true
   })
+  tableParagraphs.set(node, { pos, blocks: out })
   return out
 }
 
+const topOffsets = new WeakMap<ProseMirrorNode, number[]>()
 export function topLevel(
   doc: ProseMirrorNode,
   index: number,
 ): { node: ProseMirrorNode; pos: number } | null {
   if (!Number.isInteger(index) || index < 0 || index >= doc.childCount) return null
-  let pos = 0
-  for (let i = 0; i < index; i++) pos += doc.child(i).nodeSize
-  return { node: doc.child(index), pos }
+  let offsets = topOffsets.get(doc)
+  if (!offsets) {
+    offsets = []
+    doc.forEach((_node, pos) => offsets!.push(pos))
+    topOffsets.set(doc, offsets)
+  }
+  return { node: doc.child(index), pos: offsets[index]! }
 }
 
 // ---------------------------------------------------------------------------
@@ -503,7 +519,7 @@ export function readRunGroups(
 ): RunParagraph[] {
   const doc = editor.state.doc
   const out: RunParagraph[] = []
-  shiftedSinceRead.delete(originalAiEditor(editor))
+  if (!options.compact) shiftedSinceRead.delete(originalAiEditor(editor))
   for (let index = start; index <= end; index++) {
     const top = topLevel(doc, index)
     if (!top) break
@@ -527,10 +543,12 @@ export function readRunGroups(
         const paragraphs = textblocksOf(table, 0)
         if (paragraphs) {
           out.push(
-            ...textRunEntries(editor, doc, table, 0, paragraphs, index, options).map((entry) => ({
-              ...entry,
-              nestedTable,
-            })),
+            ...textRunEntries(editor, doc, table, 0, paragraphs, index, options, model).map(
+              (entry) => ({
+                ...entry,
+                nestedTable,
+              }),
+            ),
           )
         }
       })
@@ -544,6 +562,19 @@ export function readRunGroups(
   return out
 }
 
+// Progress checks visit every paragraph after each AI batch. Reuse the text
+// and fingerprint of untouched immutable nodes, even when their offsets move.
+const paragraphReads = new WeakMap<ProseMirrorNode, { segments: string[]; fp: string | null }>()
+function paragraphRead(node: ProseMirrorNode) {
+  let result = paragraphReads.get(node)
+  if (!result) {
+    const segments = groupsOf(node, 0).map((g) => g.text)
+    result = { segments, fp: segments.length ? runFingerprint(segments) : null }
+    paragraphReads.set(node, result)
+  }
+  return result
+}
+
 function textRunEntries(
   editor: Editor,
   doc: ProseMirrorNode,
@@ -552,16 +583,18 @@ function textRunEntries(
   blocks: NonNullable<ReturnType<typeof textblocksOf>>,
   index: number,
   options: { review?: boolean; compact?: boolean },
+  tableModel?: object,
 ): RunParagraph[] {
   const out: RunParagraph[] = []
   const inTable = node.type.name === 'docTable'
-  const groupsList = blocks.map((block) => groupsOf(block.node, block.pos))
-  const listed = groupsList.map((groups) => groups.map((g) => g.text))
-  const fps = listed.map((segments) => (segments.length > 0 ? runFingerprint(segments) : null))
+  const paragraphs = blocks.map((block) => paragraphRead(block.node))
+  const fps = paragraphs.map((p) => p.fp)
+  const slots = inTable ? bilingualSlots(node, tableModel) : undefined
   const roles = inTable ? tableTwinRoles(editor, fps) : []
+  if (slots) applySlotRoles(slots, blocks, roles)
   const cells = inTable && !options.compact ? cellInfoOf(node, pos) : null
   blocks.forEach((block, paragraph) => {
-    const segments = listed[paragraph]
+    const segments = paragraphs[paragraph]!.segments
     const ci = cells?.get(block.pos)
     const cellFields = ci ? { cell: ci.cell, ...(ci.span ? { span: ci.span } : {}) } : {}
     // an empty cell paragraph is noise, except a wholly empty cell (listed once: a free destination);
@@ -594,7 +627,7 @@ function textRunEntries(
     }
     const view = options.compact
       ? null
-      : taggedViewOf(block.node, block.pos, groupsList[paragraph], isFixed)
+      : taggedViewOf(block.node, block.pos, groupsOf(block.node, block.pos), isFixed)
     const tagged = view ? { tagged: view.tagged, tags: view.tags } : {}
     out.push(
       inTable
@@ -1169,31 +1202,38 @@ function planBoxParagraph(doc: ProseMirrorNode, item: RunTranslationItem): BoxPl
   }
 }
 
-/** put the new runs into the blocks' `textboxes` attributes; positions are mapped through the edits already in `tr` */
-function applyBoxEdits(tr: Transaction, edits: readonly BoxEdit[]): void {
-  const byNode = new Map<number, BoxEdit[]>()
-  for (const edit of edits) byNode.set(edit.nodePos, [...(byNode.get(edit.nodePos) ?? []), edit])
-  for (const [nodePos, list] of byNode) {
-    const pos = tr.mapping.map(nodePos)
-    const node = tr.doc.nodeAt(pos)
-    const attr = list[0]!.attr
-    const boxes =
-      node && Array.isArray(node.attrs[attr]) ? (node.attrs[attr] as TextboxDisplay[]) : null
-    if (!node || !boxes) continue
-    const next = boxes.map((box) => ({ ...box, paras: box.paras.map((p) => ({ ...p })) }))
-    for (const edit of list) next[edit.at].paras[edit.paragraph].runs = edit.runs
-    // a translation is often longer than what it replaces: a fixed-size box takes it smaller
-    for (const at of new Set(list.map((edit) => edit.at))) next[at] = shrinkBoxToFit(next[at])
-    tr.setNodeMarkup(pos, undefined, { ...node.attrs, [attr]: next })
-  }
+/** Measure the box from its original font sizes after each paragraph so the
+ * last unit has the same uniform fit as translating the whole box at once. */
+function applyBoxEdit(tr: Transaction, edit: BoxEdit, drafts: Map<string, TextboxDisplay>): void {
+  const pos = tr.mapping.map(edit.nodePos)
+  const node = tr.doc.nodeAt(pos)!
+  const boxes = node.attrs[edit.attr] as TextboxDisplay[]
+  const key = `${edit.nodePos}:${edit.attr}:${edit.at}`
+  const previous = drafts.get(key) ?? boxes[edit.at]!
+  const paras = previous.paras.slice()
+  paras[edit.paragraph] = { ...paras[edit.paragraph]!, runs: edit.runs }
+  const draft = { ...previous, paras }
+  drafts.set(key, draft)
+  const next = boxes.slice()
+  next[edit.at] = shrinkBoxToFit(draft)
+  tr.setNodeMarkup(pos, undefined, { ...node.attrs, [edit.attr]: next })
 }
 
 export function revisionDate(): string {
   return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')
 }
 
-function applyEdits(editor: Editor, edits: Edit[], track?: AiTrack): Transaction {
-  const tr = editor.state.tr
+function applyEdits(
+  editor: Editor,
+  tr: Transaction,
+  originalEdits: Edit[],
+  track?: AiTrack,
+): Transaction {
+  const edits = originalEdits.map((e) => ({
+    ...e,
+    from: tr.mapping.map(e.from, 1),
+    to: tr.mapping.map(e.to, -1),
+  }))
   const schema = editor.schema
   // back to front: an edit never shifts the positions of the ones still ahead
   const ordered = [...edits].sort((a, b) => b.from - a.from)
@@ -1259,23 +1299,23 @@ export type RunTranslationOutcome =
  * translate_blocks: every item checked first; an invalid item refuses the whole
  * call with nothing changed, while an item whose fingerprint no longer matches
  * is skipped and reported (all stale: refused). The edits of all items land in one transaction
- * (one undo step).
+ * with separate native undo steps for each paragraph.
  */
 export function applyRunTranslations(
   editor: Editor,
   items: RunTranslationItem[],
   track?: AiTrack,
+  noteSteps: Array<{ afterBody: number; step: Step }> = [],
 ): RunTranslationOutcome {
   const doc = editor.state.doc
   const errors: string[] = []
   const stale: string[] = []
   const skippedBoxes: string[] = []
   const reports: RunTranslationReport[] = []
-  const edits: Edit[] = []
-  const boxEdits: BoxEdit[] = []
+  const units = new Map<object, (tr: Transaction) => void>()
+  const boxDrafts = new Map<string, TextboxDisplay>()
   const seen = new Set<string>()
   const nested = new NestedTableChanges(doc)
-  let nestedChanged = false
   for (const batch of nestedBatches(items)) {
     const { index, nestedTable } = batch[0]
     const where = `block ${index} nested table ${nestedTable}`
@@ -1298,11 +1338,15 @@ export function applyRunTranslations(
     }
     stale.push(...outcome.stale.map((error) => error.replace(/^block 0/, where)))
     reports.push(...outcome.reports.map((report) => ({ ...report, index, nestedTable })))
-    const updated = draft.result()
-    if (updated !== ref.model) {
-      nested.set(ref, updated)
-      nestedChanged = true
-    }
+    const byParagraph = new Map(batch.map((item) => [item.paragraph ?? 0, item]))
+    const changed = outcome.reports.filter((r) => r.changed > 0)
+    let previous = ref.model
+    let at = 0
+    draft.forEachResult(false, (updated) => {
+      const report = changed[at++]!
+      units.set(byParagraph.get(report.paragraph ?? 0)!, nestedTextUnit(ref, previous, updated))
+      previous = updated
+    })
   }
   for (const item of items) {
     if (item.nestedTable !== undefined) continue
@@ -1326,7 +1370,7 @@ export function applyRunTranslations(
       if (!plan.ok) (plan.stale ? stale : errors).push(plan.error)
       else {
         reports.push(plan.report)
-        if (plan.edit) boxEdits.push(plan.edit)
+        if (plan.edit) units.set(item, (tr) => applyBoxEdit(tr, plan.edit!, boxDrafts))
       }
       continue
     }
@@ -1334,16 +1378,29 @@ export function applyRunTranslations(
     if (!plan.ok) (plan.stale ? stale : errors).push(plan.error)
     else {
       reports.push(plan.report)
-      edits.push(...plan.edits)
+      if (plan.edits.length)
+        units.set(item, (tr) => {
+          applyEdits(editor, tr, plan.edits, track)
+        })
     }
   }
   if (errors.length > 0) return { ok: false, errors }
   if (stale.length > 0 && reports.length === 0) return { ok: false, errors: stale, stale: true }
   if (skippedBoxes.length > 0 && reports.length === 0) return { ok: false, errors: skippedBoxes }
-  if (edits.length > 0 || boxEdits.length > 0 || nestedChanged) {
-    const tr = edits.length > 0 ? applyEdits(editor, edits, track) : editor.state.tr
-    if (boxEdits.length > 0) applyBoxEdits(tr, boxEdits)
-    if (nestedChanged) nested.apply(tr)
+  if (units.size || noteSteps.length) {
+    const tr = editor.state.tr
+    let note = 0
+    for (let i = 0; i <= items.length; i++) {
+      while (note < noteSteps.length && noteSteps[note]!.afterBody === i) {
+        tr.step(noteSteps[note++]!.step)
+        finishTranslationUnit(tr)
+      }
+      const apply = items[i] && units.get(items[i]!)
+      if (apply) {
+        apply(tr)
+        finishTranslationUnit(tr)
+      }
+    }
     if (track) tr.setMeta(TRACK_IGNORE, true)
     editor.view.dispatch(tr)
   }
@@ -1487,6 +1544,7 @@ export function readNoteRuns(access: AiNotesAccess): NoteRunParagraph[] {
 
 /** one note paragraph's translation as translate_blocks receives it */
 export interface NoteTranslationItem {
+  afterBody?: number
   note: NoteKind
   id: string
   paragraph?: number
@@ -1506,7 +1564,7 @@ export interface NoteTranslationReport {
 }
 
 export type NotePlanOutcome =
-  | { ok: true; reports: NoteTranslationReport[]; next: Array<{ kind: NoteKind; note: NoteInfo }> }
+  | { ok: true; reports: NoteTranslationReport[]; units: NoteUnit[] }
   | { ok: false; errors: string[] }
 
 /**
@@ -1520,6 +1578,7 @@ export function planNoteTranslations(
 ): NotePlanOutcome {
   const errors: string[] = []
   const reports: NoteTranslationReport[] = []
+  const units: NoteUnit[] = []
   const working = new Map<string, { kind: NoteKind; note: NoteInfo }>()
   const seen = new Set<string>()
   for (const item of items) {
@@ -1572,7 +1631,8 @@ export function planNoteTranslations(
       segments,
       gapsOf(target.groups),
     )
-    const richParas = rich ? current.richParas!.map((runs) => runs.map((r) => ({ ...r }))) : null
+    const richParas = rich ? current.richParas!.slice() : null
+    if (richParas) richParas[paragraph] = richParas[paragraph]!.map((r) => ({ ...r }))
     const texts = current.text.split('\n')
     settled.forEach((text, i) => {
       const group = target.groups[i]
@@ -1596,6 +1656,15 @@ export function planNoteTranslations(
       next.text = texts.join('\n')
     }
     working.set(wkey, { kind: item.note, note: next })
+    if (report.changed)
+      units.push({
+        kind: item.note,
+        id: item.id,
+        index: paragraph,
+        afterBody: item.afterBody ?? 0,
+        before: noteParagraph(current, paragraph, !!current.richParas && !next.richParas),
+        after: noteParagraph(next, paragraph),
+      })
     report.fp = runFingerprint(
       noteGroupsOf(next)
         .paragraphs.find((p) => p.paragraph === paragraph)!
@@ -1604,21 +1673,42 @@ export function planNoteTranslations(
     reports.push(report)
   }
   if (errors.length > 0) return { ok: false, errors }
-  return { ok: true, reports, next: [...working.values()] }
+  return { ok: true, reports, units }
 }
 
 // ---------------------------------------------------------------------------
 // Completion check
 // ---------------------------------------------------------------------------
 
-/** fingerprints of paragraphs a translate_blocks call has already handled, per editor */
-const handledFingerprints = new WeakMap<object, Set<string>>()
-
-/** remember the paragraphs just submitted, so a later check does not list them as untouched */
-export function recordHandled(editor: Editor, fps: Array<string | undefined>): void {
-  let set = handledFingerprints.get(originalAiEditor(editor))
-  if (!set) handledFingerprints.set(originalAiEditor(editor), (set = new Set()))
-  for (const fp of fps) if (fp) set.add(fp)
+type HandledUnit = {
+  index?: number
+  paragraph?: number
+  box?: number
+  nestedTable?: number
+  note?: NoteKind
+  id?: string
+  fp?: string
+  incomplete?: unknown
+}
+const handledUnits = new WeakMap<object, Map<string, string>>()
+function unitKey(unit: HandledUnit): string {
+  return JSON.stringify([
+    unit.note ?? 'body',
+    unit.id ?? unit.index,
+    unit.nestedTable,
+    unit.box,
+    unit.paragraph ?? 0,
+  ])
+}
+/** Only the fingerprint of the applied result at this address is complete.
+ * Repeated source strings in other cells and a paragraph restored by Undo
+ * must still be eligible when the source and target share a script. */
+export function recordHandled(editor: Editor, units: HandledUnit[]): void {
+  let handled = handledUnits.get(originalAiEditor(editor))
+  if (!handled) handledUnits.set(originalAiEditor(editor), (handled = new Map()))
+  for (const unit of units) {
+    if (unit.fp && !unit.incomplete) handled.set(unitKey(unit), unit.fp)
+  }
 }
 
 const SCRIPT_PATTERNS: Array<{ language: RegExp; script: RegExp }> = [
@@ -1658,21 +1748,23 @@ export function remainingUntranslated(
   access: AiNotesAccess | undefined,
   language?: string,
   /** `tracking`: revision tracking is on, so text box paragraphs (which cannot carry revisions) are not counted */
-  options: { tracking?: boolean } = {},
+  options: { tracking?: boolean; notesOnly?: boolean } = {},
 ): RemainingReport {
   const script = sourceScriptOf(language)
-  const handled = handledFingerprints.get(originalAiEditor(editor))
-  const pending = (segments: string[], fp: string): boolean => {
+  const handled = handledUnits.get(originalAiEditor(editor))
+  const pending = (segments: string[], fp: string, unit: HandledUnit): boolean => {
     const text = segments.join(' ')
     if (script) return script.test(text)
-    return /\p{L}/u.test(text) && !handled?.has(fp)
+    return /\p{L}/u.test(text) && handled?.get(unitKey(unit)) !== fp
   }
   const body: string[] = []
   const doc = editor.state.doc
-  for (const entry of readRunGroups(editor, 0, doc.childCount - 1, { compact: true })) {
+  for (const entry of options.notesOnly
+    ? []
+    : readRunGroups(editor, 0, doc.childCount - 1, { compact: true })) {
     if (!entry.segments || !entry.fp) continue
     if (options.tracking && entry.box !== undefined) continue
-    if (pending(entry.segments, entry.fp))
+    if (pending(entry.segments, entry.fp, entry))
       body.push(
         entry.box !== undefined
           ? `${entry.index} (box ${entry.box} paragraph ${entry.paragraph})`
@@ -1686,7 +1778,7 @@ export function remainingUntranslated(
   const notes: string[] = []
   if (access) {
     for (const entry of readNoteRuns(access)) {
-      if (pending(entry.segments, entry.fp))
+      if (pending(entry.segments, entry.fp, entry))
         notes.push(
           `${entry.note} ${entry.id}${entry.paragraph === undefined ? '' : ` paragraph ${entry.paragraph}`}`,
         )

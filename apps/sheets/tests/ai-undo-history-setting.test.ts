@@ -33,9 +33,11 @@ describe('AI edit undo history setting', () => {
   })
 
   it('never drops a ribbon or dialog apply, whatever the setting says', () => {
+    setAiEditUndoHistory(false)
     expect(shouldDropUndoBatch({ userFacing: true })).toBe(false)
     expect(shouldDropUndoBatch({})).toBe(false)
     setAiEditUndoHistory(true)
+    expect(shouldDropUndoBatch({ userFacing: true })).toBe(false)
     expect(shouldDropUndoBatch({})).toBe(false)
   })
 
@@ -59,14 +61,19 @@ describe('AI source wiring in App.tsx', () => {
     'utf8',
   )
 
-  it('marks the in-app AI apply and the MCP bridge as AI edits', () => {
+  it('marks the in-app AI apply and the MCP bridge as AI edits and forwards translation mode', () => {
     const lazyApply = app.slice(app.indexOf('async function handleLazyApply'))
-    expect(lazyApply.slice(0, lazyApply.indexOf('function runUiOps'))).toContain('aiEdit: true')
-    expect(app).toContain('await runUiOps(ops, undefined, true)')
+    expect(lazyApply.slice(0, lazyApply.indexOf('function runUiOps'))).toMatch(
+      /aiEdit:\s*true,\s*translation,/,
+    )
+    expect(app).toMatch(/await runUiOps\(ops,\s*undefined,\s*true,\s*translation\)/)
   })
 
   it('keeps ribbon and dialog edits (runUiOps default) out of the AI path', () => {
-    expect(app).toContain('aiEdit = false,')
-    expect(app).toMatch(/\.\.\.\(aiEdit \? \{ aiEdit: true \} : \{\}\)/)
+    const runUiOps = app.slice(app.indexOf('function runUiOps'))
+    expect(runUiOps.slice(0, runUiOps.indexOf('): Promise<ApplyOutcome>'))).toMatch(
+      /aiEdit\s*=\s*false,\s*translation\s*=\s*false/,
+    )
+    expect(runUiOps).toMatch(/\.\.\.\(aiEdit \? \{ aiEdit: true, translation \} : \{\}\)/)
   })
 })

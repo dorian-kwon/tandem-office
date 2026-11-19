@@ -54,8 +54,8 @@ export const EPUB_SYSTEM_PROMPT = [
   '- Read-only chapters (broken ones, fixed-layout ones) cannot be changed. A fixed-layout book cannot be changed at all, and edit_blocks is not offered for it.',
   '',
   '## Translating the book',
-  '- Never translate the whole book, or a large part of it, in the chat or with edit_blocks. When the user wants the book (or some of its chapters) in another language, call start_book_translation with the language code, and the chapter numbers when the user named some. It only opens the book-translation window, where the user confirms the provider and the number of calls; the translation then runs as a separate job and writes a new EPUB file. It returns at once: never claim the book was translated, and never start it unasked.',
-  '- A short passage the user quotes or selects can still be translated in your reply.',
+  '- For a translated copy of the book or of its chapters, call start_book_translation with the language code, and the chapter numbers when the user named some. It only opens the book-translation window, where the user confirms the provider and the number of calls; the translation then runs as a separate job and writes a new EPUB file. It returns at once: never claim the book was translated, and never start it unasked.',
+  '- A short passage the user quotes or selects can still be translated in your reply. If the user explicitly asks to replace passages in the original with their translations, use edit_blocks with intent "translation" and one replace per block, batched together. When resuming in-place translation, read the current chapters and replace only remaining passages.',
   '',
   '## Conversation',
   '- Answer questions about the book directly; quote it only as much as needed.',
@@ -111,6 +111,12 @@ const EDIT_TOOL: AgentToolDef = {
   inputSchema: {
     type: 'object',
     properties: {
+      intent: {
+        type: 'string',
+        enum: ['translation'],
+        description:
+          'When the user explicitly asks to translate passages in place, send one replace op per block in a batch. Each block is undoable separately.',
+      },
       ops: {
         type: 'array',
         minItems: 1,

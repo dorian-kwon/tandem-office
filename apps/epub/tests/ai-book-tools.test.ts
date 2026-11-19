@@ -355,6 +355,67 @@ describe('edit_blocks', () => {
     expect(s.controller.state().canUndo).toBe(false)
   })
 
+  it('retains more than 300 translated blocks in the same editing session', async () => {
+    const blocks = Array.from({ length: 32 }, (_, i) => `<p>Source ${i}</p>`).join('')
+    const s = setup(Array.from({ length: 10 }, () => ({ body: blocks })))
+    const original = Array.from({ length: 10 }, (_, i) => s.book.source(i))
+    for (let chapter = 1; chapter <= 10; chapter++) {
+      const result = await s.run('edit_blocks', {
+        intent: 'translation',
+        ops: Array.from({ length: 32 }, (_, i) => ({
+          chapter,
+          blockId: `b${i + 1}`,
+          op: 'replace',
+          text: `번역 ${i}`,
+        })),
+      })
+      expect(result.isError).toBe(false)
+    }
+    for (let i = 0; i < 320; i++) {
+      expect(s.controller.state().canUndo).toBe(true)
+      await s.controller.undo()
+    }
+    for (let i = 0; i < 10; i++) expect(s.book.source(i)).toBe(original[i])
+  })
+
+  it.each([true, false])(
+    'sends translations together and records each changed block in tool order (history %s)',
+    async (enabled) => {
+      applyAiPanelPrefs({ aiEditUndoHistory: enabled })
+      const s = setup(THREE)
+      const sources = () => [0, 1, 2].map((i) => s.book.source(i))
+      const before = sources()
+      const result = await s.run('edit_blocks', {
+        intent: 'translation',
+        ops: [
+          { op: 'replace', chapter: 1, blockId: 'b2', text: '<b>고래</b>가 올라왔다.' },
+          { op: 'replace', chapter: 1, blockId: 'b1', text: '시작' },
+          { op: 'replace', chapter: 2, blockId: 'b1', text: '둘째 장.' },
+        ],
+      })
+      expect(result.isError).toBe(false)
+      expect(s.book.calls.filter((c) => c.kind === 'apply')).toHaveLength(2)
+      const after = sources()
+      expect(after[0]).toContain('<h1>시작</h1>')
+      expect(after[1]).toContain('둘째 장.')
+      expect(s.controller.state().canUndo).toBe(enabled)
+      if (!enabled) return
+      await s.controller.undo()
+      expect(sources()).toEqual([after[0], before[1], before[2]])
+      await s.controller.undo()
+      expect(sources()).toEqual([
+        after[0]!.replace('<h1>시작</h1>', '<h1>Opening</h1>'),
+        before[1],
+        before[2],
+      ])
+      await s.controller.undo()
+      expect(sources()).toEqual(before)
+      expect(s.controller.state().canUndo).toBe(false)
+      for (let i = 0; i < 3; i++) await s.controller.redo()
+      expect(sources()).toEqual(after)
+    },
+  )
+
   it('applies a batch over two chapters as one undo entry', async () => {
     const s = setup(THREE)
     const before = [0, 1, 2].map((i) => s.book.source(i))

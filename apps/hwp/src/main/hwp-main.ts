@@ -20,6 +20,7 @@ import {
 import type { SaveDiskState } from '@genoffice/electron-utils'
 import { interceptSaveAs } from '@genoffice/electron-utils'
 import { hwpToText } from '@genoffice/file-parse'
+import { familyInfoFor } from '@genoffice/font-metrics'
 import { getUiLang } from '@genoffice/i18n'
 import { registerHwpAttachmentIpc } from './attachments-ipc'
 import { registerHwpImageIpc } from './ai-image'
@@ -477,6 +478,9 @@ function registerHwpIpc(): void {
   // every view calls this; the channels are registered once, by the first
   if (ipcRegistered) return
   ipcRegistered = true
+  ipcMain.handle(HWP_CHANNELS.fontFamilyInfo, (_event, families: unknown) =>
+    familyInfoFor(families),
+  )
   registerHwpAttachmentIpc()
   // the AI panel's pictures: search result or generated file → bytes for the plugin
   registerHwpImageIpc({

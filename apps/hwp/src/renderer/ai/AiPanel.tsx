@@ -1122,10 +1122,16 @@ export function AiPanel({
       setReverting(false)
     }
     setReverting(true)
-    bridgeRef.current.undo(changes.items.length, changes.foreign, changes.runId).then(
-      (result) => settle(result.ok ? 'reverted' : 'refused'),
-      () => settle('refused'),
-    )
+    bridgeRef.current
+      .undo(
+        changes.items.reduce((n, item) => n + (item.undoSteps ?? 1), 0),
+        changes.foreign,
+        changes.runId,
+      )
+      .then(
+        (result) => settle(result.ok ? 'reverted' : 'refused'),
+        () => settle('refused'),
+      )
   }
 
   /** Today's "new chat": the screen, the loop and everything the conversation carried start over. */

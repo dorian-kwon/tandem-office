@@ -7,11 +7,10 @@
  * website that is deliberate (the browser asks the user before listing the fonts); the app
  * already lets its pages list them, as the Word, Excel and PowerPoint pickers do.
  *
- * At start-up the editor asks the PC for its font list. That answer is cheap: names only.
- * The studio's own detection then reads each font file's name table for the Korean names,
- * which touches every installed file, so it runs only when the list differs from what the
- * studio kept (first run, a font installed or removed). Nothing is shown or asked; a refused
- * or failed look leaves the kept list and the 찾기 button as they were.
+ * Startup compares the enumerated face names with the saved catalog. When it
+ * changes, the app supplies Korean family names from its cached SFNT table
+ * reader in main. The studio options dialog can enrich these with the full
+ * aliases on explicit detection.
  */
 
 /** Module specifier the studio-pc-fonts patch imports; build-studio.mjs aliases it. */
@@ -63,12 +62,45 @@ function whenVisible(doc) {
   })
 }
 
+/** Enumerated faces are metadata objects; never spread them or call blob().
+ * Older explicit searches may have richer face names and aliases. Keep those
+ * for surviving faces when fonts are installed or removed. */
+async function enumeratedRecords(listed, studio) {
+  const families = [...new Set(listed.map((face) => face.family).filter(Boolean))]
+  let localized = new Map()
+  try {
+    if (studio.familyInfo) localized = new Map(await studio.familyInfo(families))
+  } catch {
+    // A standalone studio or an unavailable metadata service still has the OS names.
+  }
+  const kept = new Map(
+    studio
+      .records()
+      .filter((r) => r.detectionSource !== 'font-presence-probe')
+      .map((r) => [faceKey(r), r]),
+  )
+  return listed.map(({ family, fullName, postscriptName, style }) => {
+    const from = kept.get(faceKey({ family, fullName, postscriptName }))
+    const ko = localized.get(family)?.ko
+    const koFace = ko && style && !/^(regular|normal|roman)$/i.test(style) ? ko + ' ' + style : ko
+    return {
+      family,
+      fullName,
+      postscriptName,
+      style,
+      displayName: from?.displayName ?? koFace ?? fullName ?? family,
+      aliases: [...(from?.aliases ?? []), ...(ko ? [ko, koFace] : [])],
+    }
+  })
+}
+
 /**
  * @param {{
- *   queryLocalFonts?: () => Promise<ReadonlyArray<{ family?: string; fullName?: string; postscriptName?: string }>>,
+ *   queryLocalFonts?: () => Promise<ReadonlyArray<{ family?: string; fullName?: string; postscriptName?: string; style?: string }>>,
  *   loadStored: () => Promise<unknown>,
  *   records: () => ReadonlyArray<{ family?: string; fullName?: string; postscriptName?: string; aliases?: readonly string[]; detectionSource?: string }>,
- *   detect: () => Promise<unknown>,
+ *   familyInfo?: (families: string[]) => Promise<ReadonlyArray<readonly [string, {ko?: string}]>>,
+ *   update: (records: object[]) => Promise<unknown>,
  *   changed: () => void,
  *   document?: Pick<Document, 'visibilityState' | 'addEventListener' | 'removeEventListener'>,
  * }} studio
@@ -81,7 +113,7 @@ export async function refreshPcFonts(studio) {
     await studio.loadStored()
     const listed = await studio.queryLocalFonts()
     if (listed.length === 0 || sameFaces(listed, studio.records())) return false
-    await studio.detect()
+    await studio.update(await enumeratedRecords(listed, studio))
     studio.changed()
     return true
   } catch (error) {

@@ -42,6 +42,63 @@ const texts = (editor: Editor) => {
 const insert = { op: 'insertContent', after: 'end', markdown: 'added' } as const
 
 describe('AI edit undo history setting (markdown)', () => {
+  it('retains earlier blocks when later translation batches cross native history depth', () => {
+    applyAiPanelPrefs({ aiEditUndoHistory: true })
+    const editor = createEditor(Array.from({ length: 160 }, () => 'source').join('\n\n'))
+    for (let start = 0; start < 160; start += 40) {
+      const result = runOps(
+        editor,
+        Array.from({ length: 40 }, (_, i) => ({
+          op: 'replaceText',
+          target: { start: start + i },
+          find: 'source',
+          replace: '번역',
+        })),
+        { source: 'ai', translation: true },
+      )
+      expect(result.applied).toBe(40)
+    }
+    expect(undoDepth(editor.state)).toBe(160)
+    for (let i = 0; i < 160; i++) expect(editor.commands.undo()).toBe(true)
+    expect(texts(editor)).toEqual(Array(160).fill('source'))
+  })
+
+  it.each([true, false])(
+    'records each changed translated block of one tool call (history %s)',
+    async (enabled) => {
+      applyAiPanelPrefs({ aiEditUndoHistory: enabled })
+      const editor = createEditor('one\n\ntwo\n\nthree')
+      const before = editor.state.doc.toJSON()
+      const result = await executeTool(editor, {
+        id: 'translation',
+        name: 'apply_ops',
+        input: {
+          intent: 'translation',
+          ops: [
+            { op: 'replaceText', target: { start: 2 }, find: 'three', replace: '셋' },
+            { op: 'replaceText', target: { start: 1 }, find: 'two', replace: 'two' },
+            { op: 'replaceBlocks', target: { start: 0 }, markdown: '**하나**' },
+          ],
+        },
+      })
+      expect(result.isError).toBeFalsy()
+      const translated = editor.state.doc.toJSON()
+      expect(texts(editor)).toEqual(['하나', 'two', '셋'])
+      editor.view.dispatch(editor.state.tr.insertText('!', editor.state.doc.content.size - 1))
+      expect(editor.commands.undo()).toBe(true)
+      expect(editor.state.doc.toJSON()).toEqual(translated)
+      expect(undoDepth(editor.state)).toBe(enabled ? 2 : 0)
+      if (!enabled) return
+      expect(editor.commands.undo()).toBe(true)
+      expect(texts(editor)).toEqual(['one', 'two', '셋'])
+      expect(editor.commands.undo()).toBe(true)
+      expect(editor.state.doc.toJSON()).toEqual(before)
+      expect(editor.commands.redo()).toBe(true)
+      expect(editor.commands.redo()).toBe(true)
+      expect(editor.state.doc.toJSON()).toEqual(translated)
+    },
+  )
+
   it.each([false, true])(
     'separates a multi-block AI call from adjacent typing (history %s)',
     (enabled) => {
@@ -224,7 +281,9 @@ describe('AI panel rollback points', () => {
   })
 
   it('captures and lists them only while the setting is on', () => {
-    expect(panel).toContain('if (!aiEditUndoHistoryEnabled()) return undefined')
+    expect(panel).toContain(
+      'if (!aiEditUndoHistoryEnabled() || depsRef.current.getSource?.()) return undefined',
+    )
     expect(panel).toContain('{undoHistoryOn && snapshots.length > 0 && (')
     expect(panel).toContain('aiEditUndoHistoryEnabled() && snapshotBefore !== undefined')
   })

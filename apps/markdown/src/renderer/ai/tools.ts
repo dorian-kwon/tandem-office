@@ -166,6 +166,12 @@ export const AGENT_TOOLS: AgentToolDef[] = [
           description: 'Ordered list of op objects (see the op catalogue)',
           items: { type: 'object' },
         },
+        intent: {
+          type: 'string',
+          enum: ['translation'],
+          description:
+            'Translating existing text: send one replaceText or replaceBlocks op per block in the same batch. Each translated block is undoable separately.',
+        },
       },
       required: ['ops'],
     },
@@ -173,7 +179,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
   {
     name: 'write_document',
     description:
-      '[For long new content: a whole document, a chapter, a full report, article or translation] Hands the writing to the system writer, which streams markdown straight into the document while the user watches; you never write the text yourself. Give a concrete plan (title, section outline with the key points of each, tone, target length) and put every fact, figure, name and quote the text must use into context — the writer sees only the plan and context, not the conversation. Omit afterIndex on a blank document; on a document with content, pass afterIndex to insert after that block, or replaceDocument=true when the user asked to rewrite everything. Short additions (a paragraph or two) use apply_ops insertContent instead.',
+      '[For long new content: a whole document, a chapter, a full report or article] Hands the writing to the system writer, which streams markdown straight into the document while the user watches; you never write the text yourself. Give a concrete plan (title, section outline with the key points of each, tone, target length) and put every fact, figure, name and quote the text must use into context — the writer sees only the plan and context, not the conversation. Omit afterIndex on a blank document; on a document with content, pass afterIndex to insert after that block, or replaceDocument=true when the user asked to rewrite everything. Short additions (a paragraph or two) use apply_ops insertContent instead.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -284,14 +290,32 @@ function opsSummary(ops: MdOp[], applied: number): string {
   return t('aiToolApplyOpsDone', { n: applied })
 }
 
-function applyOps(editor: Editor, input: unknown, fm?: FrontmatterAccess): ToolExecution {
+function applyOps(
+  editor: Editor,
+  input: unknown,
+  fm?: FrontmatterAccess,
+  translation = false,
+): ToolExecution {
   const label = t('aiToolApplyOps')
   const parsed = validateOps(input)
   if ('error' in parsed) return fail(parsed.error, label)
   if (usesBlockIndexes(parsed.ops) && editedExternally(editor)) return fail(STALE_DOC_ERROR, label)
+  if (
+    translation &&
+    parsed.ops.some(
+      (op) =>
+        (op.op !== 'replaceText' && op.op !== 'replaceBlocks') ||
+        op.target === 'selection' ||
+        (op.target.end !== undefined && op.target.end !== op.target.start),
+    )
+  )
+    return fail(
+      'A translation op must replace text in one numbered block. Send the blocks together in one batch.',
+      label,
+    )
   const before = editor.state.doc
   const frontmatterBefore = fm?.read()
-  const r = runOps(editor, parsed.ops, { source: 'ai', frontmatter: fm })
+  const r = runOps(editor, parsed.ops, { source: 'ai', frontmatter: fm, translation })
   const lines = r.results.map((res, i) =>
     res.ok
       ? `ops[${i}] ${parsed.ops[i]!.op}: ${res.message}`
@@ -514,7 +538,7 @@ export function executeTool(
     }
 
     case 'apply_ops':
-      return applyOps(editor, call.input.ops, fm)
+      return applyOps(editor, call.input.ops, fm, call.input.intent === 'translation')
 
     case 'image_search': {
       const query = String(call.input.query ?? '').trim()

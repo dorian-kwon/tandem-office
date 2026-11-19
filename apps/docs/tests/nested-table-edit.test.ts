@@ -5,6 +5,7 @@ import { parseDocx, saveDocx, type TableModel } from '@genoffice/docx-engine'
 import { editorExtensions } from '../src/renderer/editor/extensions'
 import { blocksToPmDoc, pmDocToSavePlan, type PmNode } from '../src/renderer/editor/convert'
 import { buildDocx, NESTED_TABLE_XML } from '../../../packages/docx-engine/tests/helpers/build-docx'
+import { readRunGroups } from '../src/renderer/ai/translate-runs'
 import { executeTool } from '../src/renderer/ai/tools'
 
 async function openNestedDoc() {
@@ -36,6 +37,41 @@ function editNestedCell(editor: Editor, newText: string) {
 }
 
 describe('nested table editing end to end', () => {
+  it('undoes and redoes an interleaved batch in submission order across the outer and inner cells', async () => {
+    const { editor } = await openNestedDoc()
+    try {
+      const original = editor.state.doc
+      const rows = () => readRunGroups(editor, 0, 0).filter((e) => e.fp && e.segments?.length)
+      const byText = new Map(rows().map((e) => [e.segments![0], e]))
+      const ordered = ['InnerB', 'Outer', 'InnerA', 'RightCell']
+      const blocks = ordered.map((source) => ({
+        ...byText.get(source),
+        segments: ['Translated ' + source],
+      }))
+      const result = await executeTool(
+        editor,
+        { id: 'batch', name: 'translate_blocks', input: { blocks } },
+        { bullet: null, ordered: null },
+      )
+      expect(result.mutated).toBe(true)
+      const check = (done: number) => {
+        const live = rows().map((e) => e.segments![0])
+        ordered.forEach((text, i) => expect(live).toContain(i < done ? 'Translated ' + text : text))
+      }
+      for (let i = 4; i > 0; i--) {
+        check(i)
+        expect(editor.commands.undo()).toBe(true)
+      }
+      expect(editor.state.doc.eq(original)).toBe(true)
+      for (let i = 1; i <= 4; i++) {
+        expect(editor.commands.redo()).toBe(true)
+        check(i)
+      }
+    } finally {
+      editor.destroy()
+    }
+  })
+
   it('applies outer and inner bilingual translations in one document transaction', async () => {
     const { editor, parsed } = await openNestedDoc()
     try {

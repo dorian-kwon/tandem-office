@@ -187,6 +187,7 @@ export default function App() {
   const sourceMode = isSourceMode(textMode)
   // bumped on every CodeMirror doc change so the ribbon's undo/redo state re-renders
   const [sourceRev, setSourceRev] = useState(0)
+  const [sourceLoad, setSourceLoad] = useState(0)
 
   const [dirty, setDirty] = useState(false)
   const [saveState, setSaveState] = useState<SaveState>('idle')
@@ -483,6 +484,7 @@ export default function App() {
         const { text, format } = readSourceText(raw)
         sourceTextRef.current = text
         sourceFormatRef.current = format
+        setSourceLoad((n) => n + 1)
         setDocStats(statsOf(text))
         setFilePath(path)
         setFmText('')
@@ -1329,6 +1331,7 @@ export default function App() {
   }
 
   const aiDeps: MarkdownAiDeps = {
+    getSource: () => (sourceMode ? sourceRef.current?.translation() : undefined),
     getEditor: () => editorRef.current,
     // envelopeRef, not fmText state: a write-then-read within one AI run must
     // see the new value before React commits
@@ -1555,6 +1558,7 @@ export default function App() {
           {sourceMode ? (
             <div className="source-editor">
               <PlainTextEditor
+                key={sourceLoad}
                 ref={sourceRef}
                 initialText={sourceTextRef.current}
                 mode={textMode === 'json' ? 'json' : 'plain'}

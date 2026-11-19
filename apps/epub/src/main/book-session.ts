@@ -170,6 +170,22 @@ export function diffReplacement(from: string, to: string): RangeReplacement {
   return { start: head, end: from.length - tail, text: to.slice(head, to.length - tail) }
 }
 
+/** Translating replaces block interiors, so each inverse stays within its block.
+ * Only retain changed ranges from intermediate states; IPC returns the final chapter once. */
+export function applyBookBlockEdits(map: OpenChapter, edits: BlockEdit[], translation: boolean) {
+  const steps: { length: number; inverse: RangeReplacement[] }[] = []
+  const applied = applyBlockEdits(
+    map,
+    edits,
+    translation
+      ? (before, length, ranges) => {
+          steps.push({ length, inverse: invertReplacements(before, ranges) })
+        }
+      : undefined,
+  )
+  return { applied, translationSteps: translation && applied.ok ? steps : undefined }
+}
+
 /** The digest a chapter text is remembered by in `ChapterState.seen`. */
 function textDigest(text: string): string {
   return createHash('sha256').update(text, 'utf8').digest('base64')
@@ -396,7 +412,11 @@ export class EpubBookSession {
   }
 
   /** Engine block edits on one chapter, all or nothing. */
-  async applyEdits(spineIndex: unknown, rawEdits: unknown): Promise<EpubEditResult> {
+  async applyEdits(
+    spineIndex: unknown,
+    rawEdits: unknown,
+    translation = false,
+  ): Promise<EpubEditResult> {
     if (!Array.isArray(rawEdits) || rawEdits.length === 0) {
       return { ok: false, error: 'invalid-request', message: 'edits must be a non-empty list' }
     }
@@ -409,12 +429,17 @@ export class EpubBookSession {
     const target = await this.editable(spineIndex)
     if ('ok' in target) return target
     const { state, index } = target
-    let applied: ReturnType<typeof applyBlockEdits>
+    let batch: ReturnType<typeof applyBookBlockEdits>
     try {
-      applied = applyBlockEdits(state.map, edits)
+      batch = applyBookBlockEdits(
+        state.map,
+        edits,
+        translation && edits.every((edit) => edit.op === 'replace'),
+      )
     } catch (err) {
       return { ok: false, error: 'invalid-request', message: messageOf(err) }
     }
+    const { applied, translationSteps } = batch
     if (!applied.ok) {
       return {
         ok: false,
@@ -424,7 +449,8 @@ export class EpubBookSession {
         message: applied.refusal.message,
       }
     }
-    return this.commitEdit(state, index, applied.map, applied.replacements, applied.created)
+    const result = this.commitEdit(state, index, applied.map, applied.replacements, applied.created)
+    return result.ok && translationSteps ? { ...result, translationSteps } : result
   }
 
   /** Range replacements on one chapter, against the version they were made on. */

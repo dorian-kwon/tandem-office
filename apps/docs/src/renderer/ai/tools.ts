@@ -1,3 +1,4 @@
+import { noteTranslationSteps } from './note-translation-history'
 import { aiEditor, originalAiEditor, withAiEdit } from './ai-history-gate'
 import type { Editor } from '@tiptap/core'
 import type { Mark, Node as ProseMirrorNode } from '@tiptap/pm/model'
@@ -1552,7 +1553,7 @@ function noteStatusLine(editor: Editor, notes: AiNotesAccess | undefined): strin
   const foot = notes.list('footnote').length
   const end = notes.list('endnote').length
   if (foot + end === 0) return ''
-  const left = remainingUntranslated(editor, notes).notes.length
+  const left = remainingUntranslated(editor, notes, undefined, { notesOnly: true }).notes.length
   const count = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
   return (
     `This document has ${count(foot, 'footnote')} and ${count(end, 'endnote')}; ` +
@@ -2122,7 +2123,7 @@ function executeSyncTool(
           `Nothing was changed: ${outcome.errors.join('; ')}. Call read_runs for the current blocks, then retry.`,
         )
       }
-      recordHandled(editor, outcome.handled)
+      // read_runs recognizes bilingual pairs from their live source and twin.
       const lines: string[] = []
       if (outcome.added.length > 0)
         lines.push(
@@ -2268,7 +2269,7 @@ function executeSyncTool(
       // a reviewed paragraph counts as handled: a review never reports the document as untranslated
       recordHandled(
         editor,
-        outcome.reports.filter((r) => !r.untranslated).map((r) => r.fp),
+        outcome.reports.filter((r) => !r.untranslated),
       )
       const label = (r: ReviseReport) =>
         r.nestedTable !== undefined
@@ -2382,6 +2383,7 @@ function executeSyncTool(
             : { paragraph: Number(e.paragraph) }
         if (isNote)
           noteItems.push({
+            afterBody: items.length,
             note: e.note as NoteKind,
             id: e.id as string,
             fp: e.fp,
@@ -2398,7 +2400,7 @@ function executeSyncTool(
             ...paragraph,
           })
       }
-      // notes are checked first and committed last: a refused item anywhere changes nothing
+      // Preflight the separate note part before committing any body or note unit.
       const notePlan = notes && noteItems.length > 0 ? planNoteTranslations(notes, noteItems) : null
       if (notePlan && !notePlan.ok) {
         return fail(
@@ -2406,21 +2408,20 @@ function executeSyncTool(
           `Nothing was changed: ${notePlan.errors.join('; ')}. Call read_runs (notes:true for notes) for the current text, then retry.`,
         )
       }
-      const outcome = applyRunTranslations(editor, items, track)
+      const outcome = applyRunTranslations(
+        editor,
+        items,
+        track,
+        notePlan?.ok && notes ? noteTranslationSteps(editor, notes, notePlan.units) : [],
+      )
       if (!outcome.ok) {
         return fail(
           summary,
           `Nothing was changed: ${outcome.errors.join('; ')}. Call read_runs for the current blocks, then retry.`,
         )
       }
-      if (notePlan?.ok && notes) {
-        for (const { kind, note } of notePlan.next) notes.replace(kind, note.id, note)
-      }
       const noteReports = notePlan?.ok ? notePlan.reports : []
-      recordHandled(
-        editor,
-        [...outcome.reports, ...noteReports].map((r) => r.fp),
-      )
+      recordHandled(editor, [...outcome.reports, ...noteReports])
       const label = (r: RunTranslationReport) =>
         r.box !== undefined
           ? `block ${r.index} box ${r.box} paragraph ${r.paragraph}`

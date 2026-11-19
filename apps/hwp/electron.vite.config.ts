@@ -6,13 +6,17 @@ import { rhwpPatches } from './scripts/rhwp-patches.mjs'
 export default defineConfig({
   // @genoffice/i18n and @genoffice/electron-utils ship as TS source — must be bundled
   main: {
-    plugins: [externalizeDepsPlugin({ exclude: ['@genoffice/i18n', '@genoffice/electron-utils'] })],
+    plugins: [
+      externalizeDepsPlugin({
+        exclude: ['@genoffice/i18n', '@genoffice/electron-utils', '@genoffice/font-metrics'],
+      }),
+    ],
   },
   preload: {
     plugins: [externalizeDepsPlugin({ exclude: ['@genoffice/i18n', '@genoffice/electron-utils'] })],
   },
   renderer: {
-    plugins: [react(), rhwpPatches('sdk-scheme')],
+    plugins: [react(), rhwpPatches('sdk-scheme', 'sdk-edit-ack')],
     // holds the rhwp-studio build (scripts/build-studio.mjs)
     publicDir: resolve(__dirname, 'public'),
     server: {

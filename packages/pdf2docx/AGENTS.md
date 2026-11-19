@@ -43,6 +43,7 @@ PDF를 편집 가능한 문서로 되살린다. PDFium으로 글자·이미지·
 - **조판기가 짧게 끝낸 줄.** 표지 없는 목록 판정(P8 C)은 다음 단어보다 3em 넘게 남은 줄 하나, 또는 경계의 1/3 이상에서 되풀이되는 작은 차이가 있어야 목록으로 본다. 짧은 줄 규칙은 같은 굵기의 라틴 소문자로 시작하는 다음 줄을 같은 문단으로 읽는다(남은 자리가 결정적이면 끝). `analyze/blocks.ts`. 시험 `tests/blocks.test.ts`의 "keeps ragged-right prose whole…", "still splits a list whose entries miss by a little…", "short-line paragraph ends".
 - **쪽의 단 틈을 가로지르는 나란한 표.** 산문 줄이 가로지르지 않는 x 틈을 단 틈으로 보고, 그 틈을 가로지르되 행 대부분이 한쪽에만 내용이 있는 테두리 없는 표는 틈 양쪽에서 따로 다시 찾는다. 전체 폭 표는 그대로다. `analyze/stream.ts`의 `splitSideBySide`. 시험 `tests/stream.test.ts`의 "side-by-side tables across a page gutter".
 - **JPEG 마커 앞 채움 바이트.** JPEG 머리를 읽을 때 마커 앞에 오는 0xFF 채움 바이트(ITU T.81 B.1.1.2)와 단독 마커(SOI, RSTn, TEM)를 건너뛴다. 채움 바이트가 있다고 성분 수를 0으로 읽어 원본 JPEG를 다시 인코딩하지 않는다. `extract/index.ts`의 `jpegSofComponents`. 시험 `tests/jpeg-sniff.test.ts`, `tests/alpha.test.ts`의 "0xFF fill bytes…".
+- **여백의 측정 행 보존.** 문자와 숫자가 섞인 줄을 반복 쪽 번호로 판정할 때는 모든 쪽에서 쪽 번호 자리만 바뀌는지 검사한다. 구역 번호가 쪽 번호와 같아도 측정값이 달라지는 행은 본문에 남는다. `analyze/furniture.ts`, `tests/furniture.test.ts`.
 
 ## 테스트
 

@@ -749,10 +749,20 @@ export class EpubEditController {
       }))
   }
 
-  private push(parts: HistoryPart[]): void {
+  private push(parts: HistoryPart[], translation = false): void {
     if (parts.length === 0) return
-    this.undoStack.push({ parts })
-    if (this.undoStack.length > HISTORY_LIMIT) this.undoStack.shift()
+    this.undoStack.push({ parts, translation })
+    // Keep every passage from a bulk translation. Ordinary edits still age out
+    // after the existing limit, together with any translations older than them.
+    if (!translation && this.undoStack.length > HISTORY_LIMIT) {
+      let ordinary = 0
+      for (let i = this.undoStack.length - 1; i >= 0; i--) {
+        if (!this.undoStack[i]!.translation && ++ordinary > HISTORY_LIMIT) {
+          this.undoStack.splice(0, i + 1)
+          break
+        }
+      }
+    }
     this.redoStack = []
   }
 
@@ -1003,7 +1013,11 @@ export class EpubEditController {
       this.note(result)
       results.push(result)
     }
-    return { ok: true, entry: { parts: this.partsOf(results) }, results }
+    return {
+      ok: true,
+      entry: { parts: this.partsOf(results), translation: entry.translation },
+      results,
+    }
   }
 
   /** Takes back changes just made, last first (an entry or a batch that could not be made whole). */
@@ -1072,7 +1086,7 @@ export class EpubEditController {
    */
   async applyEditGroups(
     groups: readonly EditGroup[],
-    options: { atomic?: boolean; aiEdit?: boolean } = {},
+    options: { atomic?: boolean; aiEdit?: boolean; translation?: boolean } = {},
   ): Promise<EditGroupsOutcome> {
     if (this.locked) {
       return {
@@ -1091,11 +1105,16 @@ export class EpubEditController {
           failure: { ok: false, error: 'failed', message: 'pending typing could not be applied' },
         }
       }
+      const recordTranslation = options.translation && aiEditUndoHistoryEnabled()
       let results: OkEdit[] = []
       let failed: { index: number; failure: FailedEdit } | null = null
       for (const [index, group] of groups.entries()) {
         const result = await this.host.api
-          .applyEdits({ spineIndex: group.spineIndex, edits: group.edits })
+          .applyEdits({
+            spineIndex: group.spineIndex,
+            edits: group.edits,
+            ...(recordTranslation ? { translation: true } : {}),
+          })
           .catch((err): EpubEditResult => ({ ok: false, error: 'failed', message: String(err) }))
         if (!result.ok) {
           if (result.error === 'locked') this.refused(result, true)
@@ -1116,6 +1135,13 @@ export class EpubEditController {
           if (this.undoStack.length > 0) {
             mapHistory(this.undoStack, forwardChanges(parts))
           }
+        }
+      } else if (options.translation) {
+        for (const result of results) {
+          if (!result.translationSteps) this.push(this.partsOf([result]))
+          else
+            for (const step of result.translationSteps)
+              this.push([{ spineIndex: result.spineIndex, path: result.path, ...step }], true)
         }
       } else {
         this.push(this.partsOf(results))

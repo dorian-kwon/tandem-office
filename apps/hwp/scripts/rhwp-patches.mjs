@@ -172,6 +172,28 @@ const PATCHES = {
     find: "if (targetUrl.protocol !== 'http:' && targetUrl.protocol !== 'https:') {",
     replace: `if (targetUrl.protocol !== 'http:' && targetUrl.protocol !== 'https:' && targetUrl.protocol !== '${APP_SCHEME}:') {`,
   },
+  // Dropping the acknowledgement of a committed plugin edit makes the agent retry
+  // it and leaves the chat's change list out of sync. The transport rejects pending
+  // requests on destroy. Other SDK requests retain their regular timeout.
+  'sdk-edit-ack': {
+    file: /[\\/]@rhwp[\\/]editor[\\/]transport\.js$/,
+    find: '      const timeout = setTimeout(() => {',
+    replace:
+      "      const edit = method === 'plugin.invoke' && params.id === 'ieum-agent' && (params.method === 'invokeAi' || params.method === 'undo');\n      const timeout = edit ? undefined : setTimeout(() => {",
+  },
+  // Keep the standard limit for ordinary commands. Text-only translation records
+  // can extend the native stack to 5,000 entries without retaining WASM snapshots.
+  'studio-replacement-history': {
+    file: /[\\/]rhwp-studio[\\/]src[\\/]engine[\\/]history\.ts$/,
+    find: '  private maxSize = 1000;',
+    replace: [
+      '  private get maxSize(): number {',
+      '    if (this.undoStack.length <= 1000) return 1000;',
+      "    const compact = this.undoStack.reduce((n, cmd) => n + Number(cmd.type === 'plugin:ieum-agent:replacement'), 0);",
+      '    return Math.min(5000, 1000 + compact);',
+      '  }',
+    ].join('\n'),
+  },
   'studio-scheme': {
     file: /[\\/]rhwp-studio[\\/]src[\\/]embed[\\/]protocol\.ts$/,
     find: "return protocol === 'http:' || protocol === 'https:';",
@@ -1119,6 +1141,30 @@ const PATCHES = {
     replace:
       'descriptor.set!.call(this, scopedHostCanvasFont(String(value)) ?? memoSubstituteCssFontFamily(String(value)));',
   },
+  // Explicit discovery retains its SFNT alias scan. Startup already has the OS
+  // face list and localized family names from main; share the studio's normal
+  // indexing, coverage probes and snapshot persistence without fetching blobs.
+  'studio-pc-font-metadata': {
+    file: /[\\/]rhwp-studio[\\/]src[\\/]core[\\/]local-fonts\.ts$/,
+    edits: [
+      {
+        find: 'export interface DetectLocalFontsOptions {',
+        replace:
+          'export interface DetectLocalFontsOptions {\n  enumeratedRecords?: readonly Partial<LocalFontRecord>[];',
+      },
+      {
+        find: [
+          '    const fontDataList = await queryLocalFonts();',
+          '    const enumeratedRecords = await collectLocalFontRecords(fontDataList);',
+        ].join('\n'),
+        replace: [
+          '    const enumeratedRecords = options.enumeratedRecords',
+          '      ? normalizeLocalFontRecords(options.enumeratedRecords)',
+          '      : await collectLocalFontRecords(await queryLocalFonts());',
+        ].join('\n'),
+      },
+    ],
+  },
   'studio-pc-fonts': {
     file: /[\\/]rhwp-studio[\\/]src[\\/]main\.ts$/,
     edits: [
@@ -1136,10 +1182,11 @@ const PATCHES = {
         replace: [
           '    setupEventListeners();',
           '    void refreshPcFonts({',
-          '      queryLocalFonts: (globalThis as { queryLocalFonts?: () => Promise<{ family: string; fullName: string; postscriptName: string }[]> }).queryLocalFonts?.bind(globalThis),',
+          '      queryLocalFonts: (globalThis as { queryLocalFonts?: () => Promise<{ family: string; fullName: string; postscriptName: string; style: string }[]> }).queryLocalFonts?.bind(globalThis),',
           '      loadStored: loadStoredLocalFonts,',
           '      records: () => getLocalFontRecords({ includeRegistered: true }),',
-          '      detect: () => detectLocalFonts({ force: true }),',
+          '      familyInfo: (families) => window.parent.hwpApi?.fontFamilyInfo?.(families),',
+          '      update: (records) => detectLocalFonts({ force: true, enumeratedRecords: records }),',
           "      changed: () => eventBus.emit('local-fonts-changed', { source: 'pc-fonts' }),",
           '      document,',
           '    });',
@@ -1180,6 +1227,7 @@ const PATCHES = {
 /** The patches the studio build applies, in order; the SDK's own is applied by the renderer builds. */
 export const STUDIO_PATCHES = /** @type {const} */ ([
   'studio-scheme',
+  'studio-replacement-history',
   'studio-password-flag',
   'studio-plugin-allow',
   'studio-table-delete-at',
@@ -1213,6 +1261,7 @@ export const STUDIO_PATCHES = /** @type {const} */ ([
   'studio-font-memo-state',
   'studio-font-memo-use',
   'studio-cell-block-paste',
+  'studio-pc-font-metadata',
   'studio-pc-fonts',
 ])
 

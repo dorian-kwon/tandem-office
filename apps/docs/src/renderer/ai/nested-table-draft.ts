@@ -1,3 +1,4 @@
+import { finishTranslationUnit, visitTranslationUnits } from '../editor/translation-history'
 import type { Editor } from '@tiptap/core'
 import type { Node, Schema } from '@tiptap/pm/model'
 import { EditorState, type Transaction } from '@tiptap/pm/state'
@@ -68,8 +69,37 @@ function replaceAt(model: TableModel, path: readonly Step[], replacement: TableM
   return { ...model, rows }
 }
 
+/** Plan a single nested paragraph against the original grid. Resolve its
+ * ancestors again on commit so interleaved edits to sibling tables survive. */
+export function nestedTextUnit(ref: NestedTableRef, before: TableModel, after: TableModel) {
+  const changed: Array<{ r: number; c: number }> = []
+  after.rows.forEach((row, r) => {
+    if (row !== before.rows[r])
+      row.forEach((cell, c) => {
+        if (cell !== before.rows[r]![c]) changed.push({ r, c })
+      })
+  })
+  return (tr: Transaction) => {
+    const pos = tr.mapping.map(ref.pos)
+    const node = tr.doc.nodeAt(pos)!
+    const root = node.attrs.model as TableModel
+    const current = tableAt(root, ref.path)
+    const rows = current.rows.slice()
+    for (const { r, c } of changed) {
+      if (rows[r] === current.rows[r]) rows[r] = rows[r]!.slice()
+      const edited = after.rows[r]![c]!
+      rows[r]![c] = { ...rows[r]![c]!, paras: edited.paras, richParas: edited.richParas }
+    }
+    tr.setNodeMarkup(pos, undefined, {
+      ...node.attrs,
+      model: replaceAt(root, ref.path, { ...current, rows }),
+    })
+  }
+}
+
 /** Keep all work on the model until the main document transaction is ready. */
 export class NestedTableChanges {
+  private units: Array<{ pos: number; model: TableModel }> = []
   private roots = new Map<number, TableModel>()
   private lists = new Map<number, NestedTableRef[]>()
 
@@ -92,14 +122,17 @@ export class NestedTableChanges {
 
   set(ref: NestedTableRef, model: TableModel): void {
     const root = this.roots.get(ref.pos) ?? this.doc.nodeAt(ref.pos)!.attrs.model
-    this.roots.set(ref.pos, replaceAt(root, ref.path, model))
+    const next = replaceAt(root, ref.path, model)
+    this.roots.set(ref.pos, next)
+    this.units.push({ pos: ref.pos, model: next })
   }
 
   apply(tr: Transaction): void {
-    for (const [before, model] of this.roots) {
+    for (const { pos: before, model } of this.units) {
       const pos = tr.mapping.map(before)
       const node = tr.doc.nodeAt(pos)!
       tr.setNodeMarkup(pos, undefined, { ...node.attrs, model })
+      finishTranslationUnit(tr)
     }
   }
 }
@@ -124,6 +157,8 @@ export function draftNestedTable(editor: Editor, model: TableModel) {
   const before = nestedTableNode(editor, model)
   const schema = editor.schema
   let state = EditorState.create({ doc: schema.topNodeType.create(null, [before]) })
+  let transaction: Transaction | undefined
+  const start = state
   const draft = {
     schema,
     get state() {
@@ -131,20 +166,36 @@ export function draftNestedTable(editor: Editor, model: TableModel) {
     },
     view: {
       dispatch(tr: Transaction) {
+        transaction = tr
         state = state.apply(tr)
       },
     },
   } as unknown as Editor
   return {
     editor: draft,
-    result(structural = false): TableModel {
-      const after = state.doc.firstChild!
-      if (after.eq(before)) return model
+    forEachResult(structural: boolean, visit: (result: TableModel) => void) {
+      if (!transaction) return
+      let oldNode = before
+      let previous = model
+      visitTranslationUnits(transaction, start, (part) => {
+        const after = part.doc.firstChild!
+        previous = this.result(structural && oldNode === before, after, oldNode, previous)
+        visit(previous)
+        oldNode = after
+      })
+    },
+    result(
+      structural = false,
+      after = state.doc.firstChild!,
+      oldNode = before,
+      previous = model,
+    ): TableModel {
+      if (after.eq(oldNode)) return previous
       if (structural) return { ...model, ...pmTableToModel(after.toJSON() as PmNode) }
       // Text edits retain the actual model's properties, raw cell XML and
       // unaffected runs, including properties that are only used for rendering.
-      const rows = model.rows.map((cells, r) => {
-        const oldRow = before.child(r)
+      const rows = previous.rows.map((cells, r) => {
+        const oldRow = oldNode.child(r)
         const newRow = after.child(r)
         if (oldRow.eq(newRow)) return cells
         let c = 0
@@ -171,7 +222,7 @@ export function draftNestedTable(editor: Editor, model: TableModel) {
           return { ...cell, paras, richParas }
         })
       })
-      return { ...model, rows }
+      return { ...previous, rows }
     },
   }
 }

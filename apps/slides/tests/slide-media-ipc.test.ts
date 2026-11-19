@@ -51,6 +51,7 @@ import { elementDurableId } from '@genoffice/pptx-engine/identity'
 import {
   addPicture,
   addElement,
+  addTable,
   createBlankPptx,
   getSlideNotes,
   parseMasterPart,
@@ -601,3 +602,106 @@ describe('slide media IPC payload', () => {
     expect(readSlideMedia('genoffice-slide-media://archive/unknown')).toBeNull()
   })
 })
+
+it('keeps 65 translated text/notes steps across two transactions and a separate manual edit', async () => {
+  const slide = session.opened.deck.slides[0]!
+  const ids = Array.from(
+    { length: 64 },
+    (_, i) =>
+      addElement(slide, {
+        kind: 'textbox',
+        offset: { x: 0, y: 0, cx: 914400, cy: 914400 },
+        paragraphs: [{ runs: [{ text: 'Source ' + i }] }],
+      })!.id,
+  )
+  const values = () =>
+    session.opened.deck.slides[0]!.elements.filter((e) => ids.includes(e.id)).map(
+      (e) => (e as TextElement).text!.paragraphs[0]!.runs[0]!.text,
+    )
+  const ops = [
+    ...ids.map((id, i) => ({
+      op: 'setText',
+      target: { slide: 0, el: id },
+      paragraphs: [{ runs: [{ text: '번역 ' + i }] }],
+    })),
+    { op: 'setNotes', target: { slide: 0 }, text: '현장 노트' },
+  ]
+  const firstNotes = getSlideNotes(session.opened.archive, slide.path)
+  const apply = (ops: unknown[]) =>
+    call('slides:apply-txn:ai-edit', [{ ops, translation: true, acceptSlideUpdate: true }], true)
+  call('slides:history-batch-begin', { aiRun: true })
+  expect((await apply(ops.slice(0, 36))).applied).toBe(true)
+  expect((await apply(ops.slice(36))).applied).toBe(true)
+  expect(typeof call('slides:history-batch-end')).toBe('number')
+  expect(call('slides:set-notes', { slideIndex: 0, text: 'manual after' })).toBe(true)
+  call('slides:undo')
+  expect(getSlideNotes(session.opened.archive, slide.path)).toBe('현장 노트')
+  call('slides:undo')
+  expect(getSlideNotes(session.opened.archive, slide.path)).toBe(firstNotes)
+  const verify = (n: number) =>
+    expect(values()).toEqual(ids.map((_, i) => (i < n ? '번역 ' + i : 'Source ' + i)))
+  verify(64)
+  for (let n = 63; n >= 0; n--) {
+    call('slides:undo')
+    verify(n)
+  }
+  for (let n = 1; n <= 64; n++) {
+    call('slides:redo')
+    verify(n)
+  }
+  call('slides:redo')
+  expect(getSlideNotes(session.opened.archive, slide.path)).toBe('현장 노트')
+  call('slides:redo')
+  expect(getSlideNotes(session.opened.archive, slide.path)).toBe('manual after')
+}, 30000)
+
+it('restores table cells, their exact XML and dirty flag, and rolls back a rejected translation batch', async () => {
+  const tab = addTable(session.opened, 0, {
+    rows: 8,
+    cols: 8,
+    offset: { x: 0, y: 0, cx: 3810000, cy: 952500 },
+  })!
+  const slide = session.opened.deck.slides[0]!
+  const initialDirty = slide.structureDirty
+  const table = () => session.opened.deck.slides[0]!.elements.find((e) => e.type === 'table')!
+  const before = table().anchor.originalXml
+  const op = (row: number, col: number, text: string) => ({
+    op: 'setTableCell',
+    target: { slide: 0, el: tab.elementId },
+    row,
+    col,
+    paragraphs: [{ runs: [{ text }] }],
+  })
+  const apply = (ops: unknown[]) =>
+    call('slides:apply-txn:ai-edit', [{ ops, translation: true, acceptSlideUpdate: true }], true)
+  expect((await apply([op(0, 0, 'Should revert'), op(99, 99, 'Invalid')])).applied).toBe(false)
+  expect(table().anchor.originalXml).toBe(before)
+  expect(session.metaDirty).toBeFalsy()
+  expect(session.undoStack).toHaveLength(0)
+  const ops = Array.from({ length: 64 }, (_, i) => op(Math.floor(i / 8), i % 8, '번역 ' + i))
+  call('slides:history-batch-begin', { aiRun: true })
+  expect((await apply(ops.slice(0, 32))).applied).toBe(true)
+  expect((await apply(ops.slice(32))).applied).toBe(true)
+  call('slides:history-batch-end')
+  const final = table().anchor.originalXml
+  const steps = session.undoStack.at(-1)!.translation!
+  for (const step of steps.slice(1)) {
+    expect(step.target.kind).toBe('cell')
+    if (step.target.kind === 'cell') expect(step.target.xml.insert.length).toBeLessThan(2000)
+  }
+  for (let i = 63; i >= 0; i--) {
+    call('slides:undo')
+    expect(table().rows[Math.floor(i / 8)]![i % 8]!.text?.paragraphs[0]?.runs[0]?.text).not.toBe(
+      '번역 ' + i,
+    )
+  }
+  expect(table().anchor.originalXml).toBe(before)
+  expect(session.opened.deck.slides[0]!.structureDirty).toBe(initialDirty)
+  for (let i = 0; i < 64; i++) {
+    call('slides:redo')
+    expect(table().rows[Math.floor(i / 8)]![i % 8]!.text?.paragraphs[0]?.runs[0]?.text).toBe(
+      '번역 ' + i,
+    )
+  }
+  expect(table().anchor.originalXml).toBe(final)
+}, 30000)

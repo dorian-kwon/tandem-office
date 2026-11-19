@@ -252,7 +252,7 @@ describe('applyRunTranslation', () => {
 })
 
 describe('read_runs / translate_blocks tools', () => {
-  it('translate_blocks edits several blocks in one undoable step and reports incomplete ones', async () => {
+  it('translate_blocks edits several blocks with independent undo and reports incomplete ones', async () => {
     applyAiPanelPrefs({ aiEditUndoHistory: true })
     const editor = await createEditor([mixedParagraph, emptyParagraph, mixedParagraph])
     const read = await executeTool(
@@ -282,6 +282,9 @@ describe('read_runs / translate_blocks tools', () => {
     expect(exec.output).toMatch(/block 2.*1 of 3/i)
     expect(texts(blockJson(editor, 0))).toEqual(['A ', 'B', ' C'])
     expect(editor.state.doc.childCount).toBe(docBefore.childCount)
+    editor.commands.undo()
+    expect(editor.state.doc.child(2).eq(docBefore.child(2))).toBe(true)
+    expect(editor.state.doc.child(0).eq(docBefore.child(0))).toBe(false)
     editor.commands.undo()
     expect(editor.state.doc.eq(docBefore)).toBe(true)
   })

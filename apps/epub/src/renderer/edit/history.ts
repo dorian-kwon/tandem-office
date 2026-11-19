@@ -10,6 +10,7 @@ export interface HistoryPart {
 }
 
 export interface HistoryEntry {
+  translation?: boolean
   parts: HistoryPart[]
 }
 

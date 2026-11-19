@@ -228,6 +228,12 @@ function createGridContentTools(deps: SheetsToolDeps, host: SessionHost): McpToo
           .describe(
             'array of workbook DSL op objects; each op addresses its worksheet with sheet (a name) or sheetId',
           ),
+        translation: z
+          .boolean()
+          .optional()
+          .describe(
+            'Set true when writing translations, to undo each translated cell independently.',
+          ),
         dryRun: z
           .boolean()
           .optional()
@@ -240,6 +246,7 @@ function createGridContentTools(deps: SheetsToolDeps, host: SessionHost): McpToo
         const result = (await sheets.runCommand(wc, 'apply_ops', {
           ops: args.ops,
           dryRun: args.dryRun === true,
+          ...(args.translation === true && { translation: true }),
         })) as { ok?: boolean; reason?: string }
         // a rejected batch is a tool-level error so the caller reacts to it
         if (result?.ok === false) {

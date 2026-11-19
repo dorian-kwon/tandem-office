@@ -380,6 +380,9 @@ export const TOOLS_UNAVAILABLE_NOTE =
 export const TOOL_ABORTED_OUTPUT =
   '(the user stopped the run while this tool was still executing; its result was discarded)'
 
+const TOOL_SKIPPED_AFTER_STOP = '(the user stopped the run; this tool was not executed)'
+const RESUME_AFTER_STOP =
+  '\n\nThe previous run was interrupted. If the user is resuming it, read the current document and target units again before editing. Use successful tool results to identify reported commits, then verify them against the live document: the user may have edited or undone them. An interrupted tool may have applied part of its batch before it stopped. A skipped tool never started. Continue only the remaining work and preserve subsequent user edits.'
 const TOOL_ABORTED = Symbol('tool-aborted')
 
 async function awaitToolOrAbort(
@@ -511,6 +514,8 @@ export class AgentLoop<TSnapshot = unknown> {
   private handle: AgentStreamHandle | null = null
   private running = false
   private cancelled = false
+  private lastRunStopped = false
+  private resumingAfterStop = false
   private turns = 0
   /** Finalizing turn after hitting the turn limit: no tools, let the model answer from what it has read */
   private finalizing = false
@@ -587,19 +592,41 @@ export class AgentLoop<TSnapshot = unknown> {
     for (let i = 0; i < answered.length; i++) {
       const m = answered[i]!
       paired.push(m)
-      if (m.role === 'assistant' && m.toolCalls?.length && answered[i + 1]?.role !== 'tool') {
-        paired.push({
-          role: 'tool',
-          results: m.toolCalls.map((call) => ({
-            id: call.id,
-            name: call.name,
-            output: TOOL_ABORTED_OUTPUT,
-            isError: true,
-          })),
-        })
+      if (m.role !== 'assistant' || !m.toolCalls?.length) continue
+      const reported = new Map<string, AgentToolResult>()
+      while (answered[i + 1]?.role === 'tool') {
+        const next = answered[++i] as Extract<AgentMessage, { role: 'tool' }>
+        for (const result of next.results) reported.set(result.id, result)
       }
+      paired.push({
+        role: 'tool',
+        results: m.toolCalls.map(
+          (call) =>
+            reported.get(call.id) ?? {
+              id: call.id,
+              name: call.name,
+              output: TOOL_ABORTED_OUTPUT,
+              isError: true,
+            },
+        ),
+      })
     }
     this.history = paired
+    // A restored tool call may have been interrupted before all results arrived.
+    // Only the latest user request can be the interrupted work being resumed.
+    let lastUser = paired.length - 1
+    while (lastUser >= 0 && paired[lastUser]?.role !== 'user') lastUser--
+    this.lastRunStopped = paired
+      .slice(lastUser + 1)
+      .some(
+        (m) =>
+          m.role === 'tool' &&
+          m.results.some(
+            (r) =>
+              r.isError &&
+              (r.output === TOOL_ABORTED_OUTPUT || r.output === TOOL_SKIPPED_AFTER_STOP),
+          ),
+      )
     if (this.history.length === 0) return
     if (this.compactionEnabled()) {
       const { maxBytes, keepRecentBytes } = this.compactBudget()
@@ -652,6 +679,8 @@ export class AgentLoop<TSnapshot = unknown> {
   run(instruction: string, images?: AgentImage[]): void {
     if (this.running || !instruction) return
     this.running = true
+    this.resumingAfterStop = this.lastRunStopped
+    this.lastRunStopped = false
     this.cancelled = false
     this.turns = 0
     this.finalizing = false
@@ -726,6 +755,7 @@ export class AgentLoop<TSnapshot = unknown> {
    * failed instruction can't be silently re-executed by the next run.
    */
   private rollbackFailedRun(): void {
+    if (this.resumingAfterStop) this.lastRunStopped = true
     const msg = this.runUserMsg
     this.runUserMsg = null
     if (!msg) return
@@ -881,6 +911,7 @@ export class AgentLoop<TSnapshot = unknown> {
   cancel(): void {
     if (!this.running) return
     this.cancelled = true
+    this.lastRunStopped = true
     this.turnUsage = null
     // abort lets long tools mid-execution (internal LLM loops etc.) stop promptly
     this.abortController?.abort()
@@ -918,6 +949,8 @@ export class AgentLoop<TSnapshot = unknown> {
     this.running = false
     this.cancelled = false
     this.history = []
+    this.resumingAfterStop = false
+    this.lastRunStopped = false
     this.runUserMsg = null
     this.runId = undefined
   }
@@ -1055,6 +1088,7 @@ export class AgentLoop<TSnapshot = unknown> {
             runtimePreamble() +
             MATERIAL_NOT_INSTRUCTIONS +
             this.options.skill.systemPrompt +
+            (this.resumingAfterStop && toolsAllowed ? RESUME_AFTER_STOP : '') +
             (toolsAllowed ? '' : TOOLS_UNAVAILABLE_NOTE) +
             (this.options.systemSuffix?.() ?? ''),
           messages: this.requestMessages(),
@@ -1261,7 +1295,7 @@ export class AgentLoop<TSnapshot = unknown> {
         results.push({
           id: call.id,
           name: call.name,
-          output: '(the user stopped the run; this tool was not executed)',
+          output: TOOL_SKIPPED_AFTER_STOP,
           isError: true,
         })
         continue

@@ -15,6 +15,8 @@
 
 import { installDialogTheme } from './dialog-theme.mjs'
 
+import { captureReplacement, withReplacementHistory } from './replacement-history.mjs'
+
 export const AGENT_PLUGIN_ID = 'ieum-agent'
 
 /** Matches listed back to the caller when a search is ambiguous. */
@@ -37,6 +39,7 @@ const MAX_PROFILE_PICTURES = 100
 const CONTEXT_CHARS = 30
 /** Most history steps one undo call takes back. */
 const MAX_UNDO_STEPS = 200
+const MAX_RECORDED_UNITS = 5000
 /** Most paragraphs one insert call adds. */
 const MAX_INSERTED_PARAGRAPHS = 100
 /** Most cells a new table holds. */
@@ -4192,20 +4195,40 @@ export const agentPlugin = {
         markRectCache = null
       }
       markViewport = { zoom, width, height }
-      const rects =
-        markRectCache ??
-        host.read((doc) => {
-          const tableRows = new Map()
-          return marks.flatMap((mark) => {
-            try {
-              return markRects(doc, mark, tableRows)
-            } catch {
-              return []
-            }
+      if (!markRectCache) {
+        const rects = []
+        markRectCache = rects
+        const tableRows = new Map()
+        let index = 0
+        const measure = (continuation = false) => {
+          // A newer edit, layout or document supersedes an unfinished geometry pass.
+          if (markRectCache !== rects || !layer?.isConnected) return
+          const start = performance.now()
+          host.read((doc) => {
+            do {
+              const mark = marks[index++]
+              try {
+                rects.push(...markRects(doc, mark, tableRows))
+              } catch {
+                // A place without a rectangle has nothing to draw.
+              }
+            } while (index < marks.length && (marks.length <= 16 || performance.now() - start < 8))
           })
-        })
-      markRectCache = rects
-      for (const rect of rects) {
+          if (index < marks.length) {
+            setTimeout(() => {
+              try {
+                measure(true)
+              } catch {
+                // The editor may have released the document between slices.
+              }
+            }, 0)
+          } else if (continuation) {
+            redrawMarks()
+          }
+        }
+        measure()
+      }
+      for (const rect of markRectCache) {
         const box = page.createElement('div')
         const left = scroll.getPageLeftResolved(rect.pageIndex, width) + rect.x * zoom
         const top = scroll.getPageOffset(rect.pageIndex) + rect.y * zoom
@@ -4527,13 +4550,36 @@ export const agentPlugin = {
       host.automation.execute('ext:ieum-ai-history')
       return transactionHistory
     }
-    const transact = (label, fn) => {
+    let replacementParts = null
+    const transact = (label, fn, options) => {
       if (MEMO_CHANGES.has(label)) return host.transaction(label, fn)
       if (skipAiHistory) {
         return withoutAiUndoHistory(studioHistory(), () => host.transaction(label, fn))
       }
       if (!aiRunId) return host.transaction(label, fn)
-      const stack = studioHistory()?.undoStack
+      const history = studioHistory()
+      const stack = history?.undoStack
+      if (
+        (label === 'replace' ||
+          label === 'replace-all' ||
+          (label === 'replace-selection' && options?.undoUnit === 'paragraph')) &&
+        history?.recordWithoutExecute &&
+        history.execute
+      ) {
+        const parts = []
+        replacementParts = parts
+        try {
+          return withReplacementHistory(
+            history,
+            parts,
+            options?.undoUnit === 'paragraph',
+            (entry) => runOfCommand.set(entry, aiRunId),
+            () => host.transaction(label, fn),
+          )
+        } finally {
+          replacementParts = null
+        }
+      }
       const previous = stack?.at(-1)
       const result = host.transaction(label, fn)
       const command = stack?.at(-1)
@@ -4553,28 +4599,33 @@ export const agentPlugin = {
       try {
         let done
         try {
-          done = transact(label, (tx) => {
-            tx.deferPagination()
-            const doc = tx.doc()
-            const before = paragraphCounts(doc)
-            const watched = MEMO_CHANGES.has(label) || allowMemoRemoval ? null : memoEntriesOf(doc)
-            const result = fn(doc)
-            if (watched && watched.length > 0) {
-              const left = new Set(memoEntriesOf(doc).map((entry) => entry.id))
-              const gone = watched.filter(
-                (entry) => !left.has(entry.id) && !(approvedMemos && approvedMemos.has(entry.id)),
-              )
-              if (gone.length > 0) {
-                const failure = fail(
-                  'MEMO_REMOVAL_REQUIRES_APPROVAL',
-                  'the change would remove memos of the document',
+          done = transact(
+            label,
+            (tx) => {
+              tx.deferPagination()
+              const doc = tx.doc()
+              const before = paragraphCounts(doc)
+              const watched =
+                MEMO_CHANGES.has(label) || allowMemoRemoval ? null : memoEntriesOf(doc)
+              const result = fn(doc)
+              if (watched && watched.length > 0) {
+                const left = new Set(memoEntriesOf(doc).map((entry) => entry.id))
+                const gone = watched.filter(
+                  (entry) => !left.has(entry.id) && !(approvedMemos && approvedMemos.has(entry.id)),
                 )
-                failure.memos = gone
-                throw failure
+                if (gone.length > 0) {
+                  const failure = fail(
+                    'MEMO_REMOVAL_REQUIRES_APPROVAL',
+                    'the change would remove memos of the document',
+                  )
+                  failure.memos = gone
+                  throw failure
+                }
               }
-            }
-            return { result, before, after: paragraphCounts(doc) }
-          })
+              return { result, before, after: paragraphCounts(doc) }
+            },
+            options,
+          )
         } catch (thrown) {
           if (thrown && thrown.code === 'MEMO_REMOVAL_REQUIRES_APPROVAL') {
             // the editor rolled the change back; the list is what it was
@@ -4605,6 +4656,39 @@ export const agentPlugin = {
       } finally {
         own = false
       }
+    }
+
+    // Group by the actual paragraph address. Repeated matches in one paragraph and
+    // its character-format runs belong to the same translation unit.
+    const replaceMatches = (doc, hits, replacement) => {
+      if (!replacementParts) {
+        for (const hit of [...hits].reverse()) replaceHit(doc, hit, replacement)
+        return 1
+      }
+      const groups = new Map()
+      for (const hit of hits) {
+        const key = JSON.stringify([hit.sec, hit.para, cellPathOf(hit)])
+        if (!groups.has(key)) groups.set(key, [])
+        groups.get(key).push(hit)
+      }
+      for (const group of groups.values()) {
+        const hit = group[0],
+          path = cellPathOf(hit)
+        const hasControl = path
+          ? paragraphHoldsObject(doc, hit.sec, hit.para, path)
+          : parse(doc.getControlTextPositions(hit.sec, hit.para)).length > 0
+        const part = captureReplacement(
+          doc,
+          hit,
+          path && JSON.stringify(path),
+          hasControl,
+          replaceHit,
+        )
+        replacementParts.push(part)
+        for (let i = group.length - 1; i >= 0; i--) replaceHit(doc, group[i], replacement)
+        part.finish()
+      }
+      return groups.size
     }
 
     const listMatches = (doc, hits) =>
@@ -4810,7 +4894,7 @@ export const agentPlugin = {
             const hits = searchAll(doc, find)
             const { hit } = pickHit(hits, occurrence)
             if (!hit || !isReplaceable(hit)) throw fail('CHANGED', 'the document changed mid-call')
-            replaceHit(doc, hit, replacement)
+            replaceMatches(doc, [hit], replacement)
             return {
               ok: true,
               count: hits.length,
@@ -4825,27 +4909,42 @@ export const agentPlugin = {
       /** Replace every occurrence of `find` outside equations, last match first. */
       replaceAllText: guarded((find, replacement, options) => {
         checkReplacement(replacement)
-        const total = host.read((doc) => searchAll(doc, find).filter(isReplaceable).length)
-        if (total === 0) return { ok: false, reason: 'not_found', count: 0 }
+        const version = foreign
+        const hits = host.read((doc) => searchAll(doc, find).filter(isReplaceable))
+        if (!hits.length) return { ok: false, reason: 'not_found', count: 0 }
         return change(
           'replace-all',
           (doc) => {
-            // back to front, so replacing one match never moves the offset of one still to do
-            const hits = searchAll(doc, find).filter(isReplaceable).reverse()
-            for (const hit of hits) replaceHit(doc, hit, replacement)
+            if (foreign !== version) throw fail('CHANGED', 'the document changed mid-call')
+            // Body replaceText paginates on every mutation even inside deferPagination.
+            // Cell edits use a separate deferred API. Keep their existing transaction.
+            const batch =
+              hits.length > 1 &&
+              hits.every((hit) => !hit.cellContext) &&
+              typeof doc.beginBatch === 'function' &&
+              typeof doc.endBatch === 'function'
+            let units
+            if (batch) doc.beginBatch()
+            try {
+              units = replaceMatches(doc, hits, replacement)
+            } finally {
+              if (batch) doc.endBatch()
+            }
             // the first in reading order is the last one done; nothing in front of it moved.
             // A later match in the same paragraph moved by what the earlier ones changed.
             const shifted = new Map()
-            const marks = [...hits].reverse().map((hit) => {
+            const length = Array.from(replacement).length
+            const marks = hits.map((hit) => {
               const key = JSON.stringify([hit.sec, hit.para, cellPathOf(hit)])
               const moved = shifted.get(key) ?? 0
-              shifted.set(key, moved + replacement.length - hit.length)
-              return placeOf({ ...hit, charOffset: hit.charOffset + moved }, replacement.length)
+              shifted.set(key, moved + length - hit.length)
+              return placeOf({ ...hit, charOffset: hit.charOffset + moved }, length)
             })
             return {
               ok: true,
               count: hits.length,
-              place: placeOf(hits[hits.length - 1], replacement.length),
+              place: placeOf(hits[0], length),
+              ...(options?.undoUnit === 'paragraph' ? { undoSteps: units } : {}),
               marks,
             }
           },
@@ -6613,7 +6712,10 @@ export const agentPlugin = {
           throw fail('BAD_ARGUMENT', 'texts must be a list of one or more strings')
         }
         texts.forEach(checkReplacement)
-        if (texts.length !== segments.length && !isContiguous(segments)) {
+        if (
+          texts.length !== segments.length &&
+          (options?.undoUnit === 'paragraph' || !isContiguous(segments))
+        ) {
           return { ok: false, reason: 'count', count: segments.length }
         }
         if (!host.read((doc) => segmentsStand(doc, segments))) {
@@ -6646,11 +6748,14 @@ export const agentPlugin = {
               }
               // each run is in a paragraph of its own, so one does not move another
               for (let index = 0; index < kept; index++) {
-                replaceHit(doc, asHit(segments[index]), texts[index])
+                if (replacementParts) {
+                  if (segments[index].text !== texts[index])
+                    replaceMatches(doc, [asHit(segments[index])], texts[index])
+                } else replaceHit(doc, asHit(segments[index]), texts[index])
               }
               const now = segments.slice(0, kept).map((segment, index) => ({
                 ...segment,
-                length: texts[index].length,
+                length: Array.from(texts[index]).length,
                 text: texts[index],
               }))
               if (texts.length > segments.length) {
@@ -6670,7 +6775,12 @@ export const agentPlugin = {
               }
               mustKeep(before, objectsOf(doc))
               const { text: _text, ...place } = now[0]
-              return { ok: true, segments: now, place }
+              return {
+                ok: true,
+                ...(replacementParts?.length ? { undoSteps: replacementParts.length } : {}),
+                segments: now,
+                place,
+              }
             },
             options,
           ),
@@ -7328,7 +7438,11 @@ export const agentPlugin = {
        * in one go, so nothing can slip in between them.
        */
       undo: guarded((steps, expectedForeign, runId) => {
-        if (!Number.isInteger(steps) || steps < 1 || steps > MAX_UNDO_STEPS) {
+        if (
+          !Number.isInteger(steps) ||
+          steps < 1 ||
+          steps > (runId ? MAX_RECORDED_UNITS : MAX_UNDO_STEPS)
+        ) {
           throw fail('BAD_ARGUMENT', 'steps must be a small positive integer')
         }
         if (expectedForeign !== foreign) return { ok: false, reason: 'changed', undone: 0 }

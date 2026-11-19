@@ -1,4 +1,10 @@
-import { draftNestedTable, NestedTableChanges, nestedBatches } from './nested-table-draft'
+import { finishTranslationUnit } from '../editor/translation-history'
+import {
+  draftNestedTable,
+  NestedTableChanges,
+  nestedTextUnit,
+  nestedBatches,
+} from './nested-table-draft'
 import type { Editor } from '@tiptap/core'
 import type { Mark, Node as ProseMirrorNode } from '@tiptap/pm/model'
 import type { Transaction } from '@tiptap/pm/state'
@@ -376,8 +382,17 @@ function planParagraph(
  * second pass over the same paragraph does not pile up deletions of its own
  * insertions).
  */
-function applyRevisionEdits(editor: Editor, edits: ReviseEdit[], author: string): Transaction {
-  const tr = editor.state.tr
+function applyRevisionEdits(
+  editor: Editor,
+  tr: Transaction,
+  originals: ReviseEdit[],
+  author: string,
+): Transaction {
+  const edits = originals.map((e) => ({
+    ...e,
+    from: tr.mapping.map(e.from, 1),
+    to: tr.mapping.map(e.to, -1),
+  }))
   const schema = editor.schema
   const date = revisionDate()
   const ins = schema.marks.ins.create({ author, date })
@@ -406,7 +421,7 @@ export type ReviseOutcome =
 /**
  * revise_blocks: every item is checked first and one bad item refuses the
  * whole call with nothing changed; the edits of all items land in one
- * transaction (one undo step). Always tracked.
+ * transaction with a history event per reviewed paragraph. Always tracked.
  */
 export function applyRevisions(
   editor: Editor,
@@ -419,10 +434,9 @@ export function applyRevisions(
   const errors: string[] = []
   const stale: string[] = []
   const reports: ReviseReport[] = []
-  const edits: ReviseEdit[] = []
+  const units = new Map<object, (tr: Transaction) => void>()
   const seen = new Set<string>()
   const nested = new NestedTableChanges(doc)
-  let nestedChanged = false
   for (const batch of nestedBatches(items)) {
     const { index, nestedTable } = batch[0]
     const where = `block ${index} nested table ${nestedTable}`
@@ -448,11 +462,15 @@ export function applyRevisions(
     }
     stale.push(...result.stale.map(relabel))
     reports.push(...result.reports.map((report) => ({ ...report, index, nestedTable })))
-    const updated = draft.result()
-    if (updated !== ref.model) {
-      nested.set(ref, updated)
-      nestedChanged = true
-    }
+    const byParagraph = new Map(batch.map((item) => [item.paragraph ?? 0, item]))
+    const changed = result.reports.filter((r) => r.changes > 0)
+    let previous = ref.model
+    let at = 0
+    draft.forEachResult(false, (updated) => {
+      const report = changed[at++]!
+      units.set(byParagraph.get(report.paragraph ?? 0)!, nestedTextUnit(ref, previous, updated))
+      previous = updated
+    })
   }
   const lookup = reviewBlockLookup(doc)
   for (const item of items) {
@@ -469,15 +487,24 @@ export function applyRevisions(
     if (!plan.ok) (plan.stale ? stale : errors).push(plan.error)
     else {
       reports.push(plan.report)
-      edits.push(...plan.edits)
+      if (plan.edits.length)
+        units.set(item, (tr) => {
+          applyRevisionEdits(editor, tr, plan.edits, author)
+        })
     }
   }
   if (errors.length > 0) return { ok: false, errors }
   if (stale.length > 0 && reports.length === 0) return { ok: false, errors: stale, stale: true }
   const author = reviewAuthor(track)
-  if (edits.length > 0 || nestedChanged) {
-    const tr = applyRevisionEdits(editor, edits, author)
-    nested.apply(tr)
+  if (units.size) {
+    const tr = editor.state.tr
+    for (const item of items) {
+      const apply = units.get(item)
+      if (!apply) continue
+      apply(tr)
+      finishTranslationUnit(tr)
+    }
+    tr.setMeta(TRACK_IGNORE, true)
     editor.view.dispatch(tr)
   }
   const updatedDoc = editor.state.doc

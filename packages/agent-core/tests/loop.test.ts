@@ -2607,3 +2607,76 @@ describe('AgentLoop usage', () => {
     expect(onDone.mock.calls[1][0].usage).toEqual({ inputTokens: 100, outputTokens: 10 })
   })
 })
+
+it('resumes from a fresh document read and distinguishes committed, interrupted and skipped tool receipts', async () => {
+  const cells = new Map<string, string>()
+  let finish: (() => void) | undefined
+  const transport = scriptedTransport([
+    (cb) => {
+      for (const id of ['committed', 'in-flight', 'skipped'])
+        cb.onToolCall({ id, name: 'do_thing', input: { id } })
+      cb.onDone()
+    },
+    (cb) => {
+      cb.onToolCall({ id: 'reread', name: 'do_thing', input: {} })
+      cb.onDone()
+    },
+    (cb) => {
+      cb.onDelta('Checked current cells.')
+      cb.onDone()
+    },
+    (cb) => {
+      cb.onDelta('New topic')
+      cb.onDone()
+    },
+  ])
+  const requests: AgentMessage[][] = []
+  const stream = transport.stream.bind(transport)
+  transport.stream = (req, cb) => {
+    requests.push([...req.messages])
+    return stream(req, cb)
+  }
+  const skill = makeSkill()
+  skill.buildContext = () => JSON.stringify([...cells])
+  skill.executeTool = async (call) => {
+    if (call.id === 'in-flight') {
+      cells.set('partial', 'already written')
+      await new Promise<void>((resolve) => {
+        finish = resolve
+      })
+    } else if (call.id === 'committed') cells.set('committed', '번역')
+    else if (call.id === 'reread')
+      return { output: JSON.stringify([...cells]), summary: 'Current cells', mutated: false }
+    return { output: 'Applied ' + call.id, summary: call.id, mutated: true }
+  }
+  const loop = new AgentLoop({ transport, skill })
+  loop.run('Translate the sheet.')
+  await vi.waitFor(() => expect(finish).toBeDefined())
+  loop.cancel()
+  await vi.waitFor(() => expect(loop.busy).toBe(false))
+  finish!()
+  cells.set('committed', 'user correction')
+  loop.run('Continue.')
+  await vi.waitFor(() => expect(loop.busy).toBe(false))
+  const resume = transport.requests[1]!
+  expect(resume.system).toContain('read the current document')
+  expect(requests[1]!.at(-1)).toMatchObject({
+    role: 'user',
+    text: expect.stringContaining('user correction'),
+  })
+  const receipt = requests[1]!.find((m) => m.role === 'tool')
+  expect(receipt).toMatchObject({
+    results: [
+      { id: 'committed', output: 'Applied committed' },
+      { id: 'in-flight', output: TOOL_ABORTED_OUTPUT, isError: true },
+      { id: 'skipped', output: expect.stringContaining('not executed'), isError: true },
+    ],
+  })
+  expect(requests[2]!.at(-1)).toMatchObject({
+    role: 'tool',
+    results: [{ id: 'reread', output: expect.stringContaining('already written') }],
+  })
+  loop.run('Another task.')
+  await vi.waitFor(() => expect(loop.busy).toBe(false))
+  expect(transport.requests[3]!.system).not.toContain('previous run was interrupted')
+})

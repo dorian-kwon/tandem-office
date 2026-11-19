@@ -1,5 +1,5 @@
 import type { Editor, ChainedCommands, SingleCommands } from '@tiptap/core'
-import { closeHistory } from '@tiptap/pm/history'
+import { closeHistory, history, undoDepth } from '@tiptap/pm/history'
 import type { Node as PmNode } from '@tiptap/pm/model'
 import { NodeSelection, TextSelection, type Transaction } from '@tiptap/pm/state'
 import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
@@ -69,6 +69,7 @@ export type OpName = MdOp['op']
 
 export interface OpsContext {
   source: 'ai' | 'ui'
+  translation?: boolean
   frontmatter?: FrontmatterAccess
 }
 
@@ -562,7 +563,7 @@ function applyHistoryPolicy(exec: Exec, tr: Transaction): void {
   // ProseMirror groups a composition even across disjoint ranges. DOM composition
   // IDs are positive; each synchronous tool batch gets its own negative ID.
   tr.setMeta('composition', -exec.meta.batch)
-  if (exec.mappings.length === 0) closeHistory(tr)
+  if (exec.ctx.translation || exec.mappings.length === 0) closeHistory(tr)
 }
 
 /** invert a dispatched transaction step by step (highlights inside it fall away with the content) */
@@ -789,6 +790,8 @@ function execOp(exec: Exec, op: MdOp): OpResult {
         return { ok: true, message: `Deleted ${label}.` }
       }
       tr = tr.replaceWith(range.from, range.to, nodes)
+      if (exec.ctx.translation && doc.eq(tr.doc))
+        return { ok: true, message: `Already matches in ${label}.` }
       dispatch(exec, tr)
       return { ok: true, message: `Replaced ${label} with ${nodes.length} block(s).` }
     }
@@ -797,6 +800,8 @@ function execOp(exec: Exec, op: MdOp): OpResult {
       const range = resolveTarget(exec, op.target)
       const label = describeBlocks(editor.state.doc, range)
       const matches = matchesIn(exec, range, op.find)
+      if (exec.ctx.translation && op.find === op.replace)
+        return { ok: true, message: `Already matches in ${label}.` }
       let tr = editor.state.tr
       // bottom-up so earlier matches keep their positions while editing
       for (let i = matches.length - 1; i >= 0; i--) {
@@ -1030,7 +1035,24 @@ const IN_PLACE_OPS = new Set<OpName>(['replaceText', 'setStyle', 'setLink', 'set
  */
 let batchSeq = 0
 
+// Grow the native history only for translations that would otherwise evict
+// completed passages. Reconfiguring with the same plugin key retains its state.
+const translationDepths = new WeakMap<Editor, number>()
+function reserveTranslationHistory(editor: Editor, units: number): void {
+  const capacity = translationDepths.get(editor) ?? 100
+  const required = undoDepth(editor.state) + units
+  if (required <= capacity) return
+  const depth = Math.max(required, capacity * 2)
+  const replacement = history({ depth })
+  editor.registerPlugin(replacement, (next, plugins) =>
+    plugins.map((plugin) => (plugin.spec.key === next.spec.key ? next : plugin)),
+  )
+  translationDepths.set(editor, depth)
+}
+
 export function runOps(editor: Editor, ops: MdOp[], ctx: OpsContext): RunOpsResult {
+  if (ctx.translation && ctx.source === 'ai' && aiEditUndoHistoryEnabled())
+    reserveTranslationHistory(editor, ops.length)
   const batch = ++batchSeq
   const exec: Exec = {
     editor,
@@ -1046,7 +1068,7 @@ export function runOps(editor: Editor, ops: MdOp[], ctx: OpsContext): RunOpsResu
   const results: OpResult[] = []
   try {
     for (const op of ops) {
-      exec.meta = { op: op.op, source: ctx.source, batch }
+      exec.meta = { op: op.op, source: ctx.source, batch: ctx.translation ? ++batchSeq : batch }
       let result: OpResult
       try {
         result = execOp(exec, op)

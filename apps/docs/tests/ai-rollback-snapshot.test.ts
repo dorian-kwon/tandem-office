@@ -46,11 +46,15 @@ describe('AI roll-back snapshot', () => {
       para(3, 'Added by the AI'),
     )
     aiEditor(editor).commands.insertContentAt(1, 'Edited ')
-    expect(editor.getJSON()).not.toEqual(before)
+    const after = editor.getJSON()
+    expect(after).not.toEqual(before)
     editor.storage.trackChanges.enabled = true
     restoreRollbackSnapshot(editor, snapshot)
     expect(editor.getJSON()).toEqual(before)
     expect(editor.state.doc.eq(snapshot.doc)).toBe(true)
+    expect(editor.commands.redo()).toBe(true)
+    expect(editor.commands.redo()).toBe(true)
+    expect(editor.getJSON()).toEqual(after)
     editor.destroy()
   })
 

@@ -62,7 +62,7 @@ export interface PlanContext {
     current: { sessionId: string; sheetId: string; plan: ChangePlan } | null
   }
   readonly setPreview: (plan: ChangePlan | null) => void
-  readonly autoApplySafePlan: (plan: ChangePlan) => Promise<ApplyOutcome>
+  readonly autoApplySafePlan: (plan: ChangePlan, translation?: boolean) => Promise<ApplyOutcome>
 }
 
 /** shared by the agent's propose_operations tool; identical validation and
@@ -72,6 +72,7 @@ export function proposeOperations(
   ctx: PlanContext,
   operations: readonly WorkbookOperation[],
   summary: string,
+  translation = false,
 ): { ok: true; plan: ChangePlan; applied: Promise<ApplyOutcome> } | { ok: false; error: string } {
   const state = ctx.lazyWorkbookRef.current
   if (state) {
@@ -758,7 +759,11 @@ export function proposeOperations(
       ctx.setPreview(plan)
       // All plans auto-apply (undo covers them); the caller awaits `applied`
       // so a failed apply is reported instead of silently claimed as done.
-      return { ok: true, plan, applied: ctx.autoApplySafePlan(plan) }
+      return {
+        ok: true,
+        plan,
+        applied: translation ? ctx.autoApplySafePlan(plan, true) : ctx.autoApplySafePlan(plan),
+      }
     } catch (error: unknown) {
       return {
         ok: false,
@@ -866,7 +871,11 @@ export function proposeOperations(
     ctx.setPreview(plan)
     // All plans auto-apply (undo covers them); on failure the preview
     // card stays up so the user can Apply manually.
-    return { ok: true, plan, applied: ctx.autoApplySafePlan(plan) }
+    return {
+      ok: true,
+      plan,
+      applied: translation ? ctx.autoApplySafePlan(plan, true) : ctx.autoApplySafePlan(plan),
+    }
   } catch (error: unknown) {
     return {
       ok: false,
