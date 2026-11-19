@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { rowOfVisIdx, spreadRows, stepPage } from '../src/renderer/spread'
+import { rowAtOffset, rowOffsets, rowOfVisIdx, spreadRows, stepPage } from '../src/renderer/spread'
 
 describe('spreadRows', () => {
   it('gives every page its own row in single mode', () => {
@@ -56,4 +56,27 @@ describe('rowOfVisIdx', () => {
     expect(rowOfVisIdx(3, 2)).toBe(1)
     expect(rowOfVisIdx(4, 2)).toBe(2)
   })
+})
+
+it('locates fractional row starts exactly through gaps and after a new layout', () => {
+  const tops = rowOffsets([100, 77, 40], 1.25, 8)
+  expect(tops).toEqual([8, 141, 245.25])
+  expect([-1, 8, 140.99, 141, 245.24, 245.25, 1000].map((y) => rowAtOffset(tops, y))).toEqual([
+    0, 0, 0, 1, 1, 2, 2,
+  ])
+  const changed = rowOffsets([40, 100, 77], 2, 8)
+  expect(rowAtOffset(changed, 141)).toBe(1)
+  expect(rowAtOffset(changed, 245.25)).toBe(1)
+})
+
+it('finds the last of 2,000 rows in at most eleven offset reads', () => {
+  let reads = 0
+  const tops = new Proxy(rowOffsets(Array(2000).fill(792), 1, 8), {
+    get(target, key, receiver) {
+      if (key !== 'length') reads++
+      return Reflect.get(target, key, receiver)
+    },
+  })
+  expect(rowAtOffset(tops, 1_600_000)).toBe(1999)
+  expect(reads).toBeLessThanOrEqual(11)
 })

@@ -23,3 +23,25 @@ export function stepPage(visList: number[], spread: 1 | 2, page: number, dir: 1 
   const target = Math.min(Math.max(0, cur + dir), rows.length - 1)
   return visList.indexOf(rows[target]![0]!) + 1
 }
+
+/** Start offsets include the gap above the first row and between rows. */
+export function rowOffsets(heights: number[], scale: number, gap: number): number[] {
+  let top = gap
+  return heights.map((height) => {
+    const start = top
+    top += height * scale + gap
+    return start
+  })
+}
+
+/** Visible row at the scroll anchor, clamped to the first and last row. */
+export function rowAtOffset(tops: number[], anchor: number): number {
+  let lo = 0
+  let hi = tops.length
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2)
+    if (tops[mid]! <= anchor) lo = mid + 1
+    else hi = mid
+  }
+  return Math.max(0, lo - 1)
+}

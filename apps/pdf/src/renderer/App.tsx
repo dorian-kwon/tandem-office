@@ -145,7 +145,7 @@ import {
   pageTargets,
 } from './page-selection'
 import type { PageSelection } from './page-selection'
-import { rowOfVisIdx, spreadRows, stepPage } from './spread'
+import { rowAtOffset, rowOffsets, rowOfVisIdx, spreadRows, stepPage } from './spread'
 import {
   captureViewState,
   captureZoomAnchor,
@@ -2085,15 +2085,8 @@ export default function App() {
     [dispSize],
   )
 
-  /** Cumulative row-top offset (with gaps), shared by scroll positioning and current-page calc */
-  const rowTop = useCallback(
-    (rowIdx: number) => {
-      let y = PAGE_GAP
-      for (let i = 0; i < rowIdx; i++) y += rowSize(rows[i]!).height * scale + PAGE_GAP
-      return y
-    },
-    [rows, rowSize, scale],
-  )
+  const rowHeights = useMemo(() => rows.map((row) => rowSize(row).height), [rows, rowSize])
+  const rowTops = useMemo(() => rowOffsets(rowHeights, scale, PAGE_GAP), [rowHeights, scale])
 
   /** Scale-free zoom anchor (see `captureZoomAnchor`) plus page-relative x and viewport point.
    *  Written back by a layout effect so it lands after React commits the resized pages; being
@@ -2103,7 +2096,6 @@ export default function App() {
   >(null)
   const rowPages = (el: HTMLElement, rowIdx: number) =>
     el.querySelectorAll(`.pdf-row[data-idx="${rowIdx}"] > .pdf-page`)
-  const rowHeights = useMemo(() => rows.map((row) => rowSize(row).height), [rows, rowSize])
   /** Committed layout: the native wheel listener can fire before the passive effect
    *  re-subscribes it, when its closure still holds the previous render's scale. */
   const layoutRef = useRef({ scale, rowHeights })
@@ -2317,27 +2309,25 @@ export default function App() {
   }, [status, filePath, rows, rowSize, visList, scale])
 
   /** Page-top offset of a visible position (used for search positioning) */
-  const pageTop = useCallback((visIdx: number) => rowTop(rowOfVis(visIdx)), [rowTop, rowOfVis])
+  const pageTop = useCallback(
+    (visIdx: number) => rowTops[rowOfVis(visIdx)] ?? PAGE_GAP,
+    [rowTops, rowOfVis],
+  )
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current
     if (!el || rows.length === 0) return
     const anchor = el.scrollTop + el.clientHeight * 0.4
-    let rowIdx = 0
-    for (let i = 0; i < rows.length; i++) {
-      if (rowTop(i) <= anchor) rowIdx = i
-      else break
-    }
-    const page = visList.indexOf(rows[rowIdx]![0]!) + 1
+    const page = rowAtOffset(rowTops, anchor) * spread + 1
     setCurrentPage(page)
     setPageInput(String(page))
-  }, [rows, rowTop, visList])
+  }, [rows, rowTops, spread])
 
   const scrollToPage = (n: number) => {
     const el = scrollRef.current
     if (!el) return
     const target = Math.min(Math.max(1, n), pageCount)
-    el.scrollTop = rowTop(rowOfVis(target - 1)) - PAGE_GAP / 2
+    el.scrollTop = pageTop(target - 1) - PAGE_GAP / 2
   }
 
   // ---- presentation (F5 / Ctrl+F5): the viewer alone in fullscreen ----
