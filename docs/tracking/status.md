@@ -1,6 +1,12 @@
 # 진행 현황
 
-Tandem Office 기준 버전 **0.15.7 (2026-11-19)**을 Windows x64 정식 릴리스로 공개했다. 배포 커밋은 `24b9725fa`다. 업데이트 창 오른쪽 화살표에서 최근 설치 가능 버전 다섯 개까지 고를 수 있고, 현재 설치된 버전에는 `Current`를 표시한다. Mac에서 업데이트 화면 시험을 돌릴 때는 창과 Dock 아이콘을 숨긴다. [v0.15.7 릴리스](https://github.com/dorian-kwon/tandem-office/releases/tag/v0.15.7)
+Tandem Office **0.15.8 (2026-11-20)**을 Windows x64 정식 최신 릴리스로 공개했다. 배포 커밋은 `b4bab3446`다. 큰 문서에서 채팅 입력 지연과 한글 글꼴 메모리 사용을 줄였고, 번역을 편집 단위별로 실행취소·다시 실행하고 중단 뒤 이어갈 수 있다. Mac과 Linux는 기존 설치본을 사용한다. [v0.15.8 릴리스](https://github.com/dorian-kwon/tandem-office/releases/tag/v0.15.8)
+
+Windows 패키지로 Markdown과 CSV를 PDF로 내보냈고, 공개 설치 파일·블록맵·업데이트 피드의 크기와 SHA-256, 설치 파일의 SHA-512, 피드의 릴리스 안내문을 확인했다. 설치 파일과 피드가 배포 커밋과 해당 Windows 워크플로에서 만들어졌다는 출처 증명을 각각 검증했다. 빌드 환경에 Google Drive 클라이언트 설정이 없어 이번 설치본에서는 Drive 연결을 제공하지 않는다. 실제 Windows PC에서 구버전 위에 설치하고 재실행하는 경로는 별도 확인 과제로 남았다. [Windows 빌드](https://github.com/dorian-kwon/tandem-office/actions/runs/44567146606)
+
+Mac 숨김 E2E에서 지원 형식 19종을 확인했다. 500쪽 HWP·HWPX는 각각 500단위 번역, 실행취소 500회, 다시 실행 500회를 통과했다. Word 전체 단위 시험 4,384건과 한글 단위 시험 1,263건이 통과했다.
+
+이전 기준 버전 **0.15.7 (2026-11-19)**을 Windows x64 정식 릴리스로 공개했다. 배포 커밋은 `24b9725fa`다. 업데이트 창 오른쪽 화살표에서 최근 설치 가능 버전 다섯 개까지 고를 수 있고, 현재 설치된 버전에는 `Current`를 표시한다. Mac에서 업데이트 화면 시험을 돌릴 때는 창과 Dock 아이콘을 숨긴다. [v0.15.7 릴리스](https://github.com/dorian-kwon/tandem-office/releases/tag/v0.15.7)
 
 Windows 빌드의 설치 파일 검사와 Markdown·CSV PDF 내보내기 시험이 통과했다. 내려받은 설치 파일·블록맵·`latest.yml`의 SHA-256과 설치 파일의 SHA-512를 대조했다. 최신 릴리스 피드가 같은 `latest.yml`을 내보내고, 피드의 릴리스 본문과 설치 파일 및 피드의 출처 증명이 일치하는 것을 확인했다. Google Drive 클라이언트 설정은 이번 설치 파일에도 없다. [Windows 빌드](https://github.com/dorian-kwon/tandem-office/actions/runs/44485371367)
 
