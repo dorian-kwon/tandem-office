@@ -497,7 +497,7 @@ export const WORKBOOK_TOOLS: AgentToolDef[] = [
   {
     name: 'propose_operations',
     description:
-      'Submit a batch of change operations, applied to the workbook immediately (the user can roll back with the [Undo] button or ⌘Z). Basic operations: ' +
+      'Submit a batch of change operations, applied to the workbook immediately. Undo availability depends on the edit history settings and batch size. Basic operations: ' +
       '{op:"set_cell",sheetId,address,value} | {op:"set_formula",sheetId,address,formula(starts with =)} | ' +
       '{op:"clear_cell",sheetId,address} | {op:"rename_sheet",sheetId,name}. ' +
       'Field definitions for the remaining operations live in the guides — load_guide before using them: ' +
@@ -1420,7 +1420,7 @@ export function executeWorkbookTool(
                 'Read the affected ranges to see the current state before continuing; ' +
                 (applied.undoDropped
                   ? 'the committed part is not in the undo history (too large, or undo history for AI edits is turned off in the settings) — ⌘Z will NOT revert it.'
-                  : 'the whole partial batch is one undo step (⌘Z / [Undo]).')
+                  : 'the committed part was recorded in the workbook undo history.')
             : `Apply failed — the workbook is UNCHANGED: ${reason}. ` +
                 'Do not tell the user the changes were made; adjust the operations and retry, or explain the failure.',
         )

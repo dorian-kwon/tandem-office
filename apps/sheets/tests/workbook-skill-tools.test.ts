@@ -886,7 +886,7 @@ describe('executeWorkbookTool: propose_operations', () => {
     expect(proposeOperations).not.toHaveBeenCalled()
   })
 
-  it('forwards validated operations and reports auto-applied success', () => {
+  it('reports auto-applied success without promising an unconfirmed undo entry', () => {
     const proposeOperations = vi.fn().mockReturnValue({ ok: true, plan: EMPTY_PLAN })
     const result = execSync(
       call('propose_operations', {
@@ -903,7 +903,7 @@ describe('executeWorkbookTool: propose_operations', () => {
     expect(result.isError).toBeFalsy()
     expect(result.output).toContain('old → new')
     expect(result.output).toContain('Auto-applied')
-    expect(result.output).toContain('Undo')
+    expect(result.output).not.toMatch(/\[Undo\]|⌘Z/)
   })
 
   it('surfaces apply-time notices from the applied outcome', async () => {
