@@ -22,6 +22,7 @@ function host(): PhasedContentHost & { mounted: number } {
     appendNodes(nodes: PmNode[]) {
       h.mounted += nodes.length
     },
+    blockCount: () => h.mounted,
     isDestroyed: () => false,
     resetHistory() {},
     setLoading() {},

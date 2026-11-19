@@ -50,10 +50,11 @@ interface HeldText {
  */
 function replacesWholeDocument(tr: Transaction): boolean {
   return tr.steps.some((step, i) => {
-    const s = step as { from?: unknown; to?: unknown }
+    const s = step as { from?: unknown; to?: unknown; gapFrom?: unknown; gapTo?: unknown }
     return (
       typeof s.from === 'number' &&
       typeof s.to === 'number' &&
+      !(s.gapFrom === 0 && s.gapTo === s.to) &&
       s.from === 0 &&
       s.to >= tr.docs[i]!.content.size
     )

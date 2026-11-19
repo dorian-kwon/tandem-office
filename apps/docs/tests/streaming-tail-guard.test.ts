@@ -2,7 +2,16 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { Editor } from '@tiptap/core'
 import { editorExtensions } from '../src/renderer/editor/extensions'
 import { PHASED_APPEND, touchesStreamingTail } from '../src/renderer/editor/streaming-tail-guard'
-import { appendStreamedNodes } from '../src/renderer/file-actions'
+import {
+  appendStreamedNodes,
+  exportHtml,
+  exportMarkdown,
+  exportPdf,
+  save,
+  templateDocBytes,
+  type FileActionContext,
+} from '../src/renderer/file-actions'
+import { buildMailMergeFiles } from '../src/renderer/mail-merge/output'
 import {
   PHASED_MIN_BLOCKS,
   cancelPhasedContent,
@@ -81,7 +90,8 @@ describe('editing while a phased open streams', () => {
           .setMeta(PHASED_APPEND, true)
           .setContent(doc as never)
           .run(),
-      appendNodes: (nodes) => appendStreamedNodes(editor, nodes as never),
+      appendNodes: (nodes, recover) => appendStreamedNodes(editor, nodes as never, recover),
+      blockCount: () => editor.state.doc.childCount,
       isDestroyed: () => editor.isDestroyed,
       resetHistory: () => resets++,
       setLoading: () => {},
@@ -119,6 +129,47 @@ describe('editing while a phased open streams', () => {
 })
 
 describe('a refused chunk during a phased open', () => {
+  it('declines document output after the editor refuses both transactions', async () => {
+    const editor = createEditor()
+    const chunks: Array<() => void> = []
+    setContentPhased(
+      {
+        setContent: (doc) => {
+          editor.commands.setContent(doc as never)
+        },
+        appendNodes: () => {},
+        blockCount: () => editor.state.doc.childCount,
+        isDestroyed: () => false,
+        resetHistory() {},
+        setLoading() {},
+        setDirty() {},
+        getDirty: () => false,
+      },
+      {
+        type: 'doc',
+        content: Array.from({ length: PHASED_MIN_BLOCKS + 1 }, (_, i) => para(String(i))),
+      },
+      (job) => chunks.push(job),
+    )
+    const ctx = {
+      editor,
+      doc: { fileName: 'report.docx' },
+      saveInFlightRef: { current: false },
+      saveIncompleteRef: { current: false },
+    } as unknown as FileActionContext
+    const outputs = Promise.all([
+      save(ctx, false),
+      exportPdf(ctx),
+      exportHtml(ctx),
+      exportMarkdown(ctx),
+      templateDocBytes(ctx),
+      buildMailMergeFiles(ctx, { mode: 'single', records: [{}], fields: [], namePattern: '' }),
+    ])
+    chunks.shift()!()
+    expect(await outputs).toEqual([false, false, false, false, null, []])
+    expect(await save(ctx, false)).toBe(false)
+  })
+
   it('falls back to the full mount through the guard', () => {
     const editor = createEditor()
     const chunks: Array<() => void> = []
@@ -132,10 +183,12 @@ describe('a refused chunk during a phased open', () => {
           .setMeta(PHASED_APPEND, true)
           .setContent(doc as never)
           .run(),
-      appendNodes: () => {
+      appendNodes: (nodes, recover) => {
         appends++
-        throw new Error('refused')
+        if (!recover) throw new Error('refused')
+        appendStreamedNodes(editor, nodes, true)
       },
+      blockCount: () => editor.state.doc.childCount,
       isDestroyed: () => editor.isDestroyed,
       resetHistory: () => resets++,
       setLoading: () => {},
@@ -146,13 +199,15 @@ describe('a refused chunk during a phased open', () => {
     setContentPhased(host, { type: 'doc', content: blocks } as never, (cb) => chunks.push(cb))
     editor.view.dispatch(editor.state.tr.insertText('!', inside(editor, 0, 2)))
     while (chunks.length) chunks.shift()!()
-    expect(appends).toBe(1)
+    expect(appends).toBe(2)
     expect(isPhasedContentPending()).toBe(false)
     // the whole document landed even though the guard was armed at the time
     expect(editor.state.doc.childCount).toBe(blocks.length)
     expect(editor.state.doc.child(blocks.length - 1).textContent).toBe(`block ${blocks.length - 1}`)
-    // the remount discarded the mid-stream edit, so the history goes with it:
-    // an undo must not bring the truncated document back
-    expect(resets).toBe(1)
+    expect(editor.state.doc.child(0).textContent).toBe('b!lock 0')
+    expect(resets).toBe(0)
+    expect(editor.commands.undo()).toBe(true)
+    expect(editor.state.doc.child(0).textContent).toBe('block 0')
+    expect(editor.state.doc.childCount).toBe(blocks.length)
   })
 })

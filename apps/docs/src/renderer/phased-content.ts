@@ -1,3 +1,4 @@
+import type { TableModel } from '@genoffice/docx-engine'
 import type { PmNode } from './editor/convert'
 
 /**
@@ -23,7 +24,9 @@ export interface PhasedContentHost {
   /** full replace (Tiptap setContent) */
   setContent(doc: PmNode): void
   /** append top-level nodes at the document end, outside undo history */
-  appendNodes(nodes: PmNode[]): void
+  appendNodes(nodes: PmNode[], recover?: boolean): void
+  blockCount(): number
+  onError?(error: unknown): void
   isDestroyed(): boolean
   resetHistory(): void
   /** read-only + save-gate flag while the tail streams */
@@ -40,21 +43,71 @@ export const PHASED_CONTENT_SETTLED_EVENT = 'genoffice:phased-content-settled'
 export const PHASE1_BLOCKS = 64
 /** blocks appended per scheduled chunk while the tail streams in */
 export const PHASE_CHUNK_BLOCKS = 128
-/** documents at or below this many top-level blocks mount in one pass as before */
+/** Ordinary paragraphs count as one unit. A table also pays for its descendants. */
 export const PHASED_MIN_BLOCKS = 192
+
+// Four model nodes per unit lets simple tables share a frame. Stop counting once
+// a single table exceeds every budget: a table must always be mounted whole.
+function nestedTableSize(table: TableModel, limit: number): number {
+  let count = 1
+  for (const row of table.rows) {
+    if (++count >= limit) return limit
+    for (const cell of row) {
+      count += 1 + Math.max(1, cell.richParas?.length ?? cell.paras.length)
+      if (count >= limit) return limit
+      for (const nested of cell.nestedTables ?? []) {
+        count += nestedTableSize(nested, limit - count)
+        if (count >= limit) return limit
+      }
+    }
+  }
+  return count
+}
+
+function nodeCount(node: PmNode, limit: number): number {
+  // A nested table is a leaf in ProseMirror; its NodeView renders the stored model.
+  if (node.type === 'docNestedTable' && node.attrs?.model) {
+    return nestedTableSize(node.attrs.model as TableModel, limit)
+  }
+  let count = 1
+  for (const child of node.content ?? []) {
+    if (count >= limit) break
+    count += nodeCount(child, limit - count)
+  }
+  return count
+}
+
+function chunkEnd(content: PmNode[], start: number, budget: number): number {
+  let end = start
+  let remaining = budget
+  while (end < content.length && remaining > 0) {
+    const block = content[end]!
+    const weight =
+      block.type === 'docTable' ? Math.ceil(nodeCount(block, remaining * 4 + 1) / 4) : 1
+    if (end > start && weight > remaining) break
+    remaining -= weight
+    end++
+  }
+  return end
+}
 
 /** bumping the token cancels the pending tail (its chunks become no-ops) */
 let token = 0
-let settled: Promise<void> = Promise.resolve()
+let settled = Promise.resolve(true)
+let failed = false
 /** clears the loading flag / resolves settled when a load is cancelled mid-stream */
 let cancelPending: (() => void) | null = null
 
-/** Resolves when the streaming tail has fully landed (immediately when none is pending). */
-export function waitForFullContent(): Promise<void> {
+/** False if this load was replaced, destroyed, or could not mount the complete document. */
+export function waitForFullContent(): Promise<boolean> {
   return settled
 }
 
-/** true while a phased open still has tail chunks to append */
+export function hasPhasedContentFailed(): boolean {
+  return failed
+}
+
+/** A pending or failed stream does not have a complete document to act on. */
 export function isPhasedContentPending(): boolean {
   return cancelPending !== null
 }
@@ -64,6 +117,8 @@ export function cancelPhasedContent(): void {
   token++
   cancelPending?.()
   cancelPending = null
+  failed = false
+  settled = Promise.resolve(true)
 }
 
 /**
@@ -98,55 +153,82 @@ export function setContentPhased(
   cancelPhasedContent()
   const content = pmDoc.content ?? []
   const my = ++token
-  if (content.length <= PHASED_MIN_BLOCKS) {
-    host.setContent(pmDoc)
+  const onePass =
+    content.length <= PHASED_MIN_BLOCKS &&
+    chunkEnd(content, 0, PHASED_MIN_BLOCKS) === content.length
+  let index = onePass ? content.length : chunkEnd(content, 0, PHASE1_BLOCKS)
+  let settle!: (complete: boolean) => void
+  settled = new Promise<boolean>((resolve) => (settle = resolve))
+  // A failed load stays incomplete until a replacement explicitly clears it.
+  const fail = () => {
+    failed = true
+    cancelPending = () => host.setLoading(false)
+    settle(false)
+  }
+  try {
+    host.setContent(onePass ? pmDoc : { ...pmDoc, content: content.slice(0, index) })
+    if (index > 0 && host.blockCount() !== index)
+      throw new Error('The editor did not mount the complete document.')
+  } catch (error) {
+    fail()
+    throw error
+  }
+  if (onePass) {
+    settle(true)
     return
   }
-  host.setContent({ ...pmDoc, content: content.slice(0, PHASE1_BLOCKS) })
-  let settle!: () => void
-  settled = new Promise<void>((resolve) => (settle = resolve))
   host.setLoading(true)
   cancelPending = () => {
     host.setLoading(false)
-    settle()
+    settle(false)
   }
-  let index = PHASE1_BLOCKS
-  // a refused chunk remounted the whole document: whatever the user typed
-  // before is gone with it, and an undo must not bring the truncated
-  // pre-remount document back
-  let remounted = false
   const finish = () => {
-    if (my !== token) return
-    // still "pending" through the history reset: it re-creates the plugin
-    // views, whose constructors would otherwise measure the whole document
-    // once before the settled event asks for the same pass again
-    if (!host.isDestroyed() && (remounted || !host.getDirty())) host.resetHistory()
+    if (!host.getDirty()) host.resetHistory()
     cancelPending = null
     host.setLoading(false)
-    settle()
+    settle(true)
     if (typeof document !== 'undefined')
       document.dispatchEvent(new Event(PHASED_CONTENT_SETTLED_EVENT))
   }
   const appendChunk = () => {
     if (my !== token) return
-    if (host.isDestroyed()) return finish()
-    const chunk = content.slice(index, index + PHASE_CHUNK_BLOCKS)
-    index += chunk.length
-    const wasDirty = host.getDirty()
-    try {
-      host.appendNodes(chunk)
-    } catch {
-      // a refused chunk falls back to the one-pass mount instead of leaving the file truncated
-      remounted = true
-      try {
-        host.setContent(pmDoc)
-      } catch {
-        /* same failure as the one-pass path */
-      }
-      host.setDirty(wasDirty)
-      return finish()
+    if (host.isDestroyed()) {
+      settle(false)
+      return
     }
-    host.setDirty(wasDirty)
+    const start = index
+    const count = host.blockCount()
+    const wasDirty = host.getDirty()
+    const append = (end: number, recover = false) => {
+      let error: unknown
+      try {
+        host.appendNodes(content.slice(start, end), recover)
+      } catch (cause) {
+        error = cause
+      } finally {
+        host.setDirty(wasDirty)
+      }
+      // A view/update listener can throw after dispatch committed the entire step.
+      // A transaction filter can also silently refuse it. Count from the live
+      // prefix, which the user may have grown or shortened between chunks.
+      if (host.blockCount() !== count + end - start)
+        throw error ?? new Error('The editor did not accept the complete document.')
+      index = end
+    }
+    try {
+      append(chunkEnd(content, start, PHASE_CHUNK_BLOCKS))
+    } catch (error) {
+      // ProseMirror steps are atomic. An unexpected partial result cannot be
+      // retried safely because the source offset of the missing tail is unknown.
+      try {
+        if (host.blockCount() !== count) throw error
+        append(content.length, true)
+      } catch (cause) {
+        fail()
+        host.onError?.(cause)
+        return
+      }
+    }
     if (index < content.length) schedule(appendChunk)
     else finish()
   }

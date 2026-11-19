@@ -70,7 +70,11 @@ function type(editor: Editor, text: string): void {
 }
 
 /** mounts the first phase and returns the scheduled tail chunks */
-function startStreamingOpen(editor: Editor, blocks: number): Array<() => void> {
+function startStreamingOpen(
+  editor: Editor,
+  blocks: number,
+  refuseChunk = false,
+): Array<() => void> {
   const chunks: Array<() => void> = []
   const host: PhasedContentHost = {
     setContent: (doc) =>
@@ -80,7 +84,11 @@ function startStreamingOpen(editor: Editor, blocks: number): Array<() => void> {
         .setMeta(PHASED_APPEND, true)
         .setContent(doc as never)
         .run(),
-    appendNodes: (nodes) => appendStreamedNodes(editor, nodes as never),
+    appendNodes: (nodes, recover) => {
+      if (refuseChunk && !recover) throw new Error('chunk refused')
+      appendStreamedNodes(editor, nodes as never, recover)
+    },
+    blockCount: () => editor.state.doc.childCount,
     isDestroyed: () => editor.isDestroyed,
     resetHistory: () => {},
     setLoading: () => {},
@@ -95,33 +103,36 @@ function startStreamingOpen(editor: Editor, blocks: number): Array<() => void> {
 const TAIL_DOC = PHASED_MIN_BLOCKS + 10
 
 describe('typing on the streaming tail of a phased open', () => {
-  it('keeps the character and inserts it as an undoable edit once the tail lands', () => {
-    const editor = createEditor()
-    const chunks = startStreamingOpen(editor, TAIL_DOC)
-    const mounted = editor.state.doc.childCount
-    expect(mounted).toBe(PHASE1_BLOCKS)
-    expect(mounted).toBeLessThan(TAIL_DOC)
-    expect(isPhasedContentPending()).toBe(true)
+  it.each([false, true])(
+    'replays a boundary keystroke as an undoable edit (chunk refused: %s)',
+    (refuseChunk) => {
+      const editor = createEditor()
+      const chunks = startStreamingOpen(editor, TAIL_DOC, refuseChunk)
+      const mounted = editor.state.doc.childCount
+      expect(mounted).toBe(PHASE1_BLOCKS)
+      expect(mounted).toBeLessThan(TAIL_DOC)
+      expect(isPhasedContentPending()).toBe(true)
 
-    // the caret sits at the end of the last mounted block: the tail boundary
-    editor.commands.setTextSelection(endOfBlock(editor, mounted - 1))
-    type(editor, 'Z')
+      // the caret sits at the end of the last mounted block: the tail boundary
+      editor.commands.setTextSelection(endOfBlock(editor, mounted - 1))
+      type(editor, 'Z')
 
-    // the tail has not landed, so nothing may have been inserted in its place
-    expect(editor.state.doc.child(mounted - 1).textContent).toBe(`block ${mounted - 1}`)
+      // the tail has not landed, so nothing may have been inserted in its place
+      expect(editor.state.doc.child(mounted - 1).textContent).toBe(`block ${mounted - 1}`)
 
-    while (chunks.length) chunks.shift()!()
-    expect(isPhasedContentPending()).toBe(false)
-    expect(editor.state.doc.childCount).toBe(TAIL_DOC)
+      while (chunks.length) chunks.shift()!()
+      expect(isPhasedContentPending()).toBe(false)
+      expect(editor.state.doc.childCount).toBe(TAIL_DOC)
 
-    // the character survived the stream, at the position it was typed
-    expect(editor.state.doc.child(mounted - 1).textContent).toBe(`block ${mounted - 1}Z`)
+      // the character survived the stream, at the position it was typed
+      expect(editor.state.doc.child(mounted - 1).textContent).toBe(`block ${mounted - 1}Z`)
 
-    // and it is a normal edit, so Ctrl+Z brings it back
-    editor.commands.undo()
-    expect(editor.state.doc.child(mounted - 1).textContent).toBe(`block ${mounted - 1}`)
-    expect(editor.state.doc.childCount).toBe(TAIL_DOC)
-  })
+      // and it is a normal edit, so Ctrl+Z brings it back
+      editor.commands.undo()
+      expect(editor.state.doc.child(mounted - 1).textContent).toBe(`block ${mounted - 1}`)
+      expect(editor.state.doc.childCount).toBe(TAIL_DOC)
+    },
+  )
 
   it('keeps the held character through an insert at the document start', () => {
     const editor = createEditor()

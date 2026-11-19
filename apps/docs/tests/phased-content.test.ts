@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { PmNode } from '../src/renderer/editor/convert'
+import { tableModelToPmNode, type PmNode } from '../src/renderer/editor/convert'
 import {
   PHASED_CONTENT_SETTLED_EVENT,
   PHASE1_BLOCKS,
@@ -38,6 +38,7 @@ function makeHost(destroyed = false) {
       state.dirty = true
       state.events.push(`append:${nodes.length}`)
     },
+    blockCount: () => state.mounted.length,
     isDestroyed: () => destroyed,
     resetHistory: () => state.events.push('resetHistory'),
     setLoading: (v) => {
@@ -86,7 +87,31 @@ describe('setContentPhased', () => {
     )
     expect(state.loading).toBe(false)
     expect(state.events).toContain('resetHistory')
-    await expect(waitForFullContent()).resolves.toBeUndefined()
+    await expect(waitForFullContent()).resolves.toBe(true)
+  })
+
+  it('counts nested table content while streaming whole blocks and preserving the save gate', async () => {
+    const para = { type: 'docParagraph' }
+    const inner = { rows: Array.from({ length: 400 }, () => [{ paras: ['x'] }]) }
+    const heavy = tableModelToPmNode({
+      rows: [
+        [{ paras: [''], nestedTables: [{ rows: [[{ paras: [''], nestedTables: [inner] }]] }] }],
+      ],
+    })
+    const content = [para, heavy, heavy, para]
+    const s = makeScheduler()
+    const { host, state } = makeHost()
+    setContentPhased(host, { type: 'doc', content }, s.schedule)
+    expect(state.mounted).toEqual([para])
+    const complete = waitForFullContent()
+    expect(isPhasedContentPending()).toBe(true)
+    s.drain()
+    expect(state.mounted).toHaveLength(2)
+    expect(state.mounted[1]).toBe(heavy)
+    while (s.pending()) s.drain()
+    await complete
+    expect(state.mounted).toEqual(content)
+    expect(state.dirty).toBe(false)
   })
 
   it('streaming is not an edit: the dirty flag survives every chunk', () => {
@@ -108,7 +133,7 @@ describe('setContentPhased', () => {
     while (s.pending() > 0) s.drain()
     expect(state.mounted.length).toBe(landed)
     expect(state.loading).toBe(false)
-    await expect(waitForFullContent()).resolves.toBeUndefined()
+    await expect(waitForFullContent()).resolves.toBe(true)
   })
 
   it('a second phased mount cancels the first tail', () => {
@@ -146,11 +171,49 @@ describe('setContentPhased', () => {
     state.dirty = false
     while (s.pending() > 0) s.drain()
     expect(state.mounted.length).toBe(blocks)
-    expect(state.events.at(-3)).toBe(`set:${blocks}`)
+    expect(state.events.at(-3)).toBe(`append:${PHASE_CHUNK_BLOCKS}`)
     // the remount is not an edit either
     expect(state.dirty).toBe(false)
     expect(state.loading).toBe(false)
-    await expect(waitForFullContent()).resolves.toBeUndefined()
+    await expect(waitForFullContent()).resolves.toBe(true)
+  })
+
+  it('does not repeat a chunk when an update listener throws after commit', async () => {
+    const { host, state } = makeHost()
+    const { appendNodes } = host
+    host.appendNodes = (nodes) => {
+      appendNodes(nodes)
+      throw new Error('listener failed')
+    }
+    const scheduler = makeScheduler()
+    const doc = docOf(PHASED_MIN_BLOCKS + 10)
+    setContentPhased(host, doc, scheduler.schedule)
+    while (scheduler.pending()) scheduler.drain()
+    expect(await waitForFullContent()).toBe(true)
+    expect(state.mounted).toEqual(doc.content)
+  })
+
+  it('blocks existing and future waiters after a failed recovery until a new file opens', async () => {
+    const { host, state } = makeHost()
+    host.appendNodes = () => {
+      throw new Error('schema refused')
+    }
+    const scheduler = makeScheduler()
+    setContentPhased(host, docOf(PHASED_MIN_BLOCKS + 10), scheduler.schedule)
+    const waiting = waitForFullContent()
+    state.mounted[0] = { type: 'docParagraph', attrs: { edited: true } }
+    state.dirty = true
+    scheduler.drain()
+    expect(await waiting).toBe(false)
+    expect(await waitForFullContent()).toBe(false)
+    expect(isPhasedContentPending()).toBe(true)
+    expect(state.mounted[0]?.attrs?.edited).toBe(true)
+    expect(state.dirty).toBe(true)
+    expect(scheduler.pending()).toBe(0)
+    setContentPhased(host, docOf(1), scheduler.schedule)
+    expect(await waitForFullContent()).toBe(true)
+    expect(isPhasedContentPending()).toBe(false)
+    expect(state.loading).toBe(false)
   })
 
   it('reports a pending tail only while chunks remain', () => {

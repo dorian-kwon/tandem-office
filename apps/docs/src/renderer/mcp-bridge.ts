@@ -4,6 +4,7 @@ import { BLANK_BULLET_NUM_ID, BLANK_ORDERED_NUM_ID } from '@genoffice/docx-engin
 import type { McpCommandMessage, McpEditorCommand } from '../shared/ipc'
 import { executeTool, markDocSeen } from './ai/tools'
 import { findNumId, type NumIds } from './ai/protocol'
+import { isPhasedContentPending, waitForFullContent } from './phased-content'
 import { save, type FileActionContext } from './file-actions'
 
 /**
@@ -88,7 +89,15 @@ async function runCommand(
   command: McpEditorCommand,
   payload: unknown,
 ): Promise<unknown> {
-  const ctx = deps.getCtx()
+  let ctx = deps.getCtx()
+  if (isPhasedContentPending()) {
+    const original = ctx.doc?.parsed
+    if (!(await waitForFullContent())) throw new Error('the document did not finish loading')
+    ctx = deps.getCtx()
+    if (ctx.doc?.parsed !== original || isPhasedContentPending()) {
+      throw new Error('the document changed while loading')
+    }
+  }
   const editor = ctx.editor
   if (!editor || !ctx.doc) throw new Error('the document is not ready')
 

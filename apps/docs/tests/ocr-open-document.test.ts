@@ -1,3 +1,4 @@
+import { cancelPhasedContent, setContentPhased } from '../src/renderer/phased-content'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Editor } from '@tiptap/core'
 import { applyAiPanelPrefs } from '@genoffice/ui'
@@ -142,6 +143,41 @@ afterEach(() => {
 })
 
 describe('putting OCR text into the document on screen', () => {
+  it('waits for the last streamed block before building its replacement', async () => {
+    await open()
+    const buildBytes = vi.fn(deps.buildBytes)
+    const jobs: Array<() => void> = []
+    const content: PmNode[] = Array.from({ length: 200 }, () => ({ type: 'docParagraph' }))
+    let mounted = 0
+    setContentPhased(
+      {
+        setContent(doc) {
+          mounted = doc.content?.length ?? 0
+        },
+        appendNodes(nodes) {
+          mounted += nodes.length
+        },
+        blockCount: () => mounted,
+        isDestroyed: () => false,
+        resetHistory() {},
+        setLoading() {},
+        getDirty: () => false,
+        setDirty() {},
+      },
+      { type: 'doc', content },
+      (job) => jobs.push(job),
+    )
+    try {
+      const result = placeOcrIntoOpenDocument(ctx, plan(), { ...deps, buildBytes })
+      expect(buildBytes).not.toHaveBeenCalled()
+      while (jobs.length) jobs.shift()!()
+      expect((await result).ok).toBe(true)
+      expect(buildBytes).toHaveBeenCalledOnce()
+    } finally {
+      cancelPhasedContent()
+    }
+  })
+
   it('adds the boxes, keeps an unsaved edit and the file, and leaves the document unsaved', async () => {
     await open()
     unsavedEdit()

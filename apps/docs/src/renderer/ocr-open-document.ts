@@ -16,6 +16,7 @@ import {
   swapDocumentContent,
   type FileActionContext,
 } from './file-actions'
+import { isPhasedContentPending, waitForFullContent } from './phased-content'
 import { parseDocxOffThread } from './parse-off-thread'
 import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
 
@@ -121,6 +122,12 @@ export async function placeOcrIntoOpenDocument(
   let placed: Awaited<ReturnType<typeof placeOcrIntoOpenDocx>>
   let reparsed: ParsedDocFull
   try {
+    if (isPhasedContentPending()) {
+      if (!(await waitForFullContent()))
+        return { ok: false, reason: 'the document did not finish loading' }
+      if (!stillHere() || isPhasedContentPending())
+        return { ok: false, reason: 'the document changed while the text was placed' }
+    }
     const bytes = await deps.buildBytes(ctx)
     if (!bytes) return { ok: false, reason: 'the document could not be read from the screen' }
     placed = await placeOcrIntoOpenDocx(bytes, plan.items, plan.placement)

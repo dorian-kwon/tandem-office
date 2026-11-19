@@ -1653,7 +1653,8 @@ export function AiPanel({
       })
       // a phased open still streaming its tail: the context must describe the whole document
       .then(async (images) => {
-        await Promise.all([waitForFullContent(), refreshKbFiles()])
+        const [complete] = await Promise.all([waitForFullContent(), refreshKbFiles()])
+        if (!complete) pending.aborted = true
         // a newer send (after New chat) owns the panel now: leave its state alone
         if (pendingSendRef.current !== pending) return
         if (!pending.aborted && currentDocGeneration() === generation) {

@@ -8,6 +8,8 @@
 import { restoreNoteRuns } from './ai/note-run-save'
 import type { Editor } from '@tiptap/core'
 import { history } from '@tiptap/pm/history'
+import { Fragment, Slice } from '@tiptap/pm/model'
+import { ReplaceAroundStep } from '@tiptap/pm/transform'
 import {
   applyPageNumType,
   applySectionSettings,
@@ -84,7 +86,6 @@ import { TABLE_TRAILING_SKIP, setLazyMediaHashes } from './editor/extensions'
 import { FORMAT_MARKS, serializeMarks } from './editor/caret-marks'
 import { TRACK_IGNORE } from './editor/revisions'
 import {
-  cancelPhasedContent,
   isPhasedContentPending,
   setContentPhased,
   waitForFullContent,
@@ -386,27 +387,30 @@ function applyDocLayoutSettings(editor: Editor, parsed: ParsedDocFull): void {
 export type LoadFileOutcome = 'ok' | 'canceled' | 'password' | 'failed' | 'superseded'
 
 /** appends a streamed tail chunk at the document end, outside undo history and the AI freshness baseline */
-export function appendStreamedNodes(editor: Editor, nodes: PmNode[]): void {
+export function appendStreamedNodes(editor: Editor, nodes: PmNode[], recover = false): void {
   const before = editor.state.doc
-  const tr = editor.state.tr.insert(
-    before.content.size,
-    nodes.map((n) => editor.schema.nodeFromJSON(n)),
-  )
+  const end = before.content.size
+  const tail = Fragment.fromArray(nodes.map((n) => editor.schema.nodeFromJSON(n)))
+  // On refusal, replace the whole document in one step with the live prefix as
+  // the preserved gap. Undo positions and the user's text stay in that prefix.
+  const tr = recover
+    ? editor.state.tr.step(new ReplaceAroundStep(0, end, 0, end, new Slice(tail, 0, 0), 0))
+    : editor.state.tr.insert(end, tail)
   tr.setMeta('addToHistory', false)
   tr.setMeta(PHASED_APPEND, true)
   // forced Track Changes must not record the streamed tail as insertions
   tr.setMeta(TRACK_IGNORE, true)
   tr.setMeta(TABLE_TRAILING_SKIP, true)
-  editor.view.dispatch(tr)
-  carryDocSeen(editor, before)
+  try {
+    editor.view.dispatch(tr)
+  } finally {
+    if (editor.state.doc !== before) carryDocSeen(editor, before)
+  }
 }
 
 /** binds the phased content streamer to the editor and App state behind ctx */
 function phasedHostFor(ctx: FileActionContext): PhasedContentHost {
   return {
-    // the remount after a refused chunk replaces the whole document: it must
-    // pass the streaming tail guard like the appends do, and like them it is
-    // not an edit to undo
     setContent: (doc) =>
       ctx.editor
         ?.chain()
@@ -416,8 +420,14 @@ function phasedHostFor(ctx: FileActionContext): PhasedContentHost {
         .setMeta(PHASED_APPEND, true)
         .setContent(doc as never)
         .run(),
-    appendNodes: (nodes) => {
-      if (ctx.editor) appendStreamedNodes(ctx.editor, nodes)
+    appendNodes: (nodes, recover) => {
+      if (ctx.editor) appendStreamedNodes(ctx.editor, nodes, recover)
+    },
+    blockCount: () => ctx.editor?.state.doc.childCount ?? 0,
+    onError: (error) => {
+      const message = t('appOpenFailed', { error: String(error) })
+      ctx.setStatus(message)
+      showToast(message, 'error')
     },
     isDestroyed: () => !ctx.editor || ctx.editor.isDestroyed,
     resetHistory: () => {
@@ -676,10 +686,10 @@ export async function newFile(ctx: FileActionContext): Promise<boolean | undefin
     ctx.editor.storage.listNumbering.defs = parsed.numbering
     applyDocLayoutSettings(ctx.editor, parsed)
     // a tail still streaming for the previous document must never land in this one
-    cancelPhasedContent()
     beginOdtSession(null, parsed)
-    ctx.editor.commands.setContent(
-      blocksToPmDoc(parsed.blocks, readSections(parsed), pmDocOptions(parsed)) as never,
+    setContentPhased(
+      phasedHostFor(ctx),
+      blocksToPmDoc(parsed.blocks, readSections(parsed), pmDocOptions(parsed)),
     )
     resetEditorHistory(ctx.editor)
     focusDocumentStart(ctx.editor)
@@ -802,8 +812,7 @@ export async function templateDocBytes(ctx: FileActionContext): Promise<Uint8Arr
   const { doc } = ctx
   if (!doc || !ctx.editor) return null
   const generation = docGeneration
-  await waitForFullContent()
-  if (docGeneration !== generation) return null
+  if (!(await waitForFullContent()) || docGeneration !== generation) return null
   window.dispatchEvent(new Event('ai-docs-commit-tables'))
   const docx = await buildDocBytes(ctx)
   if (!docx) return null
@@ -1399,9 +1408,7 @@ async function saveOnce(
   try {
     // a mid-stream save would serialize (and write) a truncated document
     const generation = docGeneration
-    await waitForFullContent()
-    // the wait ended because another document replaced this one: nothing to write
-    if (docGeneration !== generation) return false
+    if (!(await waitForFullContent()) || docGeneration !== generation) return false
     // flush pending in-place table cell / textbox edits into the PM doc first
     window.dispatchEvent(new Event('ai-docs-commit-tables'))
     // identity snapshot: detects edits that arrive while the save is in flight
@@ -1633,7 +1640,10 @@ export function printDoc(ctx: FileActionContext): void {
   noticeLabelsBeforeOutput()
   // the print sheet prints the live preview pages: needs the whole document mounted
   if (isPhasedContentPending()) {
-    void waitForFullContent().then(() => printDoc(ctx))
+    const generation = docGeneration
+    void waitForFullContent().then((complete) => {
+      if (complete && docGeneration === generation) printDoc(ctx)
+    })
     return
   }
   if (!document.querySelector('.pagination-preview')) {
@@ -1735,7 +1745,8 @@ export async function exportPdf(ctx: FileActionContext, outPath?: string): Promi
   const { doc } = ctx
   if (!doc) return false
   noticeLabelsBeforeOutput()
-  await waitForFullContent()
+  const generation = docGeneration
+  if (!(await waitForFullContent()) || generation !== docGeneration) return false
   if (printJobActive) {
     ctx.setStatus(t('appExportingPdf'))
     return false
@@ -1949,7 +1960,8 @@ export async function exportImages(ctx: FileActionContext): Promise<boolean> {
 export async function exportHtml(ctx: FileActionContext, outPath?: string): Promise<boolean> {
   const { doc, editor } = ctx
   if (!doc || !editor) return false
-  await waitForFullContent()
+  const generation = docGeneration
+  if (!(await waitForFullContent()) || generation !== docGeneration) return false
   ctx.setStatus(t('appExportingHtml'))
   const root = editor.view.dom as HTMLElement
   const textWidthPx = Number.parseFloat(
@@ -1975,7 +1987,8 @@ export async function exportHtml(ctx: FileActionContext, outPath?: string): Prom
 export async function exportMarkdown(ctx: FileActionContext, outPath?: string): Promise<boolean> {
   const { doc, editor } = ctx
   if (!doc || !editor) return false
-  await waitForFullContent()
+  const generation = docGeneration
+  if (!(await waitForFullContent()) || generation !== docGeneration) return false
   ctx.setStatus(t('appExportingMarkdown'))
   const { markdown, images } = documentToMarkdown(editor)
   const result = await window.desktop.exportMarkdown(doc.fileName, markdown, images, outPath)

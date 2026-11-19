@@ -1,6 +1,7 @@
 import { mergeOutputFileName, type MergeRecord } from '@genoffice/docx-engine'
 import type { MergeOutputMode } from '../../shared/ipc'
-import { buildDocBytes, type FileActionContext } from '../file-actions'
+import { buildDocBytes, currentDocGeneration, type FileActionContext } from '../file-actions'
+import { waitForFullContent } from '../phased-content'
 import type { PmNode } from '../editor/convert'
 import { mergeAllRecords, substituteMergeFields } from './template'
 
@@ -60,11 +61,15 @@ export async function buildMailMergeFiles(
 ): Promise<MailMergeFile[]> {
   const editor = ctx.editor
   if (!editor || request.records.length === 0) return []
+  const generation = currentDocGeneration()
+  const sameTemplate = () => currentDocGeneration() === generation && !editor.isDestroyed
+  if (!(await waitForFullContent()) || !sameTemplate()) return []
   const template = editor.getJSON() as PmNode
   if (request.mode === 'perRecord') {
     const files: MailMergeFile[] = []
     for (const record of request.records) {
       const bytes = await buildDocBytes(ctx, substituteMergeFields(template, record))
+      if (!sameTemplate()) return []
       if (!bytes) continue
       files.push({
         name: `${mergeOutputFileName(request.namePattern, record, request.fields)}.docx`,
@@ -74,7 +79,7 @@ export async function buildMailMergeFiles(
     return files
   }
   const bytes = await buildDocBytes(ctx, mergeAllRecords(template, request.records))
-  if (!bytes) return []
+  if (!bytes || !sameTemplate()) return []
   return [{ name: mergedDocumentName(ctx), bytes }]
 }
 

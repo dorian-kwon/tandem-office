@@ -82,7 +82,8 @@ function startStreamingOpen(editor: Editor, blocks: number): Array<() => void> {
         .setMeta(PHASED_APPEND, true)
         .setContent(doc as never)
         .run(),
-    appendNodes: (nodes) => appendStreamedNodes(editor, nodes as never),
+    appendNodes: (nodes, recover) => appendStreamedNodes(editor, nodes as never, recover),
+    blockCount: () => editor.state.doc.childCount,
     isDestroyed: () => editor.isDestroyed,
     resetHistory: () => {},
     setLoading: () => {},

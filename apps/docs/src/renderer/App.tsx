@@ -433,7 +433,7 @@ import {
 } from './ocr-open-document'
 import { registerOcrHistoryHandlers } from './ocr-history-state'
 import { BlockIndex } from './pagination-index'
-import { isPhasedContentPending } from './phased-content'
+import { hasPhasedContentFailed, isPhasedContentPending } from './phased-content'
 import { sameSectionInfos } from './pagination-sections'
 import {
   blocksKeepSlicing,
@@ -2953,7 +2953,10 @@ export function App() {
         // success, so only a document that came from disk counts as ready.
         () => {
           const doc = fileCtxRef.current.doc
-          return { opened: typeof doc?.filePath === 'string', failed: doc?.filePath === null }
+          return {
+            opened: typeof doc?.filePath === 'string' && !isPhasedContentPending(),
+            failed: doc?.filePath === null || hasPhasedContentFailed(),
+          }
         },
         target.format === 'html' ? exportHtml : target.format === 'md' ? exportMarkdown : exportPdf,
       )
