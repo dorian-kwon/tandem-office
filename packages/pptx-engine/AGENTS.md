@@ -49,6 +49,7 @@ pptx 한 파일의 모델과 저장을 맡는다. `openPptx`가 zip 전체를 �
 
 - **강조 색·문자 간격의 제자리 패치(결정 0094).** `TextRun.highlightEdited`·`letterSpacingEdited`가 선 런만 `patchRunProps`가 `<a:highlight>`(채움·효과 뒤, 글꼴 앞)와 `spc`를 쓰거나 지운다. 런이 없던 `a:rPr`에 강조 색을 넣는 길도 같다. `ElementFontPatch`에 `highlight`(`null`은 지움)·`letterSpacingPt`(0·`null`은 표준)가 있다. 시험: `tests/run-highlight-spacing-visibility.test.ts`.
 - **도형 숨기기·이름(결정 0094).** `setElementHidden`·`setElementName`이 원본 조각의 첫 `p:cNvPr` 여는 태그에서 `hidden`·`name` 속성 하나만 바꾸고 `structureDirty`를 세운다. 숨기기 뒤의 모델은 부르는 쪽이 `materializeSlide`로 다시 읽는다. 시험: 같은 파일.
+- **중첩 그룹 텍스트 편집.** 최상위 그룹부터 자식 조각을 따라가 텍스트 도형의 원본 XML만 고친다. 그룹과 도형 ID, 변환, 슬라이드 순서, 애니메이션 대상을 보존한다. 시험은 `packages/pptx-ops/tests/nested-group-settext.test.ts`다.
 
 ## 테스트
 

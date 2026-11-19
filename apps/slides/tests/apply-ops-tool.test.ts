@@ -1,7 +1,11 @@
 /** apply_ops — the AI batch surface over the op transaction executor. */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { RenderSlide, ShapeRenderNode } from '@genoffice/pptx-render'
-import { createSlidesSkill, type DeckAccess } from '../src/renderer/ai/slides-skill'
+import type { GroupRenderNode, RenderSlide, ShapeRenderNode } from '@genoffice/pptx-render'
+import {
+  createSlidesSkill,
+  formatSlideDump,
+  type DeckAccess,
+} from '../src/renderer/ai/slides-skill'
 
 const slide = { widthPx: 1280, heightPx: 720, scale: 1, nodes: [] } as unknown as RenderSlide
 
@@ -50,6 +54,15 @@ const textNode = (id: string, text: string, x = 60, w = 400, y = 60) =>
     },
   }) as unknown as ShapeRenderNode
 
+const groupNode = (id: string, children: GroupRenderNode['children']): GroupRenderNode => ({
+  id,
+  sourceId: id,
+  durableId: `e_${id}`,
+  type: 'group',
+  box: textNode(id, '').box,
+  children,
+})
+
 /** A deck with real content: the anti-scratch-build guard stays out of the way */
 const richSlide = {
   widthPx: 1280,
@@ -90,6 +103,71 @@ beforeEach(() => {
 })
 
 describe('apply_ops', () => {
+  it('reads deep text with the root group id and submits all translations in one edit', async () => {
+    const first = { ...textNode('a', 'Bonjour'), durableId: 'e_a' }
+    const second = { ...textNode('b', 'Merci'), durableId: 'e_b' }
+    const nested = {
+      ...slide,
+      nodes: [groupNode('root', [groupNode('inner', [groupNode('deep', [first, second])])])],
+    }
+    const dump = formatSlideDump(nested)
+    expect(dump).toMatch(/e_a .*text only: apply_ops setText with group e_root[^\n]*\nBonjour/)
+    expect(dump).toMatch(/e_b .*text only: apply_ops setText with group e_root[^\n]*\nMerci/)
+    expect(dump).toMatch(/e_inner .*in group e_root \(directly editable\)/)
+    const submit = vi.fn(async () => ({
+      applied: true,
+      records: [
+        { op: 'setText', target: '0/e_a' },
+        { op: 'setText', target: '0/e_b' },
+      ],
+      slides: [nested],
+    }))
+    ;(globalThis as any).window.slidesApi.applyTxn = submit
+    const ops = [
+      {
+        op: 'setText',
+        target: { slide: 0, el: 'e_a' },
+        group: 'e_root',
+        paragraphs: [{ runs: [{ text: 'Hello' }] }],
+      },
+      {
+        op: 'setText',
+        target: { slide: 0, el: 'e_b' },
+        group: 'e_root',
+        paragraphs: [{ runs: [{ text: 'Thank you' }] }],
+      },
+    ]
+    const edited = await createSlidesSkill(access([nested])).executeTool!(call({ ops }))
+    expect(edited.mutated).toBe(true)
+    expect(submit).toHaveBeenCalledExactlyOnceWith({ ops })
+  })
+
+  it.each([1, 's_9'])('guards a deep withheld shape addressed on slide %s', async (ref) => {
+    const child = { ...textNode('a', 'Private words'), durableId: 'e_a' }
+    child.text!.lines[0]!.runs[0]!.redact = 'name'
+    const nested = {
+      ...slide,
+      partPath: 'ppt/slides/slide9.xml',
+      nodes: [groupNode('root', [groupNode('inner', [child])])],
+    }
+    const submit = vi.fn()
+    ;(globalThis as any).window.slidesApi.applyTxn = submit
+    const result = await createSlidesSkill(access([richSlide, nested])).executeTool!(
+      call({
+        ops: [
+          {
+            op: 'setText',
+            target: { slide: ref, el: 'e_a' },
+            group: 'e_root',
+            paragraphs: [{ runs: [{ text: 'Changed' }] }],
+          },
+        ],
+      }),
+    )
+    expect(result.output).toContain('withheld from the model ({{name}})')
+    expect(submit).not.toHaveBeenCalled()
+  })
+
   it('dry run echoes the plan and rejected ops without mutating', async () => {
     ;(globalThis as any).window.slidesApi.applyTxn = vi.fn(async () => ({
       applied: false,

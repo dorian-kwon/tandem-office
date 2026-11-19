@@ -16,11 +16,10 @@ import {
   cleanupSupersededSlideResources,
   DEFAULT_BODY_INSETS,
   ensureRunLinkRels,
-  findGroupChild,
-  groupChildSlices,
   isConnectorXml,
   materializeSlide,
-  patchGroupChildText,
+  patchGroupTextTarget,
+  resolveGroupTextTarget,
   patchSlideXml,
   setElementFont,
   setElementParagraphFormat,
@@ -29,7 +28,6 @@ import {
   type OpenedPptx,
   type Slide,
   type ElementFontPatch,
-  type GroupElement,
   type Paragraph,
   type ParagraphFormatPatch,
   type TextBody,
@@ -53,6 +51,7 @@ import {
   resolveGroup,
   resolveGroupChildId,
   resolveSlide,
+  type Op,
   type OpRecord,
 } from './registry'
 
@@ -91,12 +90,6 @@ function refuseConnector(bytes: string, what: string): void {
   if (isConnectorXml(bytes)) {
     throw new GuidedError(`op "setText": ${what} is a connector, which cannot hold text.`)
   }
-}
-
-/** Group children carry an empty byte anchor (the group saves as one blob), so a
- *  child's bytes come from the group's slice table. */
-function groupChildBytes(grp: GroupElement, child: TextElement): string {
-  return groupChildSlices(grp.anchor.originalXml).find((s) => s.nvId === child.nvId)?.xml ?? ''
 }
 
 /** Horizontal half of an autoshape's centering; an alignment the caller asked for wins. */
@@ -156,6 +149,25 @@ function landBulletImage(
   return { ...rest, bulletBlip: { mediaRef: added.mediaPath, blipEmbedId: added.rid } }
 }
 
+function groupedTextTarget(op: Op, index: number, slide: Slide) {
+  const groupId = resolveGroup(op, index, slide.elements)
+  const ref = String(op.target?.el ?? '')
+  const target = resolveGroupTextTarget(slide, String(op.group), ref)
+  if (!target) {
+    throw new GuidedError(
+      `op "setText": no unique text child "${ref}" in group "${groupId}". Use the element id and its outermost group from read_slide.`,
+    )
+  }
+  if (
+    target.depth > 1 &&
+    target.child.text?.paragraphs.some((p) => p.runs.some((run) => run.redact))
+  ) {
+    throw new GuidedError(`op "setText": "${ref}" contains withheld text and cannot be replaced.`)
+  }
+  if (!target.child.text) refuseConnector(target.xml, `group child "${ref}"`)
+  return target
+}
+
 register({
   name: 'setText',
   validate(op, ctx) {
@@ -169,7 +181,7 @@ register({
     }
     if (op.group) {
       const { index, slide } = resolveSlide(ctx, op)
-      resolveGroup(op, index, slide.elements)
+      groupedTextTarget(op, index, slide)
       return
     }
     resolveElement(ctx, op, { types: ['text', 'shape'], allowPart: true })
@@ -178,23 +190,12 @@ register({
     const paragraphs = op.paragraphs as EditParagraph[]
     const { index, slide } = resolveSlide(ctx, op, { allowPart: true })
     if (op.group) {
-      const groupId = resolveGroup(op, index, slide.elements)
-      const id = resolveGroupChildId(slide, groupId, String(op.target?.el ?? ''))
-      const found = findGroupChild(slide, groupId, id)
-      const child = found?.child
-      if (!child || (child.type !== 'text' && child.type !== 'shape')) {
-        throw new GuidedError(`op "setText": no text child "${id}" in group "${groupId}".`)
-      }
-      const textChild = child as TextElement
-      const freshBody = !textChild.text
-      let autoShape = false
-      if (freshBody) {
-        refuseConnector(groupChildBytes(found!.grp, textChild), `group child "${id}"`)
-        autoShape = isAutoShape(textChild)
-        textChild.text = createTextBody(autoShape)
-      }
-      const childBody = textChild.text!
       const previousXml = patchSlideXml(slide)
+      const target = groupedTextTarget(op, index, slide)
+      const textChild = target.child
+      const freshBody = !textChild.text
+      const autoShape = freshBody && isAutoShape(textChild)
+      const childBody = (textChild.text ??= createTextBody(autoShape))
       const before = plainText(childBody.paragraphs)
       const oldParas = childBody.paragraphs
       childBody.paragraphs = applyEditParagraphs(oldParas, paragraphs)
@@ -204,16 +205,15 @@ register({
         : fontSizeDriftNote(oldParas, paragraphs, childBody.paragraphs)
       if (autoShape) centerParagraphs(childBody.paragraphs)
       ensureRunLinkRels(ctx.opened, index, childBody.paragraphs)
-      if (!patchGroupChildText(slide, groupId, textChild)) {
-        // Executor snapshot rollback restores the already-mutated model
-        throw new GuidedError(
-          `op "setText": the child slice for "${id}" could not be located inside group "${groupId}".`,
-        )
-      }
       const landed = new Map<string, { rid: string; mediaPath: string }>()
-      for (const { index: pi, patch } of collectParagraphFormatPatches(paragraphs)) {
-        const fmt = landBulletImage(ctx.opened, slide, patch, landed, 'setText')
-        setGroupChildParagraphFormat(slide, groupId, id, fmt, [pi])
+      const formats = collectParagraphFormatPatches(paragraphs).map(({ index: pi, patch }) => ({
+        index: pi,
+        patch: landBulletImage(ctx.opened, slide, patch, landed, 'setText'),
+      }))
+      if (!patchGroupTextTarget(slide, target, formats)) {
+        throw new GuidedError(
+          `op "setText": the text child "${textChild.id}" changed before it could be patched. Read the slide again.`,
+        )
       }
       cleanupSupersededSlideResources(ctx.opened, slide, previousXml, patchSlideXml(slide))
       return { op, before, after: { levelDirty: false, note } }

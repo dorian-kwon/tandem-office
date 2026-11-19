@@ -16,6 +16,11 @@ Replaces the element's entire text with the given paragraphs. Runs you do not
 restyle inherit the formatting of the run they replace (position-wise), so a
 plain `{text}` run keeps the original size, color and font. A shape that has
 never had text gets a text body created (autoshapes default to centered text).
+For a deeply nested text box or shape, use its own id as `target.el` and
+the outermost group's id as `group` (shown as the text group by `read_slide`).
+The group structure and slide order stay intact. Send several text edits in
+one `apply_ops` transaction. For translation, retain paragraph order and the
+number of paragraphs so existing paragraph animations still point to them.
 
 | Field                                                    | Type                                                                                          | Notes                                                                                                                                                                                                                  |
 | -------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -26,7 +31,7 @@ never had text gets a text body created (autoshapes default to centered text).
 | paragraphs[].bullet                                      | `"char"` / `"number"` / `"none"`                                                              | Optional; `bulletChar` sets a custom glyph                                                                                                                                                                             |
 | paragraphs[].lineSpacingPct, spaceBeforePt, spaceAfterPt | number                                                                                        | Optional paragraph spacing                                                                                                                                                                                             |
 | paragraphs[].rtl                                         | boolean                                                                                       | Optional base direction                                                                                                                                                                                                |
-| group                                                    | string                                                                                        | Only for a direct child of a group: the group id                                                                                                                                                                       |
+| group                                                    | string                                                                                        | For grouped text: the outermost group id                                                                                                                                                                               |
 
 ```json
 {

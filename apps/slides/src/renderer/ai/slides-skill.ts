@@ -1,5 +1,6 @@
 import { aiEditApi } from './ai-edit-api'
 import { attachedImageNote, type AgentSkill, type ToolDisplay } from '@genoffice/agent-core'
+import { slideDurableId } from '@genoffice/pptx-engine/identity'
 import type {
   GroupRenderNode,
   PictureRenderNode,
@@ -338,7 +339,7 @@ const TOOLS: AgentToolDef[] = [
       ' The whole script is one atomic transaction: geometry in one batch, the rest in script order, one undo step; if any operation fails, everything rolls back and the page is unchanged — fix the script and resend it whole. A layout audit (overlap/out-of-bounds/text overflow) is returned at the end.' +
       ' Far more reliable than individual set_element_* calls — coordinate math happens at execution site, not from memory. If the audit reports problems, call this tool again immediately to fix.\n' +
       'Script environment (constrained synchronous JS-like DSL; no external APIs or ambient globals):\n' +
-      '- els: array, each item {id,type,text,x,y,w,h,rotation,fontSizePt?,fill?,textColor?,strokeColor?,inGroup?,groupId?,locked?} (pixels, origin top-left; fill/textColor/strokeColor are current colors in #RRGGBB, read-only — write via setFill/setStyle/setStroke; inGroup+groupId=directly editable group child (all primitives work, coordinates absolute as shown); inGroup without groupId=nested in a sub-group, read-only — apply_ops ungroupElement on the outer group first; locked=layout decoration, read-only)\n' +
+      '- els: array, each item {id,type,text,x,y,w,h,rotation,fontSizePt?,fill?,textColor?,strokeColor?,inGroup?,groupId?,locked?} (pixels, origin top-left; fill/textColor/strokeColor are current colors in #RRGGBB, read-only — write via setFill/setStyle/setStroke; inGroup+groupId=directly editable group child (all primitives work, coordinates absolute as shown); inGroup without groupId=nested in a sub-group, read-only in scripts; use read_slide and apply_ops setText for its text; locked=layout decoration, read-only)\n' +
       '- canvas: {w,h} canvas size (px)\n' +
       "- setBox(id, {x?,y?,w?,h?,rotation?}): set an element's target box, pass only fields to change\n" +
       '- moveBy(id, dx, dy): relative move (left = negative dx, up = negative dy)\n' +
@@ -785,7 +786,7 @@ const TOOLS: AgentToolDef[] = [
     name: 'apply_ops',
     description:
       '[Canonical edit surface] Apply a list of canonical edit ops as ONE transaction — atomic by default: any failure rolls everything back, nothing is half-applied. Set dry_run:true to validate the plan without touching the deck (rehearse risky batches). This is THE tool for every edit without a dedicated tool (fill, stroke, transform, delete, z-order, grouping, crop, opacity, effects, links, table cells, structure and styling, page background, speaker notes, page delete/move/duplicate, transitions, sections, theme) and for multi-page or many-element batches; a single op is a perfectly fine batch. For one-page layout math prefer execute_slide_script.\n' +
-      'Addressing: every op takes target:{slide, el?} — slide = 0-based index or durable "s_<n>"; el = an element id from the outline/read_slide (e_* ids are durable). Group children: put the child id in target.el and add group:"<group id>".\n' +
+      'Addressing: every op takes target:{slide, el?} — slide = 0-based index or durable "s_<n>"; el = an element id from the outline/read_slide (e_* ids are durable). Group children: put the child id in target.el and add group:"<group id>". For setText on a nested shape, use the outermost group id shown by read_slide. Collect translations in one ops batch and retain the group hierarchy.\n' +
       'Units are document-space EMU. read_slide reports px and its exact "1 px = N EMU" factor — convert with that N (9525 only on a standard 16:9 deck; other page sizes differ). Font sizes are pt.\n' +
       'Full op reference (the same executor every editing surface uses), one signature per op; ? marks optional fields:\n' +
       opSignatureIndex() +
@@ -899,7 +900,7 @@ function targetError(
 }
 
 /** Element info shared by outline/read_slide/edit scripts (includes absolute geometry; locked = layout decoration, read-only). */
-type NodeInfo = LayoutScriptElement
+type NodeInfo = LayoutScriptElement & { textGroupId?: string }
 
 /**
  * The element's text as the model reads it.
@@ -976,14 +977,14 @@ function nodeColors(n: RenderNode): Pick<NodeInfo, 'fill' | 'textColor' | 'strok
  * Collect node info (including nested group children). A child's box is in group-local
  * coordinates (ext/chExt scaling already baked into geometry at build time); here we add the
  * group offset to convert to absolute coordinates and set the inGroup flag. Direct children of a
- * top-level group also carry groupId (editable via the in-group pipeline); deeper nesting stays
- * read-only (the main process patches one level only).
+ * top-level group carry groupId for the layout script. Deeper text uses its outermost group id
+ * for setText in apply_ops.
  */
 function collectNodeInfos(
   nodes: RenderNode[],
   ox = 0,
   oy = 0,
-  parent?: { id: string; topLevel: boolean },
+  parent?: { rootId: string; topLevel: boolean },
 ): NodeInfo[] {
   const out: NodeInfo[] = []
   for (const n of nodes) {
@@ -1003,7 +1004,14 @@ function collectNodeInfos(
       ...abs,
       rotation: b.rotationDeg,
       ...(parent ? { inGroup: true } : {}),
-      ...(parent?.topLevel ? { groupId: parent.id } : {}),
+      ...(parent?.topLevel ? { groupId: parent.rootId } : {}),
+      ...(parent &&
+      !parent.topLevel &&
+      !n.decoration &&
+      (n.type === 'text' || n.type === 'shape') &&
+      n.text
+        ? { textGroupId: parent.rootId }
+        : {}),
       ...(n.decoration ? { locked: true } : {}),
       ...nodeColors(n),
     }
@@ -1014,7 +1022,7 @@ function collectNodeInfos(
       const g = n as GroupRenderNode
       out.push(
         ...collectNodeInfos(g.children, abs.x, abs.y, {
-          id: n.durableId ?? n.sourceId,
+          rootId: parent?.rootId ?? n.durableId ?? n.sourceId,
           topLevel: !parent,
         }),
       )
@@ -1073,9 +1081,11 @@ export function formatSlideDump(slide: RenderSlide): string {
     const flags = [
       n.groupId
         ? `in group ${n.groupId} (directly editable)`
-        : n.inGroup
-          ? 'nested in a sub-group (read-only; apply_ops ungroupElement on the outer group to edit)'
-          : '',
+        : n.textGroupId
+          ? `nested in a sub-group (text only: apply_ops setText with group ${n.textGroupId})`
+          : n.inGroup
+            ? 'nested in a sub-group (read-only)'
+            : '',
       n.locked ? 'layout decoration (read-only)' : '',
     ]
       .filter(Boolean)
@@ -1478,6 +1488,30 @@ interface OpPreflight {
   sampleData: boolean
 }
 
+/** Resolve a grouped setText's canonical address for the renderer's redaction check. */
+function groupedTextGuardTarget(
+  op: Record<string, unknown>,
+  slides: RenderSlide[],
+): Record<string, unknown> {
+  if (op.op !== 'setText' || typeof op.group !== 'string') return op
+  const target = op.target as { slide?: unknown; el?: unknown } | undefined
+  if (typeof target?.el !== 'string') return op
+  const address = target.slide
+  const slideIndex =
+    typeof address === 'string'
+      ? slides.findIndex(
+          ({ partPath }) => partPath && slideDurableId({ path: partPath }) === address,
+        )
+      : typeof address === 'number'
+        ? address
+        : -1
+  const group = slides[slideIndex]?.nodes.find(
+    (node) => node.type === 'group' && (node.durableId === op.group || node.sourceId === op.group),
+  )
+  const child = group?.type === 'group' ? findNodeById(group.children, target.el) : undefined
+  return child ? { ...op, slideIndex, elementId: child.sourceId } : op
+}
+
 /**
  * apply_ops runs the same policy gates the dedicated tools run before an op
  * reaches the executor: the anti-scratch-build guard for inserts on a blank
@@ -1508,7 +1542,7 @@ function preflightOps(
     // rewrites or drops those words costs the reader data they chose to keep.
     // Checked here, before anything is dispatched — apply_ops is atomic, so a
     // refusal leaves the deck exactly as it was.
-    const guard = redactGuardFor(op, slides)
+    const guard = redactGuardFor(groupedTextGuardTarget(op, slides), slides)
     if (guard) {
       return fail(t('aiFailApplyOps'), `ops[${i}] ${name}: ${guard.reason}`)
     }

@@ -61,7 +61,7 @@ import { BLANK_SLIDE_XML } from './blank'
 import { escapeXmlAttr, hasContentTypeOverride, maxRelationshipIdNumber } from './xml-utils'
 import { elementSpid } from './animation'
 import { stripStaleEmbeddedFonts } from './embedded-fonts'
-import { ensureCreationId, matchesElementRef } from './identity'
+import { elementDurableId, ensureCreationId, matchesElementRef } from './identity'
 import { listMasterParts, parseMasterPart } from './master-edit'
 import type {
   Paragraph,
@@ -4645,6 +4645,94 @@ export function findGroupChild(
     GroupElement | undefined
   const child = grp?.children.find((c) => c.id === childId)
   return grp && child ? { grp, child } : null
+}
+
+interface GroupTextTarget {
+  root: GroupElement
+  child: TextElement
+  depth: number
+  start: number
+  xml: string
+}
+
+/** Resolve text beneath a top-level group without giving nested elements their own save anchors. */
+export function resolveGroupTextTarget(
+  slide: Slide,
+  groupId: string,
+  ref: string,
+): GroupTextTarget | null {
+  const roots = slide.elements.filter(
+    (el): el is GroupElement => el.type === 'group' && matchesElementRef(el, groupId),
+  )
+  if (roots.length !== 1) return null
+  const root = roots[0]!
+
+  type Match = { child: SlideElement; ancestors: GroupElement[] }
+  const matches: Match[] = []
+  const needsGuid = /^e_[a-f0-9]{8}$/i.test(ref)
+  const indexSlices = (xml: string) => {
+    const byId = new Map<string, GroupChildSlice | null>()
+    for (const slice of groupChildSlices(xml)) {
+      if (slice.nvId) byId.set(slice.nvId, byId.has(slice.nvId) ? null : slice)
+    }
+    return byId
+  }
+  const visit = (group: GroupElement, ancestors: GroupElement[], xml?: string) => {
+    const slices = xml === undefined ? undefined : indexSlices(xml)
+    for (const child of group.children) {
+      const raw = child.nvId ? slices?.get(child.nvId) : undefined
+      if (
+        matchesElementRef(child, ref) ||
+        (raw &&
+          elementDurableId({ ...child, anchor: { ...child.anchor, originalXml: raw.xml } }) === ref)
+      ) {
+        matches.push({ child, ancestors })
+      }
+      if (child.type === 'group') visit(child, [...ancestors, child], raw?.xml)
+    }
+  }
+  visit(root, [], needsGuid ? root.anchor.originalXml : undefined)
+
+  const match = matches.length === 1 ? matches[0] : undefined
+  if (!match || (match.child.type !== 'text' && match.child.type !== 'shape')) return null
+  let start = 0
+  let xml = root.anchor.originalXml
+  for (const el of [...match.ancestors, match.child]) {
+    const slice = el.nvId ? indexSlices(xml).get(el.nvId) : undefined
+    if (!slice) return null
+    start += slice.start
+    xml = slice.xml
+  }
+  return { root, child: match.child, depth: match.ancestors.length + 1, start, xml }
+}
+
+/** Write only a leaf's text and paragraph properties; the parent hierarchy stays byte-identical. */
+export function patchGroupTextTarget(
+  slide: Slide,
+  target: GroupTextTarget,
+  formats: ReadonlyArray<{ index: number; patch: ParagraphFormatPatch }>,
+): boolean {
+  const { child, root, start, xml } = target
+  const original = root.anchor.originalXml
+  const end = start + xml.length
+  if (original.slice(start, end) !== xml) return false
+  let next =
+    child.text?.paragraphs.length === 0 && xml.includes('<p:txBody')
+      ? rebuildTxBody(child, xml)
+      : patchTextElementXml(child, xml)
+  for (const { index, patch } of formats) {
+    const paragraph = child.text?.paragraphs[index]
+    if (!paragraph) continue
+    const dirty = applyParagraphFormat([paragraph], patch)
+    if (Object.keys(dirty).length === 0) continue
+    dirty.paraIndices = [index]
+    next = patchElementPPr(child, next, dirty) ?? rebuildTxBody(child, next)
+  }
+  if (next !== xml) {
+    root.anchor.originalXml = original.slice(0, start) + next + original.slice(end)
+    slide.structureDirty = true
+  }
+  return true
 }
 
 /** Group-child geometry editing (offset is in the child EMU coordinate system, incl. chOff). */

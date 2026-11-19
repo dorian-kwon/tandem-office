@@ -126,7 +126,7 @@ function message(e: unknown): string {
  * the part at transaction end.
  */
 function hardenTargetIdentity(op: Op, ctx: OpContext): void {
-  if (typeof op.target?.el !== 'string') return
+  if (typeof op.target?.el !== 'string' || (op.op === 'setText' && op.group)) return
   try {
     ensureCreationId(resolveElement(ctx, op, { allowPart: true }).el)
   } catch {

@@ -40,7 +40,7 @@ export function elementDurableId(el: SlideElement): string | null {
   return cnvpr ? `e_${cnvpr[1]!}` : null
 }
 
-export function slideDurableId(slide: Slide): string {
+export function slideDurableId(slide: Pick<Slide, 'path'>): string {
   const m = /slide(\d+)\.xml$/.exec(slide.path)
   return m ? `s_${m[1]}` : `s_${slide.path.replace(/[^a-zA-Z0-9]/g, '_')}`
 }
