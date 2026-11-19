@@ -56,11 +56,11 @@ extension to one hidden-window exporter per module
    sandbox and `backgroundThrottling: false`;
 2. queues the input through the module's existing pending-open path, so the
    renderer runs its ordinary load pipeline;
-3. lets the renderer wait until the document has settled (docs: pagination
-   slice count stable twice in a row; slides: every picture decoded and the
-   private Office fonts registered; sheets: the workbook fully preloaded) and
-   then call **the same export function the File menu calls**, with the CLI's
-   path in place of the save dialog;
+3. waits for the complete Word document and stable pagination, the slide
+   viewport and private Office fonts, or the fully preloaded workbook. The
+   renderer then calls **the same export function the File menu calls** with
+   the CLI's output path. Slides prepares each page's pictures before drawing
+   that page;
 4. resolves on the renderer's report, and destroys the window.
 
 There is one export function per module — the GUI passes no path and gets a

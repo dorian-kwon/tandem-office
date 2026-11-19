@@ -76,6 +76,36 @@ describe('createImageLoader', () => {
     expect(flushed(apply)).toEqual([['a'], ['b', 'c']])
   })
 
+  it('limits active decodes and replaces queued thumbnail work on a jump', async () => {
+    const apply = vi.fn()
+    const loader = createImageLoader(apply)
+    loader.load(['a', 'b', 'c', 'd', 'old', 'old-neighbor'])
+    expect(FakeImage.instances.map((i) => i.src)).toEqual(['a', 'b', 'c', 'd'])
+    expect(loader.pending()).toBe(6)
+    const idle = loader.whenIdle()
+    loader.load(['jump', 'b', 'new-neighbor', 'jump'])
+    img('a').onload!()
+    expect(FakeImage.instances.at(-1)?.src).toBe('jump')
+    img('c').onerror!()
+    expect(FakeImage.instances.at(-1)?.src).toBe('new-neighbor')
+    for (const url of ['b', 'd', 'jump', 'new-neighbor']) img(url).onload!()
+    await idle
+    expect(loader.pending()).toBe(0)
+    expect(flushed(apply)).toEqual([['a', 'b', 'd', 'jump', 'new-neighbor']])
+  })
+
+  it('allows multiple healthy batches to outlast the selection stall timeout', async () => {
+    const loader = createImageLoader(vi.fn())
+    const urls = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+    loader.load(urls)
+    const finished = loader.whenIdle(5000)
+    for (const batch of [urls.slice(0, 4), urls.slice(4)]) {
+      vi.advanceTimersByTime(4000)
+      for (const url of batch) img(url).onload!()
+    }
+    await expect(finished).resolves.toBeUndefined()
+  })
+
   it('stops applying after dispose', () => {
     const apply = vi.fn()
     const loader = createImageLoader(apply, 16, 100)

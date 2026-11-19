@@ -3,40 +3,14 @@ import { createRoot } from 'react-dom/client'
 import { flushSync } from 'react-dom'
 import { Stage, Layer } from 'react-konva'
 import type Konva from 'konva'
-import type { RenderFill, RenderNode, RenderSlide } from '@genoffice/pptx-render'
+import type { RenderNode, RenderSlide } from '@genoffice/pptx-render'
 import { StaticNode } from './NodeBody'
+import { collectImageUrls } from './slide-image-urls'
 import { createImageLoader } from './image-loader'
 
 /** Load only the selection's resources, including picture fills and image bullets. */
 async function selectionImages(nodes: RenderNode[], cached: Map<string, HTMLImageElement>) {
-  const urls = new Set<string>()
-  const fill = (f?: RenderFill) => {
-    if (f?.kind === 'image' && f.dataUrl) urls.add(f.dataUrl)
-  }
-  const text = (t?: { lines: Array<{ runs: Array<{ image?: string }> }> }) => {
-    for (const line of t?.lines ?? [])
-      for (const run of line.runs) if (run.image) urls.add(run.image)
-  }
-  const walk = (items: RenderNode[]) => {
-    for (const n of items) {
-      if (n.type === 'picture' && n.dataUrl) urls.add(n.dataUrl)
-      if (n.type === 'picture' || n.type === 'shape' || n.type === 'text') fill(n.fill)
-      if (n.type === 'shape' || n.type === 'text') text(n.text)
-      if (n.type === 'chart') {
-        fill(n.bgFill)
-        fill(n.plotRect?.fill)
-        for (const b of n.bars) fill(b.fill)
-      }
-      if (n.type === 'table') fill(n.bgFill)
-      if (n.type === 'group') walk(n.children)
-      if (n.type === 'table')
-        for (const c of n.cells) {
-          fill(c.fill)
-          text(c.text)
-        }
-    }
-  }
-  walk(nodes)
+  const urls = collectImageUrls(nodes)
   const images = new Map(cached)
   const missing = [...urls].filter((url) => !images.get(url)?.naturalWidth)
   if (!missing.length) return images
@@ -45,8 +19,7 @@ async function selectionImages(nodes: RenderNode[], cached: Map<string, HTMLImag
   }, 1)
   try {
     loader.load(missing)
-    const deadline = Date.now() + 5000
-    while (loader.pending() && Date.now() < deadline) await new Promise((r) => setTimeout(r, 20))
+    await loader.whenIdle(5000)
     if (missing.some((url) => !images.get(url)?.naturalWidth))
       throw new Error('Selection image could not be loaded')
     return images

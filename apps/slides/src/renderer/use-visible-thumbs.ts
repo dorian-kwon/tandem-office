@@ -9,22 +9,27 @@ export function useVisibleThumbs(
   rootRef: RefObject<HTMLElement | null>,
   itemSelector: string,
   deps: readonly unknown[],
-  initial = 24,
 ): ReadonlySet<number> {
-  const [visible, setVisible] = useState<ReadonlySet<number>>(
-    () => new Set(Array.from({ length: initial }, (_, i) => i)),
-  )
+  const [visible, setVisible] = useState<ReadonlySet<number>>(() => new Set())
   useEffect(() => {
     const root = rootRef.current
-    if (!root || typeof IntersectionObserver === 'undefined') return
+    if (!root) return
+    const items = root.querySelectorAll<HTMLElement>(itemSelector)
+    if (typeof IntersectionObserver === 'undefined') {
+      setVisible(new Set(Array.from(items, (item) => Number(item.dataset.index))))
+      return
+    }
     // The first callback after (re)observing reports every item, so it rebuilds the set from
     // scratch instead of inheriting indices from a previous DOM (collapsed section, other deck)
     let fresh = true
+    let active = true
     const io = new IntersectionObserver(
       (entries) => {
+        if (!active) return
+        const replace = fresh
+        fresh = false
         setVisible((prev) => {
-          const next = fresh ? new Set<number>() : new Set(prev)
-          fresh = false
+          const next = replace ? new Set<number>() : new Set(prev)
           for (const e of entries) {
             const i = Number((e.target as HTMLElement).dataset.index)
             if (!Number.isFinite(i)) continue
@@ -36,8 +41,11 @@ export function useVisibleThumbs(
       },
       { root, rootMargin: '150% 0px' },
     )
-    for (const el of root.querySelectorAll(itemSelector)) io.observe(el)
-    return () => io.disconnect()
+    for (const el of items) io.observe(el)
+    return () => {
+      active = false
+      io.disconnect()
+    }
   }, deps)
   return visible
 }

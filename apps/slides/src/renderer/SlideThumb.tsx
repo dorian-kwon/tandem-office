@@ -13,6 +13,11 @@ import { StaticNode } from './NodeBody'
 // the sidebar itself is drag-resizable and always passes an explicit width
 const THUMB_W = 126
 
+/** Same box a SlideThumb Stage would occupy, so an unmounted thumbnail keeps the list's scroll geometry */
+export function thumbBox(slide: RenderSlide, width: number) {
+  return { width, height: (slide.heightPx * width) / slide.widthPx }
+}
+
 // memo: App-level state changes (zoom gestures especially) must not re-render every thumbnail Stage
 export const SlideThumb = React.memo(function SlideThumb({
   slide,

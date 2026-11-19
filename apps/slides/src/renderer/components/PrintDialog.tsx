@@ -67,12 +67,13 @@ export function PrintDialog({
   // One offscreen render of the whole deck on open (print quality, 2x); the same
   // bitmaps feed the preview (as blob URLs) and the print job (as base64).
   useEffect(() => {
-    let alive = true
+    const controller = new AbortController()
     void (async () => {
       try {
-        const rendered = await renderSlidesToPngBase64(slides, images)
+        const rendered = await renderSlidesToPngBase64(slides, images, undefined, controller.signal)
+        controller.signal.throwIfAborted()
         const noteTexts = await Promise.all(slides.map((_s, i) => window.slidesApi.getNotes(i)))
-        if (!alive) return
+        if (controller.signal.aborted) return
         blobUrlsRef.current = rendered.map((b64) =>
           URL.createObjectURL(
             new Blob([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], { type: 'image/png' }),
@@ -81,11 +82,11 @@ export function PrintDialog({
         setNotes(noteTexts)
         setPngs(rendered)
       } catch (err) {
-        if (alive) setStatus(t('appPrintFailed', { error: String(err) }))
+        if (!controller.signal.aborted) setStatus(t('appPrintFailed', { error: String(err) }))
       }
     })()
     return () => {
-      alive = false
+      controller.abort()
       for (const url of blobUrlsRef.current) URL.revokeObjectURL(url)
       blobUrlsRef.current = []
     }

@@ -26,8 +26,8 @@ export interface DeckReadiness {
 const UNREADABLE = 'the input deck did not open (corrupt, unsupported or password-protected)'
 
 /**
- * Resolves once the deck is open, every referenced image has decoded and the
- * document fonts have settled. Rasterizing earlier bakes missing pictures or
+ * Resolves once the deck is open, the initial viewport images and the document
+ * fonts have settled. The export waits for each remaining page's images before drawing. Rasterizing earlier bakes missing pictures or
  * fallback faces into the exported PNGs.
  */
 export async function waitForDeckSettled(

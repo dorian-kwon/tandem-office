@@ -7,6 +7,7 @@ import type { RenderSlide } from '@genoffice/pptx-render'
 import type { ExportPdfPage } from '../shared/ipc'
 import { collectExportFontCss } from './export-fonts'
 import { rasterizeSlideNode, renderSlidesToPngBase64 } from './export-render'
+import { prepareExportImages } from './export-images-ready'
 import { renderSlideToSvg } from './export-svg'
 
 export interface PdfExportPages {
@@ -20,16 +21,18 @@ export async function renderSlidesToPdfPages(
 ): Promise<PdfExportPages> {
   const pages: ExportPdfPage[] = []
   const fonts = new Set<string>()
+  const prepare = prepareExportImages(images)
   for (const [i, slide] of slides.entries()) {
+    const readyImages = await prepare(slide)
     try {
-      const page = await renderSlideToSvg(slide, images, {
-        rasterizeNode: (node) => rasterizeSlideNode(node, slide, images),
+      const page = await renderSlideToSvg(slide, readyImages, {
+        rasterizeNode: (node) => rasterizeSlideNode(node, slide, readyImages),
         idPrefix: `p${i + 1}-`,
       })
       for (const f of page.fontFamilies) fonts.add(f)
       pages.push({ svg: page.svg })
     } catch {
-      const [png] = await renderSlidesToPngBase64([slide], images)
+      const [png] = await renderSlidesToPngBase64([slide], readyImages)
       pages.push({ png: png ?? '' })
     }
   }

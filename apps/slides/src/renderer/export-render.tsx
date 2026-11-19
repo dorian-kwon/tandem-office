@@ -9,6 +9,7 @@ import type Konva from 'konva'
 import { Layer, Stage } from 'react-konva'
 import type { RenderNode, RenderSlide } from '@genoffice/pptx-render'
 import { SlideThumb } from './SlideThumb'
+import { prepareExportImages } from './export-images-ready'
 import { StaticNode } from './NodeBody'
 import { rotatedBounds, type NodeRaster } from './export-svg'
 
@@ -25,8 +26,9 @@ export async function renderSlidesToPngBase64(
   slides: RenderSlide[],
   images: Map<string, HTMLImageElement>,
   pixelRatio: number = EXPORT_PIXEL_RATIO,
+  signal?: AbortSignal,
 ): Promise<string[]> {
-  return renderSlidesToImageBase64(slides, images, { format: 'png', pixelRatio })
+  return renderSlidesToImageBase64(slides, images, { format: 'png', pixelRatio, signal })
 }
 
 /**
@@ -37,7 +39,7 @@ export async function renderSlidesToPngBase64(
 export async function renderSlidesToImageBase64(
   slides: RenderSlide[],
   images: Map<string, HTMLImageElement>,
-  opts: { format?: 'png' | 'jpg'; pixelRatio?: number } = {},
+  opts: { format?: 'png' | 'jpg'; pixelRatio?: number; signal?: AbortSignal } = {},
 ): Promise<string[]> {
   const format = opts.format ?? 'png'
   const pixelRatio = opts.pixelRatio ?? EXPORT_PIXEL_RATIO
@@ -47,13 +49,16 @@ export async function renderSlidesToImageBase64(
   document.body.appendChild(container)
   const root = createRoot(container)
   const out: string[] = []
+  const prepare = prepareExportImages(images, opts.signal)
   try {
     for (const slide of slides) {
+      const readyImages = await prepare(slide)
+      opts.signal?.throwIfAborted()
       const stage = await new Promise<Konva.Stage>((resolve) => {
         root.render(
           <SlideThumb
             slide={slide}
-            images={images}
+            images={readyImages}
             width={slide.widthPx}
             stageRef={(s) => s && resolve(s)}
           />,

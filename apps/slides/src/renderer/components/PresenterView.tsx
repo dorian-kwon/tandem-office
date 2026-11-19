@@ -20,7 +20,8 @@ import type { AnimationItem, ShowSyncState } from '../../shared/ipc'
 import { AnimatedSlideStage, useAnimPlayer } from './AnimatedSlide'
 import { ShowMediaLayer } from './ShowMediaLayer'
 import { useI18n } from '../i18n/locale'
-import { SlideThumb } from '../SlideThumb'
+import { SlideThumb, thumbBox } from '../SlideThumb'
+import { useVisibleThumbs } from '../use-visible-thumbs'
 import { InkLayer, type InkStroke } from './ShowInk'
 import {
   gotoPosition,
@@ -58,12 +59,14 @@ function fmtWallClock(): string {
 export function PresenterView({
   slides,
   images,
+  onImagePages,
   startAt,
   onExit,
   onUseSlideShow,
 }: {
   slides: RenderSlide[]
   images: Map<string, HTMLImageElement>
+  onImagePages: (pages: number[]) => void
   /** Start page (original index) */
   startAt: number
   /** Exit presenter view; lastIndex is the original index of the page dwelt on (for locating back in the edit view) */
@@ -315,6 +318,14 @@ export function PresenterView({
 
   // Scroll the current thumbnail into view
   const filmRef = useRef<HTMLDivElement>(null)
+  const visible = useVisibleThumbs(filmRef, '.pv-film-item', [order])
+  useEffect(() => {
+    onImagePages(
+      [order[pos], order[pos + 1], order[pos - 1], ...visible].filter(
+        (idx): idx is number => idx != null,
+      ),
+    )
+  }, [onImagePages, pos, order, visible])
   useEffect(() => {
     filmRef.current
       ?.querySelector('.pv-film-cur')
@@ -609,6 +620,7 @@ export function PresenterView({
         {order.map((idx, i) => (
           <div
             key={idx}
+            data-index={idx}
             className={`pv-film-item${i === pos ? ' pv-film-cur' : ''}`}
             onClick={() => {
               setEnded(false)
@@ -616,7 +628,11 @@ export function PresenterView({
             }}
             data-tip={t('panePresenterFilmSlideN', { n: i + 1 })}
           >
-            <SlideThumb slide={slides[idx]!} images={images} width={150} />
+            {visible.has(idx) ? (
+              <SlideThumb slide={slides[idx]!} images={images} width={150} />
+            ) : (
+              <div style={thumbBox(slides[idx]!, 150)} />
+            )}
           </div>
         ))}
       </div>

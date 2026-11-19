@@ -3,7 +3,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { RenderSlide } from '@genoffice/pptx-render'
 
-vi.mock('../src/renderer/SlideThumb', () => ({ SlideThumb: () => null }))
+vi.mock('../src/renderer/SlideThumb', () => ({ SlideThumb: () => null, thumbBox: () => ({}) }))
 
 import { ZoomDialog } from '../src/renderer/components/ZoomDialog'
 import { t } from '../src/renderer/i18n/locale'
@@ -37,6 +37,7 @@ async function mount(mode: 'slide' | 'section' | 'summary', secs = sections) {
         images: new Map(),
         sections: secs,
         currentSlide: 0,
+        onImagePages: vi.fn(),
         onInsert,
         onClose,
       }),

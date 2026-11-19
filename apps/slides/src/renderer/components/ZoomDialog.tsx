@@ -3,14 +3,15 @@
  * thumbnails, click selects one, toggle-modifier click adds, Insert stays disabled until
  * something is picked. Section mode shows each section's first slide.
  */
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import type { RenderSlide } from '@genoffice/pptx-render'
 import type { SectionInfo } from '../../shared/ipc'
 import { useModalDialog } from './modal-dialog'
 import { useI18n } from '../i18n/locale'
 import { isToggleModifier } from '../platform-modifiers'
 import { groupSections } from '../section-groups'
-import { SlideThumb } from '../SlideThumb'
+import { SlideThumb, thumbBox } from '../SlideThumb'
+import { useVisibleThumbs } from '../use-visible-thumbs'
 import type { ZoomMode } from '../zoom-actions'
 
 const THUMB_W = 160
@@ -24,6 +25,7 @@ const TITLE_KEY = {
 interface ZoomItem {
   /** Slide index (slide/summary) or groupSections() index (section) */
   key: number
+  slideIndex: number
   slide: RenderSlide
   caption: string
   disabled?: boolean
@@ -35,6 +37,7 @@ export function ZoomDialog({
   images,
   sections,
   currentSlide,
+  onImagePages,
   onInsert,
   onClose,
 }: {
@@ -43,6 +46,7 @@ export function ZoomDialog({
   images: Map<string, HTMLImageElement>
   sections: SectionInfo[]
   currentSlide: number
+  onImagePages: (pages: number[]) => void
   onInsert: (keys: number[]) => void
   onClose: () => void
 }) {
@@ -53,6 +57,7 @@ export function ZoomDialog({
     mode === 'section'
       ? groups.map((g, k) => ({
           key: k,
+          slideIndex: g.start,
           slide: slides[g.start]!,
           caption: t('ribbonZoomSectionItem', {
             n: g.start + 1,
@@ -62,6 +67,7 @@ export function ZoomDialog({
         }))
       : slides.map((slide, i) => ({
           key: i,
+          slideIndex: i,
           slide,
           caption:
             t('ribbonSlideN', { n: i + 1 }) +
@@ -71,6 +77,10 @@ export function ZoomDialog({
   const [selected, setSelected] = useState<number[]>(() =>
     mode === 'summary' ? groups.map((g) => g.start) : [],
   )
+
+  const grid = useRef<HTMLDivElement>(null)
+  const visible = useVisibleThumbs(grid, '.zoom-dlg-item', [mode, slides.length, sections])
+  useEffect(() => onImagePages([...visible]), [visible, onImagePages])
 
   const pick = (key: number, e: React.MouseEvent) => {
     if (isToggleModifier(e)) {
@@ -82,16 +92,21 @@ export function ZoomDialog({
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal zoom-dlg" {...dialogProps} onClick={(e) => e.stopPropagation()}>
         <h2 id={titleId}>{t(TITLE_KEY[mode])}</h2>
-        <div className="zoom-dlg-grid">
+        <div className="zoom-dlg-grid" ref={grid}>
           {items.map((item) => (
             <button
               key={item.key}
+              data-index={item.slideIndex}
               className={`zoom-dlg-item${selected.includes(item.key) ? ' selected' : ''}`}
               disabled={item.disabled}
               aria-pressed={selected.includes(item.key)}
               onClick={(e) => pick(item.key, e)}
             >
-              <SlideThumb slide={item.slide} images={images} width={THUMB_W} />
+              {visible.has(item.slideIndex) ? (
+                <SlideThumb slide={item.slide} images={images} width={THUMB_W} />
+              ) : (
+                <div style={thumbBox(item.slide, THUMB_W)} />
+              )}
               <span className="zoom-dlg-caption">{item.caption}</span>
             </button>
           ))}

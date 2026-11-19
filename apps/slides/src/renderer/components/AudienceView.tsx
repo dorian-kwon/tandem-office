@@ -10,8 +10,8 @@
  * Navigation input (clicks/→ etc.) is sent back for presenter arbitration (audienceNav); Esc ends
  * the whole show.
  */
-import React, { useEffect, useRef, useState } from 'react'
-import type { RenderFill, RenderNode, RenderSlide } from '@genoffice/pptx-render'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import type { RenderSlide } from '@genoffice/pptx-render'
 import type { AnimationItem, ShapeKey, ShowSyncState, TransitionKind } from '../../shared/ipc'
 import { AnimatedSlideStage, useAnimPlayer } from './AnimatedSlide'
 import { ShowMediaLayer } from './ShowMediaLayer'
@@ -20,67 +20,15 @@ import { MorphStage } from './MorphStage'
 import { InkLayer, type InkStroke } from './ShowInk'
 import { syncPrivateFonts } from '../doc-fonts'
 import { mergeBroadcastUpdate } from '../../shared/slide-update'
-import { setImageSource } from '../image-loader'
+import { viewportImageUrls } from '../slide-image-urls'
+import { useSlideImages } from '../use-slide-images'
 
 const ANIMATED = ['fade', 'push', 'wipe', 'split', 'circle'] as const
-
-/** dataUrl → HTMLImageElement (picture elements/picture fills/background images, recursing into groups and table cells) */
-function useSlideImages(slides: RenderSlide[] | null): Map<string, HTMLImageElement> {
-  const [images, setImages] = useState<Map<string, HTMLImageElement>>(new Map())
-  useEffect(() => {
-    if (!slides || slides.length === 0) return
-    const urls = new Set<string>()
-    const addFillUrl = (fill: RenderFill | undefined) => {
-      if (fill && fill.kind === 'image' && fill.dataUrl) urls.add(fill.dataUrl)
-    }
-    const walk = (nodes: readonly RenderNode[]) => {
-      for (const n of nodes) {
-        if (n.type === 'picture' && n.dataUrl) urls.add(n.dataUrl)
-        if ((n.type === 'shape' || n.type === 'text') && n.fill) addFillUrl(n.fill)
-        if (n.type === 'group' && Array.isArray(n.children)) walk(n.children)
-        if (n.type === 'table' && Array.isArray(n.cells)) {
-          for (const c of n.cells) if (c.fill) addFillUrl(c.fill)
-        }
-      }
-    }
-    for (const s of slides) {
-      addFillUrl(s.background)
-      walk(s.nodes)
-    }
-    let cancelled = false
-    const loaded = new Map<string, HTMLImageElement>()
-    let pending = 0
-    const done = () => {
-      if (--pending === 0 && !cancelled && loaded.size > 0) {
-        setImages((prev) => {
-          const m = new Map(prev)
-          for (const [k, v] of loaded) m.set(k, v)
-          return m
-        })
-      }
-    }
-    urls.forEach((u) => {
-      pending++
-      const img = new Image()
-      img.onload = () => {
-        loaded.set(u, img)
-        done()
-      }
-      img.onerror = done
-      setImageSource(img, u)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [slides])
-  return images
-}
 
 export function AudienceView() {
   const { t } = useI18n()
   const [slides, setSlides] = useState<RenderSlide[] | null>(null)
   const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight })
-  const images = useSlideImages(slides)
   const [sync, setSync] = useState<ShowSyncState | null>(null)
   const [allAnims, setAllAnims] = useState<AnimationItem[][] | null>(null)
   const transRef = useRef<TransitionKind[]>([])
@@ -98,6 +46,13 @@ export function AudienceView() {
   useEffect(() => {
     if (slides) void syncPrivateFonts().then(() => setFontsReady(true))
   }, [slides])
+
+  const index = sync?.idx
+  const imageUrls = useMemo(
+    () => viewportImageUrls(slides ?? [], index == null ? [] : [index, index + 1, index - 1]),
+    [slides, index],
+  )
+  const { images } = useSlideImages(imageUrls)
 
   // Document load: session already shared; retry covers the occasional timing where the window beats the sharing
   useEffect(() => {

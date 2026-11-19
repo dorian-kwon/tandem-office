@@ -74,13 +74,16 @@ async function rasterizeMetafile(url: string): Promise<string | null> {
   return metafileToDataUrl(bytes, mime, { maxSidePx: MAX_METAFILE_RASTER_PX })
 }
 
+const MAX_CONCURRENT_IMAGES = 4
+
 export function createImageLoader(apply: ApplyImages, batchSize = 16, delayMs = 100) {
-  const loaded = new Map<string, HTMLImageElement>()
+  const settled = new Set<string>()
   const loading = new Set<string>()
-  const failed = new Set<string>()
+  const queue = new Set<string>()
   const buf = new Map<string, HTMLImageElement>()
   let timer: ReturnType<typeof setTimeout> | null = null
   let disposed = false
+  const progress = new Set<() => void>()
 
   const flush = () => {
     if (timer) {
@@ -93,43 +96,77 @@ export function createImageLoader(apply: ApplyImages, batchSize = 16, delayMs = 
     apply(entries)
   }
 
-  return {
-    /** urls still decoding — 0 means every image the deck asked for has settled */
-    pending(): number {
-      return loading.size
-    },
-    load(urls: Iterable<string>) {
-      for (const u of urls) {
-        if (loaded.has(u) || loading.has(u) || failed.has(u)) continue
-        loading.add(u)
-        const img = new Image()
-        const done = (ok: boolean) => {
-          loading.delete(u)
-          if (ok) {
-            loaded.set(u, img)
-            if (!disposed) buf.set(u, img)
-          } else failed.add(u)
-          if (buf.size >= batchSize || loading.size === 0) flush()
-          else if (!timer && buf.size > 0) timer = setTimeout(flush, delayMs)
-        }
-        img.onload = () => done(true)
-        img.onerror = () => done(false)
-        if (METAFILE_RE.test(u) || LAZY_METAFILE_RE.test(u)) {
-          void rasterizeMetafile(u)
-            .then((png) => {
-              if (png) img.src = png
-              else done(false)
-            })
-            .catch(() => done(false))
-        } else {
-          setImageSource(img, u)
-        }
+  function pump() {
+    while (!disposed && loading.size < MAX_CONCURRENT_IMAGES && queue.size > 0) {
+      const u = queue.values().next().value!
+      queue.delete(u)
+      loading.add(u)
+      const img = new Image()
+      const done = (ok: boolean) => {
+        img.onload = img.onerror = null
+        loading.delete(u)
+        if (disposed) return
+        settled.add(u)
+        if (ok) buf.set(u, img)
+        pump()
+        if (buf.size >= batchSize || (loading.size === 0 && queue.size === 0)) flush()
+        else if (!timer && buf.size > 0) timer = setTimeout(flush, delayMs)
+        for (const update of progress) update()
       }
+      img.onload = () => done(true)
+      img.onerror = () => done(false)
+      if (METAFILE_RE.test(u) || LAZY_METAFILE_RE.test(u)) {
+        void rasterizeMetafile(u)
+          .then((png) => {
+            if (png && !disposed) img.src = png
+            else done(false)
+          })
+          .catch(() => done(false))
+      } else {
+        setImageSource(img, u)
+      }
+    }
+  }
+
+  return {
+    pending(): number {
+      return loading.size + queue.size
     },
-    // Only guards setState after unmount; in-flight loads keep filling `loaded`
+    /** A large healthy page may take many batches. Only time out when none settles. */
+    whenIdle(stallMs = 30_000): Promise<void> {
+      if (disposed || (!queue.size && !loading.size)) return Promise.resolve()
+      return new Promise((resolve, reject) => {
+        let timeout: ReturnType<typeof setTimeout>
+        const update = () => {
+          clearTimeout(timeout)
+          if (disposed || (!queue.size && !loading.size)) {
+            progress.delete(update)
+            resolve()
+          } else {
+            timeout = setTimeout(() => {
+              progress.delete(update)
+              reject(new Error('Slide images stopped loading'))
+            }, stallMs)
+          }
+        }
+        progress.add(update)
+        update()
+      })
+    },
+    /** Replace work that hasn't started with the latest viewport's priority order. */
+    load(urls: Iterable<string>) {
+      if (disposed) return
+      queue.clear()
+      for (const u of urls) if (!settled.has(u) && !loading.has(u)) queue.add(u)
+      pump()
+    },
     dispose() {
       disposed = true
+      queue.clear()
+      settled.clear()
+      buf.clear()
       if (timer) clearTimeout(timer)
+      for (const update of progress) update()
     },
   }
 }

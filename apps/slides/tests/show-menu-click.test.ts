@@ -13,7 +13,7 @@ vi.mock('../src/renderer/components/AnimatedSlide', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/renderer/components/AnimatedSlide')>()),
   AnimatedSlideStage: () => null,
 }))
-vi.mock('../src/renderer/SlideThumb', () => ({ SlideThumb: () => null }))
+vi.mock('../src/renderer/SlideThumb', () => ({ SlideThumb: () => null, thumbBox: () => ({}) }))
 
 import { SlideShowView } from '../src/renderer/components/SlideShowView'
 import { t } from '../src/renderer/i18n/locale'
@@ -48,11 +48,14 @@ afterEach(() => {
 
 async function mountShow(startAt = 0) {
   const onExit = vi.fn()
+  const onImagePages = vi.fn()
   const container = document.createElement('div')
   document.body.appendChild(container)
   const root = createRoot(container)
   await act(async () => {
-    root.render(createElement(SlideShowView, { slides, images: new Map(), startAt, onExit }))
+    root.render(
+      createElement(SlideShowView, { slides, images: new Map(), startAt, onExit, onImagePages }),
+    )
   })
   // reveal happens on a requestAnimationFrame after the fullscreen IPC settles
   await act(async () => {
@@ -61,7 +64,7 @@ async function mountShow(startAt = 0) {
   roots.push({ root, container })
   const show = container.querySelector('.slideshow') as HTMLElement
   expect(show.querySelector('.ss-counter')?.textContent).toBe(`${startAt + 1} / 3`)
-  return { show, onExit }
+  return { show, onExit, onImagePages }
 }
 
 const counter = (show: HTMLElement) => show.querySelector('.ss-counter')?.textContent
@@ -89,8 +92,10 @@ function clickItem(menu: HTMLElement, label: string) {
 
 describe('slide show context menu clicks', () => {
   it('Next advances exactly one slide', async () => {
-    const { show } = await mountShow()
+    const { show, onImagePages } = await mountShow()
+    expect(onImagePages).toHaveBeenLastCalledWith([0, 1])
     clickItem(openMenu(show), t('paneShowMenuNext'))
+    expect(onImagePages).toHaveBeenLastCalledWith([1, 2, 0])
     expect(counter(show)).toBe('2 / 3')
     expect(show.querySelector('.ctx-menu')).toBeNull()
   })

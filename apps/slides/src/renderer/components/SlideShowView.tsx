@@ -19,7 +19,8 @@ import { ShowMediaLayer } from './ShowMediaLayer'
 import { useI18n } from '../i18n/locale'
 import { MorphStage } from './MorphStage'
 import { ContextMenu } from './ContextMenu'
-import { SlideThumb } from '../SlideThumb'
+import { SlideThumb, thumbBox } from '../SlideThumb'
+import { useVisibleThumbs } from '../use-visible-thumbs'
 import {
   gotoPosition,
   INITIAL_SHOW_KEYS,
@@ -58,6 +59,7 @@ const GRID_THUMB_W = 200
 export function SlideShowView({
   slides,
   images,
+  onImagePages,
   startAt,
   onExit,
   customOrder,
@@ -66,6 +68,7 @@ export function SlideShowView({
 }: {
   slides: RenderSlide[]
   images: Map<string, HTMLImageElement>
+  onImagePages: (pages: number[]) => void
   /** Start page (original index) */
   startAt: number
   /** Exit the show; lastIndex is the original index of the page dwelt on (for locating back in the edit view) */
@@ -119,6 +122,15 @@ export function SlideShowView({
   const menuRef = useRef(menu)
   menuRef.current = menu
   const [grid, setGrid] = useState(false)
+  const gridElement = useRef<HTMLDivElement>(null)
+  const visible = useVisibleThumbs(gridElement, '.ss-grid-item', [order, grid])
+  useEffect(() => {
+    onImagePages(
+      [order[pos], order[pos + 1], order[pos - 1], ...(grid ? visible : [])].filter(
+        (idx): idx is number => idx != null,
+      ),
+    )
+  }, [onImagePages, pos, order, grid, visible])
   const gridRef = useRef(grid)
   gridRef.current = grid
   /** Left button went down outside the open menu: that click only closes the menu, it must not advance */
@@ -572,6 +584,7 @@ export function SlideShowView({
       {grid && (
         <div
           className="ss-grid"
+          ref={gridElement}
           onClick={(e) => {
             e.stopPropagation()
             setGrid(false)
@@ -580,6 +593,7 @@ export function SlideShowView({
           {order.map((idx, p) => (
             <button
               key={idx}
+              data-index={idx}
               className={`ss-grid-item${p === pos ? ' ss-grid-cur' : ''}`}
               onClick={(e) => {
                 e.stopPropagation()
@@ -588,7 +602,11 @@ export function SlideShowView({
                 goTo(p, false)
               }}
             >
-              <SlideThumb slide={slides[idx]!} images={images} width={GRID_THUMB_W} />
+              {visible.has(idx) ? (
+                <SlideThumb slide={slides[idx]!} images={images} width={GRID_THUMB_W} />
+              ) : (
+                <div style={thumbBox(slides[idx]!, GRID_THUMB_W)} />
+              )}
               <span className="ss-grid-num">{idx + 1}</span>
             </button>
           ))}

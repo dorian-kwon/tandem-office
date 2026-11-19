@@ -2,7 +2,6 @@ import { useEditorAiBusy } from '@genoffice/ui'
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type {
   GroupRenderNode,
-  RenderFill,
   RenderNode,
   RenderSlide,
   ShapeRenderNode,
@@ -41,7 +40,7 @@ import { ZOOM_PREVIEW_EVENT } from './zoom-preview'
 import { ZOOM_MAX, ZOOM_MIN, clampZoom, nextPreset, notchStep, prevPreset } from './zoom-steps'
 import type { DrawRect } from './draw-shape'
 import { paragraphsBlank } from './textbox-insert'
-import { SlideThumb } from './SlideThumb'
+import { SlideThumb, thumbBox } from './SlideThumb'
 import { useVisibleThumbs } from './use-visible-thumbs'
 import { MasterView } from './MasterView'
 import {
@@ -52,7 +51,8 @@ import {
   liveRtl,
 } from './TextEditOverlay'
 import { CropOverlay } from './CropOverlay'
-import { createImageLoader } from './image-loader'
+import { viewportImageUrls } from './slide-image-urls'
+import { useSlideImages } from './use-slide-images'
 import { runHeadlessPdfExport } from './headless-export'
 import { syncPrivateFonts } from './doc-fonts'
 import { toPickerHex } from './color-input'
@@ -362,11 +362,6 @@ function collectRtls(node: RenderNode, out: Set<boolean>) {
   else if (node.type === 'group') for (const child of node.children) collectRtls(child, out)
 }
 
-/** Same box a SlideThumb Stage would occupy, so an unmounted thumbnail keeps the list's scroll geometry */
-function thumbBox(slide: RenderSlide, width: number) {
-  return { width, height: (slide.heightPx * width) / slide.widthPx }
-}
-
 export function App() {
   // Split panes: fallback focus reporting for this screen (decision 0036)
   useSplitPaneFocusPing()
@@ -385,7 +380,7 @@ export function App() {
       }),
     [],
   )
-  /** AiPanel reset key: incremented only on applyOpen (open/new file), not on draft path updates */
+  /** Open/new resets document-scoped UI and image data; saving the same deck keeps them. */
   const [aiPanelKey, setAiPanelKey] = useState(0)
   /** Theme body default font (fallback for the font box when the selection has no text element) */
   const [defaultFont, setDefaultFont] = useState<string | null>(null)
@@ -498,8 +493,6 @@ export function App() {
     null,
   )
   const bootHandledRef = useRef(false)
-  const [images, setImages] = useState<Map<string, HTMLImageElement>>(new Map())
-  const imageLoaderRef = useRef<ReturnType<typeof createImageLoader> | null>(null)
   const [hasClipboard, setHasClipboard] = useState(false)
   // The clipboard is app-wide (copies land from other windows) and external content counts too
   useEffect(() => {
@@ -917,7 +910,7 @@ export function App() {
       // Fetch the layout list asynchronously (doesn't block opening)
       void window.slidesApi.getLayouts().then((r) => setLayoutsResult(r))
     },
-    [fitZoom],
+    [],
   )
 
   const setSelectedId = useCallback((id: string | null, additive = false) => {
@@ -1062,36 +1055,6 @@ export function App() {
     [],
   )
   const exportPdf = useCallback(() => void fileActions.exportPdf(ctxRef.current), [])
-
-  // Headless export mode (--headless-export): this renderer lives in a hidden
-  // window whose only job is to run the File menu's PDF export against a path
-  // the CLI chose, then report back so the main process can quit.
-  const headlessExportStartedRef = useRef(false)
-  useEffect(() => {
-    if (headlessExportStartedRef.current) return
-    headlessExportStartedRef.current = true
-    void (async () => {
-      const outPath = await window.slidesApi.consumeHeadlessExport()
-      if (!outPath) return
-      const report = await runHeadlessPdfExport(
-        outPath,
-        () => {
-          // A failed open falls back to an untitled blank deck (path ''), and
-          // exporting that would hand the CLI a blank PDF and call it success.
-          const deck = ctxRef.current
-          const fromFile = typeof deck?.path === 'string' && deck.path !== ''
-          return {
-            slideCount: fromFile ? deck.slides.length : 0,
-            // no loader yet = the deck's image effect has not run; -1 keeps waiting
-            pendingImages: imageLoaderRef.current?.pending() ?? -1,
-            failed: deck?.path === '',
-          }
-        },
-        (target) => fileActions.exportPdf(ctxRef.current, target),
-      )
-      window.slidesApi.headlessExportDone(report)
-    })()
-  }, [])
 
   const [printDlgOpen, setPrintDlgOpen] = useState(false)
 
@@ -2482,65 +2445,57 @@ export function App() {
     previewZoom,
   ])
 
-  // Load images (dataUrl → HTMLImageElement): picture elements + picture fills + background images
-  // (recursing into group children and decoration nodes). Walk all pages so thumbnails get
-  // background images/pictures of non-current pages (otherwise unvisited pages' thumbnails are blank).
+  const [overlayImagePages, setOverlayImagePages] = useState<number[]>([])
+  const imageUrls = useMemo(() => {
+    if (slideShow || presenter) return viewportImageUrls(slides, overlayImagePages)
+    const indices = [current, current + 1, current - 1]
+    if (zoomDialog) indices.push(...overlayImagePages)
+    else if (viewMode === 'sorter') indices.push(...visibleSorterItems)
+    else if (viewMode === 'normal' && showThumbs) indices.push(...visibleThumbs)
+    return viewportImageUrls(slides, indices)
+  }, [
+    slides,
+    current,
+    viewMode,
+    showThumbs,
+    visibleThumbs,
+    visibleSorterItems,
+    zoomDialog,
+    slideShow,
+    presenter,
+    overlayImagePages,
+  ])
+  const { images, loader: imageLoaderRef } = useSlideImages(imageUrls, aiPanelKey)
+
+  // Headless export mode (--headless-export): this renderer lives in a hidden
+  // window whose only job is to run the File menu's PDF export against a path
+  // the CLI chose, then report back so the main process can quit.
+  const headlessExportStartedRef = useRef(false)
   useEffect(() => {
-    if (slides.length === 0) return
-    const urls = new Set<string>()
-    const addFillUrl = (fill: RenderFill | undefined) => {
-      if (fill && fill.kind === 'image' && fill.dataUrl) urls.add(fill.dataUrl)
-    }
-    const addBulletUrls = (
-      text: { lines: Array<{ runs: Array<{ image?: string }> }> } | undefined,
-    ) => {
-      for (const l of text?.lines ?? []) for (const r of l.runs) if (r.image) urls.add(r.image)
-    }
-    const walk = (nodes: readonly RenderNode[]) => {
-      for (const n of nodes) {
-        if (n.type === 'picture' && n.dataUrl) urls.add(n.dataUrl)
-        if (n.type === 'shape' || n.type === 'text') {
-          if (n.fill) addFillUrl(n.fill)
-          addBulletUrls(n.text)
-        }
-        if (n.type === 'chart') {
-          addFillUrl((n as { bgFill?: RenderFill }).bgFill)
-          for (const b of (n as { bars: Array<{ fill?: RenderFill }> }).bars)
-            if (b.fill) addFillUrl(b.fill)
-        }
-        if (n.type === 'group' && Array.isArray(n.children)) walk(n.children)
-        if (n.type === 'table' && Array.isArray(n.cells)) {
-          for (const c of n.cells) {
-            if (c.fill) addFillUrl(c.fill)
-            addBulletUrls(c.text)
+    if (headlessExportStartedRef.current) return
+    headlessExportStartedRef.current = true
+    void (async () => {
+      const outPath = await window.slidesApi.consumeHeadlessExport()
+      if (!outPath) return
+      const report = await runHeadlessPdfExport(
+        outPath,
+        () => {
+          // A failed open falls back to an untitled blank deck (path ''), and
+          // exporting that would hand the CLI a blank PDF and call it success.
+          const deck = ctxRef.current
+          const fromFile = typeof deck?.path === 'string' && deck.path !== ''
+          return {
+            slideCount: fromFile ? deck.slides.length : 0,
+            // no loader yet = the deck's image effect has not run; -1 keeps waiting
+            pendingImages: imageLoaderRef.current?.pending() ?? -1,
+            failed: deck?.path === '',
           }
-        }
-      }
-    }
-    for (const s of slides) {
-      addFillUrl(s.background)
-      walk(s.nodes)
-    }
-    if (!imageLoaderRef.current) {
-      imageLoaderRef.current = createImageLoader((entries) => {
-        setImages((prev) => {
-          const m = new Map(prev)
-          for (const [k, v] of entries) m.set(k, v)
-          return m
-        })
-      })
-    }
-    imageLoaderRef.current.load(urls)
-  }, [slides])
-  // Dispose on unmount and clear the ref so a remount (e.g. React Strict Mode's
-  // dev double-mount) lazily recreates a fresh loader instead of reusing a disposed one.
-  useEffect(
-    () => () => {
-      imageLoaderRef.current?.dispose()
-      imageLoaderRef.current = null
-    },
-    [],
-  )
+        },
+        (target) => fileActions.exportPdf(ctxRef.current, target),
+      )
+      window.slidesApi.headlessExportDone(report)
+    })()
+  }, [imageLoaderRef])
 
   const canvasRef = useRef<SlideCanvasHandle>(null)
   const editNode = useMemo(() => {
@@ -4721,6 +4676,7 @@ export function App() {
         <SlideShowView
           slides={slides}
           images={images}
+          onImagePages={setOverlayImagePages}
           startAt={slideShow.startAt}
           customOrder={slideShow.customOrder}
           rehearseMode={slideShow.rehearse}
@@ -4733,6 +4689,7 @@ export function App() {
         <PresenterView
           slides={slides}
           images={images}
+          onImagePages={setOverlayImagePages}
           startAt={presenter.startAt}
           onExit={exitPresenterView}
           onUseSlideShow={switchPresenterToShow}
@@ -4782,6 +4739,7 @@ export function App() {
       {zoomDialog && (
         <ZoomDialog
           mode={zoomDialog}
+          onImagePages={setOverlayImagePages}
           slides={slides}
           images={images}
           sections={sections}
