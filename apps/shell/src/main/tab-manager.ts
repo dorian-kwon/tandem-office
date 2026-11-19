@@ -1,3 +1,4 @@
+import { setEditorViewVisible } from '../../../sheets/src/main/grid-view-visibility'
 import type { WatchdogReopenResult } from './renderer-watchdog-policy'
 import { basename, join } from 'node:path'
 import { realpathSync } from 'node:fs'
@@ -323,7 +324,7 @@ export class TabManager {
       // registering the session made the spare the menu-action target
       setActiveSheetsWebContents(active.view?.webContents ?? null)
       this.shellWindow.contentView.addChildView(view)
-      view.setVisible(false)
+      setEditorViewVisible(view, false)
       // the window may be minimized or mid-restore when the spare spawns; a
       // degenerate rect would leave the spare zero-sized until its next layout
       const bounds = this.contentBounds()
@@ -488,7 +489,7 @@ export class TabManager {
     }
     const cover = this.coverTabId()
     if (cover !== null) {
-      for (const t of this.tabs) t.view?.setVisible(t.id === cover)
+      for (const t of this.tabs) setEditorViewVisible(t.view, t.id === cover)
       this.tabById(cover)?.view?.setBounds(this.windowRect())
       return
     }
@@ -498,7 +499,8 @@ export class TabManager {
       // its bounds stay as they were, so the document keeps its scroll
       const rects = visiblePaneRects(bounds, split)
       for (const t of this.tabs) {
-        t.view?.setVisible(
+        setEditorViewVisible(
+          t.view,
           (t.id === split.aTabId && rects.a !== null) ||
             (t.id === split.bTabId && rects.b !== null),
         )
@@ -507,7 +509,7 @@ export class TabManager {
       if (rects.b) this.tabById(split.bTabId)?.view?.setBounds(rects.b)
       return
     }
-    for (const t of this.tabs) t.view?.setVisible(t.id === this.activeId)
+    for (const t of this.tabs) setEditorViewVisible(t.view, t.id === this.activeId)
     this.tabById(this.activeId)?.view?.setBounds(bounds)
   }
 
@@ -753,7 +755,7 @@ export class TabManager {
     const id = `t${this.nextId++}`
     if (!spare) {
       this.shellWindow.contentView.addChildView(view)
-      view.setVisible(false)
+      setEditorViewVisible(view, false)
     }
     this.trackHtmlFullScreen(view)
     this.trackPaneFocus(view)
@@ -1006,7 +1008,7 @@ export class TabManager {
     const view = createHtmlPresentView(owner, title)
     const id = `t${this.nextId++}`
     this.shellWindow.contentView.addChildView(view)
-    view.setVisible(false)
+    setEditorViewVisible(view, false)
     this.trackHtmlFullScreen(view)
     this.trackPaneFocus(view)
     this.tabs.push({
@@ -1163,7 +1165,7 @@ export class TabManager {
     }
     const { view } = loaded
     this.shellWindow.contentView.addChildView(view)
-    view.setVisible(false)
+    setEditorViewVisible(view, false)
     this.trackHtmlFullScreen(view)
     this.trackPaneFocus(view)
     tab.view = view
@@ -1619,7 +1621,7 @@ export class TabManager {
     const view = tab.view
     if (!view) return
     dropGenerateHandoff(view.webContents.id)
-    view.setVisible(false)
+    setEditorViewVisible(view, false)
     this.shellWindow.contentView.removeChildView(view)
     if (tab.kind === 'docs') {
       // see removeTabOnly: a docs view is detached, not destroyed, and its process is ended
@@ -2112,7 +2114,7 @@ export class TabManager {
     if (removed.view) {
       // a generate request the tab never took goes with the tab
       dropGenerateHandoff(removed.view.webContents.id)
-      removed.view.setVisible(false)
+      setEditorViewVisible(removed.view, false)
       this.shellWindow.contentView.removeChildView(removed.view)
       if (removed.kind === 'docs') {
         // webContents.close()/.destroy() on a closed docs tab wedges Electron's whole
@@ -2149,7 +2151,7 @@ export class TabManager {
     this.tabs.splice(idx, 1)
     if (this.htmlFullScreenId === id) this.htmlFullScreenId = null
     const view = tab.view
-    view.setVisible(false)
+    setEditorViewVisible(view, false)
     this.shellWindow.contentView.removeChildView(view)
     const split = this.split
     const survivor = split ? splitSurvivor(split, id) : null
@@ -2204,7 +2206,7 @@ export class TabManager {
     const id = `t${this.nextId++}`
     const { view } = record
     this.shellWindow.contentView.addChildView(view)
-    view.setVisible(false)
+    setEditorViewVisible(view, false)
     this.trackHtmlFullScreen(view)
     this.trackPaneFocus(view)
     const slot =

@@ -2959,6 +2959,7 @@ export interface McpCommandResult {
 }
 
 export interface DesktopApi {
+  onGridViewVisibility?(handler: (visible: boolean) => void): () => void
   /** open any shell-routed document path (an AI answer's filenav citation) */
   openSourcePath(path: string): Promise<void>
   /** Korean name and Hangul coverage of the enumerated families (read from the font

@@ -202,6 +202,7 @@ import {
   type WorkbookCreateDocumentResult,
   type WorkbookSaveRequest,
 } from '../shared/desktop-api'
+import { trackSheetViewVisibility } from './grid-view-visibility'
 import { IPC_CHANNELS } from '../shared/ipc-channels'
 import {
   aiRunBlockChunk,
@@ -2892,6 +2893,7 @@ export function createSheetsView(
       backgroundThrottling: false,
     },
   })
+  trackSheetViewVisibility(view)
   registerSheetsIpc()
   if (options.includeAiHandlers ?? true) registerSheetsAiIpc()
   registerSheetsSession(view.webContents, client)

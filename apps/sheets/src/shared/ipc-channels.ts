@@ -46,6 +46,7 @@ export const MAX_PDF_TEMPLATE_CHARS = 12_000_000
 export const HEADER_FOOTER_PICTURE_POSITION = /^[LCR][HF](EVEN|FIRST)?$/
 
 export const IPC_CHANNELS = {
+  gridViewVisibility: 'workbook:grid-view-visibility',
   selectWorkbook: 'workbook:select',
   /** Multi-file picker + sidecar sessions for merging into the current workbook */
   selectWorkbooksForMerge: 'workbook:select-for-merge',

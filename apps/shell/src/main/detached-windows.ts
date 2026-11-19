@@ -1,3 +1,4 @@
+import { setEditorViewVisible } from '../../../sheets/src/main/grid-view-visibility'
 import { basename } from 'node:path'
 import { BrowserWindow, screen } from 'electron'
 import type { Rectangle, WebContents, WebContentsView } from 'electron'
@@ -550,7 +551,7 @@ export function createDetachedEditorWindow(options: {
     setImmediate(() => layout())
   })
   layout()
-  view.setVisible(true)
+  setEditorViewVisible(view, true)
   if (tearOffAt) {
     const pos = win.getPosition()
     torn = { rec, grabDx: tearOffAt.x - pos[0], grabDy: tearOffAt.y - pos[1] }

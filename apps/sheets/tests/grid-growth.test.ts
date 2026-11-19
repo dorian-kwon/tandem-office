@@ -3,7 +3,7 @@ import { CommandType, ICommandService, IUndoRedoService, LogLevel, Univer } from
 import { UniverSheetsPlugin } from '@univerjs/sheets'
 import '@univerjs/sheets/facade'
 import { FUniver } from '@univerjs/core/lib/facade'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { installGridGrowth, nextGridGrowth } from '../src/renderer/grid-growth'
 import type { UniverRuntime } from '../src/renderer/univer-state'
@@ -161,6 +161,37 @@ function undoStackLength(undoRedoService: IUndoRedoService): number {
 }
 
 describe('grid growth and the undo stack', () => {
+  it('keeps the hidden grid idle and restarts just one timer when shown', () => {
+    const { univer, univerAPI } = bootBlankWorkbook()
+    const interval = vi.spyOn(window, 'setInterval')
+    const clear = vi.spyOn(window, 'clearInterval')
+    let setVisible!: (visible: boolean) => void
+    const off = vi.fn()
+    const dispose = installGridGrowth(
+      { univer, univerAPI } as unknown as UniverRuntime,
+      (handler) => {
+        setVisible = handler
+        handler(false)
+        return off
+      },
+    )
+    try {
+      expect(interval).not.toHaveBeenCalled()
+      setVisible(true)
+      setVisible(true)
+      expect(interval).toHaveBeenCalledTimes(1)
+      setVisible(false)
+      expect(clear).toHaveBeenCalledWith(interval.mock.results[0]!.value)
+      setVisible(true)
+      expect(interval).toHaveBeenCalledTimes(2)
+    } finally {
+      dispose()
+      expect(off).toHaveBeenCalledOnce()
+      interval.mockRestore()
+      clear.mockRestore()
+    }
+  })
+
   it('grows the grid on a scroll without touching the undo stack', () => {
     const { univer, univerAPI, commandService, undoRedoService, worksheet } = bootBlankWorkbook()
     const dispose = installGridGrowth({ univer, univerAPI } as unknown as UniverRuntime)

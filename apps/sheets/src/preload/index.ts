@@ -136,7 +136,23 @@ const aiSubscription: SubscriptionApi = {
   },
 }
 
+// The first visibility change may arrive before the workbook runtime is mounted.
+let gridViewVisible = true
+const gridViewListeners = new Set<(visible: boolean) => void>()
+ipcRenderer.on(IPC_CHANNELS.gridViewVisibility, (_event, visible: boolean) => {
+  if (typeof visible !== 'boolean' || visible === gridViewVisible) return
+  gridViewVisible = visible
+  for (const listener of gridViewListeners) listener(visible)
+})
+
 const desktopApi: DesktopApi = {
+  onGridViewVisibility(handler) {
+    gridViewListeners.add(handler)
+    handler(gridViewVisible)
+    return () => {
+      gridViewListeners.delete(handler)
+    }
+  },
   getLanguage: () => ipcRenderer.invoke('app:get-language'),
   fontFamilyInfo: (families) => ipcRenderer.invoke('app:font-family-info', families),
   openSourcePath: (path: string) => ipcRenderer.invoke('home:open-path', path),

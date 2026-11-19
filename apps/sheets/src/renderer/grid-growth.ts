@@ -124,7 +124,10 @@ const SET_ACTIVE_SHEET_OPERATION = 'sheet.operation.set-worksheet-active'
  *
  * Returns a disposer.
  */
-export function installGridGrowth(runtime: UniverRuntime): () => void {
+export function installGridGrowth(
+  runtime: UniverRuntime,
+  onVisibility = window.desktopApi?.onGridViewVisibility,
+): () => void {
   let disposed = false
   // The render unit appears after install, so resolve it per use and cache only
   // once it resolves: a cached miss would pin the growth off forever.
@@ -222,7 +225,7 @@ export function installGridGrowth(runtime: UniverRuntime): () => void {
 
   // Backstop: a viewport move the command stream does not carry, and the
   // window between install and the render unit existing.
-  const timer = window.setInterval(() => {
+  const poll = () => {
     if (disposed) return
     const worksheet = runtime.univerAPI.getActiveWorkbook()?.getActiveSheet()
     const manager = currentSkeletonManager()
@@ -237,9 +240,20 @@ export function installGridGrowth(runtime: UniverRuntime): () => void {
     if (lastColumn + COLUMN_LOOKAHEAD < columnCount) return
     const walked = firstVisibleColumn(skeleton, columnCount)
     growIfNearEdge(walked, lastRow)
-  }, 250)
+  }
+  let timer: number | undefined
+  const setVisible = (visible: boolean) => {
+    if (visible && timer === undefined) timer = window.setInterval(poll, 250)
+    if (!visible && timer !== undefined) {
+      window.clearInterval(timer)
+      timer = undefined
+    }
+  }
+  const unsubscribe = onVisibility?.(setVisible)
+  if (!onVisibility) setVisible(true)
 
   return () => {
+    unsubscribe?.()
     disposed = true
     window.clearInterval(timer)
     onCommand?.dispose?.()
