@@ -52,11 +52,17 @@ interface Message {
 }
 type Callbacks = { onDelta: (t: string) => void; signal: AbortSignal }
 
+function translationRequest(messages: Message[]) {
+  const data = /<document_blocks>\n([\s\S]*?)\n<\/document_blocks>/.exec(messages[0]!.text)![1]!
+  return JSON.parse(data) as {
+    blocks: { id: string; text: string }[]
+    context?: { previous?: { source: string; target: string }[] }
+  }
+}
+
 /** every block translated with a "[fr] " prefix (placeholders are kept as they are) */
 function answer(messages: Message[]): string {
-  const text = messages[0]!.text
-  const data = /<document_blocks>\n([\s\S]*?)\n<\/document_blocks>/.exec(text)![1]!
-  const blocks = (JSON.parse(data) as { blocks: { id: string; text: string }[] }).blocks
+  const { blocks } = translationRequest(messages)
   return JSON.stringify({
     translations: blocks.map((b) => ({ id: b.id, text: `[fr] ${b.text}` })),
   })
@@ -185,8 +191,7 @@ async function until(check: () => Promise<boolean>, ms = 20_000): Promise<void> 
   }
 }
 
-const sentTexts = (): string =>
-  fakes.stream.mock.calls.map((c) => (c[3] as Message[])[0]!.text).join('\n')
+const sentRequests = () => fakes.stream.mock.calls.map((c) => translationRequest(c[3] as Message[]))
 
 /** title + three contents labels + the blocks of chapters 1 and 3 */
 const TOTAL_UNITS = 7
@@ -596,8 +601,14 @@ describe('epub translate: running the job', () => {
     )
     expect(rest.code).toBe(0)
     expect(rest.json().detail.translated_blocks).toBe(3)
-    expect(sentTexts()).not.toContain('Alpha')
-    expect(sentTexts()).toContain('Gamma words.')
+    const resumed = sentRequests()
+    const targets = resumed.flatMap((request) => request.blocks.map((block) => block.text))
+    expect(targets.some((text) => text.includes('Alpha'))).toBe(false)
+    expect(targets).toContain('Gamma words.')
+    expect(resumed.flatMap((request) => request.context?.previous ?? [])).toContainEqual({
+      source: 'Alpha one.',
+      target: '[fr] Alpha one.',
+    })
 
     const restart = await run(['epub', 'translate', book, '--to', 'fr', '--restart', '--json'], {
       env,
@@ -620,7 +631,9 @@ describe('epub translate: running the job', () => {
       { env },
     )
     expect(redo.code).toBe(0)
-    expect(sentTexts()).toContain('Alpha one.')
+    expect(
+      sentRequests().flatMap((request) => request.blocks.map((block) => block.text)),
+    ).toContain('Alpha one.')
   })
 
   it('refuses while another job runs on the book, pointing at epub status', async () => {

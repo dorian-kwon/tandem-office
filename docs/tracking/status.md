@@ -1,6 +1,12 @@
 # 진행 현황
 
-Tandem Office **0.15.8 (2026-11-20)**을 Windows x64 정식 최신 릴리스로 공개했다. 배포 커밋은 `b4bab3446`다. 큰 문서에서 채팅 입력 지연과 한글 글꼴 메모리 사용을 줄였고, 번역을 편집 단위별로 실행취소·다시 실행하고 중단 뒤 이어갈 수 있다. Mac과 Linux는 기존 설치본을 사용한다. [v0.15.8 릴리스](https://github.com/dorian-kwon/tandem-office/releases/tag/v0.15.8)
+Tandem Office **0.15.9 (2026-11-20)**를 Windows x64 정식 릴리스로 공개했다. 배포 커밋은 `da2fed79a`다. 번역 화면에서 Obsidian 위키를 열 수 있고, PDF·EPUB 전체 번역이 앞에서 확정한 번역을 참고한다. [릴리스와 설치 파일](https://github.com/dorian-kwon/tandem-office/releases/tag/v0.15.9)
+
+Windows 빌드에서 패키지의 Markdown·CSV → PDF 내보내기가 통과했다. 공개한 설치 파일·블록맵·업데이트 피드의 SHA-256과 설치 파일의 SHA-512를 대조했다. 피드의 버전과 릴리스 안내문, 설치 파일 및 피드의 빌드 출처 증명을 확인했다. 이 설치본은 빌드 환경에 Google Drive 클라이언트 설정이 없어 Drive 연결을 제공하지 않는다. Windows에서 Obsidian을 직접 실행하는 과정과 구버전 위 재설치는 별도 확인 대상으로 남았다. [Windows 빌드](https://github.com/dorian-kwon/tandem-office/actions/runs/44592231539)
+
+기존 Mac 빌드에서 빠른 릴리스 검사 51개가 75.25초에 통과했다. 지원 형식 19종으로 파일 열기를 확인하고 HWP·HWPX 실행 취소와 다시 실행, 업데이트 화면을 검사했다. 일반 단위·브라우저·편집기 검사는 CI에서 자동 실행하고 부하 벤치마크는 수동으로 선택한다.
+
+이전 버전 **0.15.8 (2026-11-20)**을 Windows x64 정식 릴리스로 공개했다. 배포 커밋은 `b4bab3446`다. 큰 문서에서 채팅 입력 지연과 한글 글꼴 메모리 사용을 줄였고, 번역을 편집 단위별로 실행취소·다시 실행하고 중단 뒤 이어갈 수 있다. Mac과 Linux는 기존 설치본을 사용한다. [v0.15.8 릴리스](https://github.com/dorian-kwon/tandem-office/releases/tag/v0.15.8)
 
 Windows 패키지로 Markdown과 CSV를 PDF로 내보냈고, 공개 설치 파일·블록맵·업데이트 피드의 크기와 SHA-256, 설치 파일의 SHA-512, 피드의 릴리스 안내문을 확인했다. 설치 파일과 피드가 배포 커밋과 해당 Windows 워크플로에서 만들어졌다는 출처 증명을 각각 검증했다. 빌드 환경에 Google Drive 클라이언트 설정이 없어 이번 설치본에서는 Drive 연결을 제공하지 않는다. 실제 Windows PC에서 구버전 위에 설치하고 재실행하는 경로는 별도 확인 과제로 남았다. [Windows 빌드](https://github.com/dorian-kwon/tandem-office/actions/runs/44567146606)
 
