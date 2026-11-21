@@ -33,8 +33,10 @@ export const TRANSLATE_CHANNELS = {
   batchStatus: 'translate:batch-status',
   batchStop: 'translate:batch-stop',
   list: 'translate:list',
+  addWikiReferences: 'translate:add-wiki-references',
   openWiki: 'translate:open-wiki',
   resumeWiki: 'translate:resume-wiki',
+  learnFinals: 'translate:learn-finals',
   create: 'translate:create',
   remove: 'translate:remove',
   getSystemPrompt: 'translate:get-system-prompt',
@@ -383,6 +385,11 @@ export interface TranslateOcrWriteArgs {
   placement?: OcrPlacement
 }
 
+export interface WikiFinalResult {
+  name: string
+  status: 'added' | 'duplicate' | 'empty' | 'failed'
+}
+
 export interface TranslationWikiOpenResult {
   status: 'opened' | 'setup' | 'download' | 'unavailable' | 'idle'
   /** An idle transition still awaits installation or the initial vault registration. */
@@ -395,8 +402,10 @@ export interface TranslateApi {
   batchStop(dir: string): Promise<void>
   batchStatus(dir: string): Promise<ProjectBatchSnapshot | null>
   onBatchChanged(listener: (snapshot: ProjectBatchSnapshot) => void): () => void
+  addWikiReferences(dir: string): Promise<ProjectFile | null>
   openWiki(): Promise<TranslationWikiOpenResult>
   resumeWiki(): Promise<TranslationWikiOpenResult>
+  learnFinals(): Promise<WikiFinalResult[]>
   list(): Promise<TranslateProjectListEntry[]>
   /** documents opened lately, newest first, at most 10 */
   recent(): Promise<TranslateRecentDocument[]>

@@ -20,6 +20,13 @@ export const ar = {
   batchFailed: 'فشل',
   batchConsent:
     'استخدم هذا الذكاء الاصطناعي للمستندات المحددة وعددها {n}. يحتاج هذا الملف إلى نحو {calls} طلبات.',
+  wikiLearn: 'التعلّم من المستندات النهائية',
+  wikiLearning: 'جارٍ اختيار الملفات ومعالجتها…',
+  wikiLearnAdded: 'أُضيف إلى الويكي',
+  wikiLearnDuplicate: 'موجود في الويكي بالفعل',
+  wikiLearnEmpty: 'لا يوجد نص قابل للقراءة',
+  wikiLearnFailed: 'تعذّرت الإضافة إلى الويكي',
+  selectWikiReferences: 'اختيار مراجع من الويكي',
   wikiView: 'عرض الويكي',
   wikiSetup: 'في Obsidian، افتح المجلد أدناه كخزنة، ثم ارجع إلى {app}.',
   wikiDownload: 'أكمل تثبيت Obsidian، ثم ارجع إلى {app} لفتح الويكي.',

@@ -20,6 +20,13 @@ export const es = {
   batchFailed: 'Error',
   batchConsent:
     'Usar esta IA para los {n} documentos seleccionados. Este archivo requiere unas {calls} solicitudes.',
+  wikiLearn: 'Aprender de documentos finales',
+  wikiLearning: 'Seleccionando y procesando archivos…',
+  wikiLearnAdded: 'Añadido a la wiki',
+  wikiLearnDuplicate: 'Ya está en la wiki',
+  wikiLearnEmpty: 'Sin texto legible',
+  wikiLearnFailed: 'No se pudo añadir a la wiki',
+  selectWikiReferences: 'Elegir referencias del wiki',
   wikiView: 'Ver la wiki',
   wikiSetup: 'Abre la carpeta de abajo como bóveda en Obsidian y vuelve a {app}.',
   wikiDownload: 'Termina de instalar Obsidian y vuelve a {app} para abrir la wiki.',

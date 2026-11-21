@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import JSZip from 'jszip'
 import { PDFDocument } from 'pdf-lib'
@@ -184,6 +184,41 @@ test.afterAll(async () => {
   if (!launched) return
   await closeAndSaveVideo(launched, 'supported-document-formats')
   await rm(launched.userDataDir, { recursive: true, force: true })
+})
+
+test('learns finished documents from one native multi-selection across all supported formats', async () => {
+  const { app, page } = launched
+  const paths: string[] = []
+  for (const ext of Object.values(ROUTED_EXTENSIONS).flat()) {
+    const path = test.info().outputPath('final.' + ext)
+    await writeFile(path, await cases[ext].content())
+    paths.push(path)
+  }
+  await queuePicks(app, [paths])
+  await page.getByRole('button', { name: 'Learn from final documents' }).click()
+  await expect(
+    page.locator('.translate-learn-results li').filter({ hasText: 'Added to the wiki' }),
+  ).toHaveCount(paths.length)
+  const catalog = await readFile(
+    join(launched.userDataDir, 'translation-wiki', 'vault', 'final-documents.md'),
+    'utf8',
+  )
+  expect(catalog).toContain('final-documents/')
+  const notes = await readdir(
+    join(launched.userDataDir, 'translation-wiki', 'vault', 'final-documents'),
+  )
+  expect(notes).toHaveLength(paths.length)
+  const empty = test.info().outputPath('empty.txt')
+  await writeFile(empty, '   ')
+  await queuePicks(app, [
+    [test.info().outputPath('missing.txt'), empty, test.info().outputPath('final.docx')],
+  ])
+  expect(await page.evaluate(() => window.translateApi.learnFinals())).toEqual([
+    { name: 'missing.txt', status: 'failed' },
+    { name: 'empty.txt', status: 'empty' },
+    { name: 'final.docx', status: 'duplicate' },
+  ])
+  expect(await page.evaluate(() => window.translateApi.learnFinals())).toEqual([])
 })
 
 // Default Playwright mode keeps a single shell in the passing path and runs
@@ -374,8 +409,18 @@ test('project batch inspects and saves every editable file format with the proje
     await addSource(dir, path)
   }
   const { app, page } = launched
-  await queuePicks(app, [dir])
+  const example = 'The mission welcomes visiting delegates.'
+  const finished = join(parent, 'approved.txt')
+  await writeFile(finished, example)
+  await queuePicks(app, [[finished]])
+  await page.getByRole('button', { name: 'Learn from final documents' }).click()
+  await expect(page.locator('.translate-learn-results')).toContainText('approved.txt')
+  const notesDir = join(launched.userDataDir, 'translation-wiki', 'vault', 'final-documents')
+  const note = (await readdir(notesDir)).find((file) => file.startsWith('approved_txt-'))!
+  await queuePicks(app, [dir, [join(notesDir, note)]])
   await page.getByRole('button', { name: 'Open existing project folder' }).click()
+  await page.getByRole('button', { name: 'Choose wiki references' }).click()
+  await expect(page.getByText(note, { exact: true }).first()).toBeVisible()
   await expect(page.getByTestId('project-batch-start')).toBeVisible()
   // Intercept only the model. Real editor tools, disk persistence, project focus,
   // the XLS/TSV conversion and Electron IPC all run on the production paths.
@@ -433,6 +478,7 @@ test('project batch inspects and saves every editable file format with the proje
       }
       const prompt = JSON.stringify(calls[0])
       expect.soft(prompt.includes(styleGuide), ext + ' received the project prompt').toBe(true)
+      expect.soft(prompt.includes(example), ext + ' received the selected wiki example').toBe(true)
       expect.soft(prompt.includes(targetTerm), ext + ' received the project glossary').toBe(true)
       const output = await readFile(join(dir, 'output', item.output!))
       if (['xls', 'tsv'].includes(ext)) expect(item.output).toBe(file + '.xlsx')

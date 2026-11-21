@@ -20,6 +20,13 @@ export const th = {
   batchFailed: 'ล้มเหลว',
   batchConsent:
     'ใช้ AI นี้กับเอกสารที่เลือกทั้ง {n} รายการ ไฟล์ปัจจุบันต้องส่งคำขอประมาณ {calls} ครั้ง',
+  wikiLearn: 'เรียนรู้จากเอกสารฉบับสมบูรณ์',
+  wikiLearning: 'กำลังเลือกและประมวลผลไฟล์…',
+  wikiLearnAdded: 'เพิ่มลงในวิกิแล้ว',
+  wikiLearnDuplicate: 'มีอยู่ในวิกิแล้ว',
+  wikiLearnEmpty: 'ไม่มีข้อความที่อ่านได้',
+  wikiLearnFailed: 'เพิ่มลงในวิกิไม่สำเร็จ',
+  selectWikiReferences: 'เลือกเอกสารอ้างอิงจากวิกิ',
   wikiView: 'ดูวิกิ',
   wikiSetup: 'ใน Obsidian ให้เปิดโฟลเดอร์ด้านล่างเป็นคลัง แล้วกลับไปที่ {app}',
   wikiDownload: 'ติดตั้ง Obsidian ให้เสร็จ แล้วกลับไปที่ {app} เพื่อเปิดวิกิ',

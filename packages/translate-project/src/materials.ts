@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, writeFile, type FileHandle } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { parseGlossary, type GlossaryEntry } from './glossary'
 import type { ProjectFile } from './project-file'
@@ -64,6 +64,9 @@ export function removeSource(dir: string, file: string): Promise<ProjectFile> {
 }
 
 export interface ReferenceOptions {
+  /** The person selected this copy as an example for their project. */
+  wikiExample?: boolean
+  sourceHandle?: FileHandle
   /**
    * converts a reference file to markdown for the keyword index (the shell
    * passes file-parse's reader); absent: the index is left as it is
@@ -94,8 +97,12 @@ export function addReference(
     const avoid = basename(originalPath) === REFERENCE_MD_DIR ? [refs] : []
     if (avoid.length > 0)
       await mkdir(join(refs, REFERENCE_MD_DIR), { recursive: true }).catch(() => undefined)
-    const name = await copyIntoWithSuffix(refs, originalPath, avoid)
-    const next = { ...project, references: [...project.references, name] }
+    const name = await copyIntoWithSuffix(refs, originalPath, avoid, options.sourceHandle)
+    const next = {
+      ...project,
+      references: [...project.references, name],
+      ...(options.wikiExample ? { wikiReferences: [...(project.wikiReferences ?? []), name] } : {}),
+    }
     try {
       await saveProject(dir, next)
     } catch (e) {
@@ -116,7 +123,13 @@ export function removeReference(
     assertPlainName(file)
     const project = await loadProject(dir)
     if (!project.references.includes(file)) throw new NotListedError(file)
-    const next = { ...project, references: project.references.filter((r) => r !== file) }
+    const { wikiReferences, ...rest } = project
+    const remaining = wikiReferences?.filter((r) => r !== file)
+    const next = {
+      ...rest,
+      references: project.references.filter((r) => r !== file),
+      ...(remaining?.length ? { wikiReferences: remaining } : {}),
+    }
     await saveProject(dir, next)
     await rm(join(dir, 'references', file), { force: true })
     await syncQuietly(dir, next.references, options.convert)

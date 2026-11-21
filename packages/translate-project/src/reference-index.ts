@@ -512,6 +512,7 @@ export async function readConvertedReference(dir: string, file: string): Promise
  */
 async function indexLags(dir: string, files: readonly string[]): Promise<boolean> {
   const index = await loadIndex(dir)
+  if (index.files.length !== files.length) return true
   const known = new Map(index.files.map((f) => [f.file, f]))
   for (const file of files) {
     if (!isPlainName(file)) continue
@@ -526,6 +527,8 @@ async function indexLags(dir: string, files: readonly string[]): Promise<boolean
 }
 
 export interface QueryReferencesOptions {
+  /** Person-selected examples to consult even for a request without topical keywords. */
+  wikiExamples?: readonly string[]
   /**
    * converts a reference again when the index lags the folder (a reference
    * edited in place, or a project from before the index); absent: the index
@@ -546,7 +549,8 @@ interface LiveChunk extends ReferenceChunk {
  *   unranked (a small corpus always goes whole);
  * - otherwise BM25 (k1 1.2, b 0.75) over the unique terms of the first
  *   REFERENCE_QUERY_CHARS characters of the request, best first, each chunk
- *   that still fits; chunks sharing no term are never sent.
+ *   that still fits. Explicitly selected wiki notes may also contribute a
+ *   small sample across files when the request lacks matching terms.
  * With `options.convert`, a lagging index is brought up to date first (under
  * the project lock). A converted copy that no longer matches the index is
  * skipped until the next sync rebuilds it.
@@ -558,9 +562,11 @@ export async function queryReferences(
   options: QueryReferencesOptions = {},
 ): Promise<ReferenceChunk[]> {
   const convert = options.convert
+  let listed: Set<string> | undefined
   if (convert) {
     try {
       const project = await loadProject(dir)
+      listed = new Set(project.references)
       if (await indexLags(dir, project.references)) {
         await withProjectLock(dir, async () => {
           const current = await loadProject(dir)
@@ -573,18 +579,25 @@ export async function queryReferences(
   }
   const index = await loadIndex(dir)
   const chunks: LiveChunk[] = []
+  const wikiExamples = new Set(options.wikiExamples)
   for (const entry of index.files) {
-    if (entry.status !== 'converted') continue
+    if (entry.status !== 'converted' || (listed && !listed.has(entry.file))) continue
     const md = await convertedText(dir, entry)
     if (md === null) continue
+    const generatedExample =
+      wikiExamples.has(entry.file) && md.startsWith('---\nkind: final-style-example\n')
     for (const c of entry.chunks) {
+      const text = md.slice(c.offset, c.offset + c.length)
+      // Generated notes put the source excerpts under level-three headings. The
+      // front matter and catalog links only help navigation inside Obsidian.
+      if (generatedExample && !text.startsWith('### ')) continue
       const terms = c.terms && typeof c.terms === 'object' ? c.terms : {}
       let size = 0
       for (const v of Object.values(terms)) size += v
       chunks.push({
         file: entry.file,
         heading: c.heading,
-        text: md.slice(c.offset, c.offset + c.length),
+        text,
         terms,
         size,
       })
@@ -600,7 +613,7 @@ export async function queryReferences(
   if (total <= maxChars) return chunks.map(plain)
 
   const query = new Set(tokenize(text.slice(0, REFERENCE_QUERY_CHARS)))
-  if (query.size === 0 || chunks.length === 0) return []
+  if (chunks.length === 0 || (!query.size && !wikiExamples.size)) return []
   let sizes = 0
   for (const c of chunks) sizes += c.size
   const avg = sizes / chunks.length || 1
@@ -635,8 +648,26 @@ export async function queryReferences(
     .sort((a, b) => b.score - a.score || a.order - b.order)
   const picked: ReferenceChunk[] = []
   let used = 0
+  // A broad instruction such as “translate this” has no document keywords.
+  // Reserve up to one chunk's worth of room across the chosen wiki notes,
+  // taking their best matching excerpts first and then their earliest samples.
+  const included = new Set<LiveChunk>()
+  if (wikiExamples.size) {
+    const samples = new Map<string, LiveChunk>()
+    for (const { c } of scored)
+      if (wikiExamples.has(c.file) && !samples.has(c.file)) samples.set(c.file, c)
+    for (const c of chunks)
+      if (wikiExamples.has(c.file) && !samples.has(c.file)) samples.set(c.file, c)
+    const sampleBudget = Math.min(REFERENCE_CHUNK_CHARS, maxChars)
+    for (const c of samples.values()) {
+      if (used + c.text.length > sampleBudget) continue
+      picked.push(plain(c))
+      included.add(c)
+      used += c.text.length
+    }
+  }
   for (const { c } of scored) {
-    if (used + c.text.length > maxChars) continue
+    if (included.has(c) || used + c.text.length > maxChars) continue
     picked.push(plain(c))
     used += c.text.length
   }

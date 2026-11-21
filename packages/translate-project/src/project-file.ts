@@ -52,6 +52,8 @@ export type ProjectFile = {
   choices?: TranslationChoices
   sources: SourceEntry[]
   references: string[]
+  /** Project reference copies explicitly chosen as wiki examples. */
+  wikiReferences?: string[]
   glossaryFiles: string[]
 }
 
@@ -212,6 +214,9 @@ export function parseProjectFile(json: string): ProjectFile {
   if (raw.version !== 1) throw new ProjectFileError(`unsupported version: ${String(raw.version)}`)
   if (!Array.isArray(raw.sources)) throw new ProjectFileError('sources must be an array')
   const choices = parseChoices(raw.choices)
+  const references = strList(raw, 'references')
+  const selected = new Set(Array.isArray(raw.wikiReferences) ? raw.wikiReferences : [])
+  const wikiReferences = references.filter((name) => selected.has(name))
   return {
     version: 1,
     name: str(raw, 'name'),
@@ -222,7 +227,8 @@ export function parseProjectFile(json: string): ProjectFile {
     writingStyle: parseWritingStyle(raw.writingStyle),
     ...(choices ? { choices } : {}),
     sources: raw.sources.map(parseSource),
-    references: strList(raw, 'references'),
+    references,
+    ...(wikiReferences.length ? { wikiReferences } : {}),
     glossaryFiles: strList(raw, 'glossaryFiles'),
   }
 }

@@ -161,6 +161,7 @@ async function withReferences(
   try {
     chunks = await queryReferences(dir, paragraph, Math.min(DEFAULT_REFERENCE_CHARS, room), {
       convert,
+      wikiExamples: project.wikiReferences,
     })
   } catch {
     return none

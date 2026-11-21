@@ -20,6 +20,13 @@ export const de = {
   batchFailed: 'Fehlgeschlagen',
   batchConsent:
     'Diese KI für die {n} ausgewählten Dokumente verwenden. Für diese Datei sind etwa {calls} Anfragen nötig.',
+  wikiLearn: 'Aus fertigen Dokumenten lernen',
+  wikiLearning: 'Dateien werden ausgewählt und verarbeitet…',
+  wikiLearnAdded: 'Zum Wiki hinzugefügt',
+  wikiLearnDuplicate: 'Bereits im Wiki',
+  wikiLearnEmpty: 'Kein lesbarer Text',
+  wikiLearnFailed: 'Hinzufügen zum Wiki fehlgeschlagen',
+  selectWikiReferences: 'Referenzen aus dem Wiki auswählen',
   wikiView: 'Wiki anzeigen',
   wikiSetup:
     'Öffne in Obsidian den unten angegebenen Ordner als Vault. Kehre anschließend zu {app} zurück.',

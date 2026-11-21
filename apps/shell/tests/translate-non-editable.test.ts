@@ -1055,11 +1055,17 @@ it('runs a project batch through the PDF writer and OCR editor while keeping the
     writeFileSync(outputPath, await markdownToDocx('Translated OCR output'))
   })
   let destination = ''
+  const wikiNotes = join(root, 'wiki-notes')
+  mkdirSync(wikiNotes)
+  const wikiNote = join(wikiNotes, 'final-report.md')
+  writeFileSync(wikiNote, '# Sample\n\nPreferred annual report wording')
 
   const h = handlers(
     v,
     {},
     {
+      wikiReferenceDirectory: async () => wikiNotes,
+      showOpenDialog: async () => ({ canceled: false, filePaths: [wikiNote] }),
       batchMedia: {
         text: () => ({
           route: { provider: 'claude-code', model: '', paid: false },
@@ -1085,6 +1091,7 @@ it('runs a project batch through the PDF writer and OCR editor while keeping the
     },
   )
   await h.updateSettings({ dir, patch: { ocr: { kind: 'ai', provider: 'claude' } } })
+  await h.addWikiReferences(dir)
   await h.batchStart({ dir }, 10)
   await vi.waitFor(async () => expect((await h.batchStatus(dir))?.running).toBe(false), {
     timeout: 15_000,
@@ -1095,6 +1102,11 @@ it('runs a project batch through the PDF writer and OCR editor while keeping the
     expect.objectContaining({ state: 'saved', output: 'image (OCR).docx' }),
   ])
   expect(confirm.mock.calls).toHaveLength(2)
+  expect(sent.length).toBeGreaterThan(0)
+  for (const request of sent) {
+    expect(request.system).toContain('Preferred annual report wording')
+    expect(request.system).toContain('glossary and writing style take priority')
+  }
   expect(runBatchEditor).toHaveBeenCalledTimes(2)
   expect(
     pageText(await loadPdfium(), readFileSync(join(dir, 'output', 'report.de.pdf'))),

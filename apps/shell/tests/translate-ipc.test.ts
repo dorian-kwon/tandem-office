@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { readAppSettings, writeAppSettings } from '../src/main/app-settings'
+import { translationContextForFolder } from '../src/main/translate/context-injection'
 import { createTranslateHandlers, registerTranslateIpc } from '../src/main/translate/translate-ipc'
 import {
   GlossaryFormatError,
@@ -629,6 +630,37 @@ describe('registerTranslateIpc', () => {
     }
   })
 
+  it('coalesces finished-file pickers and only accepts files chosen by the shell', async () => {
+    const answers = new Map<string, (event: { sender: string }, ...args: unknown[]) => unknown>()
+    const picker = vi.fn(async () => ({
+      canceled: false,
+      filePaths: ['one.txt', 'one.txt', 'two.docx'],
+    }))
+    const learn = vi.fn(async () => [])
+    registerTranslateIpc(
+      { handle: (channel: string, fn: never) => void answers.set(channel, fn) } as never,
+      {
+        settingsPath: () => settingsPath,
+        now: () => clock,
+        showOpenDialog: picker,
+        learnFinalPaths: learn,
+      },
+      () => true,
+      (sender) => sender === 'shell',
+    )
+    const call = answers.get(TRANSLATE_CHANNELS.learnFinals)!
+    await expect(call({ sender: 'ocr-overlay' })).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+    })
+    await expect(
+      Promise.resolve().then(() => call({ sender: 'shell' }, ['arbitrary.txt'])),
+    ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+    expect(picker).not.toHaveBeenCalled()
+    await Promise.all([call({ sender: 'shell' }), call({ sender: 'shell' })])
+    expect(picker).toHaveBeenCalledTimes(1)
+    expect(learn).toHaveBeenCalledExactlyOnceWith(['one.txt', 'two.docx'])
+  })
+
   it('registers every channel once with the translate: prefix', () => {
     const seen: string[] = []
     registerTranslateIpc(
@@ -979,6 +1011,83 @@ describe('translation view handlers', () => {
     })
     const ok = viewHandlers()
     await expect(ok.h.setPaneHidden({ side: 'right', hidden: true })).resolves.toBeUndefined()
+  })
+})
+
+describe('selected wiki references', () => {
+  it('copies only the selected notes into the requesting project and its translation context', async () => {
+    const notes = join(root, 'final-documents')
+    mkdirSync(notes)
+    for (const [name, text] of [
+      ['style', 'Keep this wording'],
+      ['gloss', 'Keep that wording'],
+      ['private', 'Never share this'],
+    ]) {
+      writeFileSync(join(notes, name + '.md'), text)
+    }
+    writeFileSync(
+      join(notes, 'style.md'),
+      [
+        '---',
+        'kind: final-style-example',
+        'revision: private-hash',
+        '---',
+        '# Guide',
+        '',
+        '[Open catalog](../final-documents.md)',
+        '',
+        '### Line 1',
+        '',
+        '    Keep this wording',
+        '',
+      ].join('\n'),
+    )
+    const h = handlers({ wikiReferenceDirectory: async () => notes })
+    const langs = { sourceLang: 'en', targetLang: 'ko' }
+    const { dir } = await createIn(h, { name: 'A', ...langs })
+    const other = await createIn(h, { name: 'B', ...langs })
+    dialogResult = { canceled: true, filePaths: [] }
+    expect(await h.addWikiReferences(dir)).toBeNull()
+    dialogResult = {
+      canceled: false,
+      filePaths: ['style', 'gloss'].map((n) => join(notes, n + '.md')),
+    }
+    expect((await h.addWikiReferences(dir))?.references).toEqual(['style.md', 'gloss.md'])
+    expect(dialogOptions.at(-1)).toMatchObject({ properties: ['openFile', 'multiSelections'] })
+    writeFileSync(join(notes, 'style.md'), 'Later modification')
+    const lengthy = join(root, 'background.txt')
+    writeFileSync(lengthy, 'background information\n\n'.repeat(500))
+    await addPicked(h, dir, 'reference', lengthy)
+    const context = await translationContextForFolder(dir, { settingsPath }, '번역해줘')
+    expect(context?.references).toContain('Keep this wording')
+    expect(context?.references).toContain('Keep that wording')
+    expect(context?.references).not.toContain('private-hash')
+    expect(context?.references).not.toContain('Never share')
+    expect(context?.references).not.toContain('background information')
+    expect((await h.instructionsFor({ dir: other.dir, text: 'wording' })).references).toBe('')
+    await h.removeMaterial({ dir, kind: 'reference', file: 'style.md' })
+    expect((await h.instructionsFor({ dir, text: 'wording' })).references).not.toContain(
+      'Keep this',
+    )
+  })
+
+  it('rejects mixed selections outside the vault and linked notes before importing any', async () => {
+    const notes = join(root, 'notes')
+    mkdirSync(notes)
+    const inside = join(notes, 'example.md')
+    const outside = join(root, 'private.md')
+    const linked = join(notes, 'linked.md')
+    writeFileSync(inside, 'inside')
+    writeFileSync(outside, 'outside')
+    symlinkSync(outside, linked)
+    const h = handlers({ wikiReferenceDirectory: async () => notes })
+    const { dir } = await createIn(h, { name: 'A', sourceLang: 'en', targetLang: 'ko' })
+    for (const path of [outside, linked]) {
+      dialogResult = { canceled: false, filePaths: [inside, path] }
+      await expect(h.addWikiReferences(dir)).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+    }
+    expect((await h.getProject(dir)).references).toEqual([])
+    await expect(h.addWikiReferences(notes)).rejects.toMatchObject({ code: 'NOT_REGISTERED' })
   })
 })
 

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import { constants } from 'node:fs'
-import { copyFile, lstat, mkdir } from 'node:fs/promises'
+import { copyFile, lstat, mkdir, open, rm, type FileHandle } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import type { SourceEntry, SourceKind } from './project-file'
 
@@ -76,6 +76,7 @@ export async function copyIntoWithSuffix(
   destDir: string,
   originalPath: string,
   alsoAvoid: readonly string[] = [],
+  sourceHandle?: FileHandle,
 ): Promise<string> {
   await mkdir(destDir, { recursive: true })
   const base = basename(originalPath)
@@ -88,7 +89,23 @@ export async function copyIntoWithSuffix(
     if (skip) continue
     try {
       // COPYFILE_EXCL makes the clash check atomic.
-      await copyFile(originalPath, join(destDir, name), constants.COPYFILE_EXCL)
+      const destination = join(destDir, name)
+      if (sourceHandle) {
+        // Copy the file the caller opened and checked, even if it was since renamed.
+        const output = await open(destination, 'wx', 0o600)
+        try {
+          try {
+            await output.writeFile(sourceHandle.createReadStream({ autoClose: false }))
+          } finally {
+            await output.close()
+          }
+        } catch (error) {
+          await rm(destination, { force: true })
+          throw error
+        }
+      } else {
+        await copyFile(originalPath, destination, constants.COPYFILE_EXCL)
+      }
       return name
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e

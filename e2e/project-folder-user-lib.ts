@@ -128,9 +128,10 @@ export async function stubEverything(app: ElectronApplication): Promise<void> {
     dialog.showOpenDialog = (async (a: unknown, b?: unknown) => {
       const opts = optsOf(a, b)
       recorded.pickers.push(JSON.parse(JSON.stringify(opts)))
-      const picks = g.__pfPicks as string[]
+      const picks = g.__pfPicks as (string | string[])[]
       if (picks.length === 0) return { canceled: true, filePaths: [] }
-      return { canceled: false, filePaths: [picks.shift()!] }
+      const picked = picks.shift()!
+      return { canceled: false, filePaths: Array.isArray(picked) ? picked : [picked] }
     }) as typeof dialog.showOpenDialog
     shell.openPath = (async (p: string) => {
       recorded.shellOpens.push(p)
@@ -168,8 +169,11 @@ export async function queueBoxAnswers(app: ElectronApplication, answers: number[
   }, answers)
 }
 
-export async function queuePicks(app: ElectronApplication, picks: string[]): Promise<void> {
+export async function queuePicks(
+  app: ElectronApplication,
+  picks: (string | string[])[],
+): Promise<void> {
   await app.evaluate((_e, p) => {
-    ;((globalThis as Record<string, unknown>).__pfPicks as string[]).push(...p)
+    ;((globalThis as Record<string, unknown>).__pfPicks as (string | string[])[]).push(...p)
   }, picks)
 }

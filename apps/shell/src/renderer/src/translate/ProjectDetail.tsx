@@ -269,6 +269,25 @@ export function ProjectDetail({
     }
   }
 
+  const chooseWikiReferences = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const updated = await api.addWikiReferences(dir)
+      if (updated) {
+        adoptLists(updated)
+        loadRefStatus()
+      }
+    } catch (err) {
+      setError(translateErrorText(lang, err))
+      // Reflect any copies already saved before a later note failed.
+      await api.getProject(dir).then(adoptLists, () => {})
+      loadRefStatus()
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const upload = async (kind: TranslateMaterialKind) => {
     setBusy(true)
     setError(null)
@@ -660,14 +679,26 @@ export function ProjectDetail({
                       {s(title)}
                       <span className="translate-count">{files.length}</span>
                     </h3>
-                    <button
-                      type="button"
-                      className="projects-small translate-add"
-                      disabled={busy}
-                      onClick={() => void upload(kind)}
-                    >
-                      {s('addFiles')}
-                    </button>
+                    <div className="translate-material-actions">
+                      {kind === 'reference' && (
+                        <button
+                          type="button"
+                          className="projects-small translate-add"
+                          disabled={busy}
+                          onClick={() => void chooseWikiReferences()}
+                        >
+                          {s('selectWikiReferences')}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="projects-small translate-add"
+                        disabled={busy}
+                        onClick={() => void upload(kind)}
+                      >
+                        {s('addFiles')}
+                      </button>
+                    </div>
                   </div>
                   {files.length === 0 ? (
                     <p className="translate-none">{s('noFiles')}</p>

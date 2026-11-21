@@ -1,9 +1,12 @@
 import type { ProjectBatchStart, ProjectBatchSnapshot } from '../../shared/project-batch'
 import { ProjectBatchQueue, type ProjectBatchEditorRequest } from './project-batch'
 import { runBatchMedia, type ProjectBatchMediaDeps } from './project-batch-media'
+import { ROUTED_EXTENSIONS } from '../app-routing'
+import type { WikiFinalResult } from '../../shared/translate-api'
 import { isAdHocDir } from './adhoc-dirs'
 import { randomUUID } from 'node:crypto'
-import { lstat, mkdir, rm, stat } from 'node:fs/promises'
+import { constants, type BigIntStats } from 'node:fs'
+import { lstat, mkdir, open, realpath, rm, stat } from 'node:fs/promises'
 import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path'
 import type { IpcMain } from 'electron'
 import {
@@ -117,11 +120,13 @@ import {
  */
 
 export interface TranslateIpcDeps {
+  learnFinalPaths?: (paths: string[]) => Promise<WikiFinalResult[]>
   convertBatchWorkbook?: (sourcePath: string, outputPath: string) => Promise<void>
   runBatchEditor?: (request: ProjectBatchEditorRequest) => Promise<void>
   batchChanged?: (state: ProjectBatchSnapshot) => void
   batchMedia?: ProjectBatchMediaDeps
   runEditorRequest?: (output: string, prompt: string, signal: AbortSignal) => Promise<string>
+  wikiReferenceDirectory?: () => Promise<string>
   wiki?: Pick<TranslateApi, 'openWiki' | 'resumeWiki'>
   /** path of userData/app-settings.json (read per call: userData is final only after ready) */
   settingsPath: () => string
@@ -175,6 +180,7 @@ export const REFERENCE_VIEW_MAX_CHARS = 2_000_000
 export const INSTRUCTIONS_TEXT_LIMIT = 400_000
 
 export interface OpenDialogOptions {
+  defaultPath?: string
   title?: string
   properties: ('openFile' | 'openDirectory' | 'multiSelections' | 'createDirectory')[]
   filters?: { name: string; extensions: string[] }[]
@@ -249,6 +255,7 @@ export function createTranslateHandlers(deps: TranslateIpcDeps) {
     getProject: guard(raw.getProject),
     updateSettings: guard(raw.updateSettings),
     rename: guard(raw.rename),
+    addWikiReferences: guard(raw.addWikiReferences),
     addMaterial: guard(raw.addMaterial),
     removeMaterial: guard(raw.removeMaterial),
     pickMaterials: guard(raw.pickMaterials),
@@ -797,6 +804,63 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       })
     },
 
+    async addWikiReferences(dirArg: string): Promise<ProjectFile | null> {
+      const dir = registeredDir(dirArg)
+      if (!deps.wikiReferenceDirectory)
+        throw new TranslateIpcError('INVALID_ARGUMENT', 'translation wiki is unavailable')
+      const notes = await realpath(await deps.wikiReferenceDirectory())
+      const picked = await deps.showOpenDialog({
+        defaultPath: notes,
+        properties: ['openFile', 'multiSelections'],
+        filters: [{ name: 'Markdown', extensions: ['md'] }],
+      })
+      if (picked.canceled || picked.filePaths.length === 0) return null
+      const paths = new Map<string, BigIntStats>()
+      for (const path of picked.filePaths) {
+        const info = await lstat(path, { bigint: true }).catch(() => null)
+        if (
+          !isAbsolute(path) ||
+          extname(path).toLowerCase() !== '.md' ||
+          !info?.isFile() ||
+          info.nlink !== 1n
+        )
+          throw new TranslateIpcError('INVALID_ARGUMENT', 'select a note in the translation wiki')
+        const actual = await realpath(path)
+        if (fold(dirname(actual)) !== fold(notes))
+          throw new TranslateIpcError('INVALID_ARGUMENT', 'select a note in the translation wiki')
+        paths.set(actual, info)
+      }
+      registeredDir(dir)
+      const refs = join(dir, 'references')
+      if (
+        !(await lstat(refs)).isDirectory() ||
+        fold(await realpath(refs)) !== fold(join(await realpath(dir), 'references'))
+      )
+        throw new TranslateIpcError('INVALID_ARGUMENT', 'invalid reference folder')
+      let project = await loadProject(dir)
+      for (const [path, selected] of paths) {
+        const handle = await open(
+          path,
+          constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0),
+        )
+        try {
+          const current = await handle.stat({ bigint: true })
+          if (
+            !current.isFile() ||
+            current.nlink !== 1n ||
+            current.dev !== selected.dev ||
+            current.ino !== selected.ino
+          )
+            throw new TranslateIpcError('INVALID_ARGUMENT', 'the selected wiki note changed')
+          project = await addReference(dir, path, { wikiExample: true, sourceHandle: handle })
+        } finally {
+          await handle.close()
+        }
+      }
+      await refreshReferences(dir, convert)
+      return project
+    },
+
     async addMaterial(args: TranslateAddMaterialArgs): Promise<ProjectFile> {
       const dir = registeredDir(args?.dir)
       const kind = requireKind(args.kind)
@@ -1216,6 +1280,33 @@ export function registerTranslateIpc(
     }
     return id
   }
+  let learning: Promise<WikiFinalResult[]> | undefined
+  handle(
+    TRANSLATE_CHANNELS.learnFinals,
+    (_event, ...args) => {
+      if (args.length || !deps.learnFinalPaths)
+        throw new TranslateIpcError('INVALID_ARGUMENT', 'invalid finished-document import')
+      const learn = deps.learnFinalPaths
+      learning ??= (async () => {
+        const extensions = Object.values(ROUTED_EXTENSIONS).flat()
+        const picked = await deps.showOpenDialog({
+          properties: ['openFile', 'multiSelections'],
+          filters: [{ name: extensions.map((ext) => ext.toUpperCase()).join(', '), extensions }],
+        })
+        if (picked.canceled || !picked.filePaths.length) return []
+        return learn([...new Set(picked.filePaths)])
+      })().finally(() => {
+        learning = undefined
+      })
+      return learning
+    },
+    isWikiSender,
+  )
+  handle(
+    TRANSLATE_CHANNELS.addWikiReferences,
+    (_e, dir: string) => h.addWikiReferences(dir),
+    isWikiSender,
+  )
   for (const action of ['openWiki', 'resumeWiki'] as const) {
     handle(
       TRANSLATE_CHANNELS[action],

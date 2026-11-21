@@ -20,6 +20,13 @@ export const nl = {
   batchFailed: 'Mislukt',
   batchConsent:
     'Gebruik deze AI voor de {n} gekozen documenten. Dit bestand vereist ongeveer {calls} aanvragen.',
+  wikiLearn: 'Leren van definitieve documenten',
+  wikiLearning: 'Bestanden selecteren en verwerken…',
+  wikiLearnAdded: 'Toegevoegd aan de wiki',
+  wikiLearnDuplicate: 'Staat al in de wiki',
+  wikiLearnEmpty: 'Geen leesbare tekst',
+  wikiLearnFailed: 'Toevoegen aan de wiki mislukt',
+  selectWikiReferences: 'Referenties uit de wiki kiezen',
   wikiView: 'Wiki bekijken',
   wikiSetup: 'Open de onderstaande map als kluis in Obsidian en ga dan terug naar {app}.',
   wikiDownload: 'Rond de installatie van Obsidian af en ga terug naar {app} om de wiki te openen.',

@@ -20,6 +20,13 @@ export const id = {
   batchFailed: 'Gagal',
   batchConsent:
     'Gunakan AI ini untuk {n} dokumen yang dipilih. Berkas ini memerlukan sekitar {calls} permintaan.',
+  wikiLearn: 'Pelajari dokumen final',
+  wikiLearning: 'Memilih dan memproses berkas…',
+  wikiLearnAdded: 'Ditambahkan ke wiki',
+  wikiLearnDuplicate: 'Sudah ada di wiki',
+  wikiLearnEmpty: 'Tidak ada teks yang dapat dibaca',
+  wikiLearnFailed: 'Gagal menambahkan ke wiki',
+  selectWikiReferences: 'Pilih referensi dari wiki',
   wikiView: 'Lihat wiki',
   wikiSetup: 'Di Obsidian, buka folder di bawah sebagai vault, lalu kembali ke {app}.',
   wikiDownload: 'Selesaikan pemasangan Obsidian, lalu kembali ke {app} untuk membuka wiki.',

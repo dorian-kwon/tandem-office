@@ -20,6 +20,13 @@ export const ms = {
   batchFailed: 'Gagal',
   batchConsent:
     'Gunakan AI ini untuk {n} dokumen yang dipilih. Fail ini memerlukan kira-kira {calls} permintaan.',
+  wikiLearn: 'Belajar daripada dokumen akhir',
+  wikiLearning: 'Memilih dan memproses fail…',
+  wikiLearnAdded: 'Ditambahkan ke wiki',
+  wikiLearnDuplicate: 'Sudah ada dalam wiki',
+  wikiLearnEmpty: 'Tiada teks yang boleh dibaca',
+  wikiLearnFailed: 'Gagal menambah ke wiki',
+  selectWikiReferences: 'Pilih rujukan daripada wiki',
   wikiView: 'Lihat wiki',
   wikiSetup: 'Dalam Obsidian, buka folder di bawah sebagai vault, kemudian kembali ke {app}.',
   wikiDownload: 'Selesaikan pemasangan Obsidian, kemudian kembali ke {app} untuk membuka wiki.',

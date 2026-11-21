@@ -365,6 +365,13 @@ folder and passes its start page to the Obsidian app on your PC. While setup
 is pending, Tandem stores the setup stage and its timestamp in your profile
 so you can continue after installation.
 
+**Learn from final documents** reads the files you select on this PC and saves
+up to eight excerpts per file in the vault with the filename and extracted line
+numbers. **Choose wiki references** copies the selected notes into that project's
+reference folder. During translation, the project can send excerpts from those
+copies to the AI provider within the same 6,000-character reference budget,
+including a style example when your request has no matching keywords.
+
 ## Whether your content is used for AI training
 
 Tandem Office does not decide this. When you use a subscription, your content is

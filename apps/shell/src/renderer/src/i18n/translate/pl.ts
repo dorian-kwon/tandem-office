@@ -20,6 +20,13 @@ export const pl = {
   batchFailed: 'Błąd',
   batchConsent:
     'Użyj tego AI dla wybranych dokumentów ({n}). Ten plik wymaga około {calls} wywołań.',
+  wikiLearn: 'Ucz się z gotowych dokumentów',
+  wikiLearning: 'Wybieranie i przetwarzanie plików…',
+  wikiLearnAdded: 'Dodano do wiki',
+  wikiLearnDuplicate: 'Już jest w wiki',
+  wikiLearnEmpty: 'Brak tekstu do odczytu',
+  wikiLearnFailed: 'Nie udało się dodać do wiki',
+  selectWikiReferences: 'Wybierz materiały z wiki',
   wikiView: 'Zobacz wiki',
   wikiSetup: 'W Obsidianie otwórz poniższy folder jako skarbiec, a następnie wróć do {app}.',
   wikiDownload: 'Dokończ instalację Obsidiana i wróć do {app}, aby otworzyć wiki.',

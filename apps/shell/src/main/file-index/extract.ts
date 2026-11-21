@@ -20,7 +20,7 @@ export type Extracted =
 
 const MARKUP_EXTS = new Set(['html', 'htm'])
 
-function stripMarkup(html: string): string {
+export function stripMarkup(html: string): string {
   return html
     .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')

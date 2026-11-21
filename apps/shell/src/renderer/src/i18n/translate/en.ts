@@ -20,6 +20,13 @@ export const en = {
   batchFailed: 'Failed',
   batchConsent:
     'Use this AI for the selected batch of {n} documents. This file needs about {calls} calls.',
+  wikiLearn: 'Learn from final documents',
+  wikiLearning: 'Selecting and processing files…',
+  wikiLearnAdded: 'Added to the wiki',
+  wikiLearnDuplicate: 'Already in the wiki',
+  wikiLearnEmpty: 'No readable text',
+  wikiLearnFailed: 'Could not add to the wiki',
+  selectWikiReferences: 'Choose wiki references',
   wikiView: 'View wiki',
   wikiSetup:
     'In Obsidian, choose “Open folder as vault” and select the folder below. Then return to {app}.',

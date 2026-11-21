@@ -18,7 +18,7 @@ function errorCode(error: unknown): unknown {
   return error instanceof Error && 'code' in error ? error.code : undefined
 }
 
-async function ensureDirectory(path: string): Promise<void> {
+export async function ensureWikiDirectory(path: string): Promise<void> {
   await mkdir(path, { recursive: true, mode: 0o700 })
   if (!(await lstat(path)).isDirectory()) throw new Error('Expected a translation wiki directory')
 }
@@ -33,8 +33,12 @@ async function hasNote(path: string): Promise<boolean> {
   }
 }
 
-async function seedNote(stagingDir: string, path: string, content: string): Promise<void> {
-  if (await hasNote(path)) return
+export async function seedNote(
+  stagingDir: string,
+  path: string,
+  content: string,
+): Promise<boolean> {
+  if (await hasNote(path)) return false
 
   // Publish the completed note without replacing one created by Obsidian or another caller.
   // Stage outside the vault so Obsidian never indexes an unfinished note.
@@ -50,9 +54,11 @@ async function seedNote(stagingDir: string, path: string, content: string): Prom
     }
   } catch (error) {
     if (errorCode(error) !== 'EEXIST' || !(await hasNote(path))) throw error
+    return false
   } finally {
     await unlink(temp)
   }
+  return true
 }
 
 export async function prepareTranslationVault(
@@ -63,8 +69,8 @@ export async function prepareTranslationVault(
   const wikiDir = join(profileDir, 'translation-wiki')
   const vaultPath = join(wikiDir, 'vault')
   const indexPath = join(vaultPath, 'index.md')
-  await ensureDirectory(wikiDir)
-  await ensureDirectory(vaultPath)
+  await ensureWikiDirectory(wikiDir)
+  await ensureWikiDirectory(vaultPath)
 
   const [title, ...labels] = wikiLabels[lang]
   const links = categoryFiles.map((file, index) => `- [${labels[index]}](${file})`)

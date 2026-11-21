@@ -20,6 +20,13 @@ export const ko = {
   batchFailed: '실패',
   batchConsent:
     '선택한 문서 {n}개에 같은 AI를 계속 사용합니다. 현재 파일의 예상 호출 수는 {calls}회입니다.',
+  wikiLearn: '완성본 학습시키기',
+  wikiLearning: '파일 선택 및 처리 중…',
+  wikiLearnAdded: '위키에 추가됨',
+  wikiLearnDuplicate: '이미 위키에 있음',
+  wikiLearnEmpty: '읽을 수 있는 본문 없음',
+  wikiLearnFailed: '추가 실패',
+  selectWikiReferences: '위키에서 참고자료 선택',
   wikiView: '위키 보기',
   wikiSetup:
     'Obsidian에서 ‘폴더를 보관함으로 열기’를 선택하고 아래 폴더를 여세요. 그런 다음 {app}로 돌아오세요.',

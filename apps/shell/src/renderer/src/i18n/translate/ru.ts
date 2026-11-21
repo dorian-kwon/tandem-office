@@ -20,6 +20,13 @@ export const ru = {
   batchFailed: 'Ошибка',
   batchConsent:
     'Использовать этот ИИ для выбранных документов ({n}). Для текущего файла потребуется около {calls} запросов.',
+  wikiLearn: 'Учиться на готовых документах',
+  wikiLearning: 'Выбор и обработка файлов…',
+  wikiLearnAdded: 'Добавлено в вики',
+  wikiLearnDuplicate: 'Уже есть в вики',
+  wikiLearnEmpty: 'Нет читаемого текста',
+  wikiLearnFailed: 'Не удалось добавить в вики',
+  selectWikiReferences: 'Выбрать материалы из вики',
   wikiView: 'Открыть вики',
   wikiSetup: 'В Obsidian откройте указанную ниже папку как хранилище, затем вернитесь в {app}.',
   wikiDownload: 'Завершите установку Obsidian и вернитесь в {app}, чтобы открыть вики.',

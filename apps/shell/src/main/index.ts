@@ -145,7 +145,9 @@ import { projectEditorTurn } from './translate/project-editor-turn'
 import type { ProjectBatchEditorRequest } from './translate/project-batch'
 import { registerTranslateIpc } from './translate/translate-ipc'
 import { createOpenWikiService } from './translate/open-wiki'
-import { prepareTranslationVault } from './translate/wiki-vault'
+import { learnFinalPaths } from './translate/wiki-import'
+import { ensureWikiDirectory, prepareTranslationVault } from './translate/wiki-vault'
+import { FINAL_NOTES_FOLDER } from './translate/wiki-final-notes'
 import { createOcrService, type OcrServiceDeps } from './translate/ocr'
 import { createOcrChatService, type OcrChatService } from './translate/ocr-chat'
 import { rememberTranslationChoice } from './translate/choices'
@@ -771,15 +773,16 @@ const SIDECAR_BIN = app.isPackaged
   ? join(process.resourcesPath, 'native', SIDECAR_EXE)
   : join(APPS_ROOT, 'sheets', 'native', 'xlsx-engine', 'target', 'release', SIDECAR_EXE)
 
+function bundledCliEntry(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'cli', 'genoffice.cjs')
+    : join(APPS_ROOT, '..', 'packages', 'cli', 'dist', 'genoffice.cjs')
+}
+
 let cliRunner: ReturnType<typeof createCliRunner> | null = null
 /** the bundled CLI on the app's own Node runtime (MCP headless tools, Ask AI create_document) */
 function bundledCliRunner(): ReturnType<typeof createCliRunner> {
-  cliRunner ??= createCliRunner({
-    executable: process.execPath,
-    entry: app.isPackaged
-      ? join(process.resourcesPath, 'cli', 'genoffice.cjs')
-      : join(APPS_ROOT, '..', 'packages', 'cli', 'dist', 'genoffice.cjs'),
-  })
+  cliRunner ??= createCliRunner({ executable: process.execPath, entry: bundledCliEntry() })
   return cliRunner
 }
 
@@ -9585,6 +9588,12 @@ registerTranslateIpc(
         return result.response === 1
       },
     },
+    wikiReferenceDirectory: async () => {
+      const { vaultPath } = await prepareTranslationVault(app.getPath('userData'), currentLang())
+      const folder = join(vaultPath, FINAL_NOTES_FOLDER)
+      await ensureWikiDirectory(folder)
+      return folder
+    },
     wiki: createOpenWikiService({
       userDataPath: app.getPath('userData'),
       appDataPath: app.getPath('appData'),
@@ -9593,6 +9602,12 @@ registerTranslateIpc(
       handlerExecutable: async () => (await app.getApplicationInfoForProtocol('obsidian://')).path,
       openExternal: (url) => shell.openExternal(url),
     }),
+    learnFinalPaths: (paths) =>
+      learnFinalPaths(paths, {
+        profileDir: app.getPath('userData'),
+        lang: currentLang(),
+        cliEntry: bundledCliEntry(),
+      }),
     runEditorRequest: runProjectEditorRequest,
     settingsPath: APP_SETTINGS_PATH,
     now: () => Date.now(),

@@ -20,6 +20,13 @@ export const cs = {
   batchFailed: 'Selhalo',
   batchConsent:
     'Použít tuto AI pro vybrané dokumenty ({n}). Aktuální soubor vyžaduje přibližně {calls} požadavků.',
+  wikiLearn: 'Učit se z hotových dokumentů',
+  wikiLearning: 'Výběr a zpracování souborů…',
+  wikiLearnAdded: 'Přidáno do wiki',
+  wikiLearnDuplicate: 'Již je ve wiki',
+  wikiLearnEmpty: 'Žádný čitelný text',
+  wikiLearnFailed: 'Přidání do wiki se nezdařilo',
+  selectWikiReferences: 'Vybrat podklady z wiki',
   wikiView: 'Zobrazit wiki',
   wikiSetup:
     'V Obsidianu otevřete níže uvedenou složku jako trezor a potom se vraťte do aplikace {app}.',

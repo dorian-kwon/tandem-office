@@ -72,6 +72,8 @@ beforeEach(() => {
   document.body.append(host)
   root = createRoot(host)
   api = {
+    learnFinals: vi.fn().mockResolvedValue([]),
+    addWikiReferences: vi.fn().mockResolvedValue(null),
     openWiki: vi.fn().mockResolvedValue({ status: 'opened', vaultPath: '/wiki' }),
     resumeWiki: vi.fn().mockResolvedValue({ status: 'idle', vaultPath: '' }),
     list: vi.fn().mockResolvedValue([]),
@@ -166,6 +168,61 @@ describe('ProjectList', () => {
     expect(empty).not.toBeNull()
     expect(empty.textContent).toContain('No translation projects yet')
     expect(within(empty, 'New project')).toBeTruthy()
+  })
+
+  it('learns from selected finals once and keeps the last report if a later picker is cancelled', async () => {
+    type Results = Awaited<ReturnType<TranslateApi['learnFinals']>>
+    let finish!: (results: Results) => void
+    api.learnFinals.mockImplementationOnce(
+      () =>
+        new Promise<Results>((resolve) => {
+          finish = resolve
+        }),
+    )
+    await render(ProjectList, { onOpen: vi.fn() })
+    const button = buttonByText('Learn from final documents')
+    await act(async () => {
+      button.click()
+      button.click()
+    })
+    expect(api.learnFinals).toHaveBeenCalledTimes(1)
+    expect(button.disabled).toBe(true)
+    expect(button.getAttribute('aria-busy')).toBe('true')
+    await act(async () =>
+      finish([
+        { name: 'guide.docx', status: 'added' },
+        { name: 'guide.docx', status: 'duplicate' },
+        { name: 'scan.pdf', status: 'empty' },
+        { name: 'broken.hwpx', status: 'failed' },
+      ]),
+    )
+    expect(button.disabled).toBe(false)
+    const rows = () =>
+      [...host.querySelectorAll('.translate-learn-results li')].map((row) => row.textContent)
+    const report = [
+      'guide.docx — Added to the wiki',
+      'guide.docx — Already in the wiki',
+      'scan.pdf — No readable text',
+      'broken.hwpx — Could not add to the wiki',
+    ]
+    expect(rows()).toEqual(report)
+    await click(button)
+    expect(rows()).toEqual(report)
+    await click(buttonByText('Close'))
+    expect(rows()).toEqual([])
+  })
+
+  it('restores the learn button and shows a localized error when the file picker fails', async () => {
+    api.learnFinals.mockRejectedValueOnce(new Error('native path must not leak'))
+    await render(ProjectList, { onOpen: vi.fn() })
+    const button = buttonByText('Learn from final documents')
+    await click(button)
+    expect(button.disabled).toBe(false)
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe(
+      'Something went wrong. Try again.',
+    )
+    await click(button)
+    expect(host.querySelector('[role="alert"]')).toBeNull()
   })
 
   it('list shows not-found projects as disabled with a remove button', async () => {
@@ -354,6 +411,16 @@ describe('ProjectDetail', () => {
     expect(sections[0]?.textContent).not.toContain('ref.txt')
     expect(sections[1]?.textContent).toContain('ref.txt')
     expect(sections[2]?.textContent).toContain('terms.csv')
+  })
+
+  it('selects multiple wiki notes for just the current project', async () => {
+    api.addWikiReferences.mockResolvedValue(project({ references: ['Guide.md', 'Brief.md'] }))
+    await render(ProjectDetail, props())
+    const references = host.querySelector('[data-material-kind="reference"]') as HTMLElement
+    await click(within(references, 'Choose wiki references'))
+    expect(api.addWikiReferences).toHaveBeenCalledWith('/p/a')
+    expect(references.textContent).toContain('Guide.md')
+    expect(references.textContent).toContain('Brief.md')
   })
 
   it('each uploaded item has its own delete button', async () => {

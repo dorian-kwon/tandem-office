@@ -20,6 +20,13 @@ export const ja = {
   batchFailed: '失敗',
   batchConsent:
     '選択した {n} 件の文書にこの AI を使用します。このファイルの呼び出し回数は約 {calls} 回です。',
+  wikiLearn: '完成稿から学習',
+  wikiLearning: 'ファイルの選択・処理中…',
+  wikiLearnAdded: 'ウィキに追加しました',
+  wikiLearnDuplicate: 'すでにウィキにあります',
+  wikiLearnEmpty: '読み取れる本文がありません',
+  wikiLearnFailed: 'ウィキに追加できませんでした',
+  selectWikiReferences: 'ウィキから参考資料を選択',
   wikiView: 'ウィキを表示',
   wikiSetup:
     'Obsidian で「保管庫としてフォルダを開く」を選び、下のフォルダを開いてから {app} に戻ってください。',

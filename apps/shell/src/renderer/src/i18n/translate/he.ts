@@ -20,6 +20,13 @@ export const he = {
   batchFailed: 'נכשל',
   batchConsent:
     'השתמשו בבינה המלאכותית הזו עבור {n} המסמכים שנבחרו. לקובץ הנוכחי נדרשות בערך {calls} בקשות.',
+  wikiLearn: 'למידה ממסמכים סופיים',
+  wikiLearning: 'בחירת קבצים ועיבודם…',
+  wikiLearnAdded: 'נוסף לוויקי',
+  wikiLearnDuplicate: 'כבר קיים בוויקי',
+  wikiLearnEmpty: 'אין טקסט קריא',
+  wikiLearnFailed: 'ההוספה לוויקי נכשלה',
+  selectWikiReferences: 'בחירת חומרי עזר מהוויקי',
   wikiView: 'הצגת הוויקי',
   wikiSetup: 'ב־Obsidian יש לפתוח את התיקייה שלהלן ככספת ואז לחזור אל {app}.',
   wikiDownload: 'לאחר סיום ההתקנה של Obsidian יש לחזור אל {app} כדי לפתוח את הוויקי.',

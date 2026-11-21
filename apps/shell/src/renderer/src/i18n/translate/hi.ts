@@ -20,6 +20,13 @@ export const hi = {
   batchFailed: 'विफल',
   batchConsent:
     'चुने हुए {n} दस्तावेज़ों के लिए इस AI का उपयोग करें। इस फ़ाइल के लिए लगभग {calls} अनुरोध चाहिए।',
+  wikiLearn: 'अंतिम दस्तावेज़ों से सीखें',
+  wikiLearning: 'फ़ाइलें चुनी और संसाधित की जा रही हैं…',
+  wikiLearnAdded: 'विकी में जोड़ा गया',
+  wikiLearnDuplicate: 'विकी में पहले से मौजूद है',
+  wikiLearnEmpty: 'पढ़ने योग्य टेक्स्ट नहीं है',
+  wikiLearnFailed: 'विकी में नहीं जोड़ा जा सका',
+  selectWikiReferences: 'विकी से संदर्भ चुनें',
   wikiView: 'विकी देखें',
   wikiSetup: 'Obsidian में नीचे दिए गए फ़ोल्डर को वॉल्ट के रूप में खोलें। फिर {app} पर लौटें।',
   wikiDownload: 'Obsidian इंस्टॉल करने के बाद विकी खोलने के लिए {app} पर लौटें।',

@@ -719,8 +719,10 @@ const translateApi: TranslateApi = {
       ipcRenderer.removeListener(TRANSLATE_EVENTS.batchChanged, receive)
     }
   },
+  addWikiReferences: (dir) => ipcRenderer.invoke(TRANSLATE_CHANNELS.addWikiReferences, dir),
   openWiki: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.openWiki),
   resumeWiki: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.resumeWiki),
+  learnFinals: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.learnFinals),
   list: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.list),
   recent: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.recent),
   adoptOutputAsSource: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.adoptOutputAsSource, args),

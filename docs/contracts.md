@@ -487,6 +487,8 @@ metadata:
 
 **`project.json`** — `version`(1만 받는다), `name`, `sourceLang`, `targetLang`(언어 코드), `projectPrompt`, `ocr`(`{ "kind": "off" }` 또는 `{ "kind": "ai", "provider": "claude" | "chatgpt" }`, 기본은 claude), `writingStyle`(`serialComma`·`quotePunctuation`·`italics`·`custom`; `italics`는 `default`(규칙 없음, 필드가 없는 옛 파일이 읽히는 값)·`apply`(새 프로젝트의 시작값: 작품 제목·외래어·학명·배 이름·언급된 낱말을 번역 언어가 기울임체로 쓰는 경우 문장 안에서 `<i>…</i>`로 기울이게 한다)·`off`(기울임체를 더하지 않음), 알 수 없는 값은 거절), `sources`(`{ file, sha256, kind }`의 목록. `file`은 `source/` 안의 파일 이름, `sha256`은 더할 때의 해시, `kind`는 `editable`·`pdf`·`scan`·`image`), `references`·`glossaryFiles`(파일 이름 목록). 모르는 키는 읽을 때 버리고, 파일 이름이 아닌 값(경로 구분자, `.`, `..`)이 있으면 파일 전체를 망가진 것으로 본다. 시스템 프롬프트는 여기에 없다.
 
+`wikiReferences`는 프로젝트에서 직접 선택한 위키 참고자료의 파일 이름 목록이다. `references`에 있는 사본만 포함하며 오래된 프로젝트에는 생략된다. 자료 전체가 한 요청의 상한을 넘으면 선택한 위키 노트에서 최대 1,200자의 예문을 먼저 담고 나머지 공간에는 요청 단어와 맞는 참고자료를 담는다.
+
 **`glossary.json`** — `glossary/`의 파일들을 차례대로 읽어 합친 항목 목록 `[{ "source", "target", "note"? }]`. 원어와 번역어가 같은 항목은 한 번만 둔다. 단어집을 더하거나 뺄 때마다 다시 만든다. 없으면 단어집이 없는 것이다. 단어집 파일은 첫 열이 원어, 둘째 열이 번역어, 셋째 열이 메모이고, 첫 줄이 두 열의 이름(source/target, term/translation, 원어/번역어 등)이면 건너뛴다. 글은 UTF-16(바이트 순서 표시가 있거나 0 바이트로 알아볼 때), UTF-8, CP949 순으로 읽는다.
 
 **`source-kinds.json`** — `{ "version": 1, "chosen": { "<source 파일 이름>": { "sha256", "kind" } } }`. 사람이 PDF를 "텍스트 PDF"나 "스캔 PDF"로 고친 선택이다. 해시가 같은 사본에만 적용되고, 고르는 길은 `project.json`의 `kind`가 이긴다. 없거나 망가졌으면 고른 것이 없다.
