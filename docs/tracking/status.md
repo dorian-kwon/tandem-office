@@ -1,5 +1,9 @@
 # 진행 현황
 
+Tandem Office **0.15.10 (2026-11-21)**을 Windows x64 정식 릴리스로 공개했다. 배포 커밋은 `9920b24e8`이다. AI 채팅에서 변경 위치로 이동할 수 있고, 64MiB가 넘는 지원 문서도 본문으로 검색할 수 있다. 한글 문서의 중첩 표 편집과 여러 쪽에 걸친 표 저장을 개선했다. [릴리스와 설치 파일](https://github.com/dorian-kwon/tandem-office/releases/tag/v0.15.10)
+
+빠른 릴리스 검사 51건과 Windows 패키지의 Markdown·CSV → PDF 내보내기가 통과했다. 공개 설치 파일, 블록맵, 업데이트 피드의 SHA-256과 설치 파일의 SHA-512가 일치했다. 최신 피드의 버전과 안내문, 설치 파일과 피드의 빌드 출처 증명을 확인했다. 이번 Windows 설치본에는 Google Drive 연결 설정이 없다. 실제 Windows PC에서 이전 버전을 자동 업데이트한 뒤 재시작하는 경로는 확인 과제로 남았다. [Windows 빌드](https://github.com/dorian-kwon/tandem-office/actions/runs/44867453750)
+
 Tandem Office **0.15.9 (2026-11-20)**를 Windows x64 정식 릴리스로 공개했다. 배포 커밋은 `da2fed79a`다. 번역 화면에서 Obsidian 위키를 열 수 있고, PDF·EPUB 전체 번역이 앞에서 확정한 번역을 참고한다. [릴리스와 설치 파일](https://github.com/dorian-kwon/tandem-office/releases/tag/v0.15.9)
 
 Windows 빌드에서 패키지의 Markdown·CSV → PDF 내보내기가 통과했다. 공개한 설치 파일·블록맵·업데이트 피드의 SHA-256과 설치 파일의 SHA-512를 대조했다. 피드의 버전과 릴리스 안내문, 설치 파일 및 피드의 빌드 출처 증명을 확인했다. 이 설치본은 빌드 환경에 Google Drive 클라이언트 설정이 없어 Drive 연결을 제공하지 않는다. Windows에서 Obsidian을 직접 실행하는 과정과 구버전 위 재설치는 별도 확인 대상으로 남았다. [Windows 빌드](https://github.com/dorian-kwon/tandem-office/actions/runs/44592231539)
