@@ -40,3 +40,8 @@ export function bytesMatchFormat(bytes: Uint8Array, format: HwpFormat): boolean 
 export function withFormatExtension(path: string, fallback: HwpFormat): string {
   return /\.(hwpx?)$/i.test(path) ? path : `${path}.${fallback}`
 }
+
+/** A verified-save fallback always opens a new HWPX target, including on dialogs that omit an extension. */
+export function hwpxCopyPath(path: string): string {
+  return /\.hwpx$/i.test(path) ? path : path.replace(/\.hwp$/i, '') + '.hwpx'
+}

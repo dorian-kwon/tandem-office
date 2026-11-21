@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { Editor } from '@tiptap/core'
+import { findChangedBlock } from '@genoffice/agent-core'
+import { createMarkdownSkill } from '../src/renderer/ai/markdown-skill'
 import { buildExtensions } from '../src/renderer/editor/extensions'
 import { buildDocContext, executeTool, markDocSeen } from '../src/renderer/ai/tools'
 import { deriveAutoFileName } from '../src/renderer/App'
@@ -62,6 +64,20 @@ describe('apply_ops insertContent', () => {
     expect(result.mutated).toBe(true)
     expect(editor.getMarkdown()).toContain('# Hi')
     expect(editor.state.doc.childCount).toBe(2)
+  })
+
+  it('follows the edited Markdown block after an insertion and ignores its removal', async () => {
+    const editor = createEditor('# Title\n\nBody')
+    const skill = createMarkdownSkill(() => editor)
+    skill.buildContext?.()
+    const changed = await skill.executeTool(insert(1, 'Added by AI'))
+    const place = changed.changeLocations?.[0]
+    expect(place).toMatchObject({ kind: 'block', index: 2 })
+    if (place?.kind !== 'block') throw new Error('Missing change location')
+    executeTool(editor, insert(0, 'Inserted above'))
+    expect(findChangedBlock(editor.state.doc, place)).toBe(3)
+    executeTool(editor, ops({ op: 'replaceBlocks', target: { start: 3 }, markdown: '' }))
+    expect(findChangedBlock(editor.state.doc, place)).toBeNull()
   })
 
   it('inserts after the given block', () => {

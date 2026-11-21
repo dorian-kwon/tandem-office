@@ -20,6 +20,9 @@ export const HWP_CHANNELS = {
   previewRequest: 'hwp:preview-request',
   fileCommand: 'hwp:file-command',
   printPages: 'hwp:print-pages',
+  isHeadlessExport: 'hwp:is-headless-export',
+  /** renderer → main ({ ok, error? }): the headless export is done */
+  headlessExportDone: 'hwp:headless-export-done',
   dirtyChanged: 'hwp:dirty-changed',
   closeSaveRequest: 'hwp:close-save-request',
   closeSaveResult: 'hwp:close-save-result',
@@ -90,6 +93,7 @@ export const AI_CHANNELS = {
 
 export type UiTheme = 'light' | 'dark' | 'system'
 export type SaveMode = 'save' | 'saveAs'
+export type BeginSaveMode = SaveMode | 'saveAsHwpx'
 
 /** What the editor's File menu asks for (see the plugin's FILE_COMMAND_EVENT). */
 export type FileCommand = SaveMode | PrintMode | 'preview'
@@ -189,7 +193,14 @@ export type CommitSaveResult =
    * bytes were kept. `tailsLost` is set when master pages or memos of the opened file could
    * not be carried into the written one (`memosLost` is the HWPX count).
    */
-  | { ok: true; path: string; backupPath?: string; tailsLost?: true; memosLost?: number }
+  | {
+      ok: true
+      path: string
+      copyOnly?: true
+      backupPath?: string
+      tailsLost?: true
+      memosLost?: number
+    }
   | { ok: false; error: string }
 
 /**
@@ -315,7 +326,7 @@ export interface HwpApi {
    */
   trackingDropped(): Promise<boolean>
   /** resolve where and in which format this save goes (shows the dialog for Save As) */
-  beginSave(mode: SaveMode): Promise<BeginSaveResult>
+  beginSave(mode: BeginSaveMode): Promise<BeginSaveResult>
   /** the tabs of exported bytes that have no width yet (see tab-widths in main) */
   newTabs(bytes: Uint8Array, format: HwpFormat): Promise<TabSpot[]>
   /**
@@ -342,6 +353,8 @@ export interface HwpApi {
   onPreviewRequest(handler: (action: PreviewAction) => void): () => void
   /** make the PDF (asking where) or open the print dialog for these pages */
   printPages(job: PrintJob): Promise<PrintResult>
+  isHeadlessExport(): Promise<boolean>
+  headlessExportDone(result: { ok: boolean; error?: string }): void
   onCloseSaveRequest(handler: () => void): () => void
   sendCloseSaveResult(ok: boolean): void
   /** the memo editor opened or closed in this tab: main holds back save, close and quit */

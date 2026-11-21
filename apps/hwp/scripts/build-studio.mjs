@@ -34,10 +34,12 @@ import {
   HANCOM_KEYS_MODULE,
   PC_FONTS_MODULE,
   STUDIO_PATCHES,
+  WHEEL_ZOOM_MODULE,
   missingHancomCommands,
   missingPluginHooks,
   rhwpPatches,
 } from './rhwp-patches.mjs'
+import { STUDIO_TAG } from './studio-source.mjs'
 import { HANJA_COMMIT, writeHanjaDictionary } from './hanja-dict.mjs'
 
 const SCRIPTS = dirname(fileURLToPath(import.meta.url))
@@ -46,13 +48,13 @@ const require = createRequire(join(APP, 'package.json'))
 
 const REPO = 'https://github.com/edwardkim/rhwp.git'
 /**
- * The studio is built from the tag the engine was built from. The engine is the
- * patched build in vendor/rhwp-core (decision 0050), which names its tag.
+ * Pin the studio independently. Tandem plugins and shortcuts target this source;
+ * its WASM package is the compatible, newer build in vendor/rhwp-core.
  */
 const CORE_DIR = dirname(require.resolve('@rhwp/core'))
 const core = JSON.parse(readFileSync(join(CORE_DIR, 'package.json'), 'utf8'))
 const VERSION = core.version
-const TAG = core.rhwp.tag
+const TAG = STUDIO_TAG
 /** Commit each supported tag must resolve to; a moved tag stops the build. */
 const PINNED_COMMITS = {
   'v0.8.7': '1a76570e833917d15817415a53c09ad61ab3203f',
@@ -81,6 +83,7 @@ const HANCOM_KEYS = join(APP, 'studio-plugin', 'hancom-keys.mjs')
 const DOCUMENT_INFO = join(APP, 'studio-plugin', 'document-info.mjs')
 const FORMAT_COPY = join(APP, 'studio-plugin', 'format-copy.mjs')
 const CLIPBOARD_HTML = join(APP, 'studio-plugin', 'clipboard-html.mjs')
+const WHEEL_ZOOM = join(APP, '..', '..', 'packages', 'ui', 'src', 'wheel-zoom.ts')
 const PC_FONTS = join(APP, 'studio-plugin', 'pc-fonts.mjs')
 const HANJA = join(APP, 'studio-plugin', 'hanja.mjs')
 const TABLE_AUTO_FILL = join(APP, 'studio-plugin', 'table-auto-fill.mjs')
@@ -108,6 +111,7 @@ function stampValue() {
   hash.update(readFileSync(DOCUMENT_INFO))
   hash.update(readFileSync(FORMAT_COPY))
   hash.update(readFileSync(CLIPBOARD_HTML))
+  hash.update(readFileSync(WHEEL_ZOOM))
   hash.update(readFileSync(PC_FONTS))
   hash.update(readFileSync(HANJA))
   hash.update(readFileSync(TABLE_AUTO_FILL))
@@ -206,6 +210,7 @@ async function buildStudio() {
         [HANCOM_KEYS_MODULE]: HANCOM_KEYS,
         [FORMAT_COPY_MODULE]: FORMAT_COPY,
         [CLIPBOARD_HTML_MODULE]: CLIPBOARD_HTML,
+        [WHEEL_ZOOM_MODULE]: WHEEL_ZOOM,
         [PC_FONTS_MODULE]: PC_FONTS,
       },
     },

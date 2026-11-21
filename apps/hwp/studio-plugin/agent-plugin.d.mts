@@ -435,8 +435,7 @@ export type AgentTableLinesRefusal =
   | {
       ok: false
       /**
-       * nested: the table sits inside a cell of another table, where the engine cannot add
-       * or remove lines. no_such_line: the row or column is outside the table.
+       * nested: the inner table has borders drawn as objects that would have to move. no_such_line: the row or column is outside the table.
        * would_empty: nothing would be left of the table.
        */
       reason: 'nested' | 'no_such_line' | 'would_empty'

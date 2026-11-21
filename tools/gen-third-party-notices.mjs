@@ -13,7 +13,7 @@
  * own LICENSE (Apache-2.0) ships beside it as LICENSE.txt; the NOTICE that
  * license requires to travel with the work opens the generated file.
  *
- * The two Rust sections need cargo, and the rhwp one a sparse checkout of the
+ * The Rust sections need cargo, and the rhwp one a sparse checkout of the
  * rhwp tag (manifests only, cached under node_modules/.cache). Without them a
  * local build degrades to a pointer; with CI or IEUM_RELEASE set the gap is an
  * error, and electron-builder's beforePack rejects a notice that has it.
@@ -526,6 +526,39 @@ function rhwpCrates() {
     .sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version))
 }
 
+/** Normal non-proc-macro crates reachable from `rootName` in a Cargo manifest */
+function linkedRustCrates(manifestPath, rootName, extraArgs = []) {
+  const meta = cargoMetadata(manifestPath, ['--locked', ...extraArgs])
+  if (meta === null) return null
+  const byId = new Map(meta.packages.map((p) => [p.id, p]))
+  const depsOf = new Map(meta.resolve.nodes.map((n) => [n.id, n.deps]))
+  const root = meta.packages.find((p) => p.name === rootName && p.source === null)
+  if (!root) return null
+  const isProcMacro = (p) => p.targets.some((t) => t.kind.includes('proc-macro'))
+  const seen = new Set([root.id])
+  const queue = [root.id]
+  while (queue.length > 0) {
+    for (const dep of depsOf.get(queue.shift()) ?? []) {
+      if (seen.has(dep.pkg) || !dep.dep_kinds.some((k) => k.kind === null)) continue
+      if (isProcMacro(byId.get(dep.pkg))) continue
+      seen.add(dep.pkg)
+      queue.push(dep.pkg)
+    }
+  }
+  seen.delete(root.id)
+  return [...seen]
+    .map((id) => crateRow(byId.get(id)))
+    .sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version))
+}
+
+/** Rust crates statically linked into ieum-parse-sidecar */
+function parseSidecarCrates() {
+  return linkedRustCrates(
+    join(ROOT, 'packages/file-parse/native/parse-sidecar/Cargo.toml'),
+    'ieum-parse-sidecar',
+  )
+}
+
 /** the crate list and each distinct license text; the count line is what electron-builder checks */
 function crateSection(crates) {
   let text = `\n${crates.length} crates, all under permissive terms:\n\n`
@@ -766,6 +799,16 @@ and "PowerPoint" are trademarks of Microsoft Corporation. "한글" (Hangul),
 ${PRODUCT_NAME} opens.
 `
 
+const sidecarCrates = parseSidecarCrates()
+out += hr('7. Rust crates (ieum-parse-sidecar native component, statically linked)')
+if (sidecarCrates === null) {
+  gap('cargo metadata failed for packages/file-parse/native/parse-sidecar (is cargo on PATH?)')
+  out += '\ncargo metadata unavailable at generation time; see'
+  out += ' packages/file-parse/native/parse-sidecar/Cargo.lock for the full crate list.\n'
+} else {
+  out += crateSection(sidecarCrates)
+}
+
 for (const term of ['@embedpdf/pdfium', 'Copyright 2014 PDFium Authors', 'Apache License']) {
   if (!out.includes(term)) {
     throw new Error(`generated third-party notice is missing PDFium term: ${term}`)
@@ -778,7 +821,7 @@ writeFileSync(dest, out)
 console.log(
   `written: ${relative(ROOT, dest)} (${(out.length / 1024).toFixed(0)} KB) — ` +
     `${resolved.length} npm packages, ${crates?.length ?? 0} xlsx-sidecar crates, ` +
-    `${wasmCrates?.length ?? 0} rhwp crates`,
+    `${wasmCrates?.length ?? 0} rhwp crates, ${sidecarCrates?.length ?? 0} parse-sidecar crates`,
 )
 if (noText.length > 0) console.warn(`no license file published: ${noText.join(', ')}`)
 if (missing.size > 0) console.warn(`not installed, skipped: ${[...missing].join(', ')}`)

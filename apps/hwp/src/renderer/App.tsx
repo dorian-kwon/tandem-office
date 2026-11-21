@@ -44,7 +44,7 @@ import type {
   PreviewAction,
   PrintMode,
   PrintResult,
-  SaveMode,
+  BeginSaveMode,
   UiTheme,
 } from '../shared/ipc'
 
@@ -63,6 +63,8 @@ interface Notice {
   params?: Params
   /** untranslated cause from the engine or the file system, shown under the message */
   detail?: string
+  /** direct follow-up action shown beside the close button */
+  action?: 'saveAsHwpx'
   /** an information that stays until dismissed, as errors do */
   sticky?: true
 }
@@ -139,6 +141,7 @@ export default function App() {
   const formatRef = useRef<HwpFormat>('hwp')
   /** the same format for the screen: the check panel passes it to the rules */
   const [docFormat, setDocFormat] = useState<HwpFormat>('hwp')
+  const headlessRef = useRef(false)
   const [phase, setPhase] = useState<Phase>('booting')
   /** Ctrl+F5: the document alone in fullscreen, with the editor's own chrome hidden */
   const [presenting, setPresenting] = useState(false)
@@ -209,17 +212,20 @@ export default function App() {
     let stopDrop: (() => void) | null = null
     void (async () => {
       try {
-        const [path, theme, lang] = await Promise.all([
+        const [path, theme, lang, headless] = await Promise.all([
           window.hwpApi.consumePending(),
           window.hwpApi.getTheme().catch((): UiTheme => 'system'),
           window.hwpApi.getLanguage(),
+          window.hwpApi.isHeadlessExport?.() ?? false,
         ])
+        if (disposed) return
+        headlessRef.current = headless
         // the studio reads its settings before first paint, so they are seeded before it exists
         localStorage.setItem(
           STUDIO_SETTINGS_KEY,
           seededStudioSettings(localStorage.getItem(STUDIO_SETTINGS_KEY), theme),
         )
-        editor = await createEditor(hostRef.current!, { studioUrl: studioUrl(lang) })
+        editor = await createEditor(hostRef.current!, { studioUrl: studioUrl(lang, headless) })
         if (disposed) {
           editor.destroy()
           return
@@ -230,6 +236,7 @@ export default function App() {
         )
         setPhase('loading')
         if (!path) {
+          if (headless) throw new Error('the input document is unavailable')
           // a new document: the blank one bundled with the app, which has no file until
           // its first save (Save As)
           const blank = new Uint8Array(await (await fetch(blankHwpUrl)).arrayBuffer())
@@ -258,7 +265,7 @@ export default function App() {
         }
       } catch (error) {
         if (disposed) return
-        if (editor && isBridgeTimeout(error)) return
+        if (!headlessRef.current && editor && isBridgeTimeout(error)) return
         setPhase('failed')
         setNotice({
           tone: 'error',
@@ -278,7 +285,7 @@ export default function App() {
   // a document can arrive after the load call gave up or failed (a password
   // entered late, a second try in the editor's own prompt): notice it and go on
   useEffect(() => {
-    if (phase !== 'loading' && phase !== 'failed') return
+    if (headlessRef.current || (phase !== 'loading' && phase !== 'failed')) return
     const timer = setInterval(() => {
       void editorRef.current?.commands
         .context()
@@ -371,7 +378,7 @@ export default function App() {
   }, [])
 
   const save = useCallback(
-    async (mode: SaveMode, automatic = false): Promise<boolean> => {
+    async (mode: BeginSaveMode, automatic = false): Promise<boolean> => {
       const editor = editorRef.current
       if (!editor) return false
       // a memo editor is open: its text is not in the document yet; an autosave waits quietly
@@ -396,9 +403,16 @@ export default function App() {
       try {
         const outcome = await runSave(savePortOf(editor), window.hwpApi, mode, automatic)
         if (outcome.kind === 'saved') {
-          restoredRef.current = false
-          copierRef.current?.saved()
-          setFilePath(outcome.path)
+          if (!outcome.copyOnly) {
+            restoredRef.current = false
+            copierRef.current?.saved()
+            setFilePath(outcome.path)
+            const savedFormat = hwpFormatOfPath(outcome.path)
+            if (savedFormat) {
+              formatRef.current = savedFormat
+              setDocFormat(savedFormat)
+            }
+          }
           const backup = outcome.backupPath ? { name: fileNameOf(outcome.backupPath) } : null
           if (outcome.memosLost) {
             // stays until dismissed: the file is written, but some memos are not in it
@@ -415,16 +429,27 @@ export default function App() {
               key: 'savedTailsLost',
               ...(backup ? { detail: t('backupKept', backup) } : {}),
             })
+          } else if (outcome.copyOnly) {
+            setNotice({ tone: 'info', key: 'hwpxCopySaved', detail: outcome.path })
           } else if (!automatic) {
             setNotice(backup ? { tone: 'info', key: 'backupKept', params: backup } : null)
           }
-          return true
+          return !outcome.copyOnly
         }
         if (outcome.kind === 'failed') {
           // a protected or tracked document cannot be saved by this path at all;
           // the manual save explains that once instead of every autosave backoff
           const propertyFailure = outcome.reason === 'protected' || outcome.reason === 'tracked'
           if (!automatic || !propertyFailure) {
+            const verifyDetail =
+              outcome.reason === 'verify'
+                ? outcome.verify && outcome.verify.pageCountBefore !== outcome.verify.pageCountAfter
+                  ? `${t('saveVerifyPages', {
+                      before: outcome.verify.pageCountBefore,
+                      after: outcome.verify.pageCountAfter,
+                    })} · ${t('saveVerifyHint')}`
+                  : t('saveVerifyHint')
+                : undefined
             setNotice({
               tone: 'error',
               key:
@@ -435,8 +460,8 @@ export default function App() {
                     : outcome.reason === 'verify'
                       ? 'saveVerifyFailed'
                       : 'saveFailed',
-              ...(outcome.reason === 'verify'
-                ? { detail: t('saveVerifyHint') }
+              ...(verifyDetail
+                ? { detail: verifyDetail, action: 'saveAsHwpx' as const }
                 : outcome.detail
                   ? { detail: outcome.detail }
                   : {}),
@@ -692,6 +717,28 @@ export default function App() {
     [phase, openPreview],
   )
 
+  const headlessStarted = useRef(false)
+  useEffect(() => {
+    if (
+      !headlessRef.current ||
+      headlessStarted.current ||
+      (phase !== 'ready' && phase !== 'failed')
+    )
+      return
+    headlessStarted.current = true
+    if (phase === 'failed') {
+      window.hwpApi.headlessExportDone({ ok: false, error: 'the input document did not open' })
+      return
+    }
+    void runPrint('pdf').then((result) =>
+      window.hwpApi.headlessExportDone(
+        result.ok && !result.canceled
+          ? { ok: true }
+          : { ok: false, error: result.ok ? 'PDF export canceled' : result.error },
+      ),
+    )
+  }, [phase, runPrint])
+
   // PDF still exports without a preview; the preview's PDF button uses runPrint directly.
   useEffect(
     () =>
@@ -715,7 +762,7 @@ export default function App() {
   // autosave to the document's own file: 30 s and window blur, after the user has
   // paused (exporting a whole HWP document costs more than the other editors' saves)
   useEffect(() => {
-    if (!autoSave || phase !== 'ready' || !filePath) return
+    if (headlessRef.current || !autoSave || phase !== 'ready' || !filePath) return
     const editor = editorRef.current
     if (!editor) return
     const handle = startAutosave({
@@ -948,6 +995,15 @@ export default function App() {
                 <span>{notice.text ?? (notice.key ? t(notice.key, notice.params) : '')}</span>
                 {notice.detail && <span className="hwp-notice-detail">{notice.detail}</span>}
               </div>
+              {notice.action === 'saveAsHwpx' && (
+                <button
+                  type="button"
+                  className="hwp-notice-action"
+                  onClick={() => void save('saveAsHwpx')}
+                >
+                  {t('saveAsHwpx')}
+                </button>
+              )}
               <button
                 type="button"
                 className="hwp-notice-close"

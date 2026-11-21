@@ -3,6 +3,7 @@ import {
   backupPathFor,
   bytesMatchFormat,
   needsBackup,
+  hwpxCopyPath,
   withFormatExtension,
 } from '../src/main/save-plan'
 import { hwpFormatOfPath } from '../src/shared/ipc'
@@ -58,6 +59,12 @@ describe('save target format', () => {
     expect(hwpFormatOfPath('C:/d/a.HWPX')).toBe('hwpx')
     expect(hwpFormatOfPath('C:/d/a.hwp.bak')).toBeNull()
     expect(hwpFormatOfPath('C:/d/a.docx')).toBeNull()
+  })
+
+  it('always suggests an HWPX copy after verification failed', () => {
+    expect(hwpxCopyPath('/work/report.HWP')).toBe('/work/report.hwpx')
+    expect(hwpxCopyPath('/work/report.hwpx')).toBe('/work/report.hwpx')
+    expect(hwpxCopyPath('/work/report')).toBe('/work/report.hwpx')
   })
 
   it('appends the current format when Save As returns a bare name', () => {

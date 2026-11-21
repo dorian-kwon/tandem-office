@@ -1,3 +1,4 @@
+import { changedBlockLocations } from '@genoffice/agent-core'
 import { sourceTools, type SourceTranslation } from '../source/translation'
 import type { AgentSkill } from '@genoffice/agent-core'
 import { brandText } from '@genoffice/i18n'
@@ -131,7 +132,13 @@ export function createMarkdownSkill(
       if (!editor) {
         return { output: 'editor not ready', isError: true, summary: call.name }
       }
-      return executeTool(editor, call, signal, fm, getWriter?.())
+      const before = editor.state.doc
+      const withLocations = (result: import('@genoffice/agent-core').ToolExecution) =>
+        result.mutated && !editor.isDestroyed
+          ? { ...result, changeLocations: changedBlockLocations(before, editor.state.doc) }
+          : result
+      const result = executeTool(editor, call, signal, fm, getWriter?.())
+      return result instanceof Promise ? result.then(withLocations) : withLocations(result)
     },
   }
 }

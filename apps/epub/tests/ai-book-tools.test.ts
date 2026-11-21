@@ -710,7 +710,7 @@ function fakeModel(turns: Array<AgentToolCall[] | string>): AgentTransport & {
 
 describe('a run with a fake model', () => {
   it('reads, edits through the controller and leaves one undo entry', async () => {
-    const s = setup(THREE)
+    const s = setup([{ body: THREE[0]!.body + '<p>Unchanged</p>' }, ...THREE.slice(1)])
     const model = fakeModel([
       [{ id: 'r1', name: BOOK_TOOL_NAMES.readChapter, input: { chapter: 1 } }],
       [
@@ -720,6 +720,7 @@ describe('a run with a fake model', () => {
           input: {
             ops: [
               { op: 'replace', chapter: 1, blockId: 'b1', text: 'Beginning' },
+              { op: 'replace', chapter: 1, blockId: 'b4', text: 'Unchanged' },
               { op: 'replace', chapter: 1, blockId: 'b2', text: 'The <b>whale</b> sank.' },
             ],
           },
@@ -728,15 +729,25 @@ describe('a run with a fake model', () => {
       'Changed the heading and the first line.',
     ])
     const before = s.book.source(0)
+    const changes: unknown[] = []
     const done = new Promise<void>((resolve) => {
       const loop = new AgentLoop({
         transport: model,
         skill: s.skill,
-        events: { onDone: () => resolve(), onError: () => resolve() },
+        events: {
+          onToolExecuted: ({ execution }) => changes.push(...(execution.changeLocations ?? [])),
+          onDone: () => resolve(),
+          onError: () => resolve(),
+        },
       })
       void loop.run('Rename the heading and let the whale sink.')
     })
     await done
+    expect(changes).toEqual([
+      { kind: 'book', chapter: 0, block: 'b1' },
+      { kind: 'book', chapter: 0, block: 'b2' },
+    ])
+    expect(JSON.stringify(model.requests)).not.toContain('changeLocations')
     expect(model.requests[0]!.tools).toContain('edit_blocks')
     expect(s.book.source(0)).toContain('<h1>Beginning</h1>')
     expect(s.book.source(0)).toContain('<p>The <b>whale</b> sank.</p>')

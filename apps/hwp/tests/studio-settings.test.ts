@@ -44,6 +44,7 @@ describe('studio locale and url', () => {
 
   it('always asks for the embed profile, so the editor cannot swap the tab document', () => {
     expect(studioUrl('ko')).toBe('./studio/index.html?chrome=embed&lang=ko')
+    expect(studioUrl('ko', true)).toBe('./studio/index.html?chrome=embed&lang=ko&headless=1')
     expect(studioUrl('fr')).toBe('./studio/index.html?chrome=embed&lang=en')
   })
 })

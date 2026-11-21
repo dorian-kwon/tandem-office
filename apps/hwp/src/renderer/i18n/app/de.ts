@@ -19,6 +19,9 @@ export const de = {
     'Es wurde nichts gespeichert: Die zu schreibende Kopie stimmte beim Zurücklesen nicht mit dem angezeigten Dokument überein. Versuchen Sie „Speichern unter“, um eine neue Datei zu schreiben.',
   saveVerifyHint:
     'Die Originaldatei ist unverändert. Wählen Sie in „Speichern unter“ HWPX oder verwenden Sie „Als PDF exportieren“.',
+  saveVerifyPages: 'Auf dem Bildschirm: {before} Seiten → nach dem Einlesen: {after} Seiten',
+  hwpxCopySaved: 'HWPX-Kopie gespeichert.',
+  saveAsHwpx: 'Als HWPX speichern…',
   saveProtected:
     'Nicht gespeichert: Dieses Dokument ist kennwortgeschützt, und beim Speichern hier würde es ohne Kennwort geschrieben.',
   backupKept: 'Gespeichert. Die vorherige Version wurde als {name} aufbewahrt.',

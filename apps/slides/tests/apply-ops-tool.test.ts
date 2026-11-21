@@ -110,6 +110,7 @@ describe('apply_ops', () => {
     const second = { ...textNode('b', 'Merci'), durableId: 'e_b' }
     const nested = {
       ...slide,
+      partPath: 'ppt/slides/slide1.xml',
       nodes: [groupNode('root', [groupNode('inner', [groupNode('deep', [first, second])])])],
     }
     const dump = formatSlideDump(nested)
@@ -141,6 +142,10 @@ describe('apply_ops', () => {
     ]
     const edited = await createSlidesSkill(access([nested])).executeTool!(call({ ops }))
     expect(edited.mutated).toBe(true)
+    expect(edited.changeLocations).toEqual([
+      { kind: 'slide', index: 0, part: nested.partPath, node: 'e_a' },
+      { kind: 'slide', index: 0, part: nested.partPath, node: 'e_b' },
+    ])
     expect(submit).toHaveBeenCalledExactlyOnceWith({ ops, acceptSlideUpdate: true })
   })
 

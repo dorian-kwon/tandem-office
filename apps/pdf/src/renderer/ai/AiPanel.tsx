@@ -1,3 +1,5 @@
+import { changeLocationPatch, type AiChangeLocation } from '@genoffice/agent-core'
+import { AiChangeLinks } from '@genoffice/ui'
 import { analyzingDocumentLabel } from '@genoffice/i18n'
 import { useChatWindow, EarlierChatMessages } from '@genoffice/ui'
 import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
@@ -130,6 +132,7 @@ interface ToolActivity {
 }
 
 interface ChatEntry {
+  changeLocations?: readonly AiChangeLocation[]
   role: 'user' | 'assistant'
   text: string
   streaming?: boolean
@@ -804,6 +807,7 @@ export function AiPanel({
             output: execution.output?.slice(0, 2000),
           })
           patchLast((last) => ({
+            ...changeLocationPatch(last, execution),
             tools: [
               ...(last.tools ?? []),
               {
@@ -1280,6 +1284,16 @@ export function AiPanel({
               className={`ai-msg ai-msg-assistant${entry.isError && !entry.blocked ? ' ai-msg-error' : ''}`}
             >
               {hasTools && <ToolChipList tools={entry.tools!} />}
+              <AiChangeLinks
+                places={entry.changeLocations}
+                lang={lang}
+                onShow={(place) => {
+                  if (place.kind === 'page' && !apiRef.current.isDeleted(place.index - 1)) {
+                    if (onCitation) onCitation({ page: place.index })
+                    else apiRef.current.gotoPage(place.index)
+                  }
+                }}
+              />
               <SkillUsedNotes tools={entry.tools} />
               {projectPanel.messageParts(entry)}
               {entry.skillProposals?.map((key) => skillCards.render(key))}

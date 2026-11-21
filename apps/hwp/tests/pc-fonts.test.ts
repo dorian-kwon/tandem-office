@@ -89,6 +89,12 @@ describe('sameFaces', () => {
 })
 
 describe('refreshPcFonts', () => {
+  it('only loads stored faces during headless PDF export', async () => {
+    const { deps, calls } = studio([malgun], [], { headless: true })
+    expect(await refreshPcFonts(deps)).toBe(false)
+    expect(calls).toEqual(['stored'])
+  })
+
   it('detects and tells the font lists on a first run, when nothing was kept', async () => {
     const { deps, calls } = studio([malgun, nanum], [])
     expect(await refreshPcFonts(deps)).toBe(true)

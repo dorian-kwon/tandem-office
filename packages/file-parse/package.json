@@ -7,11 +7,16 @@
   "description": "shared attachment parsing: PDF, Office, HWP and plain-text formats to text; images flagged for multimodal input",
   "exports": {
     ".": "./src/index.ts",
-    "./hwp": "./src/hwp.ts"
+    "./hwp": "./src/hwp.ts",
+    "./sidecar-path": "./src/sidecar-path.ts",
+    "./sidecar-client": "./src/sidecar-client.ts"
   },
   "scripts": {
+    "native:build": "node scripts/build-sidecar.mjs",
+    "native:build:universal": "node scripts/build-sidecar-universal.mjs",
+    "native:test": "cargo test --locked --manifest-path native/parse-sidecar/Cargo.toml",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "npm run native:test && npm run native:build && vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {

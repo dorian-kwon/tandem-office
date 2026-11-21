@@ -190,13 +190,16 @@ export class FileIndexStore {
     meta: { path: string; mtimeMs: number; sizeBytes: number },
     text: string | null,
     status: IndexStatus,
+    bodyTokens?: { readonly bi: string; readonly uni: string },
   ): void {
     const name = basename(meta.path)
     const ext = extname(meta.path).slice(1).toLowerCase()
     const body = text ? text.slice(0, MAX_BODY_CHARS) : null
     const nameTok = tokenize(name)
     const pathTok = tokenize(dirname(meta.path))
-    const bodyTok = body ? tokenize(body) : { bi: [], uni: [] }
+    const fallback = body && !bodyTokens ? tokenize(body) : null
+    const bodyBi = bodyTokens?.bi ?? (fallback ? toIndexText(fallback.bi) : '')
+    const bodyUni = bodyTokens?.uni ?? (fallback ? toIndexText(fallback.uni) : '')
     this.db.exec('BEGIN')
     try {
       const existing = this.db.prepare('SELECT id FROM files WHERE path = ?').get(meta.path) as
@@ -218,10 +221,10 @@ export class FileIndexStore {
           inserted.lastInsertRowid,
           toIndexText(nameTok.bi),
           toIndexText(pathTok.bi),
-          toIndexText(bodyTok.bi),
+          bodyBi,
           toIndexText(nameTok.uni),
           toIndexText(pathTok.uni),
-          toIndexText(bodyTok.uni),
+          bodyUni,
         )
       this.db.exec('COMMIT')
     } catch (e) {

@@ -1,0 +1,23 @@
+.ai-change-links {
+  color: var(--text-secondary);
+  font-size: 0.85em;
+  margin-block: 0.4em;
+}
+.ai-change-links summary {
+  cursor: pointer;
+}
+.ai-change-links > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35em;
+  margin-top: 0.35em;
+}
+.ai-change-links button {
+  cursor: pointer;
+  color: var(--accent);
+  background: transparent;
+  border: 0;
+  text-decoration: underline;
+  font: inherit;
+  overflow-wrap: anywhere;
+}

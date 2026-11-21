@@ -10,6 +10,7 @@ import {
   installContextMenu,
   installNavigationGuard,
   installRendererProtocol,
+  isHeadlessMode,
   recordDiskState,
   registerRendererScheme,
   rendererUrl,
@@ -44,7 +45,13 @@ import {
 } from './recovery'
 import type { HwpRecoveryHost } from './recovery'
 import { applySaveFixes } from './save-fixes'
-import { backupPathFor, bytesMatchFormat, needsBackup, withFormatExtension } from './save-plan'
+import {
+  backupPathFor,
+  bytesMatchFormat,
+  needsBackup,
+  hwpxCopyPath,
+  withFormatExtension,
+} from './save-plan'
 import { readSectionMetadata } from './section-tails'
 import type { SectionTails } from './section-tails'
 import { newTabsOf } from './tab-widths'
@@ -69,6 +76,9 @@ interface RuntimePaths {
   preloadPath: string
   rendererUrl?: string
   rendererFile?: string
+  /** Save an HWPX copy without retargeting the translation project output. */
+  isTranslationOutput?: (webContentsId: number) => boolean
+  isOpenPath?: (path: string) => boolean
   /** open a file this editor made (an exported PDF) in the app; false when it cannot */
   openGeneratedPath?: (path: string) => boolean
   /** ask the shell for a file to open; the editor swallows Ctrl+O before the menu sees it */
@@ -94,6 +104,9 @@ export function configureHwpRuntime(paths: RuntimePaths): void {
 /** Open path per view, queued at tab creation; the renderer consumes it after mount.
  * Kept until the view is destroyed so a reload consumes it again. */
 const openPathByWc = new Map<number, string>()
+/** One output path per hidden export. Only the main process can grant or consume it. */
+const headlessPdfByWc = new Map<number, string>()
+const headlessWaiters = new Map<number, (result: { ok: boolean; error?: string }) => void>()
 /** File paths granted to each view; readFile only allows these */
 const allowedByWc = new Map<number, Set<string>>()
 /** Current save target per view */
@@ -119,7 +132,7 @@ const saveWaiters = new Map<number, (ok: boolean) => void>()
 const readBytesWaiters = new Map<number, (result: unknown) => void>()
 const readTextInFlight = new Map<number, Promise<string>>()
 /** Target a view resolved with beginSave and has not committed yet */
-const pendingSaveByWc = new Map<number, { path: string; format: HwpFormat }>()
+const pendingSaveByWc = new Map<number, { path: string; format: HwpFormat; copyOnly: boolean }>()
 /** Paths each view has already written this session; their first overwrite kept a backup */
 const writtenByWc = new Map<number, Set<string>>()
 /**
@@ -489,6 +502,19 @@ function registerHwpIpc(): void {
   installHwpRecovery(recoveryHost)
   registerHwpRecoveryIpc()
 
+  // ---- headless export mode (--headless-export) ----
+  ipcMain.handle(HWP_CHANNELS.isHeadlessExport, (e) => headlessWaiters.has(e.sender.id))
+  ipcMain.on(HWP_CHANNELS.headlessExportDone, (e, result: unknown) => {
+    const settle = headlessWaiters.get(e.sender.id)
+    if (!settle) return
+    headlessWaiters.delete(e.sender.id)
+    const state = result as { ok?: unknown; error?: unknown } | null
+    settle({
+      ok: state?.ok === true,
+      ...(typeof state?.error === 'string' ? { error: state.error } : {}),
+    })
+  })
+
   // the memo editor is renderer state; main keeps only whether this view has one open, so
   // save, close and quit can wait for it even when the document itself is clean
   ipcMain.on(HWP_CHANNELS.memoModalOpen, (e, open: unknown) => {
@@ -546,6 +572,13 @@ function registerHwpIpc(): void {
     printing.add(wcId)
     try {
       const printJob = job as PrintJob
+      if (isHeadlessMode()) {
+        const target = headlessPdfByWc.get(wcId)
+        if (printJob.mode !== 'pdf' || !target) return { ok: false, error: 'no pending PDF export' }
+        headlessPdfByWc.delete(wcId)
+        await atomicWriteFile(target, await printJobToPdf(printJob, printWindow))
+        return { ok: true, path: target }
+      }
       if (printJob.mode === 'print') {
         await printJobToPrinter(printJob, printWindow)
         return { ok: true }
@@ -596,11 +629,13 @@ function registerHwpIpc(): void {
       const current = savePathByWc.get(wcId)
       const currentFormat = current ? hwpFormatOfPath(current) : null
       let target: string
-      if (mode !== 'saveAs' && current && currentFormat) {
+      const hwpxCopy = mode === 'saveAsHwpx'
+      const copyOnly = hwpxCopy && runtime.isTranslationOutput?.(wcId) === true
+      if (!hwpxCopy && mode !== 'saveAs' && current && currentFormat) {
         target = current
       } else {
         // the translation output copies through the shell; its source pane never saves
-        if (mode === 'saveAs' && interceptSaveAs(wcId)) {
+        if (!copyOnly && (mode === 'saveAs' || hwpxCopy) && interceptSaveAs(wcId)) {
           settleSave(wcId, false)
           return { ok: true, canceled: true }
         }
@@ -624,24 +659,38 @@ function registerHwpIpc(): void {
           currentFormat ?? copy?.format ?? hwpFormatOfPath(offered) ?? preferred
         const hwp = { name: tm('filterHwp'), extensions: ['hwp'] }
         const hwpx = { name: tm('filterHwpx'), extensions: ['hwpx'] }
-        const picked = await showSaveDialogWithMemory(dialog, win, {
+        const dialogOptions = {
           title: tm('dlgSaveTitle'),
           // a new document has no file yet: it is offered under the untitled name in the
           // default save folder, where the shell moves it into the folder it was made from
-          defaultPath: offered,
+          defaultPath: hwpxCopy ? hwpxCopyPath(offered) : offered,
           // one type per format, so the user can pick the other one; the document's
           // own format comes first, so it is the dialog's default type
-          filters: fallback === 'hwpx' ? [hwpx, hwp] : [hwp, hwpx],
-        })
+          filters: hwpxCopy ? [hwpx] : fallback === 'hwpx' ? [hwpx, hwp] : [hwp, hwpx],
+        }
+        let picked = await showSaveDialogWithMemory(dialog, win, dialogOptions)
+        // The native picker confirmed the typed name. Ask again if changing its extension
+        // would replace a different file.
+        while (hwpxCopy && !picked.canceled && picked.filePath) {
+          const normalized = hwpxCopyPath(picked.filePath)
+          if (normalized === picked.filePath || !existsSync(normalized)) break
+          picked = await showSaveDialogWithMemory(dialog, win, {
+            ...dialogOptions,
+            defaultPath: normalized,
+          })
+        }
         if (picked.canceled || !picked.filePath) {
           settleSave(wcId, false)
           return { ok: true, canceled: true }
         }
-        target = withFormatExtension(picked.filePath, fallback)
+        target = hwpxCopy
+          ? hwpxCopyPath(picked.filePath)
+          : withFormatExtension(picked.filePath, fallback)
       }
       const format = hwpFormatOfPath(target)
       if (!format) throw new Error('hwp: no save format for this file name')
-      pendingSaveByWc.set(wcId, { path: target, format })
+      if (copyOnly && runtime.isOpenPath?.(target)) throw new Error(tm('dlgOpenCopyTarget'))
+      pendingSaveByWc.set(wcId, { path: target, format, copyOnly })
       return { ok: true, path: target, format }
     } catch (err) {
       settleSave(wcId, false)
@@ -666,7 +715,7 @@ function registerHwpIpc(): void {
       const pending = pendingSaveByWc.get(wcId)
       pendingSaveByWc.delete(wcId)
       const done = (result: CommitSaveResult): CommitSaveResult => {
-        settleSave(wcId, result.ok)
+        settleSave(wcId, result.ok && !result.copyOnly)
         return result
       }
       if (!pending) return done({ ok: false, error: 'hwp: no save in progress' })
@@ -744,6 +793,14 @@ function registerHwpIpc(): void {
           await copyFile(target, backupPath)
         }
         await atomicWriteFile(target, Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength))
+        const saved: CommitSaveResult = {
+          ok: true,
+          path: target,
+          ...(backupPath ? { backupPath } : {}),
+          ...(tailsLost ? { tailsLost: true as const } : {}),
+          ...(memosLost > 0 ? { memosLost } : {}),
+        }
+        if (pending.copyOnly) return done({ ...saved, copyOnly: true })
         await rememberDiskState(wcId, target)
         written.add(target)
         writtenByWc.set(wcId, written)
@@ -760,13 +817,7 @@ function registerHwpIpc(): void {
         dirtyByWc.delete(wcId)
         hwpRecoverySaved(wcId, recoveryBefore)
         if (isNewPath) fileSavedHook?.(e.sender, target)
-        return done({
-          ok: true,
-          path: target,
-          ...(backupPath ? { backupPath } : {}),
-          ...(tailsLost ? { tailsLost: true as const } : {}),
-          ...(memosLost > 0 ? { memosLost } : {}),
-        })
+        return done(saved)
       } catch (err) {
         return done({ ok: false, error: err instanceof Error ? err.message : String(err) })
       }
@@ -1023,6 +1074,62 @@ export function createHwpView(
   grantAndTrack(view.webContents, openPath, options)
   void view.webContents.loadURL(rendererUrl(runtime.rendererUrl, 'hwp'))
   return view
+}
+
+/**
+ * `--headless-export <file.hwp|.hwpx> --to pdf`: a hidden HWP view opens the file the way
+ * a tab does and runs the File menu's own PDF export, with the command line's path in
+ * place of the save dialog. The file is read as it is on disk: a recovery copy left for
+ * it is neither offered nor used (hwpRecoveryOnRead).
+ */
+export async function exportHwpPdfHeadless(
+  input: string,
+  outPath: string,
+  timeoutMs = 180_000,
+): Promise<void> {
+  registerHwpIpc()
+  const win = new BrowserWindow({
+    show: false,
+    width: 1280,
+    height: 900,
+    webPreferences: {
+      preload: runtime.preloadPath,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      backgroundThrottling: false,
+    },
+  })
+  const wcId = win.webContents.id
+  grantAndTrack(win.webContents, input)
+  headlessPdfByWc.set(wcId, outPath)
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    const report = await new Promise<{ ok: boolean; error?: string }>((resolve) => {
+      headlessWaiters.set(wcId, resolve)
+      win.webContents.on('render-process-gone', (_event, details) =>
+        resolve({ ok: false, error: `hwp renderer stopped (${details.reason})` }),
+      )
+      timer = setTimeout(
+        () =>
+          resolve({
+            ok: false,
+            // a document with an open password waits for one, and no one is there to give it
+            error: `hwp export timed out after ${timeoutMs}ms (a password-protected document cannot be exported this way)`,
+          }),
+        timeoutMs,
+      )
+      void win.webContents
+        .loadURL(rendererUrl(runtime.rendererUrl, 'hwp'))
+        .catch((error: Error) => resolve({ ok: false, error: error.message }))
+    })
+    if (!report.ok) throw new Error(report.error ?? 'hwp export failed')
+  } finally {
+    if (timer) clearTimeout(timer)
+    headlessWaiters.delete(wcId)
+    headlessPdfByWc.delete(wcId)
+    if (!win.isDestroyed()) win.destroy()
+  }
 }
 
 /** Standalone window mode: `npm run dev -w @genoffice/hwp`, document path passed via argv */

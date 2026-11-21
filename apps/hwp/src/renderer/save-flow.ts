@@ -3,10 +3,16 @@ import type {
   HwpFormat,
   MeasuredTab,
   MemoSnapshot,
-  SaveMode,
+  BeginSaveMode,
   TabMeasure,
   TabSpot,
 } from '../shared/ipc'
+
+interface SaveVerifyInfo {
+  pageCountBefore: number
+  pageCountAfter: number
+  recovered: boolean
+}
 
 /** The part of the embedded editor a save needs. */
 export interface SaveEditorPort {
@@ -15,11 +21,7 @@ export interface SaveEditorPort {
   exportHwp(): Promise<Uint8Array>
   exportHwpx(): Promise<Uint8Array>
   /** serialize to HWP, reload the result inside the engine, report whether it came back whole */
-  exportHwpVerify(): Promise<{
-    pageCountBefore: number
-    pageCountAfter: number
-    recovered: boolean
-  }>
+  exportHwpVerify(): Promise<SaveVerifyInfo>
   /** the memos the editor holds; null when it cannot list them */
   listMemos(): Promise<MemoSnapshot[] | null>
   /** hold off user input while memos are listed and the bytes are exported */
@@ -37,6 +39,7 @@ export type SaveOutcome =
    */
   | {
       kind: 'saved'
+      copyOnly?: true
       path: string
       backupPath?: string
       tailsLost?: true
@@ -53,6 +56,7 @@ export type SaveOutcome =
       kind: 'failed'
       reason: 'protected' | 'tracked' | 'verify' | 'export' | 'write'
       detail?: string
+      verify?: SaveVerifyInfo
     }
 
 const fileNameOf = (path: string) => path.split(/[\\/]/).pop() ?? path
@@ -122,7 +126,7 @@ async function exportHwpxWithMemos(editor: SaveEditorPort): Promise<{
 export async function runSave(
   editor: SaveEditorPort,
   api: Pick<HwpApi, 'beginSave' | 'newTabs' | 'commitSave' | 'abortSave'>,
-  mode: SaveMode,
+  mode: BeginSaveMode,
   /** the app's own 30-second save: a copy-pair conflict stands down instead of asking */
   automatic = false,
 ): Promise<SaveOutcome> {
@@ -153,7 +157,7 @@ export async function runSave(
       const verify = await editor.exportHwpVerify()
       if (!verify.recovered || verify.pageCountBefore !== verify.pageCountAfter) {
         api.abortSave()
-        return { kind: 'failed', reason: 'verify' }
+        return { kind: 'failed', reason: 'verify', verify }
       }
       bytes = await editor.exportHwp()
     } else {
@@ -179,9 +183,10 @@ export async function runSave(
     return { kind: 'failed', reason: 'write', detail: commit.error }
   }
   // the file is already written; a failed notification only leaves the editor's own dirty flag set
-  await editor.notifySaved(fileNameOf(commit.path)).catch(() => {})
+  if (!commit.copyOnly) await editor.notifySaved(fileNameOf(commit.path)).catch(() => {})
   return {
     kind: 'saved',
+    ...(commit.copyOnly ? { copyOnly: true as const } : {}),
     path: commit.path,
     ...(commit.backupPath ? { backupPath: commit.backupPath } : {}),
     ...(commit.tailsLost ? { tailsLost: true as const } : {}),

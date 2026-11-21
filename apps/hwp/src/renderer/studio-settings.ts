@@ -46,6 +46,6 @@ export function studioLocale(lang: Lang): 'ko' | 'en' {
  * save, print, document drops): the tab owns the file, and a document swapped
  * inside the editor would later be saved over the tab's file.
  */
-export function studioUrl(lang: Lang): string {
-  return `./studio/index.html?chrome=embed&lang=${studioLocale(lang)}`
+export function studioUrl(lang: Lang, headless = false): string {
+  return `./studio/index.html?chrome=embed&lang=${studioLocale(lang)}${headless ? '&headless=1' : ''}`
 }

@@ -116,6 +116,21 @@ export function createPdfSkill(deps: PdfAiDeps): AgentSkill {
       }
       return parts.join('\n')
     },
-    executeTool: (call, signal) => executePdfTool(deps, call, signal),
+    executeTool: async (call, signal) => {
+      const result = await executePdfTool(deps, call, signal)
+      const page = call.input.page
+      if (
+        !result.mutated ||
+        result.isError ||
+        result.changeLocations ||
+        typeof page !== 'number' ||
+        !Number.isSafeInteger(page) ||
+        page < 1 ||
+        page > deps.pageCount() ||
+        deps.isDeleted(page - 1)
+      )
+        return result
+      return { ...result, changeLocations: [{ kind: 'page', index: page }] }
+    },
   }
 }

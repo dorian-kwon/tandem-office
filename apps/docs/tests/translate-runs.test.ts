@@ -311,6 +311,10 @@ describe('read_runs / translate_blocks tools', () => {
     )
     expect(exec.isError).toBeFalsy()
     expect(exec.mutated).toBe(true)
+    expect(exec.changeLocations).toEqual([
+      { kind: 'block', index: 0, token: expect.any(Number) },
+      { kind: 'block', index: 2, token: expect.any(Number) },
+    ])
     expect(exec.output).toMatch(/block 2.*1 of 3/i)
     expect(texts(blockJson(editor, 0))).toEqual(['A ', 'B', ' C'])
     expect(editor.state.doc.childCount).toBe(docBefore.childCount)

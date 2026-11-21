@@ -42,12 +42,11 @@ function editorWorkspaces() {
 const editorsOnly = process.argv.includes('--editors')
 const WORKSPACES = editorsOnly ? editorWorkspaces() : testWorkspaces()
 
-/**
- * Workspaces that must wait for another one to finish. The sheets test script
- * rebuilds the xlsx sidecar, which the cli tests execute: started together,
- * the cli could run a binary that cargo is still writing.
- */
-const AFTER = { '@genoffice/cli': ['@genoffice/sheets'] }
+/** Consumers of the native sidecars must wait for the workspace that rebuilds them. */
+const AFTER = {
+  '@genoffice/cli': ['@genoffice/sheets', '@genoffice/file-parse'],
+  '@genoffice/shell': ['@genoffice/file-parse'],
+}
 
 /** Started first: the longest workspaces, so none of them is left to run alone at the end */
 const FIRST = [

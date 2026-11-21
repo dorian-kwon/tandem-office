@@ -1,3 +1,5 @@
+import { changeLocationPatch, type AiChangeLocation } from '@genoffice/agent-core'
+import { AiChangeLinks } from '@genoffice/ui'
 import { analyzingDocumentLabel } from '@genoffice/i18n'
 import { useChatWindow, EarlierChatMessages } from '@genoffice/ui'
 import {
@@ -327,6 +329,7 @@ interface ToolActivity {
 }
 
 interface ChatEntry {
+  changeLocations?: readonly AiChangeLocation[]
   role: 'user' | 'assistant'
   text: string
   streaming?: boolean
@@ -1209,7 +1212,7 @@ export function AiPanel({
             // Swap out the running placeholder pushed by onToolStart (parse-fail calls have none)
             const tools = [...(last.tools ?? [])]
             if (tools.at(-1)?.running) tools.pop()
-            return { tools: [...tools, activity] }
+            return { ...changeLocationPatch(last, execution), tools: [...tools, activity] }
           })
         },
         onTurnEnd: () => {
@@ -2333,6 +2336,13 @@ export function AiPanel({
               )}
               {hasTools && <ToolChipList tools={entry.tools!} />}
               {projectLinesOfReply}
+              <AiChangeLinks
+                places={entry.changeLocations}
+                lang={lang}
+                onShow={(place) => {
+                  if (place.kind === 'element') depsRef.current.navigateTo(place.index)
+                }}
+              />
               <SkillUsedNotes tools={entry.tools} />
               {entry.skillProposals?.map((key) => skillCards.render(key))}
               {entry.usage && (

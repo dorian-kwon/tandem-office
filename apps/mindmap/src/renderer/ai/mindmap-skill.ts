@@ -406,6 +406,7 @@ export function createMindmapSkill(deps: MindmapSkillDeps): AgentSkill {
         output: result.output,
         isError: result.isError,
         mutated: result.mutated ?? false,
+        ...(result.changeLocations ? { changeLocations: result.changeLocations } : {}),
         summary: summaryOf(call.name, result),
       }
     },

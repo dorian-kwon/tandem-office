@@ -36,7 +36,15 @@ it.each(['txt', 'json'])(
     const write = (group: typeof items) => run('translate_source_units', { items: group })
     const pending = () =>
       JSON.parse(run('read_source_units', { remaining: true }).output).units as { id: number }[]
-    expect(write(items.slice(0, 70)).isError).toBeFalsy()
+    const first = write(items.slice(0, 70))
+    expect(first.isError).toBeFalsy()
+    expect(first.changeLocations?.[1]).toEqual({ kind: 'source', index: 1 })
+    source.showUnit(1)
+    const selected = view.state.sliceDoc(
+      view.state.selection.main.from,
+      view.state.selection.main.to,
+    )
+    expect(json ? JSON.parse(selected) : selected).toBe(items[1]!.translation)
     expect(pending().map((x) => x.id)).toEqual(items.slice(70).map((x) => x.id))
     expect(write(items.slice(70)).isError).toBeFalsy()
     expect(undoDepth(view.state)).toBe(120)

@@ -87,6 +87,7 @@ describe('third-party license aggregation', () => {
       env: { ...process.env, CI: '', IEUM_RELEASE: '' },
     })
     const text = readFileSync(join(root, 'apps/shell/build/THIRD-PARTY-NOTICES.txt'), 'utf8')
+    expect(text).toContain('Rust crates (ieum-parse-sidecar native component, statically linked)')
     expect(text).toContain('@embedpdf/pdfium')
     expect(text).toContain('Copyright 2014 PDFium Authors')
     expect(text).toContain('Apache License')
@@ -99,7 +100,8 @@ describe('third-party license aggregation', () => {
     }
     const builder = readFileSync(join(root, 'apps/shell/electron-builder.cjs'), 'utf8')
     expect(builder).toContain('ensureThirdPartyNotices()')
-  })
+    // On a cold cache the generator also resolves the pinned rhwp manifest and crate licenses.
+  }, 90_000)
 
   it('opens with the NOTICE of the work, then names the product in its own header', () => {
     const text = readFileSync(join(root, 'apps/shell/build/THIRD-PARTY-NOTICES.txt'), 'utf8')
@@ -188,6 +190,7 @@ const VALID_NOTICE = [
   'Copyright 2014 PDFium Authors',
   'Apache License',
   '144 crates, all under permissive terms:',
+  '21 crates, all under permissive terms:',
   '138 crates, all under permissive terms:',
   '',
 ].join('\n')
@@ -271,7 +274,7 @@ describe('packaging gate on the third-party notice', () => {
       'crate list unavailable at generation time',
     )
     const { pack, generatorRuns } = packWithNotice(partial, partial)
-    await expect(pack()).rejects.toThrow(/1 of 2 Rust crate sections are listed/)
+    await expect(pack()).rejects.toThrow(/2 of 3 Rust crate sections are listed/)
     expect(generatorRuns).toHaveLength(1)
   })
 

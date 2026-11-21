@@ -228,6 +228,10 @@ describe('edit_map', () => {
       turn,
     )
     expect(result.detail).toEqual({ done: 3, total: 3 })
+    expect(result.changeLocations).toEqual([
+      { kind: 'topic', sheet: r.host.activeSheetKey(), topic: IDS.b, label: '둘' },
+      { kind: 'topic', sheet: r.host.activeSheetKey(), topic: IDS.a, label: '하나' },
+    ])
     const translated = copyOf(r.sheet(1))
     controller.setTitle(IDS.c, 'Manual after')
     expect(await revertTurn(r.host, turn)).toBe(false)

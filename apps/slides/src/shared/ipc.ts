@@ -185,7 +185,7 @@ export interface ApplyTxnResult {
   plan?: string[]
   failures?: Array<{ index: number; error: string }>
   /** compact journal echo: op name, target, ids minted by additive ops */
-  records?: Array<{ op: string; target?: string; created?: string[] }>
+  records?: Array<{ op: string; target?: string; slideId?: string; created?: string[] }>
   /** Only returned to callers that requested partial renders for a page-local edit. */
   update?: SlideUpdate
   /** Full deck for all other successful transactions. */

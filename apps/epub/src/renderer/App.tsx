@@ -260,7 +260,11 @@ export default function App(): React.JSX.Element {
       },
     [],
   )
+  const focusBlockForAi = useCallback((spineIndex: number, blockId: string) => {
+    void goToRef.current(spineIndex, { kind: 'block', id: blockId })
+  }, [])
   const ai = useEpubAi({
+    focusBlock: focusBlockForAi,
     book,
     readChapter: readChapterForAi,
     editor,

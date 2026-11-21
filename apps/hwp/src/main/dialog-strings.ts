@@ -3,6 +3,7 @@ import { createI18n, getUiLang } from '@genoffice/i18n'
 /** Text the main process shows or hands back: the save dialogs, the unsaved-changes prompt, and attachment errors. */
 const tDlg = createI18n({
   zh: {
+    dlgOpenCopyTarget: '此文件已打开。请为副本选择其他名称。',
     dlgSaveTitle: '保存 HWP 文档',
     untitledFile: '未命名文档',
     dlgExportPdfTitle: '导出为 PDF',
@@ -30,6 +31,7 @@ const tDlg = createI18n({
     errNotImage: '不是支持的图片类型',
   },
   en: {
+    dlgOpenCopyTarget: 'This file is open. Choose a different name for the copy.',
     dlgSaveTitle: 'Save HWP Document',
     untitledFile: 'Untitled',
     dlgExportPdfTitle: 'Export as PDF',
@@ -58,6 +60,7 @@ const tDlg = createI18n({
     errNotImage: 'not a supported image type',
   },
   vi: {
+    dlgOpenCopyTarget: 'Tệp này đang mở. Hãy chọn tên khác cho bản sao.',
     dlgSaveTitle: 'Lưu tài liệu HWP',
     untitledFile: 'Không có tiêu đề',
     dlgExportPdfTitle: 'Xuất dưới dạng PDF',
@@ -87,6 +90,7 @@ const tDlg = createI18n({
     errNotImage: 'loại hình ảnh không được hỗ trợ',
   },
   ja: {
+    dlgOpenCopyTarget: 'このファイルは開いています。コピーには別の名前を指定してください。',
     dlgSaveTitle: 'HWP ドキュメントを保存',
     untitledFile: '無題',
     dlgExportPdfTitle: 'PDF として書き出す',
@@ -116,6 +120,7 @@ const tDlg = createI18n({
     errNotImage: 'サポートされていない画像形式です',
   },
   ko: {
+    dlgOpenCopyTarget: '열려 있는 파일입니다. 사본에 다른 이름을 지정해 주세요.',
     dlgSaveTitle: '한글 문서 저장',
     untitledFile: '제목 없음',
     dlgExportPdfTitle: 'PDF로 내보내기',
@@ -145,6 +150,7 @@ const tDlg = createI18n({
     errNotImage: '지원되지 않는 이미지 형식입니다',
   },
   fr: {
+    dlgOpenCopyTarget: 'Ce fichier est ouvert. Choisissez un autre nom pour la copie.',
     dlgSaveTitle: 'Enregistrer le document HWP',
     untitledFile: 'Sans titre',
     dlgExportPdfTitle: 'Exporter en PDF',
@@ -174,6 +180,7 @@ const tDlg = createI18n({
     errNotImage: "type d'image non pris en charge",
   },
   de: {
+    dlgOpenCopyTarget: 'Diese Datei ist geöffnet. Wählen Sie einen anderen Namen für die Kopie.',
     dlgSaveTitle: 'HWP-Dokument speichern',
     untitledFile: 'Unbenannt',
     dlgExportPdfTitle: 'Als PDF exportieren',
@@ -203,6 +210,7 @@ const tDlg = createI18n({
     errNotImage: 'kein unterstütztes Bildformat',
   },
   es: {
+    dlgOpenCopyTarget: 'Este archivo está abierto. Elige otro nombre para la copia.',
     dlgSaveTitle: 'Guardar documento HWP',
     untitledFile: 'Sin título',
     dlgExportPdfTitle: 'Exportar como PDF',
@@ -232,6 +240,7 @@ const tDlg = createI18n({
     errNotImage: 'no es un tipo de imagen compatible',
   },
   th: {
+    dlgOpenCopyTarget: 'ไฟล์นี้เปิดอยู่ โปรดเลือกชื่ออื่นสำหรับสำเนา',
     dlgSaveTitle: 'บันทึกเอกสาร HWP',
     untitledFile: 'ไม่มีชื่อ',
     dlgExportPdfTitle: 'ส่งออกเป็น PDF',
@@ -261,6 +270,7 @@ const tDlg = createI18n({
     errNotImage: 'ไม่ใช่ชนิดรูปภาพที่รองรับ',
   },
   id: {
+    dlgOpenCopyTarget: 'Berkas ini sedang terbuka. Pilih nama lain untuk salinan.',
     dlgSaveTitle: 'Simpan dokumen HWP',
     untitledFile: 'Tanpa judul',
     dlgExportPdfTitle: 'Ekspor sebagai PDF',
@@ -290,6 +300,7 @@ const tDlg = createI18n({
     errNotImage: 'bukan jenis gambar yang didukung',
   },
   ru: {
+    dlgOpenCopyTarget: 'Этот файл открыт. Выберите другое имя для копии.',
     dlgSaveTitle: 'Сохранить документ HWP',
     untitledFile: 'Без названия',
     dlgExportPdfTitle: 'Экспорт в PDF',
@@ -319,6 +330,7 @@ const tDlg = createI18n({
     errNotImage: 'неподдерживаемый тип изображения',
   },
   ar: {
+    dlgOpenCopyTarget: 'هذا الملف مفتوح. اختر اسمًا آخر للنسخة.',
     dlgSaveTitle: 'حفظ مستند HWP',
     untitledFile: 'بدون عنوان',
     dlgExportPdfTitle: 'تصدير بتنسيق PDF',
@@ -348,6 +360,7 @@ const tDlg = createI18n({
     errNotImage: 'ليس نوع صورة مدعومًا',
   },
   pt: {
+    dlgOpenCopyTarget: 'Este arquivo está aberto. Escolha outro nome para a cópia.',
     dlgSaveTitle: 'Salvar documento HWP',
     untitledFile: 'Sem título',
     dlgExportPdfTitle: 'Exportar como PDF',
@@ -377,6 +390,7 @@ const tDlg = createI18n({
     errNotImage: 'não é um tipo de imagem suportado',
   },
   it: {
+    dlgOpenCopyTarget: 'Questo file è aperto. Scegli un altro nome per la copia.',
     dlgSaveTitle: 'Salva documento HWP',
     untitledFile: 'Senza titolo',
     dlgExportPdfTitle: 'Esporta come PDF',
@@ -406,6 +420,7 @@ const tDlg = createI18n({
     errNotImage: 'tipo di immagine non supportato',
   },
   pl: {
+    dlgOpenCopyTarget: 'Ten plik jest otwarty. Wybierz inną nazwę kopii.',
     dlgSaveTitle: 'Zapisz dokument HWP',
     untitledFile: 'Bez tytułu',
     dlgExportPdfTitle: 'Eksportuj jako PDF',
@@ -435,6 +450,7 @@ const tDlg = createI18n({
     errNotImage: 'nieobsługiwany typ obrazu',
   },
   cs: {
+    dlgOpenCopyTarget: 'Tento soubor je otevřený. Vyberte pro kopii jiný název.',
     dlgSaveTitle: 'Uložit dokument HWP',
     untitledFile: 'Bez názvu',
     dlgExportPdfTitle: 'Exportovat jako PDF',
@@ -464,6 +480,7 @@ const tDlg = createI18n({
     errNotImage: 'nepodporovaný typ obrázku',
   },
   nl: {
+    dlgOpenCopyTarget: 'Dit bestand is geopend. Kies een andere naam voor de kopie.',
     dlgSaveTitle: 'HWP-document opslaan',
     untitledFile: 'Naamloos',
     dlgExportPdfTitle: 'Exporteren als PDF',
@@ -493,6 +510,7 @@ const tDlg = createI18n({
     errNotImage: 'geen ondersteund afbeeldingstype',
   },
   ms: {
+    dlgOpenCopyTarget: 'Fail ini sedang dibuka. Pilih nama lain untuk salinan.',
     dlgSaveTitle: 'Simpan dokumen HWP',
     untitledFile: 'Tanpa tajuk',
     dlgExportPdfTitle: 'Eksport sebagai PDF',
@@ -522,6 +540,7 @@ const tDlg = createI18n({
     errNotImage: 'bukan jenis imej yang disokong',
   },
   he: {
+    dlgOpenCopyTarget: 'הקובץ הזה פתוח. יש לבחור שם אחר לעותק.',
     dlgSaveTitle: 'שמירת מסמך HWP',
     untitledFile: 'ללא שם',
     dlgExportPdfTitle: 'ייצוא כ-PDF',
@@ -550,6 +569,7 @@ const tDlg = createI18n({
     errNotImage: 'סוג תמונה שאינו נתמך',
   },
   hi: {
+    dlgOpenCopyTarget: 'यह फ़ाइल खुली है। कॉपी के लिए दूसरा नाम चुनें।',
     dlgSaveTitle: 'HWP दस्तावेज़ सहेजें',
     untitledFile: 'शीर्षकहीन',
     dlgExportPdfTitle: 'PDF के रूप में निर्यात करें',
@@ -579,6 +599,7 @@ const tDlg = createI18n({
     errNotImage: 'समर्थित छवि प्रकार नहीं है',
   },
   'zh-TW': {
+    dlgOpenCopyTarget: '此檔案已開啟。請為複本選擇其他名稱。',
     dlgSaveTitle: '儲存 HWP 文件',
     untitledFile: '未命名文件',
     dlgExportPdfTitle: '匯出為 PDF',
@@ -608,6 +629,7 @@ const tDlg = createI18n({
 })
 
 export type DlgKey =
+  | 'dlgOpenCopyTarget'
   | 'dlgSaveTitle'
   | 'untitledFile'
   | 'dlgExportPdfTitle'

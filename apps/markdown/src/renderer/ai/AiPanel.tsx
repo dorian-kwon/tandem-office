@@ -1,3 +1,5 @@
+import { changeLocationPatch, type AiChangeLocation, findChangedBlock } from '@genoffice/agent-core'
+import { AiChangeLinks } from '@genoffice/ui'
 import { analyzingDocumentLabel } from '@genoffice/i18n'
 import { useChatWindow, EarlierChatMessages } from '@genoffice/ui'
 import {
@@ -154,6 +156,7 @@ interface ToolActivity {
 }
 
 interface ChatEntry {
+  changeLocations?: readonly AiChangeLocation[]
   role: 'user' | 'assistant'
   text: string
   streaming?: boolean
@@ -785,7 +788,11 @@ export function AiPanel({
             // Swap out the running placeholder pushed by onToolStart (parse-fail calls have none)
             const tools = [...(last.tools ?? [])]
             if (tools.at(-1)?.running) tools.pop()
-            return { tools: [...tools, activity], ...(mindmap ? { mindmap } : {}) }
+            return {
+              ...changeLocationPatch(last, execution),
+              tools: [...tools, activity],
+              ...(mindmap ? { mindmap } : {}),
+            }
           })
         },
         onTurnEnd: () => {
@@ -1495,6 +1502,17 @@ export function AiPanel({
                   }}
                 />
               )}
+              <AiChangeLinks
+                places={entry.changeLocations}
+                lang={lang}
+                onShow={(place) => {
+                  if (place.kind === 'source') depsRef.current.getSource?.()?.showUnit(place.index)
+                  const editor = depsRef.current.getEditor()
+                  if (place.kind !== 'block' || !editor || depsRef.current.getSource?.()) return
+                  const index = findChangedBlock(editor.state.doc, place)
+                  if (index !== null) navigateToBlock(editor, index)
+                }}
+              />
               <SkillUsedNotes tools={entry.tools} />
               {projectPanel.messageParts(entry)}
               {entry.skillProposals?.map((key) => skillCards.render(key))}

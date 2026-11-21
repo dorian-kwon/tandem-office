@@ -992,6 +992,15 @@ export class MapController {
     return true
   }
 
+  /** Select and reveal a surviving target of a local AI edit. */
+  focusTopic(topicId: string): void {
+    if (this.#destroyed) return
+    const element = this.#element(topicId)
+    if (!element) return
+    this.mind.selectNode(element)
+    element.scrollIntoView?.({ block: 'center', inline: 'center' })
+  }
+
   /** Draws the sheet again from the source tree. */
   redraw(): void {
     this.#draw(this.#session.view(this.#key))

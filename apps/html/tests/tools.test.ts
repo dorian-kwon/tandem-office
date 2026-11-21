@@ -127,6 +127,11 @@ describe('html skill tools', () => {
     )
     expect(r.isError).toBeFalsy()
     expect(r.mutated).toBe(true)
+    expect(r.changeLocations).toEqual([
+      { kind: 'element', index: h1 },
+      { kind: 'element', index: cards[1]!.sid },
+      { kind: 'element', index: map.elements.find((e) => e.tag === 'p')!.sid },
+    ])
     expect(r.output).toMatch(/Applied 3 op\(s\) at L5, L8, L10/)
     expect(doc.text).toContain('<h1 id="t">Q3 Results</h1>')
     expect(doc.text).toContain('<div class="card" data-metric="margin">Margin</div>')

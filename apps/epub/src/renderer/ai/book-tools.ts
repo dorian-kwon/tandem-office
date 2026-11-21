@@ -1,3 +1,4 @@
+import { mergeChangeLocations, type AiChangeLocation } from '@genoffice/agent-core'
 import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
 /**
  * What the AI's five book tools do (spec §7): read_book, read_chapter,
@@ -75,6 +76,7 @@ export type StartBookTranslation = (
 
 /** The editor as the AI's tools see it. */
 export interface BookAiHost {
+  focusBlock?(spineIndex: number, blockId: string): void
   /** the open book; null while none is open */
   book(): EpubBookSummary | null
   readChapter(spineIndex: number): Promise<EpubChapterResult>
@@ -139,6 +141,7 @@ interface ChapterView {
 
 /** The outcome of one tool. `detail` feeds the activity line. */
 export interface BookToolResult {
+  changeLocations?: AiChangeLocation[]
   output: string
   isError?: boolean
   mutated?: boolean
@@ -624,6 +627,37 @@ export class BookTools {
       return { output: 'The blocks already match the requested edits.', detail: { done: 0 } }
     }
     return {
+      changeLocations: mergeChangeLocations(
+        undefined,
+        (function* (): Generator<AiChangeLocation> {
+          for (const [index, result] of outcome.results.entries()) {
+            if (!result.replacements.length) continue
+            const replaced = new Set(
+              groups[index]!.edits.filter((edit) => edit.op === 'replace').map(
+                (edit) => edit.blockId,
+              ),
+            )
+            const created = new Set(result.created)
+            // Both sequences are in new-chapter source order. An untouched block in a mixed
+            // batch has no inverse range inside it, even when its id was requested.
+            let rangeIndex = 0
+            for (const block of result.blocks) {
+              while (
+                result.inverse[rangeIndex] &&
+                result.inverse[rangeIndex]!.end < block.inner.start
+              )
+                rangeIndex++
+              const range = result.inverse[rangeIndex]
+              if (
+                created.has(block.id) ||
+                (replaced.has(block.id) && range && range.start <= block.inner.end)
+              ) {
+                yield { kind: 'book', chapter: result.spineIndex, block: block.id }
+              }
+            }
+          }
+        })(),
+      ),
       output: this.appliedText(ops.length, outcome.results),
       mutated: true,
       detail: { done: ops.length },

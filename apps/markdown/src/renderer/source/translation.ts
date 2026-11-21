@@ -1,3 +1,4 @@
+import { MAX_CHANGE_LOCATIONS } from '@genoffice/agent-core'
 import type { AgentToolCall, AgentToolDef, ToolExecution } from '@genoffice/agent-core'
 import { isolateHistory } from '@codemirror/commands'
 import { Transaction, type Text } from '@codemirror/state'
@@ -85,6 +86,18 @@ export class SourceTranslation {
     this.indexed = doc
     this.units = units
     return units
+  }
+
+  showUnit(id: number): void {
+    let unit: Unit | undefined
+    try {
+      unit = this.index()[id]
+    } catch {
+      return
+    }
+    if (!unit) return
+    this.view.dispatch({ selection: { anchor: unit.from, head: unit.to }, scrollIntoView: true })
+    this.view.focus()
   }
 
   execute(call: AgentToolCall): ToolExecution {
@@ -192,6 +205,10 @@ export class SourceTranslation {
       summary: call.name,
       output: JSON.stringify({ handled: edits.length, changed: transactions.length }),
       mutated: transactions.length > 0,
+      changeLocations: edits
+        .filter((edit) => edit.unit.text !== edit.translation)
+        .slice(0, MAX_CHANGE_LOCATIONS)
+        .map((edit) => ({ kind: 'source', index: edit.id })),
     }
   }
 }

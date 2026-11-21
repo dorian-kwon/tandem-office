@@ -1,13 +1,22 @@
 import { readFile, stat } from 'node:fs/promises'
 import { extname } from 'node:path'
-import { parseFileToText, redactHtmlSource } from '@genoffice/file-parse'
-import { MAX_BODY_CHARS } from './limits'
-
-/** larger files are indexed by name and folder only */
-export const MAX_EXTRACT_BYTES = 64 * 1024 * 1024
+import { REDACT_NS } from '@genoffice/agent-core/redact-range'
+import {
+  ParseSidecarClient,
+  SIDECAR_EXTS,
+  SidecarInfraError,
+  isParseSidecarEnabled,
+  parseFileToText,
+  redactHtmlSource,
+  type SidecarTokens,
+} from '@genoffice/file-parse'
+import { INDEX_STREAMING_EXTS, MAX_BODY_CHARS, MAX_EXTRACT_BYTES } from './limits'
+export { MAX_EXTRACT_BYTES } from './limits'
 
 export type Extracted =
-  { kind: 'text'; text: string } | { kind: 'name-only' } | { kind: 'error'; error: string }
+  | { kind: 'text'; text: string; tokens?: SidecarTokens }
+  | { kind: 'name-only' }
+  | { kind: 'error'; error: string }
 
 const MARKUP_EXTS = new Set(['html', 'htm'])
 
@@ -23,11 +32,33 @@ function stripMarkup(html: string): string {
     .replace(/&#39;/g, "'")
 }
 
-export async function extractText(path: string): Promise<Extracted> {
+export async function extractText(path: string, sidecar?: ParseSidecarClient): Promise<Extracted> {
   try {
     const st = await stat(path)
-    if (st.size > MAX_EXTRACT_BYTES) return { kind: 'name-only' }
     const ext = extname(path).slice(1).toLowerCase()
+    if (st.size > MAX_EXTRACT_BYTES && !INDEX_STREAMING_EXTS.has(ext)) return { kind: 'name-only' }
+    if (sidecar && isParseSidecarEnabled() && SIDECAR_EXTS.has(ext)) {
+      try {
+        const result = await sidecar.extractFile({
+          path,
+          ext,
+          tokenize: true,
+          maxBodyChars: MAX_BODY_CHARS,
+          redactNamespaces: [REDACT_NS],
+        })
+        if (result.status === 'ok')
+          return { kind: 'text', text: result.text, tokens: result.tokens }
+        if (result.status === 'unsupported') return { kind: 'name-only' }
+        if (result.status === 'rejected') return { kind: 'error', error: result.message }
+      } catch (error) {
+        if (
+          !(error instanceof SidecarInfraError) ||
+          error.code === 'request_timeout' ||
+          error.code === 'stopped'
+        )
+          throw error
+      }
+    }
     if (MARKUP_EXTS.has(ext)) {
       // what the page withholds from a model goes before the tags do: the index
       // feeds excerpts to the knowledge base and the reranker. A mark that cannot
@@ -37,7 +68,7 @@ export async function extractText(path: string): Promise<Extracted> {
         text: stripMarkup(redactHtmlSource(await readFile(path, 'utf-8'))).slice(0, MAX_BODY_CHARS),
       }
     }
-    const parsed = await parseFileToText(path)
+    const parsed = await parseFileToText(path, { skipSidecar: true, maxChars: MAX_BODY_CHARS })
     if (parsed.kind === 'unsupported') return { kind: 'name-only' }
     if (!parsed.ok || parsed.kind !== 'text')
       return { kind: 'error', error: parsed.error ?? 'parse failed' }

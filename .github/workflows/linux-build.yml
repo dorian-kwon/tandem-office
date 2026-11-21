@@ -52,10 +52,12 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Cache cargo (xlsx-sidecar)
+      - name: Cache cargo (native sidecars)
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
-          workspaces: apps/sheets/native/xlsx-engine
+          workspaces: |
+            apps/sheets/native/xlsx-engine
+            packages/file-parse/native/parse-sidecar
 
       - name: Cache electron binaries
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -110,6 +112,7 @@ jobs:
           for bin in \
             "$dir/tandem-office" \
             "$dir/resources/native/xlsx-sidecar" \
+            "$dir/resources/native/ieum-parse-sidecar" \
             "$dir/resources/cli/ieumoffice"; do
             test -x "$bin" || { echo "missing or not executable: $bin"; exit 1; }
           done

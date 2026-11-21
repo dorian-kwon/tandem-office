@@ -1,3 +1,5 @@
+import { changeLocationPatch, type AiChangeLocation } from '@genoffice/agent-core'
+import { AiChangeLinks } from '@genoffice/ui'
 import { analyzingDocumentLabel } from '@genoffice/i18n'
 import { useChatWindow, EarlierChatMessages } from '@genoffice/ui'
 import { aiEditApi } from './ai-edit-api'
@@ -307,6 +309,7 @@ function safeJsonInput(input: unknown): string | undefined {
 }
 
 interface ChatEntry {
+  changeLocations?: readonly AiChangeLocation[]
   role: 'user' | 'assistant'
   text: string
   error?: string
@@ -433,6 +436,7 @@ interface AiPanelProps {
   onQueueRemove?: (key: string) => void
   onQueueClear?: () => void
   /** Jump to the item's page and select its elements */
+  onFocusChange?: (part: string, node?: string) => void
   onQueueFocus?: (key: string) => void
   /** Drop the items a submission finished with (successful and unrunnable alike) */
   onQueueConsume?: (keys: string[]) => void
@@ -529,6 +533,7 @@ export function AiPanel({
   onQueueEditInstruction,
   onQueueRemove,
   onQueueClear,
+  onFocusChange,
   onQueueFocus,
   onQueueConsume,
   templateDocument,
@@ -1381,6 +1386,7 @@ export function AiPanel({
             return {
               ok: true,
               pages: res.slides.length,
+              landedPart: res.slides[insertedIndex ?? appendedFrom]?.partPath,
               appendedFrom,
               insertedIndex,
               fallbackReason,
@@ -1799,7 +1805,7 @@ export function AiPanel({
             // Swap out the running placeholder pushed by onToolStart (parse-fail calls have none)
             const tools = [...(last.tools ?? [])]
             if (tools.at(-1)?.running) tools.pop()
-            return { tools: [...tools, activity] }
+            return { ...changeLocationPatch(last, execution), tools: [...tools, activity] }
           })
         },
         onTurnEnd: () => {
@@ -2820,6 +2826,13 @@ export function AiPanel({
                 <span dir="auto">{choiceBubbleText(entry.text, lang)}</span>
               )}
               {entry.tools && entry.tools.length > 0 && <ToolChipList tools={entry.tools} />}
+              <AiChangeLinks
+                places={entry.changeLocations}
+                lang={lang}
+                onShow={(place) => {
+                  if (place.kind === 'slide') onFocusChange?.(place.part, place.node)
+                }}
+              />
               <SkillUsedNotes tools={entry.tools} />
               {projectPanel.messageParts(entry)}
               {entry.skillProposals?.map((key) => skillCards.render(key))}

@@ -1,3 +1,5 @@
+import { changeLocationPatch, type AiChangeLocation } from '@genoffice/agent-core'
+import { AiChangeLinks } from '@genoffice/ui'
 import { analyzingDocumentLabel } from '@genoffice/i18n'
 import { useChatWindow, EarlierChatMessages } from '@genoffice/ui'
 import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
@@ -244,6 +246,7 @@ interface ToolActivity {
 }
 
 interface ChatEntry {
+  changeLocations?: readonly AiChangeLocation[]
   role: 'user' | 'assistant'
   text: string
   streaming?: boolean
@@ -816,7 +819,7 @@ export function AiPanel({ host, filePath, onCollapse }: AiPanelProps): ReactElem
             // the running row pushed by onToolStart is swapped out (a call that never ran has none)
             const tools = [...(last.tools ?? [])]
             if (tools.at(-1)?.running) tools.pop()
-            return { tools: [...tools, activity] }
+            return { ...changeLocationPatch(last, execution), tools: [...tools, activity] }
           })
         },
         onTurnEnd: () => {
@@ -1704,6 +1707,14 @@ export function AiPanel({ host, filePath, onCollapse }: AiPanelProps): ReactElem
               )}
               {hasTools && <ToolChipList tools={entry.tools!} />}
               {projectLinesOfReply}
+              <AiChangeLinks
+                places={entry.changeLocations}
+                lang={lang}
+                onShow={(place) => {
+                  if (place.kind === 'book')
+                    hostRef.current.focusBlock?.(place.chapter, place.block)
+                }}
+              />
               <SkillUsedNotes tools={entry.tools} />
               {entry.skillProposals?.map((key) => skillCards.render(key))}
               {entry.usage && (

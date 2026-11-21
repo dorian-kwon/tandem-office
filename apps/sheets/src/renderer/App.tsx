@@ -1,3 +1,5 @@
+import { planChangeLocations } from './ai/plan-change-locations'
+import { mergeChangeLocations } from '@genoffice/agent-core'
 import { analyzingDocumentLabel } from '@genoffice/i18n'
 import { isWorkbookHistoryComposer } from './clear-selection-keyboard'
 import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
@@ -4096,6 +4098,13 @@ export function App({
    * — auto-apply never bypasses the "workbook changed since preview" check.
    * When apply fails, the preview card stays up as a manual fallback.
    */
+  function currentSheetName(id: string): string | undefined {
+    return (
+      univerRef.current?.univerAPI.getActiveWorkbook()?.getSheetBySheetId(id)?.getSheetName() ??
+      lazyWorkbookRef.current?.file.sheets.find((sheet) => sheet.id === id)?.name
+    )
+  }
+
   async function autoApplySafePlan(plan: ChangePlan, translation = false): Promise<ApplyOutcome> {
     if (!(await commitActiveEditor())) {
       return { ok: false, reason: t('appApplyTxFailed') }
@@ -4123,6 +4132,10 @@ export function App({
             ...entry,
             autoApplied: {
               opCount: (entry.autoApplied?.opCount ?? 0) + opCount,
+              locations: mergeChangeLocations(
+                entry.autoApplied?.locations,
+                planChangeLocations(plan, currentSheetName),
+              ),
               undoIds: appendAiUndoEntries(entry.autoApplied?.undoIds, undoIds),
             },
           }))
@@ -4260,6 +4273,10 @@ export function App({
         ...entry,
         autoApplied: {
           opCount: (entry.autoApplied?.opCount ?? 0) + opCount,
+          locations: mergeChangeLocations(
+            entry.autoApplied?.locations,
+            planChangeLocations(plan, currentSheetName),
+          ),
           undoIds: appendAiUndoEntries(entry.autoApplied?.undoIds, scope.entryIds),
         },
       }))
@@ -5769,6 +5786,13 @@ export function App({
           setAiScopeDismissed(true)
         }}
         onAiCitation={handleAiCitation}
+        onAiShowCell={(id, range) => {
+          const name = currentSheetName(id)
+          if (name)
+            handleAiCitation(
+              'sheetnav://' + encodeURIComponent("'" + name.replace(/'/g, "''") + "'!" + range),
+            )
+        }}
         canUndo={univerHist.canUndo}
         canRedo={univerHist.canRedo}
         onCommand={handleRibbonCommand}

@@ -134,6 +134,594 @@ function tellUser(message) {
   }
 }
 
+/**
+ * The table commands that name their table by the outermost table's numbers: the caret's
+ * parentParaIndex/controlIndex/cellIndex, or a cell block's or a selected table's sec/ppi/ci.
+ * In a table inside a cell or a text box those numbers are the outer table's, so the command
+ * changed the outer table (a row in the form, a merge of its cells). The studio's dispatcher
+ * asks nestedTableCommand before it runs one (studio-nested-table-dispatch): there the editing
+ * commands run on the inner table by its path, and the others are refused with the reason. A
+ * table in the body takes every command as before.
+ *
+ * The editing commands, which run on the inner table by its path (innerTableServices).
+ */
+export const NESTED_TABLE_EDITS = Object.freeze([
+  // rows and columns: the menu and right-click items, Alt+Insert/Alt+Enter and Alt+Delete
+  'table:insert-row-col',
+  'table:delete-row-col',
+  'table:insert-row-above',
+  'table:insert-row-below',
+  'table:insert-col-left',
+  'table:insert-col-right',
+  'table:delete-row',
+  'table:delete-col',
+  'ieum:table-insert-row-below',
+  // merge (M) and split (S)
+  'table:cell-merge',
+  'table:cell-split',
+  // a cell's border and fill: the studio's dialogs and a cell block's L/C/B/F
+  'table:border-each',
+  'table:border-one',
+  'ieum:cell-border-each',
+  'ieum:cell-background-each',
+  'ieum:cell-border-one',
+  'ieum:cell-background-one',
+  // 표/셀 속성 (P), from a cell, a cell block or a selected table, and its L/C on a selected table
+  'table:cell-props',
+  'format:object-properties',
+  'ieum:table-border-each',
+  'ieum:table-border-background',
+  // equal sizes (H/W) and the sizing keys (Ctrl/Alt/Shift+arrow on a block, Shift+arrow on a table)
+  'table:cell-height-equal',
+  'table:cell-width-equal',
+  'ieum:table-block-resize',
+  'ieum:table-row-column-resize',
+  'ieum:table-cell-resize',
+  'ieum:table-resize',
+])
+
+/** The table commands that stay refused in a table inside a cell or a text box. */
+export const NESTED_TABLE_LATER = Object.freeze([
+  // split (Ctrl+N,A) and attach (Ctrl+N,Z)
+  'table:split',
+  'table:attach',
+  'table:caption-toggle',
+  // formulas and the number formats of a cell
+  'table:formula',
+  'table:block-formula',
+  'table:thousand-sep',
+  'table:decimal-add',
+  'table:decimal-remove',
+  // transposing
+  'table:transpose-copy',
+  'table:transpose-paste',
+  'ieum:table-transpose',
+  // a selected table's order and text wrap (Shift+PageUp/Down, Shift+Home/End)
+  'ieum:table-order',
+  'ieum:table-wrap',
+])
+
+const NESTED_TABLE_EDIT_SET = new Set(NESTED_TABLE_EDITS)
+const NESTED_TABLE_LATER_SET = new Set(NESTED_TABLE_LATER)
+
+/** Commands that act on a table only with the table selected as an object (a picture's own otherwise). */
+const TABLE_OBJECT_ONLY = new Set(['format:object-properties'])
+
+const depthOf = (path) => (Array.isArray(path) ? path.length : 0)
+
+/**
+ * Whether the table a command would act on is inside a cell ('cell') or a text box ('textBox'),
+ * or null for a table in the body. A selected table counts by its own path, a cell block by its
+ * table's, the caret by the cell it is in. Headers, footers and notes are left as they were.
+ */
+export function nestedTableAt(ih) {
+  const cursor = ih?.cursor
+  if (!cursor) return null
+  if (cursor.isInHeaderFooter?.() || cursor.isInFootnote?.()) return null
+  let depth
+  if (cursor.isInTableObjectSelection?.()) {
+    depth = depthOf(cursor.getSelectedTableRef?.()?.cellPath)
+  } else if (cursor.isInCellSelectionMode?.()) {
+    depth = depthOf(cursor.getCellTableContext?.()?.cellPath)
+  } else {
+    const pos = cursor.getPosition?.() ?? ih.getCursorPosition?.()
+    depth = pos?.parentParaIndex === undefined ? 0 : depthOf(pos.cellPath)
+  }
+  if (depth < 2) return null
+  return cursor.isInTextBox?.() ? 'textBox' : 'cell'
+}
+
+function nestedTableNotice(where) {
+  if (where === 'textBox') {
+    return koreanUi
+      ? '글상자 안의 표에서는 아직 할 수 없습니다.'
+      : 'This cannot be done in a table inside a text box yet.'
+  }
+  return koreanUi
+    ? '표 안의 표에서는 아직 할 수 없습니다.'
+    : 'This cannot be done in a table inside a table yet.'
+}
+
+/** A step of a cell path, copied. */
+const stepOf = ({ controlIndex, cellIndex, cellParaIndex }) => ({
+  controlIndex,
+  cellIndex,
+  cellParaIndex,
+})
+
+/** The path the engine's table calls take: the steps down to the table, the last naming it. */
+export function tablePathOf(cellPath) {
+  const last = cellPath[cellPath.length - 1]
+  return [
+    ...cellPath.slice(0, -1).map(stepOf),
+    { controlIndex: last.controlIndex, cellIndex: 0, cellParaIndex: 0 },
+  ]
+}
+
+/** The path to one cell (and paragraph) of the table a table path names. */
+export function cellPathOf(tablePath, cellIdx, cellParaIdx = 0) {
+  const last = tablePath[tablePath.length - 1]
+  return [
+    ...tablePath.slice(0, -1).map(stepOf),
+    { controlIndex: last.controlIndex, cellIndex: cellIdx, cellParaIndex: cellParaIdx },
+  ]
+}
+
+const sameStep = (a, b) =>
+  a.controlIndex === b.controlIndex &&
+  a.cellIndex === b.cellIndex &&
+  a.cellParaIndex === b.cellParaIndex
+
+/** Whether a cell path goes through a cell of the table a table path names. */
+function throughTable(cellPath, tablePath) {
+  const n = tablePath.length
+  if (depthOf(cellPath) < n) return false
+  for (let i = 0; i < n - 1; i += 1) if (!sameStep(cellPath[i], tablePath[i])) return false
+  return cellPath[n - 1].controlIndex === tablePath[n - 1].controlIndex
+}
+
+/**
+ * The table inside a cell or a text box a table command would act on, chosen as nestedTableAt
+ * chooses: `sec`/`ppi`/`ci` are the numbers the studio's commands name it by (the outermost
+ * table's or text box's), `path` the engine's path to it. Null for a table in the body.
+ */
+export function innerTableTarget(ih) {
+  const where = nestedTableAt(ih)
+  if (!where) return null
+  const cursor = ih.cursor
+  let at
+  if (cursor.isInTableObjectSelection?.()) {
+    const ref = cursor.getSelectedTableRef()
+    at = { sec: ref.sec, ppi: ref.ppi, ci: ref.ci, cellPath: ref.cellPath }
+  } else if (cursor.isInCellSelectionMode?.()) {
+    const context = cursor.getCellTableContext()
+    at = { sec: context.sec, ppi: context.ppi, ci: context.ci, cellPath: context.cellPath }
+  } else {
+    const pos = cursor.getPosition?.() ?? ih.getCursorPosition()
+    at = {
+      sec: pos.sectionIndex,
+      ppi: pos.parentParaIndex,
+      ci: pos.controlIndex,
+      cellPath: pos.cellPath,
+    }
+  }
+  if (at.ppi === undefined || at.ci === undefined) return null
+  return { sec: at.sec, ppi: at.ppi, ci: at.ci, path: tablePathOf(at.cellPath), where, told: false }
+}
+
+const tableJson = (t) => JSON.stringify(t.path)
+const cellJson = (t, cellIdx, cellParaIdx = 0) =>
+  JSON.stringify(cellPathOf(t.path, cellIdx, cellParaIdx))
+
+/**
+ * The studio's flat table calls (on the bridge) and the path calls that stand in for them on an
+ * inner table, rhwp patch 0055 and the earlier path calls. Each takes the bridge, the target and
+ * the flat call's arguments after (section, paragraph, control).
+ */
+const PATH_CALLS = new Map(
+  Object.entries({
+    getTableDimensions: (b, t) => b.getTableDimensionsByPath(t.sec, t.ppi, tableJson(t)),
+    getTableCellBboxes: (b, t) => b.getTableCellBboxesByPath(t.sec, t.ppi, tableJson(t)),
+    getTableCellBboxesAtPage: (b, t, page) =>
+      b
+        .getTableCellBboxesByPath(t.sec, t.ppi, tableJson(t))
+        .filter((box) => box.pageIndex === undefined || box.pageIndex === page),
+    getCellInfo: (b, t, cellIdx) => b.getCellInfoByPath(t.sec, t.ppi, cellJson(t, cellIdx)),
+    getCellProperties: (b, t, cellIdx) =>
+      b.getCellPropertiesByPath(t.sec, t.ppi, tableJson(t), cellIdx),
+    getCellOwnProperties: (b, t, cellIdx) =>
+      b.getCellOwnPropertiesByPath(t.sec, t.ppi, tableJson(t), cellIdx),
+    getCellParagraphCount: (b, t, cellIdx) =>
+      b.getCellParagraphCountByPath(t.sec, t.ppi, cellJson(t, cellIdx)),
+    getCellParagraphLength: (b, t, cellIdx, para) =>
+      b.getCellParagraphLengthByPath(t.sec, t.ppi, cellJson(t, cellIdx, para)),
+    getTextInCell: (b, t, cellIdx, para, offset, count) =>
+      b.getTextInCellByPath(t.sec, t.ppi, cellJson(t, cellIdx, para), offset, count),
+    getTableProperties: (b, t) => b.getTablePropertiesByPath(t.sec, t.ppi, tableJson(t)),
+    setTableProperties: (b, t, props) =>
+      b.setTablePropertiesByPath(t.sec, t.ppi, tableJson(t), props),
+    setCellProperties: (b, t, cellIdx, props) =>
+      b.setCellPropertiesByPath(t.sec, t.ppi, tableJson(t), cellIdx, props),
+    setCellZoneProperties: (b, t, range, props) =>
+      b.setCellZonePropertiesByPath(t.sec, t.ppi, tableJson(t), range, props),
+    applyCellBorderFillIds: (b, t, payload) =>
+      b.applyCellBorderFillIdsByPath(t.sec, t.ppi, tableJson(t), payload),
+    insertTableRow: (b, t, row, below) =>
+      b.insertTableRowByPath(t.sec, t.ppi, tableJson(t), row, below),
+    insertTableColumn: (b, t, col, right) =>
+      b.insertTableColumnByPath(t.sec, t.ppi, tableJson(t), col, right),
+    deleteTableRow: (b, t, row) => b.deleteTableRowByPath(t.sec, t.ppi, tableJson(t), row),
+    deleteTableColumn: (b, t, col) => b.deleteTableColumnByPath(t.sec, t.ppi, tableJson(t), col),
+    mergeTableCells: (b, t, ...range) =>
+      b.mergeTableCellsByPath(t.sec, t.ppi, tableJson(t), ...range),
+    splitTableCell: (b, t, row, col) =>
+      b.splitTableCellByPath(t.sec, t.ppi, tableJson(t), row, col),
+    splitTableCellInto: (b, t, ...rest) =>
+      b.splitTableCellIntoByPath(t.sec, t.ppi, tableJson(t), ...rest),
+    splitTableCellsInRange: (b, t, ...rest) =>
+      b.splitTableCellsInRangeByPath(t.sec, t.ppi, tableJson(t), ...rest),
+    resizeTableCells: (b, t, updates) =>
+      b.resizeTableCellsByPath(t.sec, t.ppi, tableJson(t), updates),
+    resizeTableCell: (b, t, ...rest) =>
+      b.resizeTableCellByPath(t.sec, t.ppi, tableJson(t), ...rest),
+    setTableCellExtents: (b, t, vertical, extents) =>
+      b.setTableCellExtentsByPath(t.sec, t.ppi, tableJson(t), vertical, extents),
+  }),
+)
+
+/**
+ * Flat calls that change a table or its cells and have no path call here: named with an inner
+ * table's numbers they would change the outer table, so they are refused instead.
+ */
+const FLAT_ONLY_EDITS = new Set([
+  'splitTable',
+  'mergeTableWithNext',
+  'moveTableOffset',
+  'deleteTableControl',
+  'evaluateTableFormula',
+  'setTableCellFormula',
+  'pasteTableCellsTransposed',
+  'transposeTableCellsInPlace',
+  'changeShapeZOrder',
+  'insertTextInCell',
+  'insertTextInCellDeferredPagination',
+  'deleteTextInCell',
+  'deleteTextInCellDeferredPagination',
+  'replaceTextInCellDeferredPagination',
+  'deleteRangeInCell',
+  'splitParagraphInCell',
+  'mergeParagraphInCell',
+  'applyCharFormatInCell',
+  'setCharShapeIdInCell',
+  'applyParaFormatInCell',
+  'setCellParaShapeId',
+  'applyCellStyle',
+  'insertPictureInCell',
+  'pasteInternalInCell',
+  'pasteHtmlInCell',
+  'setFormValueInCell',
+])
+
+/** What the engine says when it refuses an inner table: a wrong path, drawn borders, a caption. */
+const INNER_TABLE_REFUSAL = /경로\[|개체로 그린|캡션/
+
+const INNER_TABLE = Symbol('ieum inner table')
+
+/** The inner table a bridge from innerTableBridge stands for, or null. */
+export function innerTableOf(bridge) {
+  return bridge?.[INNER_TABLE] ?? null
+}
+
+function tellRefusal(target) {
+  if (target.told) return
+  target.told = true
+  tellUser(nestedTableNotice(target.where))
+}
+
+function pathCall(bridge, target, name, call, args) {
+  if (name === 'deleteTableRow' || name === 'deleteTableColumn') {
+    // the last row or column stays, quietly, as in a body table
+    const dims = bridge.getTableDimensionsByPath(target.sec, target.ppi, tableJson(target))
+    if ((name === 'deleteTableRow' ? dims.rowCount : dims.colCount) <= 1) {
+      throw new Error('the last row or column of a table stays')
+    }
+  }
+  try {
+    return call(bridge, target, ...args)
+  } catch (error) {
+    if (INNER_TABLE_REFUSAL.test(String(error?.message ?? error))) tellRefusal(target)
+    throw error
+  }
+}
+
+/**
+ * The studio's bridge for a command on an inner table: a flat table call named with the target's
+ * numbers goes to the path call for the inner table instead, a flat edit with no path call is
+ * refused, and every other call is the bridge's own.
+ */
+export function innerTableBridge(bridge, target) {
+  const onTarget = (args) =>
+    args[0] === target.sec && args[1] === target.ppi && args[2] === target.ci
+  return new Proxy(bridge, {
+    get(real, prop) {
+      if (prop === INNER_TABLE) return target
+      const value = Reflect.get(real, prop, real)
+      if (typeof value !== 'function') return value
+      const call = typeof prop === 'string' ? PATH_CALLS.get(prop) : undefined
+      if (call) {
+        return (...args) =>
+          onTarget(args)
+            ? pathCall(real, target, prop, call, args.slice(3))
+            : value.apply(real, args)
+      }
+      if (FLAT_ONLY_EDITS.has(prop)) {
+        return (...args) => {
+          if (!onTarget(args)) return value.apply(real, args)
+          tellRefusal(target)
+          throw new Error(`${prop} does not reach a table inside a cell or a text box`)
+        }
+      }
+      return value.bind(real)
+    },
+  })
+}
+
+/**
+ * The caret as the studio's commands read it for the target: the cell of the inner table it is
+ * in, by that table's cell number. A caret elsewhere (a table selected while the caret is outside
+ * it) reads as the table's first cell.
+ */
+function caretOnTable(target, pos) {
+  const n = target.path.length
+  if (pos && throughTable(pos.cellPath, target.path)) {
+    const step = pos.cellPath[n - 1]
+    if (pos.cellPath.length === n) {
+      return { ...pos, cellIndex: step.cellIndex, cellParaIndex: step.cellParaIndex }
+    }
+    return {
+      ...pos,
+      paragraphIndex: step.cellParaIndex,
+      charOffset: 0,
+      cellIndex: step.cellIndex,
+      cellParaIndex: step.cellParaIndex,
+      cellPath: pos.cellPath.slice(0, n).map(stepOf),
+    }
+  }
+  return {
+    sectionIndex: target.sec,
+    paragraphIndex: 0,
+    charOffset: 0,
+    parentParaIndex: target.ppi,
+    controlIndex: target.ci,
+    cellIndex: 0,
+    cellParaIndex: 0,
+    cellPath: cellPathOf(target.path, 0),
+    ...(target.where === 'textBox' ? { isTextBox: true } : {}),
+  }
+}
+
+/** The row and column of the target's cell a caret is in, or null. */
+function placeOnTable(view, target, pos) {
+  if (!pos || !throughTable(pos.cellPath, target.path)) return null
+  try {
+    const cellIdx = pos.cellPath[target.path.length - 1].cellIndex
+    const info = view.getCellInfo(target.sec, target.ppi, target.ci, cellIdx)
+    return { row: info.row, col: info.col }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Where the caret goes after an edit of the inner table: the cell the command named, with the
+ * cell path to it (the studio's commands name a cell by `cellIndex`, a nested caret goes by its
+ * path). A cell number the edit took away (the last row deleted) becomes the cell now at the
+ * caret's old row and column, as the studio's own row deletion does; a paragraph or offset past
+ * the cell's end comes back inside it.
+ */
+function settleCaret(view, target, pos, before) {
+  if (!pos || !throughTable(pos.cellPath, target.path)) return pos
+  const { sec, ppi, ci } = target
+  const n = target.path.length
+  const step = pos.cellPath[n - 1]
+  const atTable = pos.cellPath.length === n
+  let cellIdx = atTable ? (pos.cellIndex ?? step.cellIndex) : step.cellIndex
+  let para = atTable ? (pos.cellParaIndex ?? step.cellParaIndex) : step.cellParaIndex
+  let offset = pos.charOffset
+  let path = pos.cellPath
+  const dims = view.getTableDimensions(sec, ppi, ci)
+  if (!(cellIdx >= 0 && cellIdx < dims.cellCount)) {
+    const row = Math.min(before?.row ?? dims.rowCount - 1, dims.rowCount - 1)
+    const col = Math.min(before?.col ?? dims.colCount - 1, dims.colCount - 1)
+    const hit = view
+      .getTableCellBboxes(sec, ppi, ci)
+      .find(
+        (box) =>
+          row >= box.row &&
+          row < box.row + Math.max(1, box.rowSpan) &&
+          col >= box.col &&
+          col < box.col + Math.max(1, box.colSpan),
+      )
+    cellIdx = hit ? hit.cellIdx : dims.cellCount - 1
+    para = 0
+    offset = 0
+    path = path.slice(0, n)
+  } else if (!atTable) {
+    return pos
+  }
+  const paragraphs = view.getCellParagraphCount(sec, ppi, ci, cellIdx)
+  if (!(para >= 0 && para < paragraphs)) {
+    para = 0
+    offset = 0
+  }
+  offset = Math.max(0, Math.min(offset, view.getCellParagraphLength(sec, ppi, ci, cellIdx, para)))
+  return {
+    ...pos,
+    paragraphIndex: para,
+    charOffset: offset,
+    cellIndex: cellIdx,
+    cellParaIndex: para,
+    cellPath: [
+      ...path.slice(0, n - 1).map(stepOf),
+      { controlIndex: step.controlIndex, cellIndex: cellIdx, cellParaIndex: para },
+    ],
+  }
+}
+
+/**
+ * An edit operation of a command on an inner table, as one snapshot (one undo step): it gets the
+ * inner table's bridge, and the caret it leaves is settled in the table. A command object (the
+ * studio's border/fill command, which undoes by the flat calls) runs inside the snapshot.
+ */
+function inTableOperation(target, desc, caret) {
+  const run = (bridge, act) => {
+    const view = innerTableBridge(bridge, target)
+    const before = placeOnTable(view, target, caret)
+    const pos = act(view)
+    return pos === null ? null : settleCaret(view, target, pos, before)
+  }
+  if (desc.kind === 'snapshot') {
+    return { ...desc, operation: (bridge) => run(bridge, desc.operation) }
+  }
+  if (desc.kind === 'command') {
+    const { command } = desc
+    return {
+      kind: 'snapshot',
+      operationType: command.type ?? 'innerTableCommand',
+      operation: (bridge) =>
+        run(bridge, (view) => {
+          let pos
+          try {
+            pos = command.execute(view)
+          } finally {
+            // the snapshot undoes it; what the command kept for its own undo goes
+            command.discard?.(view)
+          }
+          return command.isNoOp?.() ? null : pos
+        }),
+    }
+  }
+  tellRefusal(target)
+  throw new Error('a recorded edit does not reach a table inside a cell or a text box')
+}
+
+/**
+ * The input handler as a command on an inner table sees it: its bridge reaches the inner table,
+ * its edits are snapshots on it, and the caret reads as a cell of it.
+ */
+function innerTableHandler(ih, target, bridge = ih.wasm) {
+  const wasm = innerTableBridge(bridge, target)
+  const executeOperation = (desc) =>
+    ih.executeOperation(inTableOperation(target, desc, ih.getCursorPosition()))
+  const getCursorPosition = () => caretOnTable(target, ih.getCursorPosition())
+  return new Proxy(ih, {
+    get(real, prop) {
+      if (prop === 'wasm') return wasm
+      if (prop === 'executeOperation') return executeOperation
+      if (prop === 'getCursorPosition') return getCursorPosition
+      if (prop === INNER_TABLE) return target
+      const value = Reflect.get(real, prop, real)
+      return typeof value === 'function' ? value.bind(real) : value
+    },
+  })
+}
+
+/** The command services for a command on an inner table (innerTableHandler, innerTableBridge). */
+export function innerTableServices(services, target) {
+  const ih = innerTableHandler(services.getInputHandler(), target, services.wasm)
+  return { ...services, wasm: ih.wasm, getInputHandler: () => ih }
+}
+
+/**
+ * The studio's dispatcher asks this before it runs an enabled command. Null: run it as it is (no
+ * table command, or its table is in the body). Otherwise its table is inside a cell or a text box:
+ * an editing command gets the services that reach that table, any other is refused with the
+ * reason (false).
+ */
+export function nestedTableCommand(commandId, services) {
+  const edit = NESTED_TABLE_EDIT_SET.has(commandId)
+  if (!edit && !NESTED_TABLE_LATER_SET.has(commandId)) return null
+  const ih = services?.getInputHandler?.()
+  if (TABLE_OBJECT_ONLY.has(commandId) && !ih?.cursor?.isInTableObjectSelection?.()) return null
+  const target = innerTableTarget(ih)
+  if (!target) return null
+  if (!edit) {
+    tellUser(nestedTableNotice(target.where))
+    return false
+  }
+  return innerTableServices(services, target)
+}
+
+/**
+ * A command on a table inside a cell or a text box that came without nestedTableCommand's
+ * services would reach the outer table by its numbers: told, and left alone.
+ */
+function outsideScope(bridge, cellPath) {
+  if (depthOf(cellPath) < 2 || innerTableOf(bridge)) return false
+  tellUser(nestedTableNotice('cell'))
+  return true
+}
+
+/** A table's cells in reading order, each once (a cell over pages has a box on each). */
+function readingOrder(boxes) {
+  const seen = new Set()
+  const cells = []
+  for (const box of boxes) {
+    if (seen.has(box.cellIdx)) continue
+    seen.add(box.cellIdx)
+    cells.push(box)
+  }
+  return cells.sort((a, b) => (a.row !== b.row ? a.row - b.row : a.col - b.col))
+}
+
+/**
+ * Tab in the last cell of a table inside a cell or a text box adds a row below it and goes to
+ * the new row's first cell, as Tab does in a body table and as Hancom Hangul 2024 does there too
+ * (measured 2026-11-17: the 6×2 table in a form cell, a 2×2 table two levels down and one in a
+ * text box each got a row; the outer table stayed). False when the caret is not in such a last
+ * cell, so the studio moves on to the next cell. One undo step.
+ */
+export function innerTableTabRow(ih) {
+  const cursor = ih?.cursor
+  if (!cursor || cursor.isInCellSelectionMode?.() || cursor.isInTableObjectSelection?.()) {
+    return false
+  }
+  const target = innerTableTarget(ih)
+  if (!target) return false
+  const scoped = innerTableHandler(ih, target)
+  const view = scoped.wasm
+  const { sec, ppi, ci } = target
+  const pos = scoped.getCursorPosition()
+  try {
+    const order = readingOrder(view.getTableCellBboxes(sec, ppi, ci))
+    if (order.length === 0 || order[order.length - 1].cellIdx !== pos.cellIndex) return false
+    const info = view.getCellInfo(sec, ppi, ci, pos.cellIndex)
+    const after = info.row + Math.max(1, info.rowSpan || 1) - 1
+    scoped.executeOperation({
+      kind: 'snapshot',
+      operationType: 'insertTableRow',
+      operation: (bridge) => {
+        bridge.insertTableRow(sec, ppi, ci, after, true)
+        const next = readingOrder(bridge.getTableCellBboxes(sec, ppi, ci))
+        const cell =
+          next.find((box) => box.row === after + 1) ??
+          next.find((box) => box.row > after) ??
+          next[next.length - 1]
+        return {
+          ...pos,
+          paragraphIndex: 0,
+          charOffset: 0,
+          cellIndex: cell?.cellIdx ?? pos.cellIndex,
+          cellParaIndex: 0,
+        }
+      },
+    })
+  } catch {
+    return false
+  }
+  return true
+}
+
 const digitOf = (n) => String(n % 10)
 
 /**
@@ -549,6 +1137,15 @@ export function hancomTableObjectKey(ih, e) {
   if (e.key === 'F5' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
     e.preventDefault()
     firstCellOfSelectedTable(ih)
+    return true
+  }
+  // Studio moves objects using body-paragraph coordinates. Consume a nested table's arrow
+  // here before it can move the outer table.
+  if (ARROWS[e.key] && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    const where = nestedTableAt(ih)
+    if (!where) return false
+    e.preventDefault()
+    tellUser(nestedTableNotice(where))
     return true
   }
   // Shift+arrow resizes the table, Shift+PageUp/Down changes its order, Shift+Home/End
@@ -1794,7 +2391,7 @@ export function insertRowBelow(services) {
   const ih = services?.getInputHandler?.()
   const pos = ih?.getCursorPosition?.()
   if (!ih || !pos || pos.cellIndex === undefined) return false
-  if ((pos.cellPath?.length ?? 0) > 1) return false
+  if (outsideScope(services.wasm, pos.cellPath)) return false
   let info
   try {
     info = services.wasm.getCellInfo(
@@ -1849,24 +2446,23 @@ export function insertRowBelow(services) {
 
 /**
  * Ctrl+Enter adds a row below and Ctrl+Backspace deletes the row the caret is in, as
- * Hangul does in a table cell. Both run the studio's table commands, one undo step each.
- * Outside a cell the keys keep their meanings (page break, delete the word before). A
- * table inside a cell is left to Phase 2: the keys are consumed there, so a page break
- * cannot land in a cell.
+ * Hangul does in a table cell. Both run the studio's table commands, one undo step each; in a
+ * table inside a cell or a text box they reach that table by its path (nestedTableCommand).
+ * Outside a table the keys keep their meanings (page break, delete the word before); so does
+ * a text box itself, which is no table.
  */
 function hancomTableRowKey(ih, e) {
   const cursor = ih?.cursor
-  if (!cursor?.isInCell?.() || cursor.isInTextBox?.()) return false
+  if (!cursor?.isInCell?.()) return false
   if (cursor.isInHeaderFooter?.() || cursor.isInFootnote?.()) return false
   if (cursor.isInCellSelectionMode?.() || cursor.isInTableObjectSelection?.()) return false
   if (ih.isFormMode?.()) return false
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return false
   const pos = ih.getCursorPosition?.()
   if (!pos) return false
-  const nested = (pos.cellPath?.length ?? 0) > 1
+  if (cursor.isInTextBox?.() && depthOf(pos.cellPath) < 2) return false
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
-    if (nested) return true
     if (ih.dispatcher?.isEnabled?.('ieum:table-insert-row-below')) {
       ih.dispatcher.dispatch('ieum:table-insert-row-below')
     }
@@ -1874,14 +2470,12 @@ function hancomTableRowKey(ih, e) {
   }
   if (e.key === 'Backspace' && e.ctrlKey && !e.metaKey) {
     e.preventDefault()
-    if (nested) return true
     // the last row stays: the engine refuses to empty a table, and this keeps it quiet
     try {
-      const dims = ih.wasm?.getTableDimensions?.(
-        pos.sectionIndex,
-        pos.parentParaIndex,
-        pos.controlIndex,
-      )
+      const inner = innerTableTarget(ih)
+      const dims = inner
+        ? innerTableBridge(ih.wasm, inner).getTableDimensions(inner.sec, inner.ppi, inner.ci)
+        : ih.wasm?.getTableDimensions?.(pos.sectionIndex, pos.parentParaIndex, pos.controlIndex)
       if (dims?.rowCount <= 1) return true
     } catch {
       // let the command answer; it refuses the last row too
@@ -2112,15 +2706,7 @@ export function equalizeTableCells(services, axis, ko) {
   const ppi = context?.ppi ?? pos?.parentParaIndex
   const ci = context?.ci ?? pos?.controlIndex
   if (ppi === undefined || ci === undefined) return false
-  const nested = (context?.cellPath?.length ?? pos?.cellPath?.length ?? 0) > 1
-  if (nested) {
-    tellUser(
-      ko
-        ? '표 안의 표는 아직 크기를 같게 할 수 없습니다.'
-        : 'A table inside a cell cannot be sized equally yet.',
-    )
-    return false
-  }
+  if (outsideScope(services.wasm, context?.cellPath ?? pos?.cellPath)) return false
   // a text box is a one-cell table to the engine, but it is not a table to Hangul
   if (pos?.isTextBox && (pos.cellPath?.length ?? 0) < 2) return false
   const at = { sec, ppi, ci }
@@ -2224,14 +2810,7 @@ function blockTable(services) {
   const context = cursor?.getCellTableContext?.()
   const range = cursor?.getSelectedCellRange?.()
   if (!ih || !context || !range) return null
-  if ((context.cellPath?.length ?? 0) > 1) {
-    tellUser(
-      koreanUi
-        ? '표 안의 표는 아직 크기를 바꿀 수 없습니다.'
-        : 'A table inside a cell cannot be resized yet.',
-    )
-    return null
-  }
+  if (outsideScope(services.wasm, context.cellPath)) return null
   let table
   try {
     table = tableCells(services.wasm, context)
@@ -2315,14 +2894,7 @@ export function resizeSelectedCell(services, direction) {
   if (direction !== 'left' && direction !== 'right' && direction !== 'up' && direction !== 'down') {
     return false
   }
-  if ((context.cellPath?.length ?? 0) > 1) {
-    tellUser(
-      koreanUi
-        ? '표 안의 표는 아직 크기를 바꿀 수 없습니다.'
-        : 'A table inside a cell cannot be resized yet.',
-    )
-    return false
-  }
+  if (outsideScope(services.wasm, context.cellPath)) return false
   let cells
   try {
     cells = tableCells(services.wasm, context).cells
@@ -2696,14 +3268,7 @@ function resizeSelectedTable(services, direction) {
   const ih = services.getInputHandler()
   const table = selectedTableOf(ih, services.wasm)
   if (!ih || !table) return false
-  if ((table.ref.cellPath?.length ?? 0) > 1) {
-    tellUser(
-      koreanUi
-        ? '표 안의 표는 아직 크기를 바꿀 수 없습니다.'
-        : 'A table inside a cell cannot be resized yet.',
-    )
-    return false
-  }
+  if (outsideScope(services.wasm, table.ref.cellPath)) return false
   const at = { sec: table.ref.sec, ppi: table.ref.ppi, ci: table.ref.ci }
   let cells
   try {

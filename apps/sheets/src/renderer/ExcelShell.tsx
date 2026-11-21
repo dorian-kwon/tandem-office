@@ -317,6 +317,7 @@ interface ExcelShellProps {
   readonly aiScopeLocked: boolean
   readonly onAiScopeDismiss: () => void
   /// Citation link in an AI answer: jumps the grid to the cited cell/range.
+  readonly onAiShowCell?: ((id: string, range: string) => void) | undefined
   readonly onAiCitation: (href: string) => void
   readonly onCommand: (command: string) => void
   /// True while Univer's in-cell editor is open (Backspace must delete
@@ -576,6 +577,7 @@ export function ExcelShell({
   aiScopeColumns,
   aiScopeLocked,
   onAiScopeDismiss,
+  onAiShowCell,
   onAiCitation,
   onCommand,
   onIsCellEditing,
@@ -1096,6 +1098,7 @@ export function ExcelShell({
           scopeColumns={aiScopeColumns}
           scopeLocked={aiScopeLocked}
           onScopeDismiss={onAiScopeDismiss}
+          onShowCell={onAiShowCell}
           onCitation={onAiCitation}
           onExpand={aiDock.onExpand}
           onCollapse={() => setIsCopilotOpen(false)}

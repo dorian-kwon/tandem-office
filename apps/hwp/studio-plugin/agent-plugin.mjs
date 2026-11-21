@@ -2329,6 +2329,20 @@ function tablesOf(doc) {
       return null
     }
   }
+  // The first element may name a text box. Its contents use the same cell path as table cells.
+  const scanCell = (sec, para, path, cell, paragraphs, parent, depth) => {
+    for (let k = 0; k < paragraphs && lookups > 0; k++) {
+      for (let inner = 0; inner < NESTED_CONTROLS_TRIED && lookups > 0; inner++) {
+        lookups -= 1
+        const innerPath = [
+          ...cellAt(path, cell, k),
+          { controlIndex: inner, cellIndex: 0, cellParaIndex: 0 },
+        ]
+        const innerDims = dimensions(sec, para, innerPath)
+        if (innerDims) add(sec, para, innerPath, innerDims, parent, depth)
+      }
+    }
+  }
   const add = (sec, para, path, dims, parent, depth) => {
     const index = tables.length
     tables.push({
@@ -2347,17 +2361,7 @@ function tablesOf(doc) {
         para,
         JSON.stringify(cellAt(path, cell, 0)),
       )
-      for (let k = 0; k < paragraphs && lookups > 0; k++) {
-        for (let inner = 0; inner < NESTED_CONTROLS_TRIED; inner++) {
-          lookups -= 1
-          const innerPath = [
-            ...cellAt(path, cell, k),
-            { controlIndex: inner, cellIndex: 0, cellParaIndex: 0 },
-          ]
-          const innerDims = dimensions(sec, para, innerPath)
-          if (innerDims) add(sec, para, innerPath, innerDims, index, depth + 1)
-        }
-      }
+      scanCell(sec, para, path, cell, paragraphs, index, depth + 1)
     }
   }
   const sections = doc.getSectionCount()
@@ -2368,7 +2372,17 @@ function tablesOf(doc) {
       for (let ctrl = 0; ctrl < controls; ctrl++) {
         const path = [{ controlIndex: ctrl, cellIndex: 0, cellParaIndex: 0 }]
         const dims = dimensions(sec, para, path)
-        if (dims) add(sec, para, path, dims, null, 1)
+        if (dims) {
+          add(sec, para, path, dims, null, 1)
+        } else if (lookups > 0) {
+          let count
+          try {
+            count = doc.getCellParagraphCountByPath(sec, para, JSON.stringify(path))
+          } catch {
+            continue // a non-text control has no cell paragraphs
+          }
+          scanCell(sec, para, path, 0, count, null, 2)
+        }
       }
     }
   }
@@ -2376,16 +2390,87 @@ function tablesOf(doc) {
 }
 
 /**
- * Table `number` (as listTables numbers them) when it sits in a body paragraph, with its
- * cells; otherwise a refusal. The engine merges and splits cells by table and cell number,
- * which cannot name a table inside another table's cell.
+ * Table `number` (as listTables numbers them) with its cells, a table inside another table's
+ * cell too; otherwise a refusal.
  */
-function bodyTable(doc, number) {
+function numberedTable(doc, number) {
   const { tables } = tablesOf(doc)
   const table = Number.isInteger(number) ? tables[number - 1] : undefined
   if (!table) return { refusal: { ok: false, reason: 'no_such_table', count: tables.length } }
-  if (table.path.length > 1) return { refusal: { ok: false, reason: 'unsupported_place' } }
   return { table, grid: gridOf(doc, table) }
+}
+
+/**
+ * What the engine answers when an edit of a table inside a cell would have to move the
+ * objects its cell borders are drawn with (rhwp patch 0055). That is not done yet: the tools
+ * answer it as they answered every table inside a cell before.
+ */
+const DRAWN_BORDERS_REFUSAL = '칸 테두리를 개체로 그린'
+
+/** Whether an engine failure is its refusal of a table whose cell borders are drawn by objects. */
+const isDrawnBordersRefusal = (thrown) =>
+  String(thrown instanceof Error ? thrown.message : thrown).includes(DRAWN_BORDERS_REFUSAL)
+
+/**
+ * Run `edit`, a change of one table; when the engine refused it because the table is one
+ * inside a cell whose borders are drawn by objects (the change rolled back), answer
+ * `refusal()` instead.
+ */
+function refusingDrawnBorders(refusal, edit) {
+  try {
+    return edit()
+  } catch (thrown) {
+    if (isDrawnBordersRefusal(thrown)) return refusal()
+    throw thrown
+  }
+}
+
+/**
+ * The engine's calls on one table. A body table takes the calls by table and cell number, as
+ * it always did; a table inside another table's cell takes the same calls by its cell path,
+ * which change that table alone (rhwp patch 0055).
+ */
+function tableCalls(doc, table) {
+  const { sec, para, path } = table
+  if (path.length === 1) {
+    const control = path[0].controlIndex
+    return {
+      dimensions: () => parse(doc.getTableDimensions(sec, para, control)),
+      cellProps: (cell) => parse(doc.getCellProperties(sec, para, control, cell)),
+      setCellProps: (cell, json) => doc.setCellProperties(sec, para, control, cell, json),
+      paraProps: (cell, k) => parse(doc.getCellParaPropertiesAt(sec, para, control, cell, k)),
+      formatParagraph: (cell, k, json) =>
+        doc.applyParaFormatInCell(sec, para, control, cell, k, json),
+      insertRow: (row, below) => doc.insertTableRow(sec, para, control, row, below),
+      insertColumn: (col, right) => doc.insertTableColumn(sec, para, control, col, right),
+      deleteRow: (row) => doc.deleteTableRow(sec, para, control, row),
+      deleteColumn: (col) => doc.deleteTableColumn(sec, para, control, col),
+      merge: (top, left, bottom, right) =>
+        doc.mergeTableCells(sec, para, control, top, left, bottom, right),
+      unmerge: (row, col) => doc.splitTableCell(sec, para, control, row, col),
+      split: (row, col, rows, cols) =>
+        doc.splitTableCellInto(sec, para, control, row, col, rows, cols, true, false),
+    }
+  }
+  const json = JSON.stringify(path)
+  const at = (cell, k) => JSON.stringify(cellAt(path, cell, k))
+  return {
+    dimensions: () => parse(doc.getTableDimensionsByPath(sec, para, json)),
+    cellProps: (cell) => parse(doc.getCellPropertiesByPath(sec, para, json, cell)),
+    setCellProps: (cell, props) => doc.setCellPropertiesByPath(sec, para, json, cell, props),
+    paraProps: (cell, k) => parse(doc.getCellParaPropertiesAtByPath(sec, para, at(cell, k))),
+    formatParagraph: (cell, k, props) =>
+      doc.applyParaFormatInCellByPath(sec, para, at(cell, k), props),
+    insertRow: (row, below) => doc.insertTableRowByPath(sec, para, json, row, below),
+    insertColumn: (col, right) => doc.insertTableColumnByPath(sec, para, json, col, right),
+    deleteRow: (row) => doc.deleteTableRowByPath(sec, para, json, row),
+    deleteColumn: (col) => doc.deleteTableColumnByPath(sec, para, json, col),
+    merge: (top, left, bottom, right) =>
+      doc.mergeTableCellsByPath(sec, para, json, top, left, bottom, right),
+    unmerge: (row, col) => doc.splitTableCellByPath(sec, para, json, row, col),
+    split: (row, col, rows, cols) =>
+      doc.splitTableCellIntoByPath(sec, para, json, row, col, rows, cols, true, false),
+  }
 }
 
 /** The cells of a table with the place each takes: zero-based row and column, and its spans. */
@@ -2682,7 +2767,7 @@ function profileOf(doc) {
       cols: table.cols,
       // a table inside a cell is part of that cell's content: it has no title of its own
       titleAbove: table.parent === null ? textAbove(doc, table.sec, table.para, textAt) : '',
-      nested: table.parent !== null,
+      nested: table.path.length > 1,
       cells,
     }
     // a one-cell table may be a title box: its text is what the check reports
@@ -5769,8 +5854,7 @@ export const agentPlugin = {
       /**
        * Give cells of table `number` (as listTables numbers them) a background colour, or
        * take it away with "none". `cells` name them by row and column, from 1; a merged
-       * cell by any of the places it covers. A table inside another table's cell cannot be
-       * coloured: the engine sets cell properties by table and cell number only.
+       * cell by any of the places it covers. Nested tables use their full cell paths.
        */
       formatCells: guarded((number, cells, background, options) => {
         if (!Array.isArray(cells) || cells.length === 0 || cells.length > MAX_FORMATTED_CELLS) {
@@ -5796,9 +5880,6 @@ export const agentPlugin = {
           const table = Number.isInteger(number) ? tables[number - 1] : undefined
           if (!table) {
             return { refusal: { ok: false, reason: 'no_such_table', count: tables.length } }
-          }
-          if (table.path.length > 1) {
-            return { refusal: { ok: false, reason: 'unsupported_place', count: tables.length } }
           }
           const grid = gridOf(doc, table)
           const targets = new Set()
@@ -5829,29 +5910,35 @@ export const agentPlugin = {
         }
         const refusal = host.read((doc) => plan(doc).refusal ?? null)
         if (refusal) return refusal
-        return keepingObjects((mustKeep) =>
-          change(
-            'format-cells',
-            (doc) => {
-              const { table, targets } = plan(doc)
-              if (!targets) throw fail('CHANGED', 'the document changed mid-call')
-              const before = objectsOf(doc)
-              const control = table.path[0].controlIndex
-              for (const cell of targets) {
-                expectOk(
-                  doc.setCellProperties(table.sec, table.para, control, cell, fill),
-                  'colour the cell',
-                )
-              }
-              mustKeep(before, objectsOf(doc))
-              return {
-                ok: true,
-                count: targets.length,
-                place: { sec: table.sec, para: table.para, offset: 0, length: 0 },
-              }
-            },
-            options,
-          ),
+        return refusingDrawnBorders(
+          () =>
+            host.read((doc) => ({
+              ok: false,
+              reason: 'unsupported_place',
+              count: tablesOf(doc).tables.length,
+            })),
+          () =>
+            keepingObjects((mustKeep) =>
+              change(
+                'format-cells',
+                (doc) => {
+                  const { table, targets } = plan(doc)
+                  if (!targets) throw fail('CHANGED', 'the document changed mid-call')
+                  const before = objectsOf(doc)
+                  const calls = tableCalls(doc, table)
+                  for (const cell of targets) {
+                    expectOk(calls.setCellProps(cell, fill), 'colour the cell')
+                  }
+                  mustKeep(before, objectsOf(doc))
+                  return {
+                    ok: true,
+                    count: targets.length,
+                    place: { sec: table.sec, para: table.para, offset: 0, length: 0 },
+                  }
+                },
+                options,
+              ),
+            ),
         )
       }),
 
@@ -5875,7 +5962,7 @@ export const agentPlugin = {
           throw fail('BAD_ARGUMENT', 'from and to name one cell: there is nothing to merge')
         }
         const plan = (doc) => {
-          const found = bodyTable(doc, number)
+          const found = numberedTable(doc, number)
           if (found.refusal) return found
           const { table, grid } = found
           if (bottom >= table.rows || right >= table.cols) {
@@ -5900,40 +5987,44 @@ export const agentPlugin = {
             return { refusal: { ok: false, reason: 'crosses_merged', cells: crossing } }
           }
           // a named cell other than the first would lose its name, which a form fills it by
-          const control = table.path[0].controlIndex
+          const calls = tableCalls(doc, table)
           const named = inside
             .filter((cell) => !(cell.row === top && cell.col === left))
             .filter((cell) => {
-              const props = parse(doc.getCellProperties(table.sec, table.para, control, cell.cell))
+              const props = calls.cellProps(cell.cell)
               return typeof props.fieldName === 'string' && props.fieldName !== ''
             })
             .map((cell) => ({ row: cell.row + 1, col: cell.col + 1 }))
           if (named.length > 0)
             return { refusal: { ok: false, reason: 'named_cells', cells: named } }
-          return { table, control, merged: inside.length }
+          return { table, merged: inside.length }
         }
         const refusal = host.read((doc) => plan(doc).refusal ?? null)
         if (refusal) return refusal
-        return keepingObjects((mustKeep) =>
-          change(
-            'merge-cells',
-            (doc) => {
-              const { table, control, merged } = plan(doc)
-              if (!table) throw fail('CHANGED', 'the document changed mid-call')
-              const before = objectsOf(doc)
-              expectOk(
-                doc.mergeTableCells(table.sec, table.para, control, top, left, bottom, right),
-                'merge the cells',
-              )
-              mustKeep(before, objectsOf(doc))
-              return {
-                ok: true,
-                merged,
-                place: { sec: table.sec, para: table.para, offset: 0, length: 0 },
-              }
-            },
-            options,
-          ),
+        return refusingDrawnBorders(
+          () => ({ ok: false, reason: 'unsupported_place' }),
+          () =>
+            keepingObjects((mustKeep) =>
+              change(
+                'merge-cells',
+                (doc) => {
+                  const { table, merged } = plan(doc)
+                  if (!table) throw fail('CHANGED', 'the document changed mid-call')
+                  const before = objectsOf(doc)
+                  expectOk(
+                    tableCalls(doc, table).merge(top, left, bottom, right),
+                    'merge the cells',
+                  )
+                  mustKeep(before, objectsOf(doc))
+                  return {
+                    ok: true,
+                    merged,
+                    place: { sec: table.sec, para: table.para, offset: 0, length: 0 },
+                  }
+                },
+                options,
+              ),
+            ),
         )
       }),
 
@@ -5955,7 +6046,7 @@ export const agentPlugin = {
           }
         }
         const plan = (doc) => {
-          const found = bodyTable(doc, number)
+          const found = numberedTable(doc, number)
           if (found.refusal) return found
           const { table, grid } = found
           const cell = grid.find(
@@ -5983,37 +6074,31 @@ export const agentPlugin = {
         }
         const refusal = host.read((doc) => plan(doc).refusal ?? null)
         if (refusal) return refusal
-        return keepingObjects((mustKeep) =>
-          change(
-            'split-cell',
-            (doc) => {
-              const { table, cell, unmerge } = plan(doc)
-              if (!table) throw fail('CHANGED', 'the document changed mid-call')
-              const before = objectsOf(doc)
-              const control = table.path[0].controlIndex
-              const result = unmerge
-                ? doc.splitTableCell(table.sec, table.para, control, cell.row, cell.col)
-                : doc.splitTableCellInto(
-                    table.sec,
-                    table.para,
-                    control,
-                    cell.row,
-                    cell.col,
-                    down,
-                    across,
-                    true,
-                    false,
-                  )
-              expectOk(result, 'split the cell')
-              mustKeep(before, objectsOf(doc))
-              return {
-                ok: true,
-                unmerged: unmerge,
-                place: { sec: table.sec, para: table.para, offset: 0, length: 0 },
-              }
-            },
-            options,
-          ),
+        return refusingDrawnBorders(
+          () => ({ ok: false, reason: 'unsupported_place' }),
+          () =>
+            keepingObjects((mustKeep) =>
+              change(
+                'split-cell',
+                (doc) => {
+                  const { table, cell, unmerge } = plan(doc)
+                  if (!table) throw fail('CHANGED', 'the document changed mid-call')
+                  const before = objectsOf(doc)
+                  const calls = tableCalls(doc, table)
+                  const result = unmerge
+                    ? calls.unmerge(cell.row, cell.col)
+                    : calls.split(cell.row, cell.col, down, across)
+                  expectOk(result, 'split the cell')
+                  mustKeep(before, objectsOf(doc))
+                  return {
+                    ok: true,
+                    unmerged: unmerge,
+                    place: { sec: table.sec, para: table.para, offset: 0, length: 0 },
+                  }
+                },
+                options,
+              ),
+            ),
         )
       }),
 
@@ -6254,8 +6339,7 @@ export const agentPlugin = {
       /**
        * Add `count` empty rows or columns to table `number`, after or before row or column
        * `at` (1-based). The new ones are shaped like the one they are added next to: the
-       * engine copies its cells, and the alignment of each new cell is set to match. Only
-       * for a table of the body: the engine has no such call for a table inside a cell.
+       * engine copies its cells, and the alignment of each new cell is set to match.
        */
       addTableLines: guarded((number, what, at, where, count, options) => {
         const rows = checkLines(what, at, count)
@@ -6268,7 +6352,6 @@ export const agentPlugin = {
           if (!table)
             return { refusal: { ok: false, reason: 'no_such_table', count: tables.length } }
           const size = { rows: table.rows, cols: table.cols }
-          if (table.parent !== null) return { refusal: { ok: false, reason: 'nested', ...size } }
           if (at > (rows ? table.rows : table.cols)) {
             return { refusal: { ok: false, reason: 'no_such_line', ...size } }
           }
@@ -6276,71 +6359,68 @@ export const agentPlugin = {
         }
         const refusal = host.read((doc) => plan(doc).refusal ?? null)
         if (refusal) return refusal
-        return keepingObjects((mustKeep) =>
-          change(
-            'add-table-lines',
-            (doc) => {
-              const { table } = plan(doc)
-              if (!table) throw fail('CHANGED', 'the document changed mid-call')
-              const before = objectsOf(doc)
-              const { sec, para } = table
-              const ctrl = table.path[0].controlIndex
-              const after = where === 'after'
-              for (let n = 0; n < count; n++) {
-                // "before" pushes the line it copies down by one each time
-                const beside = after ? at - 1 : at - 1 + n
-                expectOk(
-                  rows
-                    ? doc.insertTableRow(sec, para, ctrl, beside, after)
-                    : doc.insertTableColumn(sec, para, ctrl, beside, after),
-                  rows ? 'add a row' : 'add a column',
-                )
-              }
-              const first = after ? at : at - 1
-              const model = after ? at - 1 : at - 1 + count
-              const grown = {
-                ...table,
-                cells: parse(doc.getTableDimensions(sec, para, ctrl)).cellCount,
-              }
-              const grid = gridOf(doc, grown)
-              const line = (cell) => (rows ? cell.row : cell.col)
-              const across = (cell) => (rows ? cell.col : cell.row)
-              const alignment = (cell) =>
-                parse(doc.getCellParaPropertiesAt(sec, para, ctrl, cell.cell, 0)).alignment
-              for (const cell of grid) {
-                if (line(cell) < first || line(cell) >= first + count) continue
-                const like = grid.find((c) => line(c) === model && across(c) === across(cell))
-                if (!like) continue
-                const wanted = alignment(like)
-                if (wanted && wanted !== alignment(cell)) {
-                  expectOk(
-                    doc.applyParaFormatInCell(
-                      sec,
-                      para,
-                      ctrl,
-                      cell.cell,
-                      0,
-                      JSON.stringify({ alignment: wanted }),
-                    ),
-                    'format the new cell',
-                  )
-                }
-              }
-              mustKeep(before, objectsOf(doc))
-              const dims = parse(doc.getTableDimensions(sec, para, ctrl))
-              const shown = grid.find((cell) => line(cell) === first)
-              return {
-                ok: true,
-                table: number,
-                rows: dims.rowCount,
-                cols: dims.colCount,
-                first: first + 1,
-                count,
-                ...(shown ? { place: cellBox(doc, grown, shown.cell).place(0, 0) } : {}),
-              }
-            },
-            options,
-          ),
+        return refusingDrawnBorders(
+          () =>
+            host.read((doc) => {
+              const { table, refusal } = plan(doc)
+              return refusal ?? { ok: false, reason: 'nested', rows: table.rows, cols: table.cols }
+            }),
+          () =>
+            keepingObjects((mustKeep) =>
+              change(
+                'add-table-lines',
+                (doc) => {
+                  const { table } = plan(doc)
+                  if (!table) throw fail('CHANGED', 'the document changed mid-call')
+                  const before = objectsOf(doc)
+                  const calls = tableCalls(doc, table)
+                  const after = where === 'after'
+                  for (let n = 0; n < count; n++) {
+                    // "before" pushes the line it copies down by one each time
+                    const beside = after ? at - 1 : at - 1 + n
+                    expectOk(
+                      rows ? calls.insertRow(beside, after) : calls.insertColumn(beside, after),
+                      rows ? 'add a row' : 'add a column',
+                    )
+                  }
+                  const first = after ? at : at - 1
+                  const model = after ? at - 1 : at - 1 + count
+                  const grown = {
+                    ...table,
+                    cells: calls.dimensions().cellCount,
+                  }
+                  const grid = gridOf(doc, grown)
+                  const line = (cell) => (rows ? cell.row : cell.col)
+                  const across = (cell) => (rows ? cell.col : cell.row)
+                  const alignment = (cell) => calls.paraProps(cell.cell, 0).alignment
+                  for (const cell of grid) {
+                    if (line(cell) < first || line(cell) >= first + count) continue
+                    const like = grid.find((c) => line(c) === model && across(c) === across(cell))
+                    if (!like) continue
+                    const wanted = alignment(like)
+                    if (wanted && wanted !== alignment(cell)) {
+                      expectOk(
+                        calls.formatParagraph(cell.cell, 0, JSON.stringify({ alignment: wanted })),
+                        'format the new cell',
+                      )
+                    }
+                  }
+                  mustKeep(before, objectsOf(doc))
+                  const dims = calls.dimensions()
+                  const shown = grid.find((cell) => line(cell) === first)
+                  return {
+                    ok: true,
+                    table: number,
+                    rows: dims.rowCount,
+                    cols: dims.colCount,
+                    first: first + 1,
+                    count,
+                    ...(shown ? { place: cellBox(doc, grown, shown.cell).place(0, 0) } : {}),
+                  }
+                },
+                options,
+              ),
+            ),
         )
       }),
 
@@ -6358,7 +6438,6 @@ export const agentPlugin = {
           if (!table)
             return { refusal: { ok: false, reason: 'no_such_table', count: tables.length } }
           const size = { rows: table.rows, cols: table.cols }
-          if (table.parent !== null) return { refusal: { ok: false, reason: 'nested', ...size } }
           const total = rows ? table.rows : table.cols
           if (at + count - 1 > total)
             return { refusal: { ok: false, reason: 'no_such_line', ...size } }
@@ -6378,51 +6457,56 @@ export const agentPlugin = {
         }
         const refusal = host.read((doc) => plan(doc).refusal ?? null)
         if (refusal) return refusal
-        return keepingObjects((mustKeep) =>
-          change(
-            'remove-table-lines',
-            (doc) => {
-              const { table, going } = plan(doc)
-              if (!table) throw fail('CHANGED', 'the document changed mid-call')
-              const before = objectsOf(doc, new Set())
-              const { sec, para } = table
-              const ctrl = table.path[0].controlIndex
-              const text = clip(
-                going
-                  .map((cell) =>
-                    paragraphsOf(cellBox(doc, table, cell.cell))
-                      .join(' ')
-                      .trim(),
+        return refusingDrawnBorders(
+          () =>
+            host.read((doc) => {
+              const { table, refusal } = plan(doc)
+              return refusal ?? { ok: false, reason: 'nested', rows: table.rows, cols: table.cols }
+            }),
+          () =>
+            keepingObjects((mustKeep) =>
+              change(
+                'remove-table-lines',
+                (doc) => {
+                  const { table, going } = plan(doc)
+                  if (!table) throw fail('CHANGED', 'the document changed mid-call')
+                  const before = objectsOf(doc, new Set())
+                  const calls = tableCalls(doc, table)
+                  const text = clip(
+                    going
+                      .map((cell) =>
+                        paragraphsOf(cellBox(doc, table, cell.cell))
+                          .join(' ')
+                          .trim(),
+                      )
+                      .filter(Boolean)
+                      .join(' | '),
+                    MAX_REPORTED_CHARS,
                   )
-                  .filter(Boolean)
-                  .join(' | '),
-                MAX_REPORTED_CHARS,
-              )
-              for (let n = 0; n < count; n++) {
-                // the next one moves up into the place of the one just removed
-                expectOk(
-                  rows
-                    ? doc.deleteTableRow(sec, para, ctrl, at - 1)
-                    : doc.deleteTableColumn(sec, para, ctrl, at - 1),
-                  rows ? 'remove the row' : 'remove the column',
-                )
-              }
-              // the value of a named cell goes with its cell; nothing else may be lost
-              mustKeep(before, objectsOf(doc, new Set()))
-              const dims = parse(doc.getTableDimensions(sec, para, ctrl))
-              const shrunk = { ...table, cells: dims.cellCount }
-              return {
-                ok: true,
-                table: number,
-                rows: dims.rowCount,
-                cols: dims.colCount,
-                count,
-                text,
-                place: cellBox(doc, shrunk, 0).place(0, 0),
-              }
-            },
-            options,
-          ),
+                  for (let n = 0; n < count; n++) {
+                    // the next one moves up into the place of the one just removed
+                    expectOk(
+                      rows ? calls.deleteRow(at - 1) : calls.deleteColumn(at - 1),
+                      rows ? 'remove the row' : 'remove the column',
+                    )
+                  }
+                  // the value of a named cell goes with its cell; nothing else may be lost
+                  mustKeep(before, objectsOf(doc, new Set()))
+                  const dims = calls.dimensions()
+                  const shrunk = { ...table, cells: dims.cellCount }
+                  return {
+                    ok: true,
+                    table: number,
+                    rows: dims.rowCount,
+                    cols: dims.colCount,
+                    count,
+                    text,
+                    place: cellBox(doc, shrunk, 0).place(0, 0),
+                  }
+                },
+                options,
+              ),
+            ),
         )
       }),
 

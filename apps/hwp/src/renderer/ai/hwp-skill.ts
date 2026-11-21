@@ -155,7 +155,7 @@ const SYSTEM_PROMPT = [
   '## What they cannot do',
   '- You cannot change numbering, borders or the page layout, and you cannot move, resize, replace or remove a picture that is already in the document (the user does that in the editor). You can only add a new one. analyze_picture only looks at one. A note cannot be put inside a table cell.',
   "- A tick box that is a picture or a form control cannot be ticked: only a □ that is the paragraph's bullet or typed into the text can.",
-  '- A table inside a cell of another table can be read, filled and removed, but its cells cannot be coloured, merged or split, it cannot get or lose rows and columns, and the alignment, spacing and paragraph style of its paragraphs cannot be changed. Its text can still be formatted, character styles included.',
+  '- A table inside a cell of another table can be read, filled, coloured, merged, split and resized by adding or removing rows or columns. Tables whose borders are drawn as objects refuse structural changes. The paragraph alignment, spacing and paragraph style in an inner table cannot be changed. Its text can still be formatted, character styles included.',
   '- You cannot remove a style. The user can do that in the style dialog of the editor (F6).',
   '- You cannot add, change or remove memos: the editor has a memo panel for that. When an edit would remove a memo, it is refused and the user is asked to approve that one edit; with a no, nothing is changed.',
   '- One piece of text is always one line: a line break inside a text argument is refused. Several paragraphs are several strings in one insert_paragraphs call.',
@@ -711,7 +711,7 @@ const TOOLS: AgentToolDef[] = [
   {
     name: 'merge_cells',
     description:
-      'Merge the cells of a table between two corners (both included) into one cell. Their text is kept, one cell after another. A merged cell must lie wholly inside the range. Not for a table inside another table.',
+      'Merge the cells of a table between two corners (both included) into one cell. Their text is kept, one cell after another. A merged cell must lie wholly inside the range.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -727,7 +727,7 @@ const TOOLS: AgentToolDef[] = [
   {
     name: 'split_cell',
     description:
-      'Split one cell of a table into rows × cols cells, or, without rows and cols, split a merged cell back into the cells it covers. The text stays in the first cell. Not for a table inside another table.',
+      'Split one cell of a table into rows × cols cells, or, without rows and cols, split a merged cell back into the cells it covers. The text stays in the first cell.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -743,7 +743,7 @@ const TOOLS: AgentToolDef[] = [
   {
     name: 'format_cells',
     description:
-      'Give cells of a table a background colour, or take it away with "none". Cells are named by row and column from 1, as read_table shows them; a merged cell by any place it covers. Not for a table inside another table.',
+      'Give cells of a table a background colour, or take it away with "none". Cells are named by row and column from 1, as read_table shows them; a merged cell by any place it covers.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -842,7 +842,7 @@ const TOOLS: AgentToolDef[] = [
   {
     name: 'add_to_table',
     description:
-      'Add empty rows or columns to a table, after or before one of its rows or columns. The new ones are shaped and formatted like that one. Row and column numbers after them shift: read the table again before filling. Not for a table that sits inside a cell of another table.',
+      'Add empty rows or columns to a table, after or before one of its rows or columns. The new ones are shaped and formatted like that one. Row and column numbers after them shift: read the table again before filling.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1225,7 +1225,7 @@ function linesRefusal(table: number, what: string, result: AgentTableLinesRefusa
     case 'no_such_table':
       return noSuchTable(table, result.count)
     case 'nested':
-      return 'Nothing was changed: that table sits inside a cell of another table, and rows and columns can only be added to or removed from a table of the body text.'
+      return 'Nothing was changed: that table sits inside a cell of another table, and its cell borders are drawn as objects that cannot be moved.'
     case 'no_such_line':
       return `Nothing was changed: the table has ${result.rows} row(s) and ${result.cols} column(s), so those ${what} are not all in it.`
     case 'would_empty':
@@ -2274,7 +2274,7 @@ export function createHwpSkill(deps: HwpSkillDeps): HwpSkill {
             case 'unsupported_place':
               return bad(
                 call,
-                'Nothing was changed: that table sits inside a cell of another table, whose cells cannot be merged here.',
+                'Nothing was changed: its cell borders are drawn as objects, so its cells cannot be merged here.',
               )
             case 'no_such_cell':
               return bad(
@@ -2349,7 +2349,7 @@ export function createHwpSkill(deps: HwpSkillDeps): HwpSkill {
             case 'unsupported_place':
               return bad(
                 call,
-                'Nothing was changed: that table sits inside a cell of another table, whose cells cannot be split here.',
+                'Nothing was changed: its cell borders are drawn as objects, so its cells cannot be split here.',
               )
             case 'no_such_cell':
               return bad(
@@ -2523,7 +2523,7 @@ export function createHwpSkill(deps: HwpSkillDeps): HwpSkill {
           if (result.reason === 'unsupported_place') {
             return bad(
               call,
-              'Nothing was changed: that table sits inside a cell of another table, whose cells cannot be coloured here.',
+              'Nothing was changed: its cell borders are drawn as objects, so its cells cannot be coloured here.',
             )
           }
           const places = result.cells.map((cell) => `${cell.row}.${cell.col}`).join(', ')

@@ -80,7 +80,12 @@ function boxes(doc: HwpDocument, page: number): Box[] {
 function footnoteAndBody(doc: HwpDocument, page: number) {
   const root = JSON.parse(doc.getPageRenderTree(page)) as Node
   const area = root.children?.find((child) => child.type === 'FootnoteArea')
-  const separator = area?.children?.find((child) => child.type === 'Line')?.bbox?.y
+  // the separator line, or the first note's line where the document's separator has no
+  // colour (`color="none"`, which rhwp devel leaves undrawn)
+  const separator = (
+    area?.children?.find((child) => child.type === 'Line') ??
+    area?.children?.find((child) => child.type === 'TextLine')
+  )?.bbox?.y
   const bottoms: number[] = []
   const walk = (node: Node) => {
     if (node.type === 'TextLine' && node.bbox) bottoms.push(node.bbox.y + node.bbox.h)
@@ -114,7 +119,8 @@ const px = (hwpunit: number) => (hwpunit * 96) / 7200
 describe('vendored rhwp engine', () => {
   it('is the build its manifest records', () => {
     const manifest = JSON.parse(readFileSync(join(CORE, 'package.json'), 'utf8'))
-    expect(manifest.version).toMatch(/^0\.8\.7-ieum\.\d+$/)
+    // a release tag, or a commit on an upstream branch ahead of one (decision 0107)
+    expect(manifest.version).toMatch(/^\d+\.\d+\.\d+-(devel\.)?ieum\.\d+$/)
     const wasm = readFileSync(join(CORE, 'rhwp_bg.wasm'))
     expect(createHash('sha256').update(wasm).digest('hex')).toBe(manifest.rhwp.wasmSha256)
   })

@@ -96,6 +96,7 @@ async function enumeratedRecords(listed, studio) {
 
 /**
  * @param {{
+ *   headless?: boolean,
  *   queryLocalFonts?: () => Promise<ReadonlyArray<{ family?: string; fullName?: string; postscriptName?: string; style?: string }>>,
  *   loadStored: () => Promise<unknown>,
  *   records: () => ReadonlyArray<{ family?: string; fullName?: string; postscriptName?: string; aliases?: readonly string[]; detectionSource?: string }>,
@@ -107,6 +108,14 @@ async function enumeratedRecords(listed, studio) {
  * @returns {Promise<boolean>} whether the studio's list was detected anew
  */
 export async function refreshPcFonts(studio) {
+  if (studio.headless ?? new URLSearchParams(globalThis.location?.search).get('headless') === '1') {
+    try {
+      await studio.loadStored()
+    } catch (error) {
+      console.warn('[pc-fonts] Could not load the saved font list:', error)
+    }
+    return false
+  }
   if (!studio.queryLocalFonts) return false
   try {
     await whenVisible(studio.document)

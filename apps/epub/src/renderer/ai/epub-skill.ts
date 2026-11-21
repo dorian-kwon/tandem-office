@@ -274,6 +274,7 @@ export function createEpubSkill(deps: EpubSkillDeps): AgentSkill {
         output: result.output,
         isError: result.isError ?? false,
         mutated: result.mutated ?? false,
+        ...(result.changeLocations ? { changeLocations: result.changeLocations } : {}),
         summary: summaryOf(call.name, result),
       }
     },

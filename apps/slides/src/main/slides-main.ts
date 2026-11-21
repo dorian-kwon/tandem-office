@@ -1525,6 +1525,7 @@ export function applySessionTxn(
     applied: true,
     records: (r.records ?? []).map((rec) => ({
       op: rec.op.op,
+      ...(rec.slideId ? { slideId: rec.slideId } : {}),
       ...(rec.op.target
         ? { target: `${rec.op.target.slide}${rec.op.target.el ? `/${rec.op.target.el}` : ''}` }
         : {}),

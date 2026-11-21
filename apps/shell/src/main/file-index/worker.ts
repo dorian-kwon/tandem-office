@@ -14,10 +14,10 @@ export type WorkerResponse =
 
 export function runIndexWorker(
   extract: (path: string) => Promise<Extracted>,
-  scan: (root: string) => ScanResult = scanFiles,
+  scan: (root: string) => ScanResult | Promise<ScanResult> = scanFiles,
 ): void {
   const port = parentPort!
-  const store = new FileIndexStore(workerData as string)
+  const store = new FileIndexStore(workerData.dbPath)
   port.on('close', () => store.close())
 
   async function index(req: Extract<WorkerRequest, { type: 'index' }>): Promise<WorkerResponse> {
@@ -41,7 +41,7 @@ export function runIndexWorker(
     const result = await extract(file.path)
     const after = checkDisk()
     if (after) return after
-    if (result.kind === 'text') store.upsert(file, result.text, 'ok')
+    if (result.kind === 'text') store.upsert(file, result.text, 'ok', result.tokens)
     else store.upsert(file, null, result.kind)
     return { type: 'done' }
   }
@@ -50,7 +50,7 @@ export function runIndexWorker(
   port.on('message', async (req: WorkerRequest) => {
     let response: WorkerResponse = { type: 'done' }
     try {
-      if (req.type === 'scan') response = { type: 'scan', ...scan(req.root) }
+      if (req.type === 'scan') response = { type: 'scan', ...(await scan(req.root)) }
       else if (req.type === 'remove') store.remove(req.paths)
       else if (req.type === 'index') response = await index(req)
     } catch {

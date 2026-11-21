@@ -1,4 +1,8 @@
-import { Worker } from 'node:worker_threads'
+import { MessageChannel, Worker } from 'node:worker_threads'
+import { extname } from 'node:path'
+import { hostIndexParser } from './native-parser'
+import { resolveParseSidecarPath } from '@genoffice/file-parse/sidecar-path'
+import { INDEX_STREAMING_EXTS, MAX_EXTRACT_BYTES } from './limits'
 import type { WorkerRequest, WorkerResponse } from './worker'
 import { isSupportedTreeFile } from '../folder-tree'
 import { statOrNull, type ScannedFile } from './scan'
@@ -46,6 +50,7 @@ const WORKER_HEAP_LIMIT_MB = 1024
  */
 export class FileIndexer {
   private worker: Worker | null = null
+  private nativeHost: ReturnType<typeof hostIndexParser> | null = null
   private retiring: Promise<number> | null = null
   private waiting: ((r: WorkerResponse | { type: 'lost' }) => void) | null = null
   private reader: FileIndexStore | null = null
@@ -146,7 +151,13 @@ export class FileIndexer {
     for (const f of seen.values()) {
       const k = known.get(f.path)
       if (k && k.mtimeMs === f.mtimeMs && k.sizeBytes === f.sizeBytes) {
-        if (k.status === 'cloud') recheck.push(f)
+        if (
+          k.status === 'cloud' ||
+          (k.status === 'name-only' &&
+            k.sizeBytes > MAX_EXTRACT_BYTES &&
+            INDEX_STREAMING_EXTS.has(extname(f.path).slice(1).toLowerCase()))
+        )
+          recheck.push(f)
       } else changed.push(f)
     }
     const nameOnly = await this.decideNameOnly([...changed, ...recheck])
@@ -199,8 +210,13 @@ export class FileIndexer {
 
   private ensureWorker(): Worker {
     if (this.worker) return this.worker
+    // Electron exposes resourcesPath on main but not necessarily in Node
+    // worker threads. Resolve the installed helper before crossing that boundary.
+    const { port1, port2 } = new MessageChannel()
+    this.nativeHost = hostIndexParser(port1, resolveParseSidecarPath())
     const worker = new Worker(this.workerPath, {
-      workerData: this.dbPath,
+      workerData: { dbPath: this.dbPath, parserPort: port2 },
+      transferList: [port2],
       resourceLimits: { maxOldGenerationSizeMb: this.workerHeapLimitMb },
     })
     worker.on('message', (response: WorkerResponse) => {
@@ -218,6 +234,8 @@ export class FileIndexer {
   private retire(): void {
     const worker = this.worker
     this.worker = null
+    this.nativeHost?.stop()
+    this.nativeHost = null
     if (worker) this.retiring = worker.terminate()
     this.waiting?.({ type: 'lost' })
   }

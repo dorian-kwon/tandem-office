@@ -1,3 +1,6 @@
+import { changeLocationPatch, type AiChangeLocation } from '@genoffice/agent-core'
+import { AiChangeLinks } from '@genoffice/ui'
+import { keepBlockLocation, findChangedBlock } from '@genoffice/agent-core'
 import { analyzingDocumentLabel } from '@genoffice/i18n'
 import { useChatWindow, EarlierChatMessages } from '@genoffice/ui'
 import { OcrChatPreview, ocrDisplayOf, type OcrChatDisplay } from '@genoffice/ui'
@@ -235,6 +238,7 @@ function safeJsonInput(input: unknown): string | undefined {
 }
 
 interface ChatEntry {
+  changeLocations?: readonly AiChangeLocation[]
   ocrDisplays?: OcrChatDisplay[]
   role: 'user' | 'assistant'
   text: string
@@ -943,9 +947,10 @@ export function AiPanel({
     const view = editorRef.current.view
     let tr = view.state.tr
     let touched = false
-    view.state.doc.forEach((node, offset) => {
+    view.state.doc.forEach((node, offset, index) => {
       if (node.attrs.aiChanged) {
         tr = tr.setNodeMarkup(offset, undefined, { ...node.attrs, aiChanged: false })
+        keepBlockLocation(node, tr.doc.child(index))
         touched = true
       }
     })
@@ -1369,6 +1374,7 @@ export function AiPanel({
             const tools = [...(last.tools ?? [])]
             if (tools.at(-1)?.running) tools.pop()
             return {
+              ...changeLocationPatch(last, execution),
               tools: [
                 ...tools,
                 {
@@ -2194,6 +2200,16 @@ export function AiPanel({
                   }}
                 />
               )}
+              <AiChangeLinks
+                places={entry.changeLocations}
+                lang={lang}
+                onShow={(place) => {
+                  if (place.kind !== 'block') return
+                  const editor = editorRef.current
+                  const index = findChangedBlock(editor.state.doc, place)
+                  if (index !== null) navigateToBlock(editor, index)
+                }}
+              />
               <SkillUsedNotes tools={entry.tools} />
               {project.messageParts(entry)}
               {entry.skillProposals?.map((key) => skillCards.render(key))}

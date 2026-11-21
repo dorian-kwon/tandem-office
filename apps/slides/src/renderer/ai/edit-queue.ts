@@ -149,6 +149,24 @@ export function buildSelectionInstruction(
   ].join('\n')
 }
 
+/** The canvas can enter a top-level group. Deeper edits select its containing subgroup. */
+export function selectionForChange(
+  slide: RenderSlide,
+  id: string,
+): { group: string | null; selected: string } | null {
+  const matches = (node: RenderNode) =>
+    !node.decoration && (node.sourceId === id || node.durableId === id)
+  const contains = (node: RenderNode): boolean =>
+    matches(node) || (node.type === 'group' && (node as GroupRenderNode).children.some(contains))
+  for (const top of slide.nodes) {
+    if (matches(top)) return { group: null, selected: top.sourceId }
+    if (top.type !== 'group') continue
+    const child = (top as GroupRenderNode).children.find(contains)
+    if (child) return { group: top.sourceId, selected: child.sourceId }
+  }
+  return null
+}
+
 interface FoundNode {
   node: RenderNode
   /** 0 = top level, 1 = child of a top-level group, 2+ = deeper (edit tools patch one level only) */

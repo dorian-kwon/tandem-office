@@ -1,3 +1,5 @@
+import type { AiChangeLocation } from '@genoffice/agent-core'
+import { AiChangeLinks } from '@genoffice/ui'
 import { useChatWindow, EarlierChatMessages } from '@genoffice/ui'
 import { useAiPanelPrefs } from '@genoffice/ui'
 import { OcrChatPreview, type OcrChatDisplay } from '@genoffice/ui'
@@ -268,7 +270,12 @@ export interface AiChatMessage {
   readonly blocked?: AiBlockedRun | undefined
   /** Set when this message reflects an auto-applied plan; renders an inline [Undo] button. */
   readonly autoApplied?:
-    { readonly opCount: number; readonly undoIds?: readonly string[] } | undefined
+    | {
+        readonly opCount: number
+        readonly locations?: readonly AiChangeLocation[]
+        readonly undoIds?: readonly string[]
+      }
+    | undefined
   /** attachments consumed from the composer by this user message (read-only echo chips) */
   readonly attachments?: readonly AttachmentMeta[] | undefined
   /** the range this user message targeted, frozen at send */
@@ -380,6 +387,7 @@ export function AiChatPanel({
   scopeColumns,
   scopeLocked,
   onScopeDismiss,
+  onShowCell,
   onCitation,
   onExpand,
   onCollapse,
@@ -457,6 +465,7 @@ export function AiChatPanel({
   readonly scopeLocked: boolean
   readonly onScopeDismiss: () => void
   /** citation link in an answer ([B12](sheetnav://B12)) */
+  readonly onShowCell?: ((id: string, range: string) => void) | undefined
   readonly onCitation: (href: string) => void
   readonly onExpand: () => void
   readonly onCollapse: () => void
@@ -935,6 +944,13 @@ export function AiChatPanel({
                     <span className="ai-auto-applied-text">
                       {t('aiAutoApplied', { count: entry.autoApplied.opCount })}
                     </span>
+                    <AiChangeLinks
+                      places={entry.autoApplied.locations}
+                      lang={lang}
+                      onShow={(place) => {
+                        if (place.kind === 'cell') onShowCell?.(place.id, place.range)
+                      }}
+                    />
                     {undoHistoryOn &&
                       entry.autoApplied.undoIds &&
                       canUndoAiEntries(entry.autoApplied.undoIds) && (

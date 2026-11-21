@@ -1,3 +1,12 @@
+export {
+  changedBlockLocations,
+  keepBlockLocation,
+  changeLocationPatch,
+  findChangedBlock,
+  mergeChangeLocations,
+  MAX_CHANGE_LOCATIONS,
+  type AiChangeLocation,
+} from './change-locations'
 export type {
   AgentImage,
   AgentMessage,

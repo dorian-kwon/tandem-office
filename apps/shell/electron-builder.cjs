@@ -69,6 +69,11 @@ const winArch = winArm64 ? 'arm64' : 'x64'
 const winSidecarTarget = winArm64 ? 'aarch64-pc-windows-msvc' : 'x86_64-pc-windows-gnu'
 const WIN_SIDECAR = `../sheets/native/xlsx-engine/target/${winSidecarTarget}/release/xlsx-sidecar.exe`
 
+const PARSE_TARGET = '../../packages/file-parse/native/parse-sidecar/target'
+const UNIX_PARSE_SIDECAR = PARSE_TARGET + '/release/ieum-parse-sidecar'
+const WIN_PARSE_SIDECAR =
+  PARSE_TARGET + (winArm64 ? '/aarch64-pc-windows-msvc' : '') + '/release/ieum-parse-sidecar.exe'
+
 function assertExtraResourceSources() {
   for (const rel of [
     '../../LICENSE',
@@ -191,19 +196,22 @@ function assertUniversalVisionOcr() {
 // `native:build` dev path) would silently ship an arm64 sidecar inside the
 // Intel dmg, where every workbook open fails. Runs from beforePack, dual-arch
 // mac packs only.
-function assertUniversalSidecar() {
-  const sidecar = join(__dirname, '../sheets/native/xlsx-engine/target/release/xlsx-sidecar')
+function assertUniversalSidecar(
+  source = '../sheets/native/xlsx-engine/target/release/xlsx-sidecar',
+  workspace = '@genoffice/sheets',
+) {
+  const sidecar = join(__dirname, source)
   if (!existsSync(sidecar)) {
     throw new Error(
-      `mac extraResources source missing: ${sidecar} (run "npm run native:build:universal -w @genoffice/sheets" first)`,
+      `mac extraResources source missing: ${sidecar} (run "npm run native:build:universal -w ${workspace}" first)`,
     )
   }
   const archs = execFileSync('lipo', ['-archs', sidecar], { encoding: 'utf8' }).trim().split(/\s+/)
   for (const want of ['x86_64', 'arm64']) {
     if (!archs.includes(want)) {
       throw new Error(
-        `xlsx-sidecar is [${archs.join(', ')}] but both mac arch packages ship it — ` +
-          'run "npm run native:build:universal -w @genoffice/sheets" before packaging mac',
+        `${source} is [${archs.join(', ')}] but both mac arch packages ship it — ` +
+          `run "npm run native:build:universal -w ${workspace}" before packaging mac`,
       )
     }
   }
@@ -298,9 +306,9 @@ function ensureCliBundleCarriesAppVersion() {
 const NOTICE_PATH = join(__dirname, 'build/THIRD-PARTY-NOTICES.txt')
 const PDFIUM_NOTICE_TERMS = ['@embedpdf/pdfium', 'Copyright 2014 PDFium Authors', 'Apache License']
 // tools/gen-third-party-notices.mjs writes this header after the repo NOTICE,
-// and one crate-count line per Rust component (xlsx-sidecar, rhwp_bg.wasm)
+// and one crate-count line per Rust component (xlsx-sidecar, rhwp_bg.wasm, ieum-parse-sidecar)
 const NOTICE_HEADER = `${PRODUCT_NAME} — Third-Party Software Notices`
-const RUST_COMPONENTS = 2
+const RUST_COMPONENTS = 3
 const CRATE_COUNT_LINE = /^[1-9]\d* crates, all under permissive terms:$/gm
 
 /**
@@ -705,6 +713,10 @@ const config = {
         from: '../sheets/native/xlsx-engine/target/release/xlsx-sidecar',
         to: 'native/xlsx-sidecar',
       },
+      {
+        from: UNIX_PARSE_SIDECAR,
+        to: 'native/ieum-parse-sidecar',
+      },
     ],
   },
   win: {
@@ -721,6 +733,10 @@ const config = {
       {
         from: WIN_SIDECAR,
         to: 'native/xlsx-sidecar.exe',
+      },
+      {
+        from: WIN_PARSE_SIDECAR,
+        to: 'native/ieum-parse-sidecar.exe',
       },
       {
         from: 'build/shell-new',
@@ -795,6 +811,10 @@ const config = {
       {
         from: '../sheets/native/xlsx-engine/target/release/xlsx-sidecar',
         to: 'native/xlsx-sidecar',
+      },
+      {
+        from: UNIX_PARSE_SIDECAR,
+        to: 'native/ieum-parse-sidecar',
       },
     ],
   },
@@ -879,7 +899,15 @@ const config = {
     ensureCliBundleCarriesAppVersion()
     if (context.electronPlatformName === 'darwin' && includeMacX64) {
       assertUniversalSidecar()
+      assertUniversalSidecar(UNIX_PARSE_SIDECAR, '@genoffice/file-parse')
       assertUniversalVisionOcr()
+    }
+    const parseBinary =
+      context.electronPlatformName === 'win32' ? WIN_PARSE_SIDECAR : UNIX_PARSE_SIDECAR
+    if (!existsSync(join(__dirname, parseBinary))) {
+      throw new Error(
+        `Missing parse sidecar: ${parseBinary}. Run the native build for @genoffice/file-parse first.`,
+      )
     }
     if (context.electronPlatformName === 'win32' && !existsSync(join(__dirname, WIN_SIDECAR))) {
       throw new Error(

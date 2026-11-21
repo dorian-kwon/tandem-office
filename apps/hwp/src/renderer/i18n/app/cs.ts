@@ -19,6 +19,9 @@ export const cs = {
     'Nic se neuložilo: kopie připravená k zápisu se po zpětném načtení neshodovala s dokumentem na obrazovce. Zkuste „Uložit jako“ a zapište nový soubor.',
   saveVerifyHint:
     'Původní soubor je beze změny. V dialogu Uložit jako zvolte HWPX nebo použijte Exportovat jako PDF.',
+  saveVerifyPages: 'Na obrazovce: {before} str. → po načtení: {after} str.',
+  hwpxCopySaved: 'Kopie HWPX byla uložena.',
+  saveAsHwpx: 'Uložit jako HWPX…',
   saveProtected:
     'Neuloženo: tento dokument je chráněn heslem a uložením zde by se zapsal bez hesla.',
   backupKept: 'Uloženo. Předchozí verze byla zachována jako {name}.',

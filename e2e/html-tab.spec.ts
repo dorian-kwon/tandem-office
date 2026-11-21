@@ -462,6 +462,7 @@ test.describe('html editor', () => {
     const launched = await launchShell({
       onboardingSeen: true,
       videoDir: 'html-undo-zoom',
+      hideUpdateWindows: true,
       openFile: htmlPath,
     })
     const { app } = launched
@@ -488,14 +489,15 @@ test.describe('html editor', () => {
       await frame.locator('body').press('ControlOrMeta+z')
       await expect(frame.locator('p.note')).toHaveText('Beta')
 
-      // trackpad pinch arrives as ctrl+wheel inside the sandboxed frame
+      // ctrl+wheel inside the sandboxed frame is relayed: one notch is five points,
+      // however large the OS makes its delta
       await expect(editorPage.locator('.zoom-value')).toHaveText('100%')
       await frame.locator('body').evaluate((body) => {
         body.dispatchEvent(
           new WheelEvent('wheel', { deltaY: -100, ctrlKey: true, bubbles: true, cancelable: true }),
         )
       })
-      await expect(editorPage.locator('.zoom-value')).toHaveText('160%')
+      await expect(editorPage.locator('.zoom-value')).toHaveText('105%')
       // zoom shortcuts are relayed too while the frame keeps focus
       await frame.locator('body').press('ControlOrMeta+0')
       await expect(editorPage.locator('.zoom-value')).toHaveText('100%')

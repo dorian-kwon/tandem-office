@@ -2,7 +2,7 @@
 name: ieumoffice
 description: Create, convert, read and edit Office documents locally with tandem office's command line. Build a new presentation (pptx) from a brief through a checked outline, per-page spec and render pipeline, a new spreadsheet (xlsx) from CSV or JSON data with formulas, a new Word document (docx) from Markdown or HTML, a Hangul document (hwp / hwpx), or a PDF; convert between pdf, docx, odt, xlsx, pptx, md, html and csv, and a PDF to Markdown or EPUB; read the structure and text of an existing file (including the user's own docx / odt / xlsx / pptx / pdf / hwp as source material) and apply structured edits to it, Hangul documents included; read scanned PDF pages with AI and translate a whole PDF into a translated PDF, Markdown or EPUB, or an EPUB book into a translated or bilingual EPUB. Use whenever the user asks for a slide deck, presentation, spreadsheet, workbook, report, Word document or any real Office file, a format conversion, a rewrite of part of an existing document, or wants the result opened in the tandem office editor. Documents are processed locally; only search, image, media, read-url, pdf ai-read, pdf translate and epub translate send data off the machine (read-url sends the address it is given to that site; the rest send to the provider configured in tandem office).
 metadata:
-  version: 2.73.5
+  version: 2.73.6
   cli: '>=0.9.0'
 ---
 
@@ -176,7 +176,7 @@ Source material the user hands you (a report to turn into slides, a workbook to 
 - xlsx: `ieumoffice convert file.xlsx --to csv --sheet <name> --out file.csv` for a whole sheet as displayed text, or `ieumoffice sheet read file.xlsx --range A1:H200 --json` for raw values (without `--range` it stops at 500 rows and says `truncated: true`; `--stats` first to size a workbook, `--cols`/`--max-rows` to page through a wide or long sheet, `--where formula` for the formulas alone).
 - pptx: `ieumoffice slides read file.pptx --full --json` for every slide's text, tables and speaker notes; add `--comments` for each page's stored review comments (`{authorId, idx, author, dt, text}`) and `hidden: true`; `ieumoffice slides render file.pptx --out shots` when you need to see the pages.
 - pdf: `ieumoffice pdf read file.pdf --range 1-20 --json` when you cannot open the PDF yourself (a password-protected file, or page sizes and metadata are needed).
-- hwp, hwpx: `ieumoffice hwp read file.hwp --full --json` for the whole text, tables as `a | b` rows. To change one, `ieumoffice hwp apply` with the ops in `ieumoffice guide hwp`; a new one is `ieumoffice create --type hwp --ops ops.json --out x.hwp`.
+- hwp, hwpx: `ieumoffice convert file.hwp --to pdf` exports the Hangul layout. Use `ieumoffice hwp read file.hwp --full --json` for the whole text, tables as `a | b` rows. To change one, `ieumoffice hwp apply` with the ops in `ieumoffice guide hwp`; a new one is `ieumoffice create --type hwp --ops ops.json --out x.hwp`.
 
 Take figures and wording from that material; never `cat` or `unzip` the Office file itself.
 

@@ -229,3 +229,36 @@ for (const ext of Object.values(ROUTED_EXTENSIONS).flat()) {
     await expect(launched.page.locator('.tab-item:not(.tab-home)')).toHaveCount(0)
   })
 }
+
+test('a Word chat change link selects the paragraph the mock edited', async () => {
+  const path = test.info().outputPath('change-link.docx')
+  await writeFile(path, await cases.docx.content())
+  const [page] = await Promise.all([
+    launched.app.waitForEvent('window'),
+    launched.page.evaluate((p) => window.aiOffice.openPath(p), path),
+  ])
+  await cases.docx.check(page)
+  const marker = 'Revised visit schedule.'
+  await queueTurns(launched.app, [
+    {
+      toolCalls: [
+        {
+          id: 'revise',
+          name: 'replace_blocks',
+          input: { startBlockIndex: 1, endBlockIndex: 1, html: '<p>' + marker + '</p>' },
+        },
+      ],
+    },
+    { text: 'Revision complete.' },
+  ])
+  const composer = page.locator('.ai-composer textarea').first()
+  if (!(await composer.isVisible())) await page.locator('.ai-rail').first().click()
+  await composer.fill('Replace the second paragraph with the revised visit schedule.')
+  await page.locator('.ai-composer .ai-send-btn').first().click()
+  await expect(page.getByText('Revision complete.', { exact: true })).toBeVisible()
+  const links = page.locator('.ai-change-links')
+  await links.locator('summary').click()
+  await links.getByRole('button', { name: '#2', exact: true }).click()
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toContain(marker)
+  await page.keyboard.press('ControlOrMeta+s')
+})

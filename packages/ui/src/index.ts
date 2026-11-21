@@ -399,6 +399,9 @@ export {
   createWheelPager,
   createZoomWheelClassifier,
   notchStep,
+  WHEEL_ZOOM_STEP,
+  wheelZoomStep,
+  wheelZoomStepPercent,
   type ZoomWheelIntent,
 } from './wheel-zoom'
 export { AiModelPicker, aiModelPopoverStyle, type AiModelPickerBridge } from './AiModelPicker'
@@ -630,3 +633,5 @@ export { OcrChatPreview, ocrDisplayOf, type OcrChatDisplay } from './OcrChatPrev
 
 export { useChatWindow, EarlierChatMessages, recentChatStart } from './chat-window'
 export { useEditorAiBusy, acquireEditorAiWork, withEditorAiWork } from './editor-ai-busy'
+
+export { AiChangeLinks } from './AiChangeLinks'

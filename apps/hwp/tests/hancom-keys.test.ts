@@ -1,3 +1,4 @@
+import { STUDIO_TAG } from '../scripts/studio-source.mjs'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -578,25 +579,48 @@ describe("Hangul's table row keys inside a cell", () => {
     expect(e.preventDefault).not.toHaveBeenCalled()
   })
 
-  it('does not page-break in a table that sits in a cell (Phase 2)', () => {
-    const ih = inCell()
-    ih.getCursorPosition = () => ({
-      sectionIndex: 0,
-      paragraphIndex: 0,
-      charOffset: 0,
-      parentParaIndex: 1,
-      controlIndex: 0,
-      cellIndex: 0,
-      cellParaIndex: 0,
-      cellPath: [
+  it('takes the row keys in a table that sits in a cell too, for that table', () => {
+    const nested = () => {
+      const ih = inCell()
+      ih.getCursorPosition = () => ({
+        sectionIndex: 0,
+        paragraphIndex: 0,
+        charOffset: 0,
+        parentParaIndex: 1,
+        controlIndex: 0,
+        cellIndex: 0,
+        cellParaIndex: 0,
+        cellPath: [
+          { controlIndex: 0, cellIndex: 0, cellParaIndex: 0 },
+          { controlIndex: 1, cellIndex: 0, cellParaIndex: 0 },
+        ],
+      })
+      return ih
+    }
+    const enter = key({ key: 'Enter', code: 'Enter', ctrlKey: true })
+    const ih = nested()
+    expect(hancomContextKey(ih, enter)).toBe(true)
+    expect(enter.preventDefault).toHaveBeenCalled()
+    // the dispatcher hands the command the inner table (nestedTableCommand)
+    expect(ih.dispatcher.dispatch).toHaveBeenCalledWith('ieum:table-insert-row-below')
+    const back = nested()
+    // the inner table's rows, read by its path: the last row stays
+    back.wasm.getTableDimensionsByPath = vi.fn(() => ({ rowCount: 1, colCount: 2, cellCount: 2 }))
+    expect(
+      hancomContextKey(back, key({ key: 'Backspace', code: 'Backspace', ctrlKey: true })),
+    ).toBe(true)
+    expect(back.wasm.getTableDimensionsByPath).toHaveBeenCalledWith(
+      0,
+      1,
+      JSON.stringify([
         { controlIndex: 0, cellIndex: 0, cellParaIndex: 0 },
         { controlIndex: 1, cellIndex: 0, cellParaIndex: 0 },
-      ],
-    })
-    const e = key({ key: 'Enter', code: 'Enter', ctrlKey: true })
-    expect(hancomContextKey(ih, e)).toBe(true)
-    expect(e.preventDefault).toHaveBeenCalled()
-    expect(ih.dispatcher.dispatch).not.toHaveBeenCalled()
+      ]),
+    )
+    expect(back.dispatcher.dispatch).not.toHaveBeenCalled()
+    back.wasm.getTableDimensionsByPath = vi.fn(() => ({ rowCount: 3, colCount: 2, cellCount: 6 }))
+    hancomContextKey(back, key({ key: 'Backspace', code: 'Backspace', ctrlKey: true }))
+    expect(back.dispatcher.dispatch).toHaveBeenCalledWith('table:delete-row')
   })
 })
 
@@ -622,6 +646,16 @@ describe('the table-object keys (표를 선택한 상태에서)', () => {
       expect(ih.dispatcher.dispatch).toHaveBeenCalledWith(id)
       expect(ih._cellBlockLetterImeGuard.arm).toHaveBeenCalledWith(e)
     }
+  })
+
+  it('consumes a plain arrow on a nested selection before Studio can move the outer table', () => {
+    const ih = inObject([])
+    const e = key({ key: 'ArrowRight' })
+    expect(hancomTableObjectKey(ih, e)).toBe(false)
+    Object.assign(ih.cursor, { getSelectedTableRef: () => ({ cellPath: [{}, {}] }) })
+    expect(hancomTableObjectKey(ih, e)).toBe(true)
+    expect(e.preventDefault).toHaveBeenCalledOnce()
+    expect(ih.dispatcher.dispatch).not.toHaveBeenCalled()
   })
 
   it('deletes the table with Ctrl+E', () => {
@@ -1474,16 +1508,13 @@ describe('equal cell sizes (H/W)', () => {
 })
 
 describe('against the studio source the build fetched', () => {
-  const core = JSON.parse(
-    readFileSync(join(__dirname, '..', '..', '..', 'vendor', 'rhwp-core', 'package.json'), 'utf8'),
-  )
   const studio = join(
     __dirname,
     '..',
     'node_modules',
     '.cache',
     'rhwp-studio',
-    core.rhwp.tag,
+    STUDIO_TAG,
     'rhwp-studio',
   )
   const map = join(studio, 'src', 'command', 'shortcut-map.ts')

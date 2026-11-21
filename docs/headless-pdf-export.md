@@ -40,6 +40,7 @@ On failure the JSON envelope is
 | `.pptx`                       | slides   |
 | `.md` `.markdown`             | markdown |
 | `.html` `.htm`                | html     |
+| `.hwp` `.hwpx`                | hwp      |
 
 ## How it works
 
@@ -85,3 +86,5 @@ file manager) and the slides recent-files entry.
   PDF export is allowed. Headless makes that call itself.
 - **Only the active sheet** is exported for spreadsheets, exactly as in the
   GUI.
+
+The Hangul exporter reads the file on disk, loads the cached font list, and uses the same page renderer as the PDF menu. The hidden view skips installed-font enumeration and leaves recovery copies alone.

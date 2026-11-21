@@ -4,6 +4,8 @@
 
 첨부 파일을 모델에 보낼 평문으로 바꾼다. `parseFileToText(경로)`가 확장자와 매직 바이트를 보고 PDF, docx, doc, odt, pptx, ppt, xlsx/xlsm, 마인드맵(`.xmind`), 한글(hwp, hwpx), EPUB 책(`.epub`), 텍스트 계열 파일을 글자로 풀고, 이미지는 내용을 읽지 않고 `kind: 'image'`와 MIME만 돌려준다. Docs·Sheets·Slides·HTML·Mindmap·EPUB 메인 프로세스의 첨부 처리, 셸의 파일 색인·지식 베이스, 만들기 창의 자료 확인과 AI 없이 바꾸기가 쓴다. 앱 안에서 파일이 "다른 파일로" 읽히는 길은 모두 여기를 지난다.
 
+DOCX·XLSX·XLSM·PPTX·ODT·EPUB·XMind의 첨부·색인 본문은 설치본의 로컬 Rust 프로그램 `ieum-parse-sidecar`가 읽는다. 바이너리를 시작할 수 없으면 기존 TypeScript 경로가 처리하고, 문서 자체를 거부한 결과는 그대로 돌려준다. PPTX에 가리기 흔적이 있으면 기존 가리기 판정을 거친다. `GENOFFICE_PARSE_SIDECAR=0`으로 기존 처리기를 선택할 수 있다.
+
 다른 파일로 읽힐 때의 가리기도 맡는다. 자기 편집기가 AI에게 가리는 자리를 여기서도 똑같이 `{{이름}}`으로 바꿔 내준다.
 
 첨부할 수 있는 형식 목록도 여기서 한 벌로 정의한다(`attachable.ts`, 결정 0035). `ATTACHABLE_EXTS`(글자로 읽는 형식과 그림을 합친 한 벌), `ATTACHABLE_IMAGE_EXTS`(그림 확장자), `ATTACHABLE_MAX_BYTES`(50MB)·`ATTACHABLE_IMAGE_MAX_BYTES`(5MB), 형식별 상한 `attachableMaxBytes`(사진이 크기를 차지하는 zip 문서와 PDF는 상한 없음, 결정 0091), 판정 함수 `isAttachableExt`를 내주고, 일곱 편집기(워드·엑셀·PPT·HTML·마인드맵·한글·EPUB)의 메인 프로세스가 이것을 가져다 쓴다. `.epub`도 이 목록에 있다.

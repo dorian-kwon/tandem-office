@@ -1213,6 +1213,7 @@ describe('apply_ops', () => {
     )
     expect(result.isError).toBeUndefined()
     expect(result.mutated).toBe(true)
+    expect(result.changeLocations).toEqual([{ kind: 'page', index: 1 }])
     expect(result.output).toContain('Applied 4 op(s)')
     expect(deps.applyOps).toHaveBeenCalledTimes(1)
     expect(vi.mocked(deps.applyOps).mock.calls[0]![0]).toEqual([

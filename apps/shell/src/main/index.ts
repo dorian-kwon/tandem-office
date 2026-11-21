@@ -184,6 +184,7 @@ import {
   ATTACHABLE_MAX_BYTES,
   attachableMaxBytes,
   parseFileToText,
+  stopParseSidecar,
 } from '@genoffice/file-parse'
 import { createDocList } from './doc-picker/doc-list'
 import { resolveDocAsker } from './doc-picker/doc-asker'
@@ -335,6 +336,7 @@ import {
 import {
   configureHwpRuntime,
   editorTakes,
+  exportHwpPdfHeadless,
   hwpFileRenamed,
   hwpReadText,
   requestHwpPreview,
@@ -883,6 +885,8 @@ configureHwpRuntime({
   openFileDialog: () => void openFileViaDialog(),
   goHome: () => tabManager?.openHomeTab(),
   newDocument: () => newHwpTab(),
+  isTranslationOutput: translationOutputFor,
+  isOpenPath: isPathOpenInAnyTab,
   newDocumentDir: (id) => newDocumentFolderFor(id),
 })
 configureEpubRuntime({
@@ -1084,17 +1088,20 @@ function currentDocTheme(): DocTheme {
 
 let cachedAutoSaveDefault: AutoSaveDefault | null = null
 
-/** The autosave answer for one editor: always on (and locked) in the translation output pane. */
-function autoSaveFor(webContentsId: number): AutoSaveDefault {
-  const base = currentAutoSaveDefault()
+function translationOutputFor(webContentsId: number): boolean {
   const manager = tabManager
-  if (
-    manager &&
+  return (
+    !!manager &&
     isTranslationOutputTab(manager.tabIdForWebContents(webContentsId), manager.splitState(), (id) =>
       manager.isReadOnlyTab(id),
     )
   )
-    return { ...base, on: true, locked: true }
+}
+
+/** The autosave answer for one editor: always on (and locked) in the translation output pane. */
+function autoSaveFor(webContentsId: number): AutoSaveDefault {
+  const base = currentAutoSaveDefault()
+  if (translationOutputFor(webContentsId)) return { ...base, on: true, locked: true }
   return base
 }
 
@@ -6687,15 +6694,9 @@ function registerHomeIpc(): void {
   )
 
   // an editor asks whether it is the translation view's output pane (the AI run lock)
-  ipcMain.handle(TRANSLATION_OUTPUT_CHANNEL, (event): boolean => {
-    const manager = tabManager
-    if (!manager) return false
-    return isTranslationOutputTab(
-      manager.tabIdForWebContents(event.sender.id),
-      manager.splitState(),
-      (id) => manager.isReadOnlyTab(id),
-    )
-  })
+  ipcMain.handle(TRANSLATION_OUTPUT_CHANNEL, (event): boolean =>
+    translationOutputFor(event.sender.id),
+  )
 
   // an editor asks which language pair its document's translation project has (web translation
   // aims at the target language); null for a document outside any project
@@ -9613,6 +9614,7 @@ const headlessExporters: HeadlessExporters = {
   slides: (input, outPath) => exportSlidesPdfHeadless(input, outPath),
   markdown: (input, outPath) => exportMarkdownPdfHeadless(input, outPath),
   html: exportHtmlHeadless,
+  hwp: (input, outPath) => exportHwpPdfHeadless(input, outPath),
 }
 
 /**
@@ -10340,6 +10342,7 @@ function releaseAppResources(): void {
     // the settings file is not writable now; the list order is only a convenience
   }
   void fileIndexer?.stop()
+  stopParseSidecar()
   for (const watcher of folderWatchers.values()) watcher.close()
   controlServer?.close()
   // a second instance that lost the lock quits too; it must not delete the running editor's list

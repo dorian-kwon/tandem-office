@@ -1,3 +1,9 @@
+import {
+  mergeChangeLocations,
+  MAX_CHANGE_LOCATIONS,
+  type AiChangeLocation,
+} from '@genoffice/agent-core'
+import { elementCovering } from '../document/parse-map'
 import type { AgentSkill, AgentToolCall, AgentToolDef, ToolExecution } from '@genoffice/agent-core'
 import { t } from '../i18n/locale'
 import type { ElementEntry, ParseMap } from '../document/parse-map'
@@ -1042,6 +1048,16 @@ export function createHtmlSkillCore(access: HtmlDocAccess): {
               output: `Applied ${ops.length} op(s) at ${where.join(', ')}. Document is now version ${access.getVersion()}.${warn}`,
               mutated: true,
               summary: t('aiToolApplyOps', { n: ops.length }),
+              changeLocations: mergeChangeLocations(
+                undefined,
+                result.ranges
+                  .slice(0, MAX_CHANGE_LOCATIONS)
+                  .flatMap(([from, to]): AiChangeLocation[] => {
+                    if (from === to) return []
+                    const element = elementCovering(access.getMap(), from, to)
+                    return element ? [{ kind: 'element', index: element.sid }] : []
+                  }),
+              ),
             }
           }
           if (access.resolveAttachmentSrc && ops.some((op) => hasAttachmentRef(op))) {

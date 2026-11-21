@@ -1,5 +1,6 @@
 import { open, readFile, stat } from 'node:fs/promises'
 import { extname } from 'node:path'
+import { REDACT_NS } from '@genoffice/agent-core/redact-range'
 import { OdtNotTextError, isOdtOpenError } from '@genoffice/odt-engine'
 import { docToText } from './doc'
 import { docxToText } from './docx'
@@ -15,6 +16,8 @@ import { readZipTextParts } from './zip-text-parts'
 import { decodeCsvBuffer } from '@genoffice/xlsx-gateway/gateway/csv-import'
 import { redactHtmlSource } from './html-redaction'
 import { redactMarkdownSource } from './markdown-redaction'
+import { getInteractiveParseSidecar, SidecarInfraError } from './sidecar-client'
+import { isParseSidecarEnabled } from './sidecar-path'
 
 export type ParsedFileKind = 'text' | 'image' | 'unsupported'
 
@@ -161,6 +164,8 @@ async function parseOdt(bytes: Buffer): Promise<ParsedFile> {
 
 /** Character budget for extractors that can stop early (xlsx today). */
 export interface ParseFileOptions {
+  /** The index worker already tried its own low-priority native parser. */
+  skipSidecar?: boolean
   /// Character budget for extractors that can stop early (xlsx and docx today).
   maxChars?: number
   /// Size past which a zip-based document is read for its text parts only
@@ -216,6 +221,30 @@ async function readDocumentBytes(
   return readFile(filePath)
 }
 
+/**
+ * Formats routed to the native Rust `ieum-parse-sidecar` binary.
+ * Redaction-bearing text/markup (`md`, `markdown`, `txt`, `json`, `html`, `htm`)
+ * and formats handled exclusively in JS/WASM (`pdf`, `hwp`, `hwpx`, `ppt`,
+ * `drawio*`, images) are intentionally excluded and go directly to TypeScript.
+ */
+export const SIDECAR_EXTS: ReadonlySet<string> = new Set([
+  // ZIP-based document formats (plus `.doc`, which falls back to TS for legacy OLE2)
+  'docx',
+  'xlsx',
+  'xlsm',
+  'pptx',
+  'odt',
+  'epub',
+  'xmind',
+  'doc',
+  // Non-redacted plain / tabular formats
+  'csv',
+  'tsv',
+  'xml',
+  'log',
+  'py',
+])
+
 /** parse an attachment into plain text (or flag it as image / unsupported) */
 export async function parseFileToText(
   filePath: string,
@@ -224,6 +253,39 @@ export async function parseFileToText(
   const ext = extname(filePath).slice(1).toLowerCase()
   const imageMime = IMAGE_MIMES[ext]
   if (imageMime) return { ok: true, kind: 'image', mime: imageMime }
+  if (
+    !opts.skipSidecar &&
+    opts.wholeZipMaxBytes === undefined &&
+    isParseSidecarEnabled() &&
+    SIDECAR_EXTS.has(ext)
+  ) {
+    try {
+      const result = await getInteractiveParseSidecar().extractFile({
+        path: filePath,
+        ext,
+        ...(opts.maxChars !== undefined ? { maxChars: opts.maxChars } : {}),
+        redactNamespaces: [REDACT_NS],
+      })
+      switch (result.status) {
+        case 'ok':
+          return { ok: true, kind: 'text', text: result.text }
+        case 'rejected':
+          // Strict gate: never fall back to TS extractors on document rejections.
+          return { ok: false, kind: 'text', error: result.message }
+        case 'unsupported':
+          // Strict gate: never fall back to TS extractors on unsupported results.
+          return { ok: false, kind: 'unsupported', error: result.message }
+        case 'fallback':
+          // Allowed fallback (`redaction_present` or `unsupported_format`, e.g. legacy OLE2 .doc).
+          break
+      }
+    } catch (e) {
+      if (!(e instanceof SidecarInfraError)) {
+        return { ok: false, kind: 'text', error: e instanceof Error ? e.message : String(e) }
+      }
+      // Allowed fallback on SidecarInfraError (binary missing, crash, IPC/protocol error).
+    }
+  }
   try {
     if (TEXT_EXTS.has(ext)) {
       const bytes = await readFile(filePath)

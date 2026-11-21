@@ -75,6 +75,7 @@ export interface EpubAiWiring {
   /** the chapter frame's document, null while it loads */
   frameDoc: MutableRefObject<Document | null>
   /** opens the book-translation window (the translating screen); absent until it exists */
+  focusBlock?: BookAiHost['focusBlock']
   startBookTranslation?: StartBookTranslation | null
 }
 
@@ -86,12 +87,14 @@ export interface EpubAi {
 
 /** The AI's view of the editor, and whether its panel is open. */
 export function useEpubAi(wiring: EpubAiWiring): EpubAi {
-  const { book, readChapter, editor, shownChapter, frameDoc, startBookTranslation } = wiring
+  const { book, readChapter, editor, shownChapter, frameDoc, startBookTranslation, focusBlock } =
+    wiring
   const [open, setOpen] = useState(() => aiPanelInitiallyOpen(OPEN_KEY))
   useEffect(() => rememberAiPanelOpen(OPEN_KEY, open), [open])
 
   const host = useMemo<BookAiHost>(
     () => ({
+      ...(focusBlock ? { focusBlock } : {}),
       book: () => book,
       readChapter,
       editor: () => editor,
@@ -107,7 +110,7 @@ export function useEpubAi(wiring: EpubAiWiring): EpubAi {
       },
       startBookTranslation: startBookTranslation ?? null,
     }),
-    [book, readChapter, editor, shownChapter, frameDoc, startBookTranslation],
+    [book, readChapter, editor, shownChapter, frameDoc, startBookTranslation, focusBlock],
   )
   return { host, open, setOpen }
 }

@@ -1,3 +1,5 @@
+import { changeLocationPatch, type AiChangeLocation } from '@genoffice/agent-core'
+import { AiChangeLinks } from '@genoffice/ui'
 import { analyzingDocumentLabel } from '@genoffice/i18n'
 import { useChatWindow, EarlierChatMessages } from '@genoffice/ui'
 import { aiEditUndoHistoryEnabled, useAiPanelPrefs } from '@genoffice/ui'
@@ -125,7 +127,7 @@ import { createSearchSkill } from './search-skill'
 import { createElectronTransport } from './transport'
 import { blockedRunFor, mergeSubscriptionUsage, type BlockedRun } from './connection'
 import { useSubscriptionConnection } from './subscription-client'
-import { blankNewMapSheet, type MapAiHost, MapTurn, revertTurn } from './map-tools'
+import { controllerFor, blankNewMapSheet, type MapAiHost, MapTurn, revertTurn } from './map-tools'
 import sendEnterOn from './assets/send-enter-on.png'
 import sendEnterOff from './assets/send-enter-off.png'
 import sendStop from './assets/send-stop.png'
@@ -270,6 +272,7 @@ interface ToolActivity {
 }
 
 interface ChatEntry {
+  changeLocations?: readonly AiChangeLocation[]
   role: 'user' | 'assistant'
   text: string
   streaming?: boolean
@@ -970,7 +973,7 @@ export function AiPanel({
             // the running row pushed by onToolStart is swapped out (a call that never ran has none)
             const tools = [...(last.tools ?? [])]
             if (tools.at(-1)?.running) tools.pop()
-            return { tools: [...tools, activity] }
+            return { ...changeLocationPatch(last, execution), tools: [...tools, activity] }
           })
         },
         onTurnEnd: () => {
@@ -1924,6 +1927,30 @@ export function AiPanel({
               )}
               {hasTools && <ToolChipList tools={entry.tools!} />}
               {projectLinesOfReply}
+              <AiChangeLinks
+                places={entry.changeLocations}
+                lang={lang}
+                onShow={(place) => {
+                  if (place.kind !== 'topic') return
+                  const host = hostRef.current
+                  const session = host.session()
+                  if (!session || session.indexOf(place.sheet) < 0) return
+                  if (host.activeSheetKey() !== place.sheet) host.showSheet(place.sheet)
+                  requestAnimationFrame(() => {
+                    const current = hostRef.current
+                    if (current.session() !== session || current.activeSheetKey() !== place.sheet)
+                      return
+                    void controllerFor(current, place.sheet).then((controller) => {
+                      if (
+                        hostRef.current.session() === session &&
+                        hostRef.current.activeSheetKey() === place.sheet
+                      ) {
+                        controller?.focusTopic(place.topic)
+                      }
+                    })
+                  })
+                }}
+              />
               <SkillUsedNotes tools={entry.tools} />
               {entry.skillProposals?.map((key) => skillCards.render(key))}
               {entry.usage && (

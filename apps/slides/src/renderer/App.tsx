@@ -38,7 +38,15 @@ import { mergeBroadcastUpdate, mergeSlideUpdate, setDeckRefresh } from '../share
 import { SlideCanvas, selectionChromeColor, type SlideCanvasHandle } from './SlideCanvas'
 import { tableCellOverlayBox } from './table-hit'
 import { ZOOM_PREVIEW_EVENT } from './zoom-preview'
-import { ZOOM_MAX, ZOOM_MIN, clampZoom, nextPreset, notchStep, prevPreset } from './zoom-steps'
+import {
+  ZOOM_MAX,
+  ZOOM_MIN,
+  clampZoom,
+  nextPreset,
+  notchStep,
+  prevPreset,
+  wheelStep,
+} from './zoom-steps'
 import type { DrawRect } from './draw-shape'
 import { paragraphsBlank } from './textbox-insert'
 import { SlideThumb, thumbBox } from './SlideThumb'
@@ -89,6 +97,7 @@ import {
   describeNode,
   EDIT_QUEUE_MAX,
   resolveQueueItem,
+  selectionForChange,
   type EditQueueItem,
 } from './ai/edit-queue'
 import { FormatBackgroundPane, type BgPaneOp } from './components/FormatBackgroundPane'
@@ -1203,8 +1212,9 @@ export function App() {
     }
   }, [])
 
-  // Trackpad pinch zoom: Chromium synthesizes pinch gestures as ctrlKey+wheel events;
-  // Ctrl/⌘ + wheel zoom also supported. Needs passive:false to preventDefault.
+  // Ctrl/⌘ + wheel zoom: five percentage points per notch whatever the OS scroll
+  // setting; a trackpad pinch (ctrlKey wheel events in Chromium) moves in the same
+  // steps. Needs passive:false to preventDefault.
   // Plain wheel/trackpad scroll turns pages (PowerPoint/WPS behavior) — but only
   // while the slide fits the viewport; zoomed-in overflow keeps native panning.
   useEffect(() => {
@@ -1217,14 +1227,8 @@ export function App() {
         ev.preventDefault()
         const intent = zoomWheel.feed(ev, ev.timeStamp)
         if (!intent) return
-        const anchor = { x: ev.clientX, y: ev.clientY }
-        if (intent === 'pinch') {
-          const factor = Math.exp(-ev.deltaY * 0.01)
-          previewZoom((z) => z * factor, anchor)
-        } else {
-          const dir = intent === 'zoom-in' ? 1 : -1
-          previewZoom((z) => notchStep(z, dir), anchor)
-        }
+        const dir = intent === 'zoom-in' ? 1 : -1
+        previewZoom((z) => wheelStep(z, dir), { x: ev.clientX, y: ev.clientY })
         return
       }
       // Never flip out from under a live text edit — the overlay's commit
@@ -3752,6 +3756,15 @@ export function App() {
                 onQueueRemove={(key) => setEditQueue((prev) => prev.filter((it) => it.key !== key))}
                 onQueueClear={() => setEditQueue([])}
                 onQueueFocus={focusQueueItem}
+                onFocusChange={(part, node) => {
+                  const index = slides.findIndex((slide) => slide.partPath === part)
+                  if (index < 0) return
+                  setEditing(null)
+                  setCurrent(index)
+                  const selection = node ? selectionForChange(slides[index]!, node) : null
+                  setEnteredGroupId(selection?.group ?? null)
+                  setSelectedIds(selection ? [selection.selected] : [])
+                }}
                 onQueueConsume={(keys) =>
                   setEditQueue((prev) => prev.filter((it) => !keys.includes(it.key)))
                 }

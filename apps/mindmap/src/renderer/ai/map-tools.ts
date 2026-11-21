@@ -1,3 +1,4 @@
+import { mergeChangeLocations, type AiChangeLocation } from '@genoffice/agent-core'
 /**
  * What the AI's tools do to the map.
  *
@@ -83,6 +84,7 @@ export interface MapAiHost {
 
 /** What a tool hands back: the text for the model, and whether the map changed. */
 export interface MapToolResult {
+  changeLocations?: AiChangeLocation[]
   output: string
   isError?: boolean
   mutated?: boolean
@@ -659,6 +661,18 @@ export async function editMap(
     output: lines.join('\n'),
     isError: done === 0,
     mutated: done > 0 && (history !== 'recorded' || steps > 0),
+    changeLocations: mergeChangeLocations(
+      undefined,
+      (function* (): Generator<AiChangeLocation> {
+        for (const outcome of outcomes) {
+          if (!outcome.ok || !outcome.id || outcome.op === 'delete') continue
+          const edit = edits[outcome.index]
+          const label =
+            isRecord(edit) && typeof edit.title === 'string' ? edit.title.slice(0, 64) : outcome.id
+          yield { kind: 'topic', sheet: key, topic: outcome.id, label }
+        }
+      })(),
+    ),
     detail: { done, total: edits.length },
   }
 }
@@ -870,14 +884,19 @@ export async function setTopicPicture(
     throw error
   }
   const undoNote = history === 'large' ? ' ' + SHEET_UNDO_LIMIT_NOTE : ''
+  const changeLocations: AiChangeLocation[] = [
+    { kind: 'topic', sheet: key, topic: topicId, label: found.node.topic.slice(0, 64) || topicId },
+  ]
   if (entryName === null) {
     return {
+      changeLocations,
       output: `Changed the title of topic ${topicId} of sheet ${position}.${undoNote}`,
       mutated: true,
       detail: { done: 1, total: 1 },
     }
   }
   return {
+    changeLocations,
     output: `Put the picture on topic ${topicId} of sheet ${position}. It is saved inside the map file (${entryName}).${undoNote}`,
     mutated: true,
     detail: { done: 1, total: 1 },
@@ -972,6 +991,7 @@ export async function writeMap(
     )
   }
   const written: string[] = []
+  const changeLocations: AiChangeLocation[] = []
   for (const [at, sheet] of parsed.entries()) {
     const fill = at === 0 ? blank : null
     let key: string
@@ -997,6 +1017,13 @@ export async function writeMap(
     }
     const position = session.indexOf(key) + 1
     turn?.finishEdit(session, key, history)
+    const root = session.sheet(key).rootTopic
+    changeLocations.push({
+      kind: 'topic',
+      sheet: key,
+      topic: root.id,
+      label: typeof root.title === 'string' && root.title ? root.title.slice(0, 64) : root.id,
+    })
     const count = countSheetTopics(session.sheet(key))
     written.push(
       fill
@@ -1010,6 +1037,7 @@ export async function writeMap(
   return {
     output: `${written.join('\n')}\nCall read_map for the ids of the new topics before you edit them.`,
     mutated: true,
+    changeLocations,
     detail: { sheets: parsed.length },
   }
 }

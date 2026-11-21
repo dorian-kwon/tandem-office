@@ -1,3 +1,4 @@
+import { mergeChangeLocations, type AiChangeLocation } from '@genoffice/agent-core'
 import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import type { AgentToolCall, AgentToolDef, ToolExecution } from '@genoffice/agent-core'
@@ -2111,6 +2112,7 @@ async function insertBlankPageTool(
   const r = deps.insertBlankPage(afterOrig)
   if (!r.ok) return err(r.error, summary)
   return {
+    changeLocations: [{ kind: 'page', index: r.pageIndex + 1 }],
     output: `Inserted a blank page as page ${pos} (pending until the user saves; ${aiEditUndoHistoryEnabled() ? 'undoable' : 'AI undo is off'}). Like every pending edit it is addressed by its original page number, ${r.pageIndex + 1}; existing pages keep their original numbers.`,
     mutated: true,
     summary,
@@ -2940,6 +2942,7 @@ function editInsertedTextTool(deps: PdfAiDeps, input: Record<string, unknown>): 
   deps.updateTextInsert(r.ins.id, edit)
   deps.gotoPage(cur.pageIndex + 1)
   return {
+    changeLocations: [{ kind: 'page', index: cur.pageIndex + 1 }],
     output: `Updated inserted text T${r.ins.id} on page ${cur.pageIndex + 1}: ${text.split('\n').length} line(s), ${fontSize} pt, ${align} (unsaved; the user saves with ⌘S).`,
     mutated: true,
     summary,
@@ -2981,6 +2984,7 @@ function moveInsertedTextTool(deps: PdfAiDeps, input: Record<string, unknown>): 
   deps.moveTextInsert(r.ins.id, [origin[0] + (bx - ax), origin[1] + (by - ay)])
   deps.gotoPage(pageIndex + 1)
   return {
+    changeLocations: [{ kind: 'page', index: pageIndex + 1 }],
     output: `Moved inserted text T${r.ins.id} on page ${pageIndex + 1} to x=${fmt(nx)}, y=${fmt(ny)} (unsaved; the user saves with ⌘S).`,
     mutated: true,
     summary,
@@ -2994,6 +2998,7 @@ function deleteInsertedTextTool(deps: PdfAiDeps, input: Record<string, unknown>)
   if ('bad' in r) return err(r.bad, summary)
   deps.deleteTextInsert(r.ins.id)
   return {
+    changeLocations: [{ kind: 'page', index: r.ins.input.pageIndex + 1 }],
     output: `Removed inserted text T${r.ins.id} from page ${r.ins.input.pageIndex + 1} (unsaved; ${aiEditUndoHistoryEnabled() ? 'undo with ⌘Z' : 'AI undo is off'}).`,
     mutated: true,
     summary,
@@ -3601,6 +3606,7 @@ async function applyOpsTool(
   const problems: string[] = []
   const ops: Op[] = []
   /** 1-based page to scroll to afterwards: the one page an op addressed */
+  const editedPages = new Set<number>()
   let focusPage: number | null = null
   const current = deps.pageOrder()
   // Working state the later ops of the batch are checked against
@@ -3669,6 +3675,7 @@ async function applyOpsTool(
           bad(`No field named "${name}"; use list_form_fields to see the fields`)
           continue
         }
+        editedPages.add(field.page)
         focusPage ??= field.page
         if (field.kind === 'checkbox') {
           if (typeof v.checked !== 'boolean') {
@@ -3704,6 +3711,7 @@ async function applyOpsTool(
           continue
         }
         const idxs = resolved.map((r) => (r as { origIdx: number }).origIdx)
+        for (const index of idxs) editedPages.add(index + 1)
         if (idxs.length === 1) focusPage ??= idxs[0]! + 1
         ops.push({ op: o.op, pages: idxs, dir: o.dir })
         break
@@ -3739,7 +3747,10 @@ async function applyOpsTool(
           (idx) => !vis.includes(idx),
         )
         const moved = movedPage(order, vis)
-        if (moved !== undefined) focusPage ??= moved + 1
+        if (moved !== undefined) {
+          editedPages.add(moved + 1)
+          focusPage ??= moved + 1
+        }
         order = vis
         ops.push({ op: o.op, order: [...vis, ...rest] })
         break
@@ -3779,6 +3790,7 @@ async function applyOpsTool(
         const a = viewToPdf(geom, x, y)
         const b = viewToPdf(geom, x + w, y + h)
         const { page: _page, x: _x, y: _y, width: _w, height: _h, ...rest } = f
+        editedPages.add(Number(f.page))
         focusPage ??= Number(f.page)
         ops.push({
           op: o.op,
@@ -3825,6 +3837,18 @@ async function applyOpsTool(
       `Applied ${plan.ops.length} op(s) as one batch: ${names} (unsaved; the user saves with ⌘S, ${aiEditUndoHistoryEnabled() ? 'undoes with ⌘Z' : 'AI undo is off'}).` +
       (details.length > 0 ? ` ${details.join(' ')}` : ''),
     mutated: true,
+    changeLocations: mergeChangeLocations(
+      undefined,
+      (function* (): Generator<AiChangeLocation> {
+        const removed = new Set(
+          ops.filter((op) => op.op === 'deletePage').map((op) => op.pageIndex),
+        )
+        for (const page of editedPages) {
+          if (!removed.has(page - 1) && !deps.isDeleted(page - 1))
+            yield { kind: 'page', index: page }
+        }
+      })(),
+    ),
     summary: plan.ops.length === 1 ? singleOpSummary(plan.ops[0]!, current) : summary,
   }
 }

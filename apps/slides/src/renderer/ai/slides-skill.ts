@@ -1,3 +1,8 @@
+import {
+  mergeChangeLocations,
+  MAX_CHANGE_LOCATIONS,
+  type AiChangeLocation,
+} from '@genoffice/agent-core'
 import { aiEditApi } from './ai-edit-api'
 import { attachedImageNote, type AgentSkill, type ToolDisplay } from '@genoffice/agent-core'
 import { slideDurableId } from '@genoffice/pptx-engine/identity'
@@ -134,6 +139,7 @@ export interface DeckAccess {
   ): Promise<{
     ok: boolean
     pages?: number
+    landedPart?: string | undefined
     appendedFrom?: number
     insertedIndex?: number
     error?: string
@@ -1581,6 +1587,10 @@ function preflightOps(
  * the journal echo), capped so a deck-wide batch does not flood the reply.
  * Empty when every audited page passes.
  */
+function slideLocation(index: number, part: string | undefined, node?: string): AiChangeLocation[] {
+  return part ? [{ kind: 'slide', index, part, ...(node ? { node } : {}) }] : []
+}
+
 function auditTouchedPages(
   records: Array<{ target?: string }> | undefined,
   deck: RenderSlide[] | SlideUpdate,
@@ -1728,6 +1738,7 @@ async function executeTool(
       return {
         output: `Applied the edit script to page ${idx + 1}: ${parts.join(', ')}.${returnedStr}${logsStr}${formatAudit(issues)}`,
         mutated: true,
+        changeLocations: slideLocation(idx, applied.slide.partPath),
         summary: t('aiSumScript', { n: idx + 1, count: r.ops.length + r.edits.length }),
       }
     }
@@ -1898,6 +1909,7 @@ async function executeTool(
       return {
         output: `Inserted the image on page ${idx + 1}, element id=${r.sourceId}.`,
         mutated: true,
+        changeLocations: slideLocation(idx, r.slide.partPath, r.sourceId),
         summary: t('aiSumInsertImage', { n: idx + 1 }),
       }
     }
@@ -1947,6 +1959,7 @@ async function executeTool(
       return {
         output: `Replaced the image of picture ${sourceId} on page ${idx + 1} in place (frame/z-order/effects kept).`,
         mutated: true,
+        changeLocations: slideLocation(idx, updated.partPath, sourceId),
         summary: t('aiSumReplaceImage', { n: idx + 1 }),
       }
     }
@@ -2124,6 +2137,7 @@ async function executeTool(
           `Redid page ${idx + 1} in place from the brief (other pages untouched; the user can undo). Fine-tune afterwards with execute_slide_script / set_element_* tools.` +
           imageFailNote(allImageFails.length ? allImageFails : undefined),
         mutated: true,
+        changeLocations: slideLocation(idx, access.getSlides()[idx]?.partPath),
         summary: t('aiSumRegen', { n: idx + 1 }),
       }
     }
@@ -2248,7 +2262,20 @@ async function executeTool(
       }
       // User clicked stop → checked inside each stage loop, abort as soon as possible (pages already landed are kept)
       const cancelled = () => signal?.aborted === true
+      const landedLocations: AiChangeLocation[] = []
+      const recordLanding = (result: {
+        landedPart?: string | undefined
+        insertedIndex?: number | undefined
+        appendedFrom?: number | undefined
+      }) => {
+        if (landedLocations.length < MAX_CHANGE_LOCATIONS) {
+          landedLocations.push(
+            ...slideLocation(result.insertedIndex ?? result.appendedFrom ?? 0, result.landedPart),
+          )
+        }
+      }
       const cancelResult = (landed: number, totalPages: number) => ({
+        changeLocations: landedLocations,
         output: `The user stopped generation. ${landed} page(s) already landed${totalPages ? ` (${totalPages} planned)` : ''} and remain on the canvas.${templateNote}`,
         mutated: landed > 0,
         summary: landed > 0 ? t('aiSumStoppedKept', { n: landed }) : t('aiErrStopped'),
@@ -2638,6 +2665,7 @@ async function executeTool(
                 pageErrors[nextToLand] = r.fallbackReason
               }
               if (r.imageFailures) deckImageFails.push(...r.imageFailures)
+              recordLanding(r)
               if (!firstDone) baseOffset = r.appendedFrom ?? 0
               landedPages += 1
               firstDone = true
@@ -2725,6 +2753,7 @@ async function executeTool(
                 baseOffset + doneFlags.slice(0, idx).filter(Boolean).length,
               )
           if (r.ok) {
+            recordLanding(r)
             if (isFirstLand) {
               baseOffset = r.appendedFrom ?? 0
               firstDone = true
@@ -2778,6 +2807,7 @@ async function executeTool(
         return {
           output: `Generation stopped early: ${why} ${landedNote} Do not call generate_deck again in this turn; tell the user the connection cannot continue right now and that the remaining pages can be generated after it recovers.`,
           isError: true,
+          changeLocations: landedLocations,
           mutated: landedPages > 0,
           summary: landedPages > 0 ? t('aiSumStoppedKept', { n: landedPages }) : t('aiFailGenDeck'),
         }
@@ -2864,6 +2894,7 @@ async function executeTool(
           templateNote +
           progressTail,
         mutated: true,
+        changeLocations: landedLocations,
         summary: t('aiSumDeckGenerated', { done: landedPages, total }),
       }
     }
@@ -2906,6 +2937,7 @@ async function executeTool(
       return {
         output: `Updated chart ${sourceId} on page ${idx + 1}.${sampleNote}`,
         mutated: true,
+        changeLocations: slideLocation(idx, updated.slide.partPath, sourceId),
         summary: t('aiSumChartEdit', { n: idx + 1 }),
       }
     }
@@ -2960,6 +2992,35 @@ async function executeTool(
           (pre.sampleData ? SAMPLE_DATA_NOTE : '') +
           auditTouchedPages(r.records, deck),
         mutated: true,
+        changeLocations: mergeChangeLocations(
+          undefined,
+          (function* () {
+            const order = Array.isArray(deck) ? deck.map((slide) => slide.partPath) : deck.order
+            const byId = new Map(
+              order.flatMap((path, i) => (path ? [[slideDurableId({ path }), i] as const] : [])),
+            )
+            for (const rec of r.records ?? []) {
+              if (!rec.target || rec.op === 'deleteSlide') continue
+              const [page, node] = rec.target.split('/')
+              if (!page) continue
+              const numeric = /^\d+$/.test(page)
+              const original = numeric ? slides[Number(page)]?.partPath : undefined
+              const idx = rec.slideId
+                ? (byId.get(rec.slideId) ?? -1)
+                : original
+                  ? order.indexOf(original)
+                  : numeric
+                    ? Number(page)
+                    : (byId.get(page) ?? -1)
+              const part = order[idx]
+              yield* slideLocation(
+                idx,
+                part,
+                rec.op === 'deleteElement' ? undefined : (rec.created?.[0] ?? node),
+              )
+            }
+          })(),
+        ),
         summary: applyOpsSummary(pre.ops, r.records?.length ?? 0),
       }
     }

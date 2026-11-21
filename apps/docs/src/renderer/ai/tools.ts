@@ -1,3 +1,4 @@
+import { changedBlockLocations, type AiChangeLocation } from '@genoffice/agent-core'
 import { noteTranslationSteps } from './note-translation-history'
 import { aiEditor, originalAiEditor, withAiEdit } from './ai-history-gate'
 import type { Editor } from '@tiptap/core'
@@ -963,6 +964,7 @@ export interface FrozenSelection {
 }
 
 export interface ToolExecution {
+  changeLocations?: readonly AiChangeLocation[]
   /** result text fed back to the model */
   output: string
   isError?: boolean
@@ -1636,6 +1638,7 @@ export function executeTool(
   const odtRefusal = odtToolRefusal(call)
   if (odtRefusal) return fail(t('appOdtOff'), odtRefusal)
   startOdtToolCall()
+  const before = editor.state.doc
   const result = withAiEdit(() =>
     executeToolUnguarded(
       aiEditor(editor),
@@ -1655,7 +1658,9 @@ export function executeTool(
   )
   const settleOdt = (exec: ToolExecution): ToolExecution => {
     const refused = odtGuardRefusalText()
-    return refused ? { ...exec, isError: true, output: refused } : exec
+    if (refused) return { ...exec, isError: true, output: refused }
+    if (!exec.mutated || editor.isDestroyed) return exec
+    return { ...exec, changeLocations: changedBlockLocations(before, editor.state.doc) }
   }
   return result instanceof Promise ? result.then(settleOdt) : settleOdt(result)
 }
