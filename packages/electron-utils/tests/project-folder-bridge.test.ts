@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { EDITOR_REPLY, EDITOR_REQUEST } from '@genoffice/project-store/editor-run'
 import {
   PROJECT_FOLDER_CHANNELS,
   PROJECT_FOLDER_EVENTS,
@@ -42,11 +43,32 @@ describe('projectFolderBridge', () => {
   it('has every method of the bridge contract', () => {
     const { ipc } = fakeIpc()
     const bridge = projectFolderBridge(ipc as unknown as ProjectFolderBridgeIpc)
-    const expected = [...Object.keys(PROJECT_FOLDER_CHANNELS), ...EVENT_METHODS].sort()
+    const expected = [
+      ...Object.keys(PROJECT_FOLDER_CHANNELS),
+      ...EVENT_METHODS,
+      'onEditorRequest',
+      'replyToEditorRequest',
+    ].sort()
     expect(Object.keys(bridge).sort()).toEqual(expected)
     for (const name of expected) {
       expect(typeof bridge[name as keyof ProjectFolderApi], name).toBe('function')
     }
+  })
+
+  it('passes editor requests and replies over their channels until the listener is removed', () => {
+    const { ipc, emit } = fakeIpc()
+    const bridge = projectFolderBridge(ipc as unknown as ProjectFolderBridgeIpc)
+    const listener = vi.fn()
+    const off = bridge.onEditorRequest(listener)
+    const request = { kind: 'probe', id: 'r1', path: 'guide.docx' }
+    emit(EDITOR_REQUEST, request)
+    expect(listener).toHaveBeenCalledWith(request)
+    const reply = { kind: 'ready', id: 'r1' } as const
+    bridge.replyToEditorRequest(reply)
+    expect(ipc.send).toHaveBeenCalledWith(EDITOR_REPLY, reply)
+    off()
+    emit(EDITOR_REQUEST, request)
+    expect(listener).toHaveBeenCalledTimes(1)
   })
 
   it('invokes each request on its channel, passing the argument as given', async () => {

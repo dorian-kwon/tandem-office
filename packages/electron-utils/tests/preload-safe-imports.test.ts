@@ -23,8 +23,9 @@ const NODE_FREE = new Set([
   './handoff-editors',
   './outbound-channels',
   './mcp-tools-channels',
-  // types and constants only (folder-api.ts imports nothing at runtime)
+  // Both project contracts contain only types and constants.
   '@genoffice/project-store/folder-api',
+  '@genoffice/project-store/editor-run',
 ])
 
 function runtimeImports(file: string): string[] {
@@ -45,11 +46,11 @@ describe('preload-safe bridges', () => {
     }
   })
 
-  it('keeps the project folder contract free of runtime imports', () => {
-    const contract = join(__dirname, '..', '..', 'project-store', 'src', 'folder-api.ts')
+  it.each(['folder-api.ts', 'editor-run.ts'])('keeps %s free of runtime imports', (name) => {
+    const contract = join(__dirname, '..', '..', 'project-store', 'src', name)
     const text = readFileSync(contract, 'utf8')
     for (const match of text.matchAll(/^import\s+(type\s+)?[^'"]*from\s+['"]([^'"]+)['"]/gm)) {
-      expect(match[1], `folder-api.ts imports ${match[2]} at runtime`).toBeTruthy()
+      expect(match[1], `${name} imports ${match[2]} at runtime`).toBeTruthy()
     }
   })
 })
