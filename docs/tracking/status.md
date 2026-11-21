@@ -1,5 +1,9 @@
 # 진행 현황
 
+Tandem Office **0.15.12 (2026-11-21)**를 Windows x64 정식 릴리스로 공개했다. 배포 커밋은 `78227c5a6`이다. 번역 홈에서 완성본을 여러 개 골라 위키에 예문을 저장하고, 프로젝트에서 선택한 예문을 일반 번역과 일괄 번역에 참고할 수 있다. [릴리스와 설치 파일](https://github.com/dorian-kwon/tandem-office/releases/tag/v0.15.12)
+
+빠른 릴리스 검사 51건과 Windows 패키지의 Markdown·CSV PDF 내보내기가 통과했다. 게시된 파일 세 개의 SHA-256, 설치 파일의 SHA-512, 피드의 버전과 안내문, 설치 파일과 피드의 빌드 출처를 확인했다. 이 설치본에는 Google Drive 연결 설정이 빠져 있다. 이전 Windows 설치본에서 업데이트한 뒤 재시작하는 과정은 실기기 확인이 남아 있다. [Windows 빌드](https://github.com/dorian-kwon/tandem-office/actions/runs/44890389475)
+
 Tandem Office **0.15.11 (2026-11-21)**을 Windows x64 정식 릴리스로 공개했다. 배포 커밋은 `fc54cb919`이다. 프로젝트에서 문서를 골라 일괄 번역하고 실패한 문서를 다시 실행할 수 있다. 프로젝트 AI 창을 접어도 대화와 진행 중인 작업이 유지된다. 파일 변환 메뉴는 각 원본 폴더에 변환본을 저장한다. [릴리스와 설치 파일](https://github.com/dorian-kwon/tandem-office/releases/tag/v0.15.11)
 
 빠른 릴리스 검사 51건과 Windows 패키지의 Markdown·CSV → PDF 내보내기가 통과했다. 공개한 설치 파일·블록맵·피드의 SHA-256, 설치 파일의 SHA-512와 업데이트 안내문을 대조하고 설치 파일·피드의 빌드 출처를 확인했다. 이 Windows 설치본은 Google Drive 연결 설정 없이 빌드했다. 실제 이전 Windows 설치본에서 업데이트 후 재시작하는 과정은 확인 과제로 남아 있다. [Windows 빌드](https://github.com/dorian-kwon/tandem-office/actions/runs/44883107299)
