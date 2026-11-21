@@ -9,9 +9,11 @@ import type {
   TranslateSettingsPatch,
 } from '../../../shared/translate-api'
 import { useI18n } from '../locale'
-import { TranslationWikiButton } from './TranslationWiki'
+import { TranslationWikiButton, useTranslationWiki } from './TranslationWiki'
+import { ProjectAssistant, type ProjectAssistantProps } from './ProjectAssistant'
 import type { TranslateStringKey } from '../i18n/strings-translate'
 import { normalizeProjectName } from '../../../shared/project-name'
+import { ProjectBatchControl } from './ProjectBatch'
 import { InlineName } from './InlineName'
 import {
   EyeIcon,
@@ -33,6 +35,8 @@ import './translate.css'
 import './translate-global'
 
 export interface ProjectDetailProps {
+  assistant?: Omit<ProjectAssistantProps, 'actions'> & { open(file: string): Promise<string> }
+
   dir: string
   onBack: () => void
   /** called with the source file's name when the person opens a translation */
@@ -90,6 +94,7 @@ function filesOf(project: ProjectFile, kind: TranslateMaterialKind): string[] {
 const OCR_PICTURE_FILE = /\.(docx|xlsx|hwpx|hwp)$/i
 
 export function ProjectDetail({
+  assistant,
   dir,
   onBack,
   onStartTranslation,
@@ -99,6 +104,7 @@ export function ProjectDetail({
 }: ProjectDetailProps) {
   const { lang } = useI18n()
   const s = makeText(lang)
+  const wiki = useTranslationWiki()
   const api = window.translateApi
   const [project, setProject] = useState<ProjectFile | null>(null)
   const [prompt, setPrompt] = useState('')
@@ -389,6 +395,7 @@ export function ProjectDetail({
 
   // the global button needs exactly one source; with several each row opens its own
   const onlySource = project?.sources.length === 1 ? project.sources[0]?.file : undefined
+  const offersBatch = typeof api?.batchStart === 'function'
   const hasManySources = (project?.sources.length ?? 0) > 1
 
   /** icon-only row action with its name as tooltip and accessible label */
@@ -508,7 +515,7 @@ export function ProjectDetail({
     )
   }
 
-  return (
+  const detail = (
     <main className="content projects-panel">
       <div className="translate-pane">
         <button type="button" className="translate-back" onClick={onBack}>
@@ -562,19 +569,30 @@ export function ProjectDetail({
           </div>
           {project && (
             <div className="translate-head-actions">
-              <button
-                type="button"
-                className="projects-primary"
-                disabled={!onlySource}
-                onClick={() => onlySource && onStartTranslation(onlySource)}
-              >
-                {s('startTranslation')}
-              </button>
+              {(!offersBatch || !hasManySources) && (
+                <button
+                  type="button"
+                  className="projects-primary"
+                  disabled={!onlySource}
+                  onClick={() => onlySource && onStartTranslation(onlySource)}
+                >
+                  {s('startTranslation')}
+                </button>
+              )}
+              {offersBatch && api && (
+                <ProjectBatchControl
+                  api={api}
+                  key={dir}
+                  dir={dir}
+                  files={project.sources.map((source) => source.file)}
+                  primary={hasManySources}
+                />
+              )}
               <TranslationWikiButton />
             </div>
           )}
         </header>
-        {project && !onlySource && (
+        {project && !onlySource && (!offersBatch || !hasManySources) && (
           <p className="translate-start-hint">
             {hasManySources ? s('startPickHint') : s('startDisabledHint')}
           </p>
@@ -734,5 +752,36 @@ export function ProjectDetail({
         </div>
       )}
     </main>
+  )
+  return (
+    <div className="translation-project-workspace">
+      {detail}
+      {assistant && project && (
+        <ProjectAssistant
+          key={dir}
+          {...assistant}
+          actions={{
+            dir,
+            api,
+            project: () => latest.current ?? project,
+            open: assistant.open,
+            ocr: (file) => onStartOcr?.(file),
+            confirmRemove: (file) => window.confirm(s('deleteFileAria', { name: file }) + '?'),
+            wiki: () => {
+              if (!wiki) throw new Error('Wiki unavailable')
+              wiki.open()
+            },
+            refresh: async () => {
+              const before = latest.current
+              const updated = await api.getProject(dir)
+              adopt(updated)
+              if (before?.projectPrompt !== updated.projectPrompt) setPrompt(updated.projectPrompt)
+              loadRefStatus()
+              loadPictures()
+            },
+          }}
+        />
+      )}
+    </div>
   )
 }

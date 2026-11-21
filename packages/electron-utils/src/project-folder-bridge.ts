@@ -4,6 +4,12 @@
 /// bridge only forwards ids and options. It takes the preload's `ipcRenderer`
 /// instead of importing Electron, so this module stays free of Node and
 /// Electron at runtime (sandboxed preloads load it bundled).
+import {
+  EDITOR_REQUEST,
+  EDITOR_REPLY,
+  type EditorRequest,
+  type ProjectEditorBridge,
+} from '@genoffice/project-store/editor-run'
 import type { IpcRenderer, IpcRendererEvent } from 'electron'
 import {
   PROJECT_FOLDER_CHANNELS,
@@ -21,7 +27,9 @@ export type ProjectFolderBridgeIpc = Pick<IpcRenderer, 'invoke' | 'on' | 'remove
 
 type RequestMethod = keyof typeof PROJECT_FOLDER_CHANNELS
 
-export function projectFolderBridge(ipc: ProjectFolderBridgeIpc): ProjectFolderApi {
+export function projectFolderBridge(
+  ipc: ProjectFolderBridgeIpc,
+): ProjectFolderApi & ProjectEditorBridge {
   // how many listeners each event has in this page; main hears about the first and the last
   const listeners = new Map<ProjectFolderEventMethod, number>()
 
@@ -57,6 +65,14 @@ export function projectFolderBridge(ipc: ProjectFolderBridgeIpc): ProjectFolderA
 
   return {
     ...(requests as unknown as Omit<ProjectFolderApi, ProjectFolderEventMethod>),
+    onEditorRequest: (listener) => {
+      const handler = (_event: IpcRendererEvent, message: EditorRequest) => listener(message)
+      ipc.on(EDITOR_REQUEST, handler)
+      return () => {
+        ipc.removeListener(EDITOR_REQUEST, handler)
+      }
+    },
+    replyToEditorRequest: (reply) => ipc.send(EDITOR_REPLY, reply),
     onChatMessageAppended: (listener) => subscribe('onChatMessageAppended', listener),
     onOpenChat: (listener) => subscribe('onOpenChat', listener),
     onOpenProjectScreen: (listener) => subscribe('onOpenProjectScreen', listener),

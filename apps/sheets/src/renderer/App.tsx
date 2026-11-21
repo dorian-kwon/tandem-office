@@ -129,6 +129,7 @@ import {
   projectChoiceRemember,
   useAiChoice,
   useAiRunStatus,
+  useProjectEditorRun,
   useTranslationLock,
   type ProjectPanel,
 } from '@genoffice/ui'
@@ -1052,7 +1053,7 @@ export function App({
   >(() => Promise.resolve({ ok: false }))
   /// Latest MCP bridge handlers (assigned each render; see the install below).
   const mcpSheetHandlersRef = useRef<McpSheetHandlers | null>(null)
-  const closeSaveRef = useRef<() => Promise<void>>(() => Promise.resolve())
+  const closeSaveRef = useRef<(projectOutput?: string) => Promise<void>>(() => Promise.resolve())
   const commitActiveEditor = useCallback(async (): Promise<boolean> => {
     const editor = univerRef.current?.univerAPI.getActiveWorkbook() as
       ActiveCellEditor | null | undefined
@@ -2124,6 +2125,16 @@ export function App({
 
   /// A citation link in an AI answer ([B12](sheetnav://B12)): jump the grid to
   /// the cited cell or range through the same path the Name Box uses.
+  useProjectEditorRun({
+    turn: aiRunStatus.projectTurn,
+    path: templateFilePath,
+    ready: (!project.chat.available || project.chat.ready) && !openingWorkbook,
+    gate: sendGate.peek,
+    busy: aiBusy,
+    send: (prompt) => handleSend(prompt, []),
+    stop: handleStopAgent,
+  })
+
   function handleAiCitation(href: string): void {
     const ref = parseSheetNavHref(href)
     if (ref === null) return
@@ -3688,7 +3699,7 @@ export function App({
       (() => undefined)
     // Close guard chose Save: run the journal save and report the outcome.
     const unsubscribeCloseSave =
-      window.desktopApi?.onCloseSaveRequest?.(() => void closeSaveRef.current()) ??
+      window.desktopApi?.onCloseSaveRequest?.((path) => void closeSaveRef.current(path)) ??
       (() => undefined)
     const gridHost = document.getElementById('univer-container')
     const disposePictureTransfer = gridHost
@@ -5256,7 +5267,12 @@ export function App({
       return handleSaveImpl(saveContext(), mode, quiet, explicitTarget)
     })
   }
-  closeSaveRef.current = async () => {
+  closeSaveRef.current = async (projectOutput) => {
+    const opened = lazyWorkbookRef.current?.file
+    if (projectOutput && (!opened || (opened.csvPath ?? opened.path) !== projectOutput)) {
+      window.desktopApi?.reportCloseSaveResult?.(false)
+      return
+    }
     if (!(await commitActiveEditor())) {
       window.desktopApi?.reportCloseSaveResult?.(false)
       return
@@ -5264,6 +5280,13 @@ export function App({
     const state = lazyWorkbookRef.current
     if (!state || journalSize(state.editJournal) === 0) {
       window.desktopApi?.reportCloseSaveResult?.(true)
+      return
+    }
+    if (projectOutput) {
+      const saved = await saveGateRef.current.run(() =>
+        handleSaveImpl(saveContext(), 'save', true, undefined, projectOutput),
+      )
+      window.desktopApi?.reportCloseSaveResult?.(saved.ok)
       return
     }
     await handleSave('save')

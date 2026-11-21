@@ -71,9 +71,10 @@ describe('one product name', () => {
   it('shows the display name on shortcuts, the bundle and the desktop entry only', () => {
     // names people read: capitalised; everything that locates the install keeps productName
     expect((config.nsis as { shortcutName: string }).shortcutName).toBe(PRODUCT_NAME)
-    expect((config.mac as { extendInfo: Record<string, string> }).extendInfo).toEqual({
-      CFBundleName: PRODUCT_NAME,
+    expect((config.mac as { extendInfo: Record<string, unknown> }).extendInfo).toEqual({
+      CFBundleName: config.productName,
       CFBundleDisplayName: PRODUCT_NAME,
+      CFBundleLocalizations: LANGS,
     })
     expect((config.linux as { desktop: { entry: { Name: string } } }).desktop.entry.Name).toBe(
       PRODUCT_NAME,
@@ -83,7 +84,9 @@ describe('one product name', () => {
 
   it('pins the packaged app userData folder to the machine name', () => {
     const main = readFileSync(join(SHELL, 'src/main/index.ts'), 'utf8')
-    expect(main).toContain("app.setPath('userData', join(app.getPath('appData'), USER_DATA_DIR_NAME))")
+    expect(main).toContain(
+      "app.setPath('userData', join(app.getPath('appData'), USER_DATA_DIR_NAME))",
+    )
   })
 
   it('names the installer process with the product name', () => {

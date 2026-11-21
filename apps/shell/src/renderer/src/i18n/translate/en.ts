@@ -1,6 +1,25 @@
 import type { zh } from './zh'
 
 export const en = {
+  openProjectAi: 'Open project AI',
+  closeProjectAi: 'Close project AI',
+  batchTranslate: 'Batch translate',
+  batchRetry: 'Retry failed documents',
+  batchResume: 'Resume stopped documents',
+  batchSelectTitle: 'Choose documents to translate',
+  batchTranslateSelected: 'Translate selected',
+  batchProgress: 'Translation progress',
+  batchOverall: 'Overall progress',
+  batchOpening: 'Opening',
+  batchOcr: 'Reading with OCR',
+  batchSaving: 'Saving',
+  batchOperations: 'Edits: {n}',
+  batchWaiting: 'Queued',
+  batchRunning: 'Translating',
+  batchStopped: 'Stopped',
+  batchFailed: 'Failed',
+  batchConsent:
+    'Use this AI for the selected batch of {n} documents. This file needs about {calls} calls.',
   wikiView: 'View wiki',
   wikiSetup:
     'In Obsidian, choose “Open folder as vault” and select the folder below. Then return to {app}.',

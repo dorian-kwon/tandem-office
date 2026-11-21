@@ -1,6 +1,25 @@
 import type { zh } from './zh'
 
 export const ar = {
+  openProjectAi: 'فتح الذكاء الاصطناعي للمشروع',
+  closeProjectAi: 'إغلاق الذكاء الاصطناعي للمشروع',
+  batchTranslate: 'ترجمة دفعة',
+  batchRetry: 'إعادة محاولة المستندات التي فشلت',
+  batchResume: 'استئناف المستندات المتوقفة',
+  batchSelectTitle: 'اختيار المستندات للترجمة',
+  batchTranslateSelected: 'ترجمة المحدد',
+  batchProgress: 'تقدم الترجمة',
+  batchOverall: 'التقدم الإجمالي',
+  batchOpening: 'جارٍ الفتح',
+  batchOcr: 'جارٍ التعرف الضوئي على النص',
+  batchSaving: 'جارٍ الحفظ',
+  batchOperations: 'عدد التعديلات: {n}',
+  batchWaiting: 'قيد الانتظار',
+  batchRunning: 'جارٍ الترجمة',
+  batchStopped: 'متوقف',
+  batchFailed: 'فشل',
+  batchConsent:
+    'استخدم هذا الذكاء الاصطناعي للمستندات المحددة وعددها {n}. يحتاج هذا الملف إلى نحو {calls} طلبات.',
   wikiView: 'عرض الويكي',
   wikiSetup: 'في Obsidian، افتح المجلد أدناه كخزنة، ثم ارجع إلى {app}.',
   wikiDownload: 'أكمل تثبيت Obsidian، ثم ارجع إلى {app} لفتح الويكي.',

@@ -1,6 +1,25 @@
 import type { zh } from './zh'
 
 export const th = {
+  openProjectAi: 'เปิด AI ของโครงการ',
+  closeProjectAi: 'ปิด AI ของโครงการ',
+  batchTranslate: 'แปลหลายไฟล์',
+  batchRetry: 'ลองแปลเอกสารที่ล้มเหลวอีกครั้ง',
+  batchResume: 'แปลเอกสารที่หยุดไว้ต่อ',
+  batchSelectTitle: 'เลือกเอกสารที่จะแปล',
+  batchTranslateSelected: 'แปลเอกสารที่เลือก',
+  batchProgress: 'ความคืบหน้าการแปล',
+  batchOverall: 'ความคืบหน้าโดยรวม',
+  batchOpening: 'กำลังเปิด',
+  batchOcr: 'กำลังอ่านข้อความด้วย OCR',
+  batchSaving: 'กำลังบันทึก',
+  batchOperations: 'แก้ไขแล้ว {n} ครั้ง',
+  batchWaiting: 'อยู่ในคิว',
+  batchRunning: 'กำลังแปล',
+  batchStopped: 'หยุดแล้ว',
+  batchFailed: 'ล้มเหลว',
+  batchConsent:
+    'ใช้ AI นี้กับเอกสารที่เลือกทั้ง {n} รายการ ไฟล์ปัจจุบันต้องส่งคำขอประมาณ {calls} ครั้ง',
   wikiView: 'ดูวิกิ',
   wikiSetup: 'ใน Obsidian ให้เปิดโฟลเดอร์ด้านล่างเป็นคลัง แล้วกลับไปที่ {app}',
   wikiDownload: 'ติดตั้ง Obsidian ให้เสร็จ แล้วกลับไปที่ {app} เพื่อเปิดวิกิ',

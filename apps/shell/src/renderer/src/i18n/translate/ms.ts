@@ -1,6 +1,25 @@
 import type { zh } from './zh'
 
 export const ms = {
+  openProjectAi: 'Buka AI projek',
+  closeProjectAi: 'Tutup AI projek',
+  batchTranslate: 'Terjemah secara kelompok',
+  batchRetry: 'Cuba semula dokumen yang gagal',
+  batchResume: 'Sambung semula dokumen yang dihentikan',
+  batchSelectTitle: 'Pilih dokumen untuk diterjemahkan',
+  batchTranslateSelected: 'Terjemahkan pilihan',
+  batchProgress: 'Kemajuan terjemahan',
+  batchOverall: 'Kemajuan keseluruhan',
+  batchOpening: 'Sedang membuka',
+  batchOcr: 'Sedang membaca dengan OCR',
+  batchSaving: 'Sedang menyimpan',
+  batchOperations: 'Bilangan suntingan: {n}',
+  batchWaiting: 'Dalam giliran',
+  batchRunning: 'Sedang menterjemah',
+  batchStopped: 'Dihentikan',
+  batchFailed: 'Gagal',
+  batchConsent:
+    'Gunakan AI ini untuk {n} dokumen yang dipilih. Fail ini memerlukan kira-kira {calls} permintaan.',
   wikiView: 'Lihat wiki',
   wikiSetup: 'Dalam Obsidian, buka folder di bawah sebagai vault, kemudian kembali ke {app}.',
   wikiDownload: 'Selesaikan pemasangan Obsidian, kemudian kembali ke {app} untuk membuka wiki.',

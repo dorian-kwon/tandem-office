@@ -1,5 +1,6 @@
 import {
   csvToXlsxBuffer,
+  csvToXlsxBufferForOpen,
   decodeCsvBuffer,
   parseCsv,
   resolveImportDelimiter,
@@ -50,8 +51,34 @@ export function csvInfo(bytes: Uint8Array): CsvInfo {
   }
 }
 
-export async function csvToXlsx(bytes: Uint8Array, sheetName: string): Promise<Uint8Array> {
-  const buf = await csvToXlsxBuffer(decodeCsv(bytes), sheetName)
+export function csvField(text: string, delimiter: string): string {
+  const normalized = text.replace(/\r\n|\r/g, '\n')
+  return /["\n]/.test(normalized) || normalized.includes(delimiter)
+    ? `"${normalized.replace(/"/g, '""')}"`
+    : normalized
+}
+
+export function convertDelimitedText(bytes: Uint8Array, from: string, to: string): string {
+  const text = decodeCsv(bytes)
+  const rows = parseCsv(text, from === 'tsv' ? '\t' : resolveImportDelimiter(text))
+  const delimiter = to === 'tsv' ? '\t' : ','
+  return (
+    '\ufeff' +
+    rows
+      .map((row) => row.map((value) => csvField(value, delimiter)).join(delimiter) + '\r\n')
+      .join('')
+  )
+}
+
+export async function csvToXlsx(
+  bytes: Uint8Array,
+  sheetName: string,
+  delimiter?: '\t',
+): Promise<Uint8Array> {
+  const text = decodeCsv(bytes)
+  const buf = delimiter
+    ? (await csvToXlsxBufferForOpen(text, sheetName, delimiter)).buffer
+    : await csvToXlsxBuffer(text, sheetName)
   return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength)
 }
 

@@ -167,6 +167,23 @@ export function TranslationPanel(props: TranslationPanelProps = {}) {
   return (
     <>
       <ProjectDetail
+        assistant={
+          connection
+            ? {
+                aiSettings,
+                connection,
+                onOpenAiSettings: openAiSettings,
+                onNoticeNeeded: props.onNoticeNeeded ?? (() => undefined),
+                open: async (file) => {
+                  const result = await window.translateApi!.openTranslation({ dir: openDir, file })
+                  await handleOpened(openDir, file, result)
+                  return result.flow === 'edit'
+                    ? 'Opened the editor for ' + file
+                    : 'Opened the project workflow: ' + result.flow
+                },
+              }
+            : undefined
+        }
         dir={openDir}
         onBack={() => setOpenDir(null)}
         onStartTranslation={(file) => void startTranslation(openDir, file)}

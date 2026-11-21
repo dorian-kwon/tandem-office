@@ -180,8 +180,10 @@ it('resumes a same-script translation using the applied result at each address',
     NUM_IDS,
   )
   expect(outcome.isError).toBeFalsy()
+  expect(outcome.translationProgress).toEqual({ done: 1, total: 2 })
   expect(pending()).toEqual(['1'])
   editor.commands.undo()
+  expect(remainingUntranslated(editor, undefined, 'ru').progress).toEqual({ done: 0, total: 2 })
   expect(pending()).toEqual(['0', '1'])
   editor.commands.redo()
   expect(pending()).toEqual(['1'])

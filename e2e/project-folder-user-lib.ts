@@ -41,6 +41,8 @@ export async function shot(page: Page, name: string): Promise<void> {
 
 /** One scripted model turn: text, tool calls, or both */
 export interface FakeTurn {
+  /** Hold this reply while an E2E asserts the live progress UI; releaseHeldTurn resumes it. */
+  hold?: boolean
   text?: string
   toolCalls?: Array<{ id: string; name: string; input: Record<string, unknown> }>
 }
@@ -94,18 +96,17 @@ export async function stubEverything(app: ElectronApplication): Promise<void> {
     ipcMain.removeHandler('ai:stream')
     ipcMain.handle('ai:stream', (event, request: { requestId: string }) => {
       recorded.streams.push(JSON.stringify(request))
-      const turns = g.__pfTurns as Array<{
-        text?: string
-        toolCalls?: Array<{ id: string; name: string; input: Record<string, unknown> }>
-      }>
+      const turns = g.__pfTurns as FakeTurn[]
       const turn = turns.shift() ?? { text: '네, 알겠습니다.' }
       const send = (chunk: Record<string, unknown>) =>
         realSend.call(event.sender, 'ai:stream-chunk', { requestId: request.requestId, ...chunk })
-      setTimeout(() => {
+      const reply = () => {
         if (turn.text) send({ type: 'delta', text: turn.text })
         for (const call of turn.toolCalls ?? []) send({ type: 'tool-call', toolCall: call })
         send({ type: 'done' })
-      }, 60)
+      }
+      if (turn.hold) g.__pfHeldReply = reply
+      else setTimeout(reply, 60)
     })
     for (const wc of webContents.getAllWebContents()) {
       if (!wc.isDestroyed()) realSend.call(wc, 'ai:subscription-changed', statuses)
@@ -149,6 +150,16 @@ export async function queueTurns(app: ElectronApplication, turns: FakeTurn[]): P
   await app.evaluate((_e, t) => {
     ;((globalThis as Record<string, unknown>).__pfTurns as unknown[]).push(...t)
   }, turns)
+}
+
+export async function releaseHeldTurn(app: ElectronApplication): Promise<void> {
+  await app.evaluate(() => {
+    const g = globalThis as Record<string, unknown>
+    const reply = g.__pfHeldReply as (() => void) | undefined
+    if (!reply) throw new Error('No model reply is waiting for release')
+    delete g.__pfHeldReply
+    reply()
+  })
 }
 
 export async function queueBoxAnswers(app: ElectronApplication, answers: number[]): Promise<void> {

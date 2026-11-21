@@ -53,9 +53,11 @@ export function DriveSettingsCard() {
       {state.state === 'connected' ? (
         <>
           <div className="set-drive-row">
-            <span className="set-drive-account">
-              {t('driveConnectedAs', { email: state.email || state.name })}
-            </span>
+            {(state.email || state.name) && (
+              <span className="set-drive-account">
+                {t('driveConnectedAs', { email: state.email || state.name })}
+              </span>
+            )}
             {confirming ? null : (
               <button className="set-btn" onClick={() => setConfirming(true)}>
                 {t('driveDisconnect')}

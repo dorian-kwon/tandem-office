@@ -30,7 +30,7 @@ beforeEach(() => {
 
 /** Nothing the conversion staged is left beside the output. */
 function leftovers(dir: string): string[] {
-  return readdirSync(dir).filter((name) => name.startsWith('.ieumoffice-odt-'))
+  return readdirSync(dir).filter((name) => name.startsWith('.ieumoffice-convert-'))
 }
 
 describe('convert routes through .odt', () => {
@@ -154,7 +154,7 @@ describe('convert routes through .odt', () => {
   it('lists the ODT routes and still refuses others', async () => {
     const dir = tempDir()
     const odt = await writeFormOdt(dir)
-    const r = await run(['convert', odt, '--to', 'pptx', '--json'])
+    const r = await run(['convert', odt, '--to', 'gif', '--json'])
     expect(r.code).toBe(1)
     expect(r.json().error).toBe('unsupported')
     expect(r.json().detail.supported).toContain('odt→docx/pdf/md/html')

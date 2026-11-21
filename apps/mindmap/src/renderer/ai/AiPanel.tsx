@@ -33,6 +33,7 @@ import {
   projectChoiceRemember,
   useAiChoice,
   useAiRunStatus,
+  useProjectEditorRun,
   AI_QUEUE_LABELS,
   AiSubscriptionUsageLine,
   aiSubscriptionText,
@@ -1705,6 +1706,16 @@ export function AiPanel({
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request])
+
+  useProjectEditorRun({
+    turn: runStatus.projectTurn,
+    path: filePath,
+    ready: !projectChat.available || projectChat.ready,
+    gate: sendGate.peek,
+    busy: busy,
+    send: (prompt) => send(prompt),
+    stop: stop,
+  })
 
   const copyMessage = (text: string, idx: number): void => {
     void navigator.clipboard?.writeText(text)

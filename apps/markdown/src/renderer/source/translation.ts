@@ -54,6 +54,7 @@ export class SourceTranslation {
   private lastRead?: Text
   private indexed?: Text
   private units: Unit[] = []
+  private counts?: { language: string; done: number; total: number }
   private completed = new Map<string, Map<number, string>>()
   constructor(
     private readonly view: EditorView,
@@ -83,6 +84,7 @@ export class SourceTranslation {
         units.push({ from, to, text })
       }
     }
+    this.counts = undefined
     this.indexed = doc
     this.units = units
     return units
@@ -120,6 +122,19 @@ export class SourceTranslation {
     )
       return fail('The document changed since the last read. Read the current units and retry.')
     const completed = this.completed.get(lang) ?? new Map<number, string>()
+    // Recount only after a manual document change/Undo or a target-language switch.
+    if (this.counts?.language !== lang) {
+      let done = 0,
+        total = 0
+      for (let id = 0; id < units.length; id++) {
+        const text = units[id]!.text
+        const handled = completed.get(id) === text
+        if (handled) done++
+        if (handled || text.trim()) total++
+      }
+      this.counts = { language: lang, done, total }
+    }
+    const counts = this.counts
     if (call.name === 'read_source_units') {
       const start = call.input.start ?? 0
       if (typeof start !== 'number' || !Number.isSafeInteger(start) || start < 0)
@@ -137,6 +152,7 @@ export class SourceTranslation {
       }
       return {
         summary: call.name,
+        translationProgress: { done: counts.done, total: counts.total },
         output: JSON.stringify({ units: page, next: id < units.length ? id : null }),
       }
     }
@@ -199,12 +215,19 @@ export class SourceTranslation {
       this.indexed = state.doc
     }
     this.lastRead = state.doc
-    for (const { id, translation } of edits) completed.set(id, translation)
+    for (const { id, unit, translation } of edits) {
+      if (completed.get(id) !== unit.text) {
+        counts.done++
+        if (!unit.text.trim()) counts.total++
+      }
+      completed.set(id, translation)
+    }
     this.completed.set(lang, completed)
     return {
       summary: call.name,
       output: JSON.stringify({ handled: edits.length, changed: transactions.length }),
       mutated: transactions.length > 0,
+      translationProgress: { done: counts.done, total: counts.total },
       changeLocations: edits
         .filter((edit) => edit.unit.text !== edit.translation)
         .slice(0, MAX_CHANGE_LOCATIONS)

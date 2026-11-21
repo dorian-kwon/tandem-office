@@ -49,7 +49,12 @@ import { parseMcpPaste, type PastedServer } from './paste'
 import { RemoteMcpError, type RemoteMcpConnection } from './remote'
 import type { McpRuntimeKit, RuntimeMissing } from './runtimes'
 import { secretView } from './secrets'
-import { newMcpServerConfig, type McpServerConfig, type McpServersStore } from './store'
+import {
+  McpCredentialsLocked,
+  newMcpServerConfig,
+  type McpServerConfig,
+  type McpServersStore,
+} from './store'
 
 /**
  * The one place the app holds the person's MCP servers (user MCP spec 5.1):
@@ -313,7 +318,7 @@ export function createMcpHub(deps: McpHubDeps): McpHub {
     const key = remoteKeyOf(server)
     if (live.remote && live.remoteKey === key) return live.remote
     if (live.remote) closeWhenUnused(live.remote)
-    const conn = deps.remote(server, storeOAuthAccess(store, server.id))
+    const conn = deps.remote(store.forConnection(server), storeOAuthAccess(store, server.id))
     live.remote = conn
     live.remoteKey = key
     live.unsubscribe.push(conn.onToolsChanged(() => void relistQuietly(server.id, conn)))
@@ -323,7 +328,7 @@ export function createMcpHub(deps: McpHubDeps): McpHub {
   function localOf(server: McpServerConfig): LocalMcpConnection {
     const live = liveOf(server.id)
     if (live.local) return live.local
-    const conn = deps.local(server, app.signal)
+    const conn = deps.local(store.forConnection(server), app.signal)
     live.local = conn
     live.unsubscribe.push(
       conn.onStateChanged((state) => {
@@ -344,7 +349,16 @@ export function createMcpHub(deps: McpHubDeps): McpHub {
     const server = store.server(id)
     const live = lives.get(id)
     if (!server || !live) return
-    if (live.local) live.local.setServer(server)
+    if (live.local) {
+      try {
+        live.local.setServer(store.forConnection(server))
+      } catch (error) {
+        if (!(error instanceof McpCredentialsLocked)) throw error
+        void live.local.stop().catch(() => {})
+        live.local = null
+        live.listed = false
+      }
+    }
     if (live.remote && (live.remoteKey !== remoteKeyOf(server) || !server.enabled)) {
       closeWhenUnused(live.remote)
       live.remote = null
@@ -755,6 +769,10 @@ export function createMcpHub(deps: McpHubDeps): McpHub {
       const late = stoppingRefusal(server) ?? refusalFor(server, toolName, true)
       if (late) return refusal(late)
       return await runCall(server, toolName, input, signal)
+    } catch (error) {
+      if (error instanceof McpCredentialsLocked)
+        return refusal(troubleText(found.name, { kind: 'login' }))
+      throw error
     } finally {
       if (calls.get(key)?.controller === controller) calls.delete(key)
     }
@@ -1025,9 +1043,14 @@ export function createMcpHub(deps: McpHubDeps): McpHub {
     // 4.9: ask the server to revoke the sign-in before its tokens are forgotten
     let revoker: RemoteMcpConnection | null = null
     try {
-      if (server.kind === 'remote') {
-        revoker = live?.remote ?? deps.remote(server, storeOAuthAccess(store, id))
-        await revoker.revoke().catch(() => {})
+      if (server.kind === 'remote' && server.oauth?.tokens) {
+        try {
+          revoker =
+            live?.remote ?? deps.remote(store.forConnection(server), storeOAuthAccess(store, id))
+          await revoker.revoke()
+        } catch {
+          // Forget the local registration even if the remote sign-in cannot be revoked.
+        }
       }
       await store.removeServer(id)
     } finally {
@@ -1126,7 +1149,7 @@ export function createMcpHub(deps: McpHubDeps): McpHub {
           }
         }
       }
-      localOf(server).retry()
+      live.local?.retry()
       live.failure = null
       live.localProblem = null
     } else {
@@ -1171,6 +1194,9 @@ export function createMcpHub(deps: McpHubDeps): McpHub {
         notify()
       }
       return result
+    } catch (error) {
+      if (error instanceof McpCredentialsLocked) return { ok: false, reason: 'denied' }
+      throw error
     } finally {
       if (live.signIn === controller) live.signIn = null
     }

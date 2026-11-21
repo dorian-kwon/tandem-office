@@ -286,6 +286,8 @@ export function canContinue(estimate: DocumentJobEstimate): boolean {
 }
 
 export interface RunPdfTranslationOptions {
+  /** Batch jobs publish an output only after every unit was translated and stored. */
+  completeOnly?: boolean
   dir: string
   file: string
   bridge: PdfTranslateBridge
@@ -358,7 +360,10 @@ export async function runPdfTranslation(
         : {}),
     })
     const summary = (await handle.result) as JobSummary<unknown>
-    if (summary.state !== 'complete') {
+    if (
+      summary.state !== 'complete' ||
+      (o.completeOnly && (summary.failedUnits.length > 0 || summary.lostUnits.length > 0))
+    ) {
       keep = true
       return { summary, output: null, token, bilingual: go.bilingual }
     }

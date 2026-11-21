@@ -4,6 +4,7 @@
  * Drive files, and the AI's read-only access. The screens get state and file
  * lists; tokens never leave this process.
  */
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   app,
@@ -105,17 +106,36 @@ function trainingAck(settingsPath: string): boolean {
 const FREE_AI_REFUSAL =
   'Drive files are not given to the AI in use: it is a free connection that may use what it receives to train models. Tell the person to choose another AI to work with Drive files.'
 
-export function registerDriveIpc(deps: DriveIpcDeps): DriveService {
+export function registerDriveIpc(
+  deps: DriveIpcDeps,
+  platform: NodeJS.Platform = process.platform,
+): DriveService {
   const fetch: FetchLike = (url, init) => net.fetch(url, init)
+  const client = buildGoogleClient()
+  const tokenFile = join(deps.userData(), 'google-drive.json')
   const connection = new DriveConnection({
-    client: buildGoogleClient(),
-    vault: createDriveVault(join(deps.userData(), 'google-drive.json'), {
-      available: () => driveTokenSeals(safeStorage, process.platform),
+    client,
+    vault: createDriveVault(tokenFile, {
+      available: () => driveTokenSeals(safeStorage, platform),
       encrypt: (text) => safeStorage.encryptString(text),
       decrypt: (bytes) => safeStorage.decryptString(bytes),
     }),
     fetch,
   })
+  // Merely displaying Drive in Home or an editor must not open the macOS Keychain.
+  let awaitingRestore = platform === 'darwin' && !!client && existsSync(tokenFile)
+  const hasConnection = () => awaitingRestore || connection.connected()
+  let restoring: Promise<void> | undefined
+  function restoreConnection(): Promise<void> {
+    restoring ??= connection.load().then(() => {
+      if (awaitingRestore) {
+        awaitingRestore = false
+        broadcast()
+      }
+    })
+    return restoring
+  }
+
   let connecting = false
   let picking = false
   const t = (key: Parameters<typeof driveText>[1], params?: Record<string, string>) =>
@@ -127,6 +147,17 @@ export function registerDriveIpc(deps: DriveIpcDeps): DriveService {
     const ack = trainingAck(deps.settingsPath())
     if (state.state === 'unavailable') return { state: 'unavailable' }
     if (connecting) return { state: 'connecting', aiAccess: ai, trainingAck: ack }
+    if (state.state === 'disconnected' && awaitingRestore) {
+      return {
+        state: 'connected',
+        name: '',
+        email: '',
+        persisted: true,
+        aiAccess: ai,
+        trainingAck: ack,
+        picking,
+      }
+    }
     if (state.state === 'disconnected') {
       return {
         state: 'disconnected',
@@ -228,9 +259,10 @@ export function registerDriveIpc(deps: DriveIpcDeps): DriveService {
     wasConnected = now
     broadcast()
   })
-  void connection.load().then(() => {
-    if (connection.state().state !== 'unavailable') void files.start()
-  })
+  if (client) {
+    void files.start()
+    if (platform !== 'darwin') void restoreConnection()
+  }
 
   const toEntry = (file: DriveFile): DriveEntry => {
     const target = file.shortcutTarget
@@ -290,6 +322,7 @@ export function registerDriveIpc(deps: DriveIpcDeps): DriveService {
     connecting = true
     broadcast()
     try {
+      await restoreConnection()
       const result = await connection.connect(browserRound('pageDone'))
       if (result.ok) return { ok: true }
       return { ok: false, reason: result.reason === 'unavailable' ? 'network' : result.reason }
@@ -306,12 +339,14 @@ export function registerDriveIpc(deps: DriveIpcDeps): DriveService {
    * connection made after the person confirmed DRIVE_TRAINING_ACK_KEY
    */
   const pickFiles = async (): Promise<PickOutcome> => {
-    if (!connection.connected()) return { ok: false, reason: 'not-connected' }
+    if (!hasConnection()) return { ok: false, reason: 'not-connected' }
     if (!trainingAck(deps.settingsPath())) return { ok: false, reason: 'training' }
     if (picking || connecting) return { ok: false, reason: 'busy' }
     picking = true
     broadcast()
     try {
+      await restoreConnection()
+      if (!connection.connected()) return { ok: false, reason: 'not-connected' }
       const result = await connection.pick(browserRound('pagePicked'), true)
       if (result.ok) return result
       return { ok: false, reason: result.reason === 'unavailable' ? 'network' : result.reason }
@@ -335,6 +370,7 @@ export function registerDriveIpc(deps: DriveIpcDeps): DriveService {
   })
 
   ipcMain.handle(DRIVE_CHANNELS.disconnect, async () => {
+    await restoreConnection()
     await connection.disconnect()
     broadcast()
   })
@@ -354,6 +390,7 @@ export function registerDriveIpc(deps: DriveIpcDeps): DriveService {
   const listEntries = async (raw: unknown, pageToken: unknown): Promise<DriveListResult> => {
     const listing = listingOf(raw)
     if (!listing) return { ok: false, kind: 'not-found' }
+    await restoreConnection()
     const result = await connection.api.list(listing, {
       pageToken: typeof pageToken === 'string' && pageToken.length < 2000 ? pageToken : undefined,
     })
@@ -370,11 +407,11 @@ export function registerDriveIpc(deps: DriveIpcDeps): DriveService {
 
   // ---- attaching Drive files to an editor's AI panel (a person picks them) ----
 
-  ipcMain.handle(DRIVE_CHANNELS.connected, (): boolean => connection.connected())
+  ipcMain.handle(DRIVE_CHANNELS.connected, (): boolean => hasConnection())
 
   ipcMain.handle(DRIVE_CHANNELS.pickAttachments, async (): Promise<DriveAttachResult> => {
     // asked before the picker opens, so nothing is fetched for an AI that may train on it
-    if (connection.connected() && deps.freeAi()) return { ok: false, reason: 'free-ai' }
+    if (hasConnection() && deps.freeAi()) return { ok: false, reason: 'free-ai' }
     const result = await pickFiles()
     if (!result.ok) {
       const { reason } = result
@@ -398,13 +435,14 @@ export function registerDriveIpc(deps: DriveIpcDeps): DriveService {
     if (typeof fileId !== 'string' || !/^[\w-]{1,200}$/.test(fileId)) {
       return { ok: false, kind: 'not-found' }
     }
+    await restoreConnection()
     return files.open(fileId)
   })
 
   // ---- the editors' AI (screen requests only; the CLI and MCP have no Drive) ----
 
   const aiEnabled = () =>
-    connection.connected() && aiAccess(deps.settingsPath()) && trainingAck(deps.settingsPath())
+    hasConnection() && aiAccess(deps.settingsPath()) && trainingAck(deps.settingsPath())
 
   ipcMain.handle(DRIVE_CHANNELS.aiEnabled, (): boolean => aiEnabled())
 
@@ -413,6 +451,7 @@ export function registerDriveIpc(deps: DriveIpcDeps): DriveService {
     if (deps.freeAi()) return { ok: false, error: FREE_AI_REFUSAL }
     const r = (raw && typeof raw === 'object' ? raw : {}) as { q?: unknown; limit?: unknown }
     const limit = Math.min(Math.max(1, Math.floor(Number(r.limit) || 10)), SEARCH_LIMIT_MAX)
+    await restoreConnection()
     return ai.search(typeof r.q === 'string' ? r.q : '', limit)
   })
 
@@ -422,14 +461,20 @@ export function registerDriveIpc(deps: DriveIpcDeps): DriveService {
     const r = (raw && typeof raw === 'object' ? raw : {}) as { id?: unknown; offset?: unknown }
     const id = typeof r.id === 'string' ? r.id : ''
     if (!/^[\w-]{1,200}$/.test(id)) return { ok: false, error: 'not a Drive file id' }
+    await restoreConnection()
     return ai.read(id, Number(r.offset) || 0)
   })
 
   return {
     reopen(path, openPath = deps.openPath) {
-      const entry = files.entryFor(path)
-      if (!entry) return null
-      return files.open(entry.sourceId, undefined, openPath).then((r) => r.ok || openPath(path))
+      if (!client || !files.inCache(path)) return null
+      return files.start().then(async () => {
+        const entry = files.entryFor(path)
+        if (!entry) return openPath(path)
+        await restoreConnection()
+        const result = await files.open(entry.sourceId, undefined, openPath)
+        return result.ok || openPath(path)
+      })
     },
     stop() {
       setAiRunGuard(null)

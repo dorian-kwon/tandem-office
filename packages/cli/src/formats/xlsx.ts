@@ -23,7 +23,7 @@ import {
 } from '@genoffice/xlsx-gateway/gateway/xlsx-sheets'
 import { PRODUCT_NAME } from '@genoffice/i18n'
 import { EMPTY_PAYLOADS, type GatewayPayloads } from './xlsx-gateway-ops'
-import { decodeCsv } from './csv'
+import { decodeCsv, csvField } from './csv'
 import type { WorkbookStyleEdit } from '@genoffice/xlsx-gateway/shared/edit-schemas'
 import {
   echoStyleColor,
@@ -238,10 +238,26 @@ export async function workbookSummary(path: string): Promise<WorkbookSummary> {
 export async function convertLegacyWorkbook(
   path: string,
   targetPath: string,
-): Promise<{ sheets: number; cells: number }> {
+): Promise<{ sheets: number; cells: number; formulasDropped?: number }> {
   return withSidecar(async (client) => {
-    return (await client.convertWorkbook({ path, targetPath })) as { sheets: number; cells: number }
+    return (await client.convertWorkbook({ path, targetPath })) as {
+      sheets: number
+      cells: number
+      formulasDropped?: number
+    }
   })
+}
+
+export async function workbookToOds(path: string, targetPath: string) {
+  return withSidecar(
+    async (client) =>
+      (await client.convertToOds({ path, targetPath })) as {
+        sheets: number
+        cells: number
+        formulasDropped: number
+        dropped: Record<string, number>
+      },
+  )
 }
 
 // ── reading ────────────────────────────────────────────────────────────
@@ -835,74 +851,98 @@ export interface SheetCsv {
  * same shape the app's Export as CSV writes. Rows are produced band by band so
  * a wide, sparse used range never needs a dense grid of the whole sheet.
  */
-export async function sheetToCsv(path: string, opts: { sheet?: string }): Promise<SheetCsv> {
-  return withOpenWorkbook(path, async (client, wb) => {
-    const meta = pickSheet(wb, opts.sheet) as SheetMeta
-    const styles = wb.styles ?? []
-    const date1904 = wb.date1904 === true
-    const columnStyles = new Map<number, number>()
-    for (const span of meta.columnWidths ?? []) {
-      if (span.styleIndex === undefined) continue
-      for (let c = span.startColumn; c <= span.endColumn && c < meta.columnCount; c++) {
-        columnStyles.set(c, span.styleIndex)
-      }
-    }
-    const lines: string[] = []
-    let chars = 0
-    let formulas = 0
-    if (meta.rowCount > 0 && meta.columnCount > 0) {
-      const whole = {
-        startRow: 0,
-        endRow: meta.rowCount - 1,
-        startColumn: 0,
-        endColumn: meta.columnCount - 1,
-      }
-      for (const band of recalcBands(whole, RANGE_CELL_CAP)) {
-        const r = await readRangeIndexed(client, wb.sessionId, meta.id, band)
-        const height = band.endRow - band.startRow + 1
-        const grid: string[][] = Array.from({ length: height }, () =>
-          Array<string>(meta.columnCount).fill(''),
-        )
-        // OOXML precedence: the cell's own xf, then the row default, then the column default
-        const rowStyles = new Map((r.rows ?? []).map((row) => [row.row, row.styleIndex]))
-        const pending: { row: number; column: number }[] = []
-        for (const c of r.cells) {
-          if (c.formula) formulas++
-          if (c.value === undefined || c.value === null) {
-            if (c.formula) pending.push({ row: c.row, column: c.column })
-            continue
-          }
-          const styleIndex = c.styleIndex ?? rowStyles.get(c.row) ?? columnStyles.get(c.column)
-          const format = styleIndex === undefined ? undefined : styles[styleIndex]?.numberFormat
-          grid[c.row - band.startRow]![c.column] = displayText(c.value, format, date1904)
-        }
-        if (pending.length) {
-          for (const cell of await recalcRange(client, path, meta.name, boundingBox(pending))) {
-            const row = grid[cell.row - band.startRow]
-            if (row && row[cell.column] === '') row[cell.column] = cell.formatted
-          }
-        }
-        for (const row of grid) {
-          const line = row.map(csvField).join(',') + '\r\n'
-          chars += line.length
-          if (chars > MAX_CSV_CHARS) {
-            throw new CliError(EXIT.conversion, 'sheet is too large to export as CSV', {
-              limit_chars: MAX_CSV_CHARS,
-            })
-          }
-          lines.push(line)
-        }
-      }
-    }
-    return {
-      sheet: meta.name,
-      sheets: wb.sheets.length,
-      rows: meta.rowCount,
-      columns: meta.columnCount,
-      formulas,
-      csv: lines.join(''),
+export async function sheetToCsv(
+  path: string,
+  opts: { sheet?: string; delimiter?: ',' | '\t' },
+): Promise<SheetCsv> {
+  return withOpenWorkbook(path, (client, wb) =>
+    formatSheetCsv(client, wb, path, pickSheet(wb, opts.sheet), opts.delimiter),
+  )
+}
+
+/** Read each sheet on one native workbook session and release its formatted rows before the next. */
+export async function visitFormattedSheets(
+  path: string,
+  visit: (sheet: SheetCsv) => void,
+): Promise<void> {
+  await withOpenWorkbook(path, async (client, wb) => {
+    for (const meta of wb.sheets) {
+      if (!meta.hidden) visit(await formatSheetCsv(client, wb, path, meta))
     }
   })
+}
+
+async function formatSheetCsv(
+  client: XlsxSidecarClient,
+  wb: OpenedWorkbook,
+  path: string,
+  meta: SheetMeta,
+  delimiter: ',' | '\t' = ',',
+): Promise<SheetCsv> {
+  const styles = wb.styles ?? []
+  const date1904 = wb.date1904 === true
+  const columnStyles = new Map<number, number>()
+  for (const span of meta.columnWidths ?? []) {
+    if (span.styleIndex === undefined) continue
+    for (let c = span.startColumn; c <= span.endColumn && c < meta.columnCount; c++) {
+      columnStyles.set(c, span.styleIndex)
+    }
+  }
+  const lines: string[] = []
+  let chars = 0
+  let formulas = 0
+  if (meta.rowCount > 0 && meta.columnCount > 0) {
+    const whole = {
+      startRow: 0,
+      endRow: meta.rowCount - 1,
+      startColumn: 0,
+      endColumn: meta.columnCount - 1,
+    }
+    for (const band of recalcBands(whole, RANGE_CELL_CAP)) {
+      const r = await readRangeIndexed(client, wb.sessionId, meta.id, band)
+      const height = band.endRow - band.startRow + 1
+      const grid: string[][] = Array.from({ length: height }, () =>
+        Array<string>(meta.columnCount).fill(''),
+      )
+      // OOXML precedence: the cell's own xf, then the row default, then the column default
+      const rowStyles = new Map((r.rows ?? []).map((row) => [row.row, row.styleIndex]))
+      const pending: { row: number; column: number }[] = []
+      for (const c of r.cells) {
+        if (c.formula) formulas++
+        if (c.value === undefined || c.value === null) {
+          if (c.formula) pending.push({ row: c.row, column: c.column })
+          continue
+        }
+        const styleIndex = c.styleIndex ?? rowStyles.get(c.row) ?? columnStyles.get(c.column)
+        const format = styleIndex === undefined ? undefined : styles[styleIndex]?.numberFormat
+        grid[c.row - band.startRow]![c.column] = displayText(c.value, format, date1904)
+      }
+      if (pending.length) {
+        for (const cell of await recalcRange(client, path, meta.name, boundingBox(pending))) {
+          const row = grid[cell.row - band.startRow]
+          if (row && row[cell.column] === '') row[cell.column] = cell.formatted
+        }
+      }
+      for (const row of grid) {
+        const line = row.map((value) => csvField(value, delimiter)).join(delimiter) + '\r\n'
+        chars += line.length
+        if (chars > MAX_CSV_CHARS) {
+          throw new CliError(EXIT.conversion, 'sheet is too large to export as CSV', {
+            limit_chars: MAX_CSV_CHARS,
+          })
+        }
+        lines.push(line)
+      }
+    }
+  }
+  return {
+    sheet: meta.name,
+    sheets: wb.sheets.length,
+    rows: meta.rowCount,
+    columns: meta.columnCount,
+    formulas,
+    csv: lines.join(''),
+  }
 }
 
 /** Grid text for one value; `format` is the cell's resolved number format. */
@@ -927,10 +967,6 @@ function isCalendarDatePattern(pattern: string): boolean {
 }
 
 // same quoting as the app's csv-export.ts (RFC 4180: quote on comma, quote or newline)
-function csvField(text: string): string {
-  const normalized = text.replace(/\r\n|\r/g, '\n')
-  return /[",\n]/.test(normalized) ? `"${normalized.replace(/"/g, '""')}"` : normalized
-}
 
 // ── writing ────────────────────────────────────────────────────────────
 

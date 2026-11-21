@@ -1,6 +1,25 @@
 import type { zh } from './zh'
 
 export const de = {
+  openProjectAi: 'Projekt-KI öffnen',
+  closeProjectAi: 'Projekt-KI schließen',
+  batchTranslate: 'Stapelübersetzung',
+  batchRetry: 'Fehlgeschlagene Dokumente erneut versuchen',
+  batchResume: 'Angehaltene Dokumente fortsetzen',
+  batchSelectTitle: 'Zu übersetzende Dokumente auswählen',
+  batchTranslateSelected: 'Auswahl übersetzen',
+  batchProgress: 'Übersetzungsfortschritt',
+  batchOverall: 'Gesamtfortschritt',
+  batchOpening: 'Wird geöffnet',
+  batchOcr: 'Texterkennung läuft',
+  batchSaving: 'Wird gespeichert',
+  batchOperations: 'Bearbeitungen: {n}',
+  batchWaiting: 'In Warteschlange',
+  batchRunning: 'Wird übersetzt',
+  batchStopped: 'Gestoppt',
+  batchFailed: 'Fehlgeschlagen',
+  batchConsent:
+    'Diese KI für die {n} ausgewählten Dokumente verwenden. Für diese Datei sind etwa {calls} Anfragen nötig.',
   wikiView: 'Wiki anzeigen',
   wikiSetup:
     'Öffne in Obsidian den unten angegebenen Ordner als Vault. Kehre anschließend zu {app} zurück.',

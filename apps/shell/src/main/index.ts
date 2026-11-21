@@ -140,12 +140,17 @@ import { installCliLinkBestEffort } from './cli-link'
 import { createDefaultAppService, execFileRunner } from './default-app'
 import { registerIntegrationsIpc } from './integrations-ipc'
 import { registerResultStoreIpc } from './result-store-ipc'
+import { registerFileConversionIpc, convertWithBundledCli } from './file-conversion-ipc'
+import { projectEditorTurn } from './translate/project-editor-turn'
+import type { ProjectBatchEditorRequest } from './translate/project-batch'
 import { registerTranslateIpc } from './translate/translate-ipc'
 import { createOpenWikiService } from './translate/open-wiki'
 import { prepareTranslationVault } from './translate/wiki-vault'
 import { createOcrService, type OcrServiceDeps } from './translate/ocr'
 import { createOcrChatService, type OcrChatService } from './translate/ocr-chat'
 import { rememberTranslationChoice } from './translate/choices'
+import { createBatchTextModel } from './translate/project-batch-media'
+import { translateText as batchText } from '../renderer/src/i18n/strings-translate'
 import { createChatOcrModel } from './translate/ocr-chat-model'
 import { chatOcrSourceResolver, pruneOcrWorkDir } from './translate/ocr-chat-source'
 import type { OcrMode } from '@genoffice/translate-project'
@@ -255,6 +260,7 @@ import {
   configureSheetsRuntime,
   exportSheetsPdfHeadless,
   hasActiveQueuedWorkbook,
+  requestWorkbookSave,
   installSheetsMenu,
   markSheetsShuttingDown,
   resolveSheetsSessionPath,
@@ -337,6 +343,7 @@ import {
   configureHwpRuntime,
   editorTakes,
   exportHwpPdfHeadless,
+  flushHwpSave,
   hwpFileRenamed,
   hwpReadText,
   requestHwpPreview,
@@ -467,6 +474,7 @@ import {
   PPTX_RE,
   TEXT_RE,
   XLSX_RE,
+  appForPath,
   renameStaysInApp,
 } from './app-routing'
 import { isSameFile, pdfSaveAsTarget, isValidRawRenameName } from './rename-validation'
@@ -631,6 +639,7 @@ import {
   pushHwpRecoveryTitles,
   reopenUntitledCopy,
   runLaunchRecovery,
+  restoredTabOpener,
   tabUntitledCopy,
   type RestoredTabOpenerDeps,
 } from './recovery-shell'
@@ -9264,6 +9273,12 @@ registerIntegrationsIpc({
     : join(APPS_ROOT, '..', 'packages', 'cli', 'package.json'),
 })
 registerResultStoreIpc(ipcMain, () => app.getPath('userData'))
+registerFileConversionIpc(
+  () => shellWindow,
+  bundledCliRunner,
+  () => tm('filterSupported'),
+  currentLang,
+)
 let translateJobSeq = 0
 /**
  * One structure job for the translation tool (OCR pages, scan detection, the
@@ -9396,9 +9411,180 @@ chatOcrService = createOcrChatService({
   newToken: randomUUID,
 })
 
+const projectEditorJobs = new Set<string>()
+// A failed background job can resume its own dirty tab until the user takes it over.
+const backgroundProjectEditors = new WeakSet<WebContents>()
+
+async function runProjectEditorRequest(
+  outputPath: string,
+  prompt: string,
+  signal: AbortSignal,
+  report?: ProjectBatchEditorRequest['report'],
+): Promise<string> {
+  signal.throwIfAborted()
+  const key = canonicalPath(outputPath)
+  const kind = appForPath(outputPath)
+  const projectDocumentControl = currentMcpRuntimeDeps()?.openDocumentsControl
+  if (!key || !kind || !projectDocumentControl)
+    throw new Error('The document editor is unavailable.')
+  if (projectEditorJobs.has(key))
+    throw new Error('A project request is already running for this document.')
+  if (detachedFilePaths().some((path) => canonicalPath(path) === key))
+    throw new Error('Close the detached output window before starting this request.')
+  projectEditorJobs.add(key)
+  try {
+    const manager = ensureTabManager()
+    const existing = manager
+      .list()
+      .find((tab) => tab.filePath && canonicalPath(tab.filePath) === key)
+    if (existing?.readOnly) throw new Error('The output document is open read-only.')
+    const existingContents = existing && manager.webContentsForTab(existing.id)
+    const continuing =
+      !!existingContents && !existing?.active && backgroundProjectEditors.has(existingContents)
+    if (existing && !continuing && (await manager.isFileDirty(outputPath)))
+      throw new Error('Save the open document before starting a project request.')
+    const title = basename(outputPath)
+    const tab =
+      existing?.id ??
+      manager.addUnloadedTab({
+        kind,
+        title,
+        filePath: outputPath,
+        opener: restoredTabOpener(
+          { key, kind, title, filePath: outputPath, open: { type: 'file' } },
+          restoredTabDeps,
+        ),
+      })
+    let saved = false
+    try {
+      const loaded = await manager.ensureTabLoaded(tab)
+      if (loaded.status !== 'ready')
+        throw new Error('Open the document to resolve its recovery prompt.')
+      const wc = loaded.webContents
+      if (!existing && !manager.list().find((item) => item.id === tab)?.active) {
+        backgroundProjectEditors.add(wc)
+        wc.once('focus', () => backgroundProjectEditors.delete(wc))
+      }
+      report?.({ phase: 'translating' })
+      const result = await projectEditorTurn(
+        wc,
+        outputPath,
+        prompt,
+        signal,
+        ({ operations, done, total }) =>
+          report?.({
+            operations,
+            ...(done !== undefined && total !== undefined ? { done, total } : {}),
+          }),
+      )
+      signal.throwIfAborted()
+      if (result.incomplete)
+        throw new Error('The document AI stopped before finishing its request.')
+      const dirty = await manager.isFileDirty(outputPath)
+      const alreadyTranslated =
+        result.inspected && /^PROJECT_ALREADY_TRANSLATED\s*$/m.test(result.text)
+      if (
+        report &&
+        (!result.text.trimEnd().endsWith('PROJECT_TRANSLATION_COMPLETE') ||
+          (!result.mutated && !alreadyTranslated))
+      )
+        throw new Error('The editor has not confirmed that the entire document is translated.')
+      report?.({ phase: 'saving' })
+      if (result.mutated || dirty) {
+        if (kind === 'sheets') {
+          if (!(await requestWorkbookSave(wc, outputPath)))
+            throw new Error('The spreadsheet editor could not save its output workbook.')
+        } else if (kind === 'hwp') {
+          if (!(await flushHwpSave(wc, outputPath)))
+            throw new Error('The Hangul editor could not save the output document.')
+        } else if (kind === 'pdf') {
+          if (!(await flushPdfSave(wc, true)))
+            throw new Error('The PDF editor could not save the output document.')
+        } else {
+          const result = await projectDocumentControl.save({
+            id: tab,
+            kind,
+            title,
+            filePath: outputPath,
+            active: false,
+            dirty: true,
+          })
+          if (canonicalPath(result.savedPath) !== key)
+            throw new Error('The editor saved to a different file.')
+        }
+      }
+      saved = true
+      return result.text
+    } finally {
+      // Keep a partially edited tab available for inspection or retry after a failed run.
+      const contents = manager.webContentsForTab(tab)
+      if (
+        (!existing || continuing) &&
+        (!contents || backgroundProjectEditors.has(contents)) &&
+        !manager.list().find((item) => item.id === tab)?.active &&
+        (saved || (!signal.aborted && !(await manager.isFileDirty(outputPath))))
+      )
+        manager.closeTabWithoutPrompt(tab)
+    }
+  } finally {
+    projectEditorJobs.delete(key)
+  }
+}
+
+async function runProjectBatchDocument(request: ProjectBatchEditorRequest): Promise<void> {
+  const prompt = [
+    `Translate the entire document from ${request.sourceLang} into ${request.targetLang}. Work in this document only.`,
+    'Use the project glossary and style instructions. First inspect the document, then use the editor tools to translate all remaining editable text in batches. Preserve formatting and structure, including nested content. Leave numbers, formulas, code and identifiers intact.',
+    'If no changes are needed because the document is already in the target language, inspect its contents using the editor tools, then put PROJECT_ALREADY_TRANSLATED on its own line before the completion marker.',
+    'Check the document again for remaining source-language text. Only after verifying that every translation unit is complete, end your response with PROJECT_TRANSLATION_COMPLETE. If anything remains or you need input, describe it without the completion marker.',
+  ].join('\n')
+  await runProjectEditorRequest(request.outputPath, prompt, request.signal, request.report)
+}
 registerTranslateIpc(
   ipcMain,
   {
+    convertBatchWorkbook: async (source, output) => {
+      const result = await bundledCliRunner().run([
+        'convert',
+        source,
+        '--to',
+        'xlsx',
+        '--out',
+        output,
+      ])
+      if (!result.ok) throw new Error('The source could not be converted to XLSX.')
+    },
+    batchChanged: (state) => {
+      if (shellWindow && !shellWindow.isDestroyed() && !shellWindow.webContents.isDestroyed())
+        shellWindow.webContents.send(TRANSLATE_EVENTS.batchChanged, state)
+    },
+    batchMedia: {
+      text: (owner) =>
+        createBatchTextModel(readStoredAiSettings, sharedSubscriptionStatuses, owner),
+      ocr: chatOcrModel,
+      confirm: async ({ kind, route, count, total, file }) => {
+        const host = shellWindow
+        if (!host || host.isDestroyed()) return false
+        const lang = currentLang()
+        const provider = [route.provider, route.model].filter(Boolean).join(' · ')
+        const details = [
+          file,
+          batchText(lang, 'batchConsent', { n: total, calls: count }),
+          batchText(lang, 'trConfirmProvider', { provider }),
+          batchText(lang, kind === 'ocr' ? 'ocrConfirmSends' : 'trConfirmSends'),
+        ]
+        if (route.paid) details.push(batchText(lang, 'trConfirmPaid', { provider }))
+        const result = await dialog.showMessageBox(host, {
+          type: 'question',
+          message: batchText(lang, 'trConfirmTitle'),
+          detail: details.join('\n'),
+          buttons: [batchText(lang, 'cancel'), batchText(lang, 'batchTranslate')],
+          defaultId: 1,
+          cancelId: 0,
+        })
+        return result.response === 1
+      },
+    },
     wiki: createOpenWikiService({
       userDataPath: app.getPath('userData'),
       appDataPath: app.getPath('appData'),
@@ -9407,6 +9593,7 @@ registerTranslateIpc(
       handlerExecutable: async () => (await app.getApplicationInfoForProtocol('obsidian://')).path,
       openExternal: (url) => shell.openExternal(url),
     }),
+    runEditorRequest: runProjectEditorRequest,
     settingsPath: APP_SETTINGS_PATH,
     now: () => Date.now(),
     showOpenDialog: (options) => {
@@ -9421,6 +9608,7 @@ registerTranslateIpc(
       if (st.chatgpt?.state === 'ready' || st.codex?.state === 'ready') return 'chatgpt'
       return 'claude'
     },
+    runBatchEditor: runProjectBatchDocument,
     view: translationViewDeps(),
     projects: {
       ensureListed: (dir) => translationProjects().ensureListed(dir),
@@ -9433,6 +9621,25 @@ registerTranslateIpc(
     onOcrPopupResult: (senderId, result) => void ocrPopupHost.complete(senderId, result),
     // exporting a translation: the native save dialog, the editor's unsaved state, Documents
     exportTranslation: {
+      convert: (input, format, output) =>
+        convertWithBundledCli(bundledCliRunner(), input, format, output, currentLang()),
+      ...(process.platform === 'darwin'
+        ? {
+            chooseFormat: (formats: string[]) =>
+              new Promise<string | null>((resolve) => {
+                const menu = Menu.buildFromTemplate(
+                  formats.map((format) => ({
+                    label: format.toUpperCase(),
+                    click: () => resolve(format),
+                  })),
+                )
+                menu.popup({
+                  window: BrowserWindow.getFocusedWindow() ?? shellWindow ?? undefined,
+                  callback: () => setImmediate(() => resolve(null)),
+                })
+              }),
+          }
+        : {}),
       showSaveDialog: (options) => {
         const owner = BrowserWindow.getFocusedWindow()
         return owner ? dialog.showSaveDialog(owner, options) : dialog.showSaveDialog(options)

@@ -964,6 +964,7 @@ export interface FrozenSelection {
 }
 
 export interface ToolExecution {
+  translationProgress?: { done: number; total: number }
   changeLocations?: readonly AiChangeLocation[]
   /** result text fed back to the model */
   output: string
@@ -1599,23 +1600,24 @@ const BILINGUAL_NOTES_NOTE =
   'Bilingual output (add_bilingual) does not duplicate footnotes or endnotes: leave them in the original language and tell the person.'
 
 /** what translate_blocks still leaves open, by its own tracking (short) */
-function remainingLine(
-  editor: Editor,
-  notes: AiNotesAccess | undefined,
-  tracking: boolean,
-): string {
+function remainingLine(editor: Editor, notes: AiNotesAccess | undefined, tracking: boolean) {
   const report = remainingUntranslated(editor, notes, undefined, { tracking })
   if (report.body.length + report.notes.length === 0)
-    return "Nothing is left by this tool's own tracking; confirm once with read_runs checkRemaining:true and sourceLanguage."
+    return {
+      progress: report.progress,
+      text: "Nothing is left by this tool's own tracking; confirm once with read_runs checkRemaining:true and sourceLanguage.",
+    }
   const next = [
     report.body.length > 0 ? 'read_runs for the body blocks' : '',
     report.notes.length > 0 ? 'read_runs notes:true for the notes' : '',
   ].filter(Boolean)
-  return (
-    `Still untranslated: ${report.body.length} body block(s) and ${report.notes.length} note paragraph(s) (not finished; ${next.join(' and ')}). ` +
-    'Spacing around punctuation is tidied by the tool; do not fix it by hand.' +
-    (hasTwins(editor) && report.notes.length > 0 ? ` ${BILINGUAL_NOTES_NOTE}` : '')
-  )
+  return {
+    progress: report.progress,
+    text:
+      `Still untranslated: ${report.body.length} body block(s) and ${report.notes.length} note paragraph(s) (not finished; ${next.join(' and ')}). ` +
+      'Spacing around punctuation is tidied by the tool; do not fix it by hand.' +
+      (hasTwins(editor) && report.notes.length > 0 ? ` ${BILINGUAL_NOTES_NOTE}` : ''),
+  }
 }
 
 export function executeTool(
@@ -1956,6 +1958,7 @@ function executeSyncTool(
             ? ''
             : `\n${label}: ${items.slice(0, 150).join(', ')}${items.length > 150 ? ` …(+${items.length - 150})` : ''}`
         return {
+          translationProgress: report.progress,
           output:
             total === 0
               ? 'Nothing left to translate: every body paragraph and note has been handled.'
@@ -2192,8 +2195,10 @@ function executeSyncTool(
         outcome.added.length +
         outcome.placed.length +
         outcome.tables.reduce((n, x) => n + x.paragraphs, 0)
-      lines.push(remainingLine(editor, notes, track !== undefined))
+      const remaining = remainingLine(editor, notes, track !== undefined)
+      lines.push(remaining.text)
       return {
+        translationProgress: remaining.progress,
         output: lines.join('\n'),
         mutated: count > 0,
         summary: t('aiSumAddedBilingual', { count }),
@@ -2472,7 +2477,9 @@ function executeSyncTool(
       if (empty.length > 0)
         remarks.push(`Ignored (empty paragraphs, left as they are): ${empty.join(', ')}.`)
       const noteCount = translatedNotes.length
+      const remaining = remainingLine(editor, notes, track !== undefined)
       return {
+        translationProgress: remaining.progress,
         output: [
           `Translated ${translated.length} paragraph(s)${noteCount > 0 ? ` and ${noteCount} note paragraph(s)` : ''} in place; run formatting, footnote references, paragraph styles and empty paragraphs were kept. Block indexes are unchanged.`,
           ...remarks,
@@ -2484,7 +2491,7 @@ function executeSyncTool(
                 `SKIPPED ${outcome.skippedBoxes.length} text box paragraph(s): a text box cannot carry tracked changes, so it was left as it is. Tell the person to turn revision tracking off to translate the text boxes. ${outcome.skippedBoxes.slice(0, 20).join('; ')}`,
               ]
             : []),
-          remainingLine(editor, notes, track !== undefined),
+          remaining.text,
         ].join('\n'),
         mutated: translated.length > 0 || noteCount > 0,
         summary: t('aiSumTranslatedBlocks', { count: translated.length + noteCount }),

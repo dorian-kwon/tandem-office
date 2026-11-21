@@ -1779,6 +1779,8 @@ export function sourceScriptOf(language: string | undefined): RegExp | null {
 }
 
 export interface RemainingReport {
+  /** Fingerprints successfully handled out of all text-bearing translation units, independent of language heuristics. */
+  progress: { done: number; total: number }
   /** body blocks (top-level index, plus the cell paragraph number in a table) still untranslated */
   body: string[]
   /** note paragraphs still untranslated, "footnote 3" / "endnote 2 paragraph 1" */
@@ -1799,16 +1801,29 @@ export function remainingUntranslated(
 ): RemainingReport {
   const script = sourceScriptOf(language)
   const handled = handledUnits.get(originalAiEditor(editor))
+  const progress = { done: 0, total: 0 }
   const pending = (segments: string[], fp: string, unit: HandledUnit): boolean => {
-    if (handled?.get(unitKey(unit)) === fp) return false
+    if (handled?.get(unitKey(unit)) === fp) {
+      progress.done++
+      progress.total++
+      return false
+    }
     const text = segments.join(' ')
-    return script ? script.test(text) : /\p{L}/u.test(text)
+    const hasLetters = /\p{L}/u.test(text)
+    if (hasLetters) progress.total++
+    return script ? script.test(text) : hasLetters
   }
   const body: string[] = []
   const doc = editor.state.doc
   for (const entry of options.notesOnly
     ? []
     : readRunGroups(editor, 0, doc.childCount - 1, { compact: true })) {
+    // The two bilingual sides form one handled source unit.
+    if (entry.skip === TWIN_SKIP.source) {
+      progress.done++
+      progress.total++
+      continue
+    }
     if (!entry.segments || !entry.fp) continue
     if (options.tracking && entry.box !== undefined) continue
     if (pending(entry.segments, entry.fp, entry))
@@ -1831,5 +1846,5 @@ export function remainingUntranslated(
         )
     }
   }
-  return { body, notes }
+  return { body, notes, progress }
 }

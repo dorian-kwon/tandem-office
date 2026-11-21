@@ -38,6 +38,8 @@ it.each(['txt', 'json'])(
       JSON.parse(run('read_source_units', { remaining: true }).output).units as { id: number }[]
     const first = write(items.slice(0, 70))
     expect(first.isError).toBeFalsy()
+    expect(first.translationProgress).toEqual({ done: 70, total: 120 })
+    expect(write(items.slice(0, 1)).translationProgress).toBeUndefined()
     expect(first.changeLocations?.[1]).toEqual({ kind: 'source', index: 1 })
     source.showUnit(1)
     const selected = view.state.sliceDoc(
@@ -46,7 +48,7 @@ it.each(['txt', 'json'])(
     )
     expect(json ? JSON.parse(selected) : selected).toBe(items[1]!.translation)
     expect(pending().map((x) => x.id)).toEqual(items.slice(70).map((x) => x.id))
-    expect(write(items.slice(70)).isError).toBeFalsy()
+    expect(write(items.slice(70)).translationProgress).toEqual({ done: 120, total: 120 })
     expect(undoDepth(view.state)).toBe(120)
     expect(pending()).toEqual([])
     for (let i = 119; i >= 0; i--) {
@@ -59,6 +61,11 @@ it.each(['txt', 'json'])(
     expect(pending()).toEqual([])
     expect(undo(view)).toBe(true)
     expect(pending().map((x) => x.id)).toEqual([119])
+    expect(run('read_source_units', {}).translationProgress).toEqual({ done: 119, total: 120 })
+    expect(run('read_source_units', { language: 'fr' }).translationProgress).toEqual({
+      done: 0,
+      total: 120,
+    })
     const last = view.state.doc.toString().lastIndexOf(originals[119]!)
     view.dispatch({ changes: { from: last, to: last + originals[119]!.length, insert: 'manual' } })
     const before = view.state.doc

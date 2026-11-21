@@ -51,10 +51,9 @@ export function linuxKeyringSeals(storage: SafeStorageLike): boolean {
 
 /** Whether this platform seals at all, apart from the key being ready */
 export function platformSeals(storage: SafeStorageLike, platform: NodeJS.Platform): boolean {
-  if (!storage.isEncryptionAvailable()) return false
-  if (platform === 'win32') return true
-  if (platform === 'linux') return linuxKeyringSeals(storage)
-  return false
+  // Even checking availability on macOS can ask to unlock the login keychain.
+  if (platform !== 'win32' && platform !== 'linux') return false
+  return storage.isEncryptionAvailable() && (platform === 'win32' || linuxKeyringSeals(storage))
 }
 
 /**

@@ -1353,3 +1353,158 @@
 .translate-wiki-guide .projects-field {
   margin-top: 12px;
 }
+
+.translation-project-workspace {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.translation-project-workspace > .content {
+  min-width: 0;
+}
+.translation-project-workspace .translation-project-assistant {
+  flex: 0 1 340px;
+  min-width: 240px;
+  max-width: 38%;
+  margin: 0;
+  border-inline-start: 1px solid var(--border-subtle);
+  padding: 0 14px 14px;
+  box-sizing: border-box;
+}
+.translation-project-assistant .kb-ask-headbar {
+  align-items: center;
+  justify-content: space-between;
+}
+.project-assistant-toggle {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 21px;
+  cursor: pointer;
+}
+.project-assistant-toggle:hover {
+  background: var(--surface-subtle);
+  color: var(--text-primary);
+}
+.project-assistant-body:not([hidden]) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.translation-project-workspace .translation-project-assistant[data-collapsed='true'] {
+  flex: 0 0 40px;
+  min-width: 0;
+  padding: 0;
+}
+.translation-project-assistant[data-collapsed='true'] .kb-ask-headbar {
+  justify-content: center;
+  margin: 0;
+  padding: 4px 0;
+  border-bottom: 0;
+}
+@media (max-width: 850px) {
+  .translation-project-workspace {
+    flex-direction: column;
+  }
+  .translation-project-workspace .translation-project-assistant {
+    min-width: 0;
+    max-width: none;
+    flex: 0 1 35%;
+    border-inline-start: 0;
+    border-top: 1px solid var(--border-subtle);
+  }
+}
+
+.translate-batch-dialog {
+  box-sizing: border-box;
+  width: min(500px, 94vw);
+  max-height: 84vh;
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+}
+.translate-batch-dialog[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.translate-batch-dialog::backdrop {
+  background: var(--color-bg-overlay);
+}
+.translate-batch-dialog h3,
+.translate-batch-dialog .modal-buttons {
+  margin: 0;
+}
+.translate-batch-dialog .modal-buttons {
+  flex-wrap: wrap;
+}
+.translate-batch-selection-heading,
+.translate-batch-file,
+.translate-batch-totals > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.translate-batch-dialog label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+}
+.translate-batch-dialog input[type='checkbox'] {
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
+.translate-batch-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-block: 1px solid var(--border);
+}
+.translate-batch-list li {
+  overflow-wrap: anywhere;
+}
+.translate-batch-list li + li {
+  border-block-start: 1px solid var(--border-subtle);
+}
+.translate-batch-list label,
+.translate-batch-documents li {
+  padding: 10px 2px;
+}
+.translate-batch-file strong {
+  font-size: 14px;
+}
+.translate-batch-file span,
+.translate-batch-dialog small,
+.translate-batch-totals p,
+.translate-batch-selection-heading > span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.translate-batch-file span {
+  flex-shrink: 0;
+}
+.translate-batch-dialog small {
+  display: block;
+}
+.translate-batch-dialog .is-warning {
+  color: var(--danger);
+}
+.translate-batch-dialog progress {
+  display: block;
+  width: 100%;
+  height: 7px;
+  margin-block: 7px;
+  accent-color: var(--accent);
+}

@@ -1,6 +1,25 @@
 import type { zh } from './zh'
 
 export const he = {
+  openProjectAi: 'פתיחת הבינה המלאכותית של הפרויקט',
+  closeProjectAi: 'סגירת הבינה המלאכותית של הפרויקט',
+  batchTranslate: 'תרגום באצווה',
+  batchRetry: 'ניסיון חוזר למסמכים שנכשלו',
+  batchResume: 'המשך תרגום המסמכים שנעצרו',
+  batchSelectTitle: 'בחירת מסמכים לתרגום',
+  batchTranslateSelected: 'תרגום המסמכים שנבחרו',
+  batchProgress: 'התקדמות התרגום',
+  batchOverall: 'התקדמות כוללת',
+  batchOpening: 'בפתיחה',
+  batchOcr: 'בזיהוי טקסט OCR',
+  batchSaving: 'בשמירה',
+  batchOperations: 'מספר עריכות: {n}',
+  batchWaiting: 'בתור',
+  batchRunning: 'בתרגום',
+  batchStopped: 'נעצר',
+  batchFailed: 'נכשל',
+  batchConsent:
+    'השתמשו בבינה המלאכותית הזו עבור {n} המסמכים שנבחרו. לקובץ הנוכחי נדרשות בערך {calls} בקשות.',
   wikiView: 'הצגת הוויקי',
   wikiSetup: 'ב־Obsidian יש לפתוח את התיקייה שלהלן ככספת ואז לחזור אל {app}.',
   wikiDownload: 'לאחר סיום ההתקנה של Obsidian יש לחזור אל {app} כדי לפתוח את הוויקי.',

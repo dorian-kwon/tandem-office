@@ -3,10 +3,16 @@ import { tmpdir } from 'node:os'
 import { basename, dirname, extname, join } from 'node:path'
 import { PdfLoadError } from '@genoffice/pdf2docx'
 import { flagBool, flagString, type ParsedArgs } from '../args'
-import { csvToXlsx, sheetNameFromStem } from '../formats/csv'
+import { convertDelimitedText, csvToXlsx, sheetNameFromStem } from '../formats/csv'
 import { convertPdf, type PdfTarget } from '../formats/pdf'
-import { convertLegacyWorkbook, sheetToCsv } from '../formats/xlsx'
+import { convertLegacyWorkbook, sheetToCsv, workbookToOds } from '../formats/xlsx'
 import { exportViaApp, type AppExportTarget } from '../formats/app-export'
+import {
+  appTarget,
+  bodyTarget,
+  conversionPath,
+  CONVERSION_ROUTES as ROUTES,
+} from '../conversion-routes'
 import { htmlToMarkdown, markdownToDocx, markdownToHtml } from '../formats/markdown'
 import { closeDocument, documentHtml, openDocument } from '../formats/docx'
 import { docxBytesToOdt, openOdtBytes, reportOdtConversion } from '../formats/odt'
@@ -20,79 +26,10 @@ import {
   resultStore,
   withStoredReadings,
 } from '../formats/pdf-structure'
-import { extension, readInput, resolveInput, resolveOutput, writeOutput } from '../fs'
+import { extension, readInput, resolveInput, resolveOutput, stripBom, writeOutput } from '../fs'
 import { assertNotEmptyPackage } from '../limits'
 import type { CommandContext, CommandDef } from '../registry'
 import { CliError, EXIT } from '../result'
-
-/** Conversions that run in this process. */
-const NODE_ROUTES: Record<string, readonly string[]> = {
-  pdf: ['docx', 'pptx', 'xlsx', 'md', 'epub'],
-  csv: ['xlsx'],
-  xls: ['xlsx'],
-  xlsb: ['xlsx'],
-  ods: ['xlsx'],
-  md: ['docx', 'html'],
-  markdown: ['docx', 'html'],
-  docx: ['md'],
-  xlsx: ['csv'],
-  xlsm: ['csv'],
-}
-
-/**
- * Conversions the GenOffice binary runs for us in its hidden headless-export
- * mode: anything that needs an app renderer (page layout for pdf, the Word
- * editor's HTML export, html2docx, the Hangul editor's pages). Mirrors
- * HEADLESS_TARGETS in the shell.
- */
-const APP_ROUTES: Record<string, readonly AppExportTarget[]> = {
-  pdf: ['html'],
-  csv: ['pdf'],
-  xls: ['pdf'],
-  md: ['pdf'],
-  markdown: ['pdf'],
-  docx: ['pdf', 'html'],
-  xlsx: ['pdf'],
-  xlsm: ['pdf'],
-  pptx: ['pdf'],
-  html: ['pdf', 'docx'],
-  htm: ['pdf', 'docx'],
-  hwp: ['pdf'],
-  hwpx: ['pdf'],
-}
-
-/**
- * OpenDocument text routes. They pass through a docx: an .odt is opened as
- * its bridge docx (odtToDocx) and goes on along the docx routes (the app's
- * headless export does not take .odt, so pdf/html read a temporary docx);
- * docx, md and html reach .odt through docx and docxToOdt.
- */
-const ODT_ROUTES: Record<string, readonly string[]> = {
-  odt: ['docx', 'pdf', 'md', 'html'],
-  docx: ['odt'],
-  md: ['odt'],
-  markdown: ['odt'],
-  html: ['odt'],
-  htm: ['odt'],
-}
-
-const ROUTES: Record<string, readonly string[]> = Object.fromEntries(
-  [
-    ...new Set([
-      ...Object.keys(NODE_ROUTES),
-      ...Object.keys(APP_ROUTES),
-      ...Object.keys(ODT_ROUTES),
-    ]),
-  ].map((from) => [
-    from,
-    [...(NODE_ROUTES[from] ?? []), ...(APP_ROUTES[from] ?? []), ...(ODT_ROUTES[from] ?? [])],
-  ]),
-)
-
-function appTarget(from: string, to: string): AppExportTarget | null {
-  const target = APP_ROUTES[from]?.find((t) => t === to)
-  return target ?? null
-}
 
 export const convertCommand: CommandDef = {
   name: 'convert',
@@ -165,7 +102,7 @@ export const convertCommand: CommandDef = {
           suggestion: 'pass a different --out',
         },
       )
-    const result = await run(input, from, to, output, args, ctx)
+    const result = await runPath(input, conversionPath(from, to)!, output, args, ctx)
     if (result.bytes) writeOutput(output, result.bytes)
     return {
       summary: `converted ${basename(input)} → ${basename(output)}`,
@@ -192,6 +129,96 @@ interface Produced {
   detail: Record<string, unknown>
 }
 
+async function runPath(
+  input: string,
+  path: string[],
+  output: string,
+  args: ParsedArgs,
+  ctx: CommandContext,
+): Promise<Produced> {
+  if (path.length === 2) return run(input, path[0]!, path[1]!, output, args, ctx)
+  const warnings = new Set<string>()
+  const stepContext: CommandContext = {
+    ...ctx,
+    warn(warning) {
+      const key = JSON.stringify(warning)
+      if (!warnings.has(key)) ctx.warn(warning)
+      warnings.add(key)
+    },
+  }
+  if (path.slice(1, -1).includes('pdf'))
+    stepContext.warn({
+      code: 'body_conversion',
+      message:
+        'The editable body is converted. Page layout, headers, annotations and complex objects may differ from the original.',
+    })
+  if (path[0] === 'pptx')
+    stepContext.warn({
+      code: 'printed_content',
+      message:
+        'Printed slide content is included. Animations and speaker notes are not transferred.',
+    })
+  const dir = mkdtempSync(join(dirname(output), '.ieumoffice-convert-'))
+  try {
+    let current = input
+    const title = basename(input, extname(input))
+    const steps: Record<string, unknown>[] = []
+    for (let index = 1; index < path.length; index++) {
+      const from = path[index - 1]!
+      const to = path[index]!
+      const last = index === path.length - 1
+      const next = last ? output : join(dir, title + '.' + to)
+      const result = await run(current, from, to, next, args, stepContext)
+      steps.push(result.detail)
+      if (last) return { ...result, detail: { via: path, steps } }
+      if (result.bytes) writeOutput(next, result.bytes)
+      // Ordinary Markdown uses paths relative to the original file. Embed its assets
+      // before handing the HTML to another engine in the temporary folder.
+      if (to === 'html' && (from === 'md' || from === 'markdown')) {
+        const { conversionHtml } = await import('../formats/conversion-html')
+        const { decodeHtmlBytes } = await import('../formats/html-text')
+        writeOutput(
+          next,
+          Buffer.from(await conversionHtml(decodeHtmlBytes(readInput(next)), current, stepContext)),
+        )
+      }
+      current = next
+    }
+    throw new CliError(EXIT.conversion, 'Incomplete conversion path')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+async function runBody(
+  input: string,
+  from: string,
+  to: string,
+  ctx: CommandContext,
+): Promise<Produced> {
+  const { textBodyHtml, conversionHtml, bodyHtmlText } = await import('../formats/conversion-html')
+  const { bodyHtmlToEpub, bodyHtmlToXmind, epubBodyHtml, xmindOutlineHtml } =
+    await import('../formats/conversion-book-map')
+  const { workbookBodyHtml, bodyHtmlToWorkbook } = await import('../formats/conversion-sheet')
+  const { decodeHtmlBytes } = await import('../formats/html-text')
+  const title = basename(input, extname(input))
+  let html: string
+  if (from === 'epub') html = await epubBodyHtml(readInput(input), ctx)
+  else if (from === 'xmind') html = await xmindOutlineHtml(readInput(input))
+  else if (from === 'xlsx' || from === 'xlsm') html = await workbookBodyHtml(input)
+  else if (from === 'txt')
+    html = textBodyHtml(stripBom(Buffer.from(readInput(input)).toString('utf8')))
+  else html = decodeHtmlBytes(readInput(input))
+  const detail = { via: 'editable HTML body' }
+  if (to === 'txt') return { bytes: Buffer.from(await bodyHtmlText(html)), detail }
+  const body = await conversionHtml(html, input, ctx)
+  if (to === 'html') return { bytes: Buffer.from(body), detail }
+  if (to === 'md') return { bytes: Buffer.from(await htmlToMarkdown(body)), detail }
+  if (to === 'epub') return { bytes: await bodyHtmlToEpub(body, title, ctx), detail }
+  if (to === 'xmind') return { bytes: await bodyHtmlToXmind(body, title), detail }
+  return { bytes: await bodyHtmlToWorkbook(body, sheetNameFromStem(title)), detail }
+}
+
 async function run(
   input: string,
   from: string,
@@ -200,8 +227,20 @@ async function run(
   args: ParsedArgs,
   ctx: CommandContext,
 ): Promise<Produced> {
-  if (from === 'odt' || to === 'odt') return runOdt(input, from, to, output, ctx)
   const password = flagString(args, 'password')
+  if (from === 'json' || to === 'json') {
+    const bytes = readInput(input)
+    try {
+      JSON.parse(stripBom(new TextDecoder('utf-8', { fatal: true }).decode(bytes)))
+    } catch {
+      throw new CliError(EXIT.conversion, 'This text is not a valid UTF-8 JSON document.')
+    }
+    return { bytes, detail: { via: 'validated JSON text' } }
+  }
+  if (bodyTarget(from, to)) {
+    warnBodyConversion(from, to, ctx)
+    return runBody(input, from, to, ctx)
+  }
   if (from === 'pdf' && to === 'html') {
     return convertPdfViaDocx(input, to, output, password, ctx)
   }
@@ -210,6 +249,10 @@ async function run(
     const r = await exportViaApp(input, viaApp, output, { env: ctx.env, log: ctx.log })
     return { detail: { via: 'ieumoffice --headless-export', summary: r.summary } }
   }
+  if (from === 'hwp' || from === 'hwpx' || to === 'hwp' || to === 'hwpx') {
+    return runHangul(input, from, to, output, password, ctx)
+  }
+  if (from === 'odt' || to === 'odt') return runOdt(input, from, to, output, ctx)
   if (from === 'pdf' && (to === 'md' || to === 'epub')) {
     return pdfReflow(input, to, output, args, ctx)
   }
@@ -225,18 +268,49 @@ async function run(
     }
     return { bytes: await markdownToDocx(text, { file: input, ctx }), detail: { title } }
   }
-  if (from === 'csv') {
+  if (from === 'csv' || from === 'tsv') {
+    if (to === 'csv' || to === 'tsv')
+      return {
+        bytes: Buffer.from(convertDelimitedText(readInput(input), from, to)),
+        detail: { via: 'delimited text' },
+      }
     const sheet = sheetNameFromStem(basename(input, extname(input)))
-    return { bytes: await csvToXlsx(readInput(input), sheet), detail: { sheet } }
+    return {
+      bytes: await csvToXlsx(readInput(input), sheet, from === 'tsv' ? '\t' : undefined),
+      detail: { sheet },
+    }
   }
-  if (to === 'csv') {
-    const { csv, ...detail } = await sheetToCsv(input, { sheet: flagString(args, 'sheet') })
+  if (to === 'ods') {
+    const detail = await workbookToOds(input, output)
+    const omitted = Object.entries(detail.dropped)
+      .filter(([, count]) => count > 0)
+      .map(([feature, count]) => feature + ': ' + count)
+    if (detail.formulasDropped) omitted.push('formulas: ' + detail.formulasDropped)
+    if (omitted.length)
+      ctx.warn({
+        code: 'spreadsheet_features_omitted',
+        message: 'ODS conversion omitted ' + omitted.join(', '),
+      })
+    return { detail }
+  }
+  if (to === 'csv' || to === 'tsv') {
+    const { csv, ...detail } = await sheetToCsv(input, {
+      sheet: flagString(args, 'sheet'),
+      delimiter: to === 'tsv' ? '\t' : ',',
+    })
     // UTF-8 BOM, as the app writes it, so Excel opens the file without a wizard
     return { bytes: Buffer.from('\ufeff' + csv, 'utf-8'), detail }
   }
   if (to === 'md') return docxToMarkdown(readInput(input), ctx)
   const r = await convertLegacyWorkbook(input, output)
-  return { detail: { sheets: r.sheets, cells: r.cells } }
+  if (from === 'xlsm' || r.formulasDropped) {
+    ctx.warn({
+      code: 'spreadsheet_conversion',
+      message:
+        'Workbook values and supported formulas are converted. Macros, unsupported formulas and special formatting may be omitted.',
+    })
+  }
+  return { detail: { ...r } }
 }
 
 async function docxToMarkdown(docx: Uint8Array, ctx: CommandContext): Promise<Produced> {
@@ -293,23 +367,205 @@ function assertRouteOptions(args: ParsedArgs, from: string, to: string): void {
 }
 
 /**
- * Runs `work` on a temporary docx written beside the output (inside the
+ * Runs `work` on a temporary document written beside the output (inside the
  * allowed roots the output already passed), and always deletes it.
  */
-async function withTempDocx<T>(
+async function withTempDocument<T>(
   output: string,
-  stem: string,
-  docx: Uint8Array | null,
+  name: string,
+  bytes: Uint8Array | null,
   work: (path: string) => Promise<T>,
 ): Promise<T> {
-  const dir = mkdtempSync(join(dirname(output), '.ieumoffice-odt-'))
+  const dir = mkdtempSync(join(dirname(output), '.ieumoffice-convert-'))
   try {
-    const path = join(dir, `${stem}.docx`)
-    if (docx) writeOutput(path, docx)
+    const path = join(dir, name)
+    if (bytes) writeOutput(path, bytes)
     return await work(path)
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
+}
+
+function warnBodyConversion(from: string, to: string, ctx: CommandContext) {
+  ctx.warn({
+    code: 'body_conversion',
+    message:
+      'The editable body is converted. Page layout, headers, annotations and complex objects may differ from the original.',
+  })
+  if (from === 'xmind' || to === 'xmind') {
+    ctx.warn({
+      code: 'map_outline',
+      message:
+        'Mind maps exchange topic outlines. Map styling, images and graphical relationships are not transferred.',
+    })
+  }
+  if (from === 'epub' || to === 'epub') {
+    ctx.warn({
+      code: 'epub_body',
+      message:
+        'Book content is converted in reading order. Fixed layout, interactive media and book navigation can change.',
+    })
+  }
+  if (from === 'xlsx' || from === 'xlsm') {
+    ctx.warn({
+      code: 'worksheet_display_values',
+      message:
+        'Visible worksheets are converted to tables using displayed cell values. Formulas, charts and macros are not transferred.',
+    })
+  }
+}
+
+/** Keep native Hangul documents on their checked serializer. Other word processing
+ * formats exchange their editable body via the same HTML exporters as their editors. */
+async function runHangul(
+  input: string,
+  from: string,
+  to: string,
+  output: string,
+  password: string | undefined,
+  ctx: CommandContext,
+): Promise<Produced> {
+  const { convertHangulNative, hangulToHtml, htmlToHangul } =
+    await import('../formats/hwp-conversion')
+  const { workbookBodyHtml, bodyHtmlToWorkbook } = await import('../formats/conversion-sheet')
+  const fromHangul = from === 'hwp' || from === 'hwpx'
+  const toHangul = to === 'hwp' || to === 'hwpx'
+  if (fromHangul && toHangul) {
+    return {
+      bytes: await convertHangulNative(readInput(input), to, ctx),
+      detail: { via: 'native Hangul export' },
+    }
+  }
+  if (to === 'txt') {
+    const { hwpText } = await import('../formats/hwp')
+    return { bytes: Buffer.from(await hwpText(readInput(input)), 'utf-8'), detail: {} }
+  }
+
+  const appOptions = { env: ctx.env, log: ctx.log }
+  if (to === 'pptx') {
+    // Page-based formats use the same printed pages and document reconstruction
+    // as a PDF opened separately, without touching either original.
+    return withTempDocument(output, 'pages.pdf', null, async (pdf) => {
+      await exportViaApp(input, 'pdf', pdf, appOptions)
+      const result = await convertPdfOrThrow(pdf, to, undefined, ctx)
+      return {
+        bytes: result.bytes,
+        detail: { via: 'printed PDF pages', pages: result.pages, warnings: result.warnings },
+      }
+    })
+  }
+  const detail = { via: 'editable HTML body' }
+  warnBodyConversion(from, to, ctx)
+  if (fromHangul) {
+    const html = await hangulToHtml(readInput(input))
+    if (to === 'epub' || to === 'xmind') {
+      const { bodyHtmlToEpub, bodyHtmlToXmind } = await import('../formats/conversion-book-map')
+      const title = basename(input, extname(input))
+      const bytes =
+        to === 'epub' ? await bodyHtmlToEpub(html, title, ctx) : await bodyHtmlToXmind(html, title)
+      return { bytes, detail }
+    }
+    if (to === 'xlsx')
+      return {
+        bytes: await bodyHtmlToWorkbook(html, sheetNameFromStem(basename(input, extname(input)))),
+        detail,
+      }
+    if (to === 'html') return { bytes: Buffer.from(html), detail }
+    if (to === 'md') return { bytes: Buffer.from(await htmlToMarkdown(html)), detail }
+    return withTempDocument(output, 'body.html', Buffer.from(html), async (path) => {
+      if (to === 'docx') {
+        await exportViaApp(path, 'docx', output, appOptions)
+        return { detail }
+      }
+      return withTempDocument(output, 'body.docx', null, async (docx) => {
+        await exportViaApp(path, 'docx', docx, appOptions)
+        const { odtBytes, report } = await docxBytesToOdt(readInput(docx))
+        return {
+          bytes: odtBytes,
+          detail: { ...detail, odt_report: reportOdtConversion(report, to, ctx) },
+        }
+      })
+    })
+  }
+  if (!toHangul) throw new CliError(EXIT.usage, 'unsupported Hangul conversion')
+  const { decodeHtmlBytes } = await import('../formats/html-text')
+  async function docxHtml(path: string): Promise<string> {
+    return withTempDocument(output, 'body.html', null, async (html) => {
+      await exportViaApp(path, 'html', html, appOptions)
+      return decodeHtmlBytes(readInput(html))
+    })
+  }
+  let html: string
+  switch (from) {
+    case 'epub': {
+      const { epubBodyHtml } = await import('../formats/conversion-book-map')
+      html = await epubBodyHtml(readInput(input), ctx)
+      break
+    }
+    case 'xmind': {
+      const { xmindOutlineHtml } = await import('../formats/conversion-book-map')
+      html = await xmindOutlineHtml(readInput(input))
+      break
+    }
+    case 'txt':
+      html = stripBom(Buffer.from(readInput(input)).toString('utf8'))
+        .split(/\r\n|\n|\r/)
+        .map(
+          (line) =>
+            '<p>' +
+            line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') +
+            '</p>',
+        )
+        .join('')
+      break
+    case 'md':
+    case 'markdown':
+      html = await markdownToHtml(
+        stripBom(Buffer.from(readInput(input)).toString('utf8')),
+        basename(input),
+      )
+      break
+    case 'htm':
+    case 'html':
+      html = decodeHtmlBytes(readInput(input))
+      break
+    case 'docx':
+      html = await docxHtml(input)
+      break
+    case 'odt': {
+      const { docxBytes, origin } = await openOdtBytes(readInput(input))
+      reportOdtConversion(origin.report, to, ctx)
+      html = await withTempDocument(output, 'body.docx', docxBytes, docxHtml)
+      break
+    }
+    case 'xlsx':
+    case 'xlsm':
+      html = await workbookBodyHtml(input)
+      break
+    case 'pdf':
+    case 'pptx': {
+      const reconstruct = (path: string) => convertPdfOrThrow(path, 'docx', password, ctx)
+      const reconstructed =
+        from === 'pdf'
+          ? await reconstruct(input)
+          : await withTempDocument(output, 'pages.pdf', null, async (pdf) => {
+              await exportViaApp(input, 'pdf', pdf, appOptions)
+              return reconstruct(pdf)
+            })
+      if (from !== 'pdf') {
+        ctx.warn({
+          code: 'printed_content',
+          message:
+            'Printed slide content is included. Animations and speaker notes are not transferred.',
+        })
+      }
+      html = await withTempDocument(output, 'body.docx', reconstructed.bytes, docxHtml)
+      break
+    }
+    default:
+      throw new CliError(EXIT.usage, 'unsupported Hangul input')
+  }
+  return { bytes: await htmlToHangul(html, input, to, ctx), detail }
 }
 
 async function runOdt(
@@ -329,7 +585,7 @@ async function runOdt(
       return { ...r, detail: { ...r.detail, odt_report } }
     }
     const target = to as AppExportTarget
-    const r = await withTempDocx(output, stem, docxBytes, (docx) =>
+    const r = await withTempDocument(output, `${stem}.docx`, docxBytes, (docx) =>
       exportViaApp(docx, target, output, { env: ctx.env, log: ctx.log }),
     )
     return { detail: { via: 'ieumoffice --headless-export', summary: r.summary, odt_report } }
@@ -341,7 +597,7 @@ async function runOdt(
     const text = Buffer.from(readInput(input)).toString('utf-8')
     docx = await markdownToDocx(text, { file: input, ctx })
   } else {
-    docx = await withTempDocx(output, stem, null, async (path) => {
+    docx = await withTempDocument(output, `${stem}.docx`, null, async (path) => {
       await exportViaApp(input, 'docx', path, { env: ctx.env, log: ctx.log })
       return new Uint8Array(readFileSync(path))
     })

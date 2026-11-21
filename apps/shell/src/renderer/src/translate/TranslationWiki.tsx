@@ -15,9 +15,13 @@ import './translate-global'
 
 const WikiContext = createContext<{ open: () => void; opening: boolean } | null>(null)
 
+export function useTranslationWiki() {
+  return useContext(WikiContext)
+}
+
 export function TranslationWikiButton({ className = 'projects-ghost' }: { className?: string }) {
   const { lang } = useI18n()
-  const wiki = useContext(WikiContext)
+  const wiki = useTranslationWiki()
   return (
     <button
       type="button"

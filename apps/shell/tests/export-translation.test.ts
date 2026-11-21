@@ -28,7 +28,9 @@ beforeEach(async () => {
   dir = (await createProject(root, 'P', 'en', 'ko')).dir
   picked = null
   dirty = false
-  dialog = vi.fn(async () => (picked === null ? { canceled: true } : { canceled: false, filePath: picked }))
+  dialog = vi.fn(async () =>
+    picked === null ? { canceled: true } : { canceled: false, filePath: picked },
+  )
   deps = {
     showSaveDialog: dialog as unknown as ExportTranslationDeps['showSaveDialog'],
     isDirty: async () => dirty,
@@ -77,6 +79,18 @@ describe('exportTranslation', () => {
     expect(options.defaultPath).toBe(join(dir, 'budget (ja).xlsx'))
   })
 
+  it.each(['xls', 'tsv'])('exports the translated XLSX for a batch %s source', async (kind) => {
+    const entry = await addSource('budget.' + kind)
+    writeFileSync(join(dir, 'output', entry.file), 'original')
+    writeFileSync(join(dir, 'output', entry.file + '.xlsx'), BYTES)
+    picked = join(root, 'translated.xlsx')
+    expect(await exportTranslation(dir, entry, undefined, 'ko', deps)).toEqual({
+      status: 'saved',
+      path: picked,
+    })
+    expect(readFileSync(picked)).toEqual(BYTES)
+  })
+
   it('does nothing when the dialog is cancelled', async () => {
     const entry = await addSource('a.md')
     writeFileSync(join(dir, 'output', 'a.md'), 'translated')
@@ -87,7 +101,9 @@ describe('exportTranslation', () => {
 
   it('reports a clear error when there is no output yet and never opens the dialog', async () => {
     const entry = await addSource('a.md')
-    expect(await codeOf(exportTranslation(dir, entry, undefined, 'ko', deps))).toBe('OUTPUT_MISSING')
+    expect(await codeOf(exportTranslation(dir, entry, undefined, 'ko', deps))).toBe(
+      'OUTPUT_MISSING',
+    )
     expect(dialog).not.toHaveBeenCalled()
   })
 
@@ -95,11 +111,15 @@ describe('exportTranslation', () => {
     const entry = await addSource('a.md')
     writeFileSync(join(dir, 'output', 'a.md'), 'translated')
     picked = join(dir, 'source', 'a (ko).md')
-    expect(await codeOf(exportTranslation(dir, entry, undefined, 'ko', deps))).toBe('EXPORT_REFUSED')
+    expect(await codeOf(exportTranslation(dir, entry, undefined, 'ko', deps))).toBe(
+      'EXPORT_REFUSED',
+    )
     expect(existsSync(picked)).toBe(false)
     // overwriting the source copy itself is refused as well
     picked = join(dir, 'source', 'a.md')
-    expect(await codeOf(exportTranslation(dir, entry, undefined, 'ko', deps))).toBe('EXPORT_REFUSED')
+    expect(await codeOf(exportTranslation(dir, entry, undefined, 'ko', deps))).toBe(
+      'EXPORT_REFUSED',
+    )
     expect(readFileSync(join(dir, 'source', 'a.md'), 'utf8')).toBe('source')
   })
 
@@ -107,7 +127,9 @@ describe('exportTranslation', () => {
     const entry = await addSource('a.md')
     writeFileSync(join(dir, 'output', 'a.md'), 'translated')
     picked = join(dir, 'output', 'a.md')
-    expect(await codeOf(exportTranslation(dir, entry, undefined, 'ko', deps))).toBe('EXPORT_REFUSED')
+    expect(await codeOf(exportTranslation(dir, entry, undefined, 'ko', deps))).toBe(
+      'EXPORT_REFUSED',
+    )
     expect(readFileSync(join(dir, 'output', 'a.md'), 'utf8')).toBe('translated')
   })
 
@@ -116,7 +138,9 @@ describe('exportTranslation', () => {
     writeFileSync(join(dir, 'output', 'a.md'), 'translated')
     dirty = true
     picked = join(root, 'a (ko).md')
-    expect(await exportTranslation(dir, entry, undefined, 'ko', deps)).toEqual({ status: 'unsaved' })
+    expect(await exportTranslation(dir, entry, undefined, 'ko', deps)).toEqual({
+      status: 'unsaved',
+    })
     expect(dialog).not.toHaveBeenCalled()
     expect(existsSync(picked)).toBe(false)
   })
@@ -131,6 +155,54 @@ describe('exportTranslation', () => {
     expect((dialog.mock.calls[0]![0] as { defaultPath: string }).defaultPath).toBe(
       join(dir, 'paper (ko).pdf'),
     )
+  })
+
+  it('converts the saved output to the chosen format, preserving the working files', async () => {
+    const entry = await addSource('brief.docx')
+    const working = join(dir, 'output', 'brief.docx')
+    writeFileSync(working, 'translated')
+    picked = join(root, 'brief.hwpx')
+    deps.chooseFormat = async (formats) => {
+      expect(formats).toContain('hwpx')
+      return 'hwpx'
+    }
+    deps.convert = async (input, format, destination) => {
+      expect(readFileSync(input, 'utf8')).toBe('translated')
+      expect(format).toBe('hwpx')
+      writeFileSync(destination, 'converted')
+      return 'Check the page layout.'
+    }
+    const result = await exportTranslation(dir, entry, undefined, 'ko', deps)
+    expect(result).toEqual({ status: 'saved', path: picked, warning: 'Check the page layout.' })
+    expect(dialog.mock.calls[0]![0]).toMatchObject({ defaultPath: join(dir, 'brief (ko).hwpx') })
+    expect(readFileSync(picked, 'utf8')).toBe('converted')
+    expect(readFileSync(working, 'utf8')).toBe('translated')
+  })
+
+  it('keeps an existing destination intact if its converter fails', async () => {
+    const entry = await addSource('brief.docx')
+    writeFileSync(join(dir, 'output', 'brief.docx'), 'translated')
+    picked = join(root, 'brief.hwp')
+    writeFileSync(picked, 'older edition')
+    deps.convert = async (_input, _format, destination) => {
+      writeFileSync(destination, 'incomplete')
+      throw new Error('conversion failed')
+    }
+    await expect(exportTranslation(dir, entry, undefined, 'ko', deps)).rejects.toThrow(
+      'conversion failed',
+    )
+    expect(readFileSync(picked, 'utf8')).toBe('older edition')
+  })
+
+  it('refuses an unsupported extension instead of copying different bytes under the name', async () => {
+    const entry = await addSource('brief.docx')
+    writeFileSync(join(dir, 'output', 'brief.docx'), 'translated')
+    picked = join(root, 'brief.gif')
+    deps.convert = vi.fn()
+    expect(await codeOf(exportTranslation(dir, entry, undefined, 'ko', deps))).toBe(
+      'EXPORT_REFUSED',
+    )
+    expect(existsSync(picked)).toBe(false)
   })
 
   it('refuses an output name that is not a result of that source', async () => {

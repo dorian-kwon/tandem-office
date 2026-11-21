@@ -635,3 +635,5 @@ export { useChatWindow, EarlierChatMessages, recentChatStart } from './chat-wind
 export { useEditorAiBusy, acquireEditorAiWork, withEditorAiWork } from './editor-ai-busy'
 
 export { AiChangeLinks } from './AiChangeLinks'
+
+export { useProjectEditorRun } from './use-project-editor-run'

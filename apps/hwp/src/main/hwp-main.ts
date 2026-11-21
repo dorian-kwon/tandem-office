@@ -280,6 +280,14 @@ export async function requestHwpClose(
     hwpRecoveryDontSave(contents)
     return true
   }
+  return flushHwpSave(contents)
+}
+
+/** Finish an in-flight autosave or save dirty editor contents. A verified clean document is already on disk. */
+export async function flushHwpSave(contents: WebContents, expectedPath?: string): Promise<boolean> {
+  if (contents.isDestroyed() || memoModalByWc.has(contents.id) || closeSaveWaiters.has(contents.id))
+    return false
+  if (expectedPath && savePathByWc.get(contents.id) !== expectedPath) return false
   return new Promise<boolean>((resolve) => {
     const timer = setTimeout(() => {
       closeSaveWaiters.delete(contents.id)
@@ -287,7 +295,7 @@ export async function requestHwpClose(
     }, 120_000)
     closeSaveWaiters.set(contents.id, (ok) => {
       clearTimeout(timer)
-      resolve(ok)
+      resolve(ok && (!expectedPath || savePathByWc.get(contents.id) === expectedPath))
     })
     contents.send(HWP_CHANNELS.closeSaveRequest)
   })

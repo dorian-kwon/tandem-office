@@ -20,7 +20,7 @@ import type { PlannedLaunch } from '../../src/main/mcp-client/local-launch'
 import { plannedLaunch } from '../../src/main/mcp-client/local-launch'
 import { RemoteMcpError, type RemoteMcpConnection } from '../../src/main/mcp-client/remote'
 import { createMcpRuntimeKit } from '../../src/main/mcp-client/runtimes'
-import type { McpSecretCodec } from '../../src/main/mcp-client/secrets'
+import { safeStorageMcpCodec, type McpSecretCodec } from '../../src/main/mcp-client/secrets'
 import {
   createMcpServersStore,
   newMcpServerConfig,
@@ -288,6 +288,68 @@ const NL2 = String.fromCharCode(10).repeat(2)
 // ---- tests --------------------------------------------------------------------
 
 describe('MCP hub: the list the AI windows get', () => {
+  it('leaves the macOS keychain alone for startup and local editor/settings lists, including a saved setup', async () => {
+    const storage = {
+      isEncryptionAvailable: vi.fn(() => true),
+      encryptString: vi.fn((text: string) => Buffer.from(text)),
+      decryptString: vi.fn((bytes: Buffer) => bytes.toString()),
+    }
+    const path = join(tempDir(), 'mcp-servers.json')
+    const store = createMcpServersStore(path, safeStorageMcpCodec(storage, 'darwin'))
+    const { hub } = rig(store)
+    await hub.load()
+    expect(hub.settingsView().sealing).toBeNull()
+    expect(hub.editorList()).toEqual([])
+    await store.update((file) => {
+      file.servers.push(
+        newMcpServerConfig({ name: 'public', kind: 'remote', url: 'https://public.example/mcp' }),
+      )
+    })
+    expect(storage.isEncryptionAvailable).not.toHaveBeenCalled()
+
+    const remote = remoteServer()
+    const local = localServer()
+    await store.update((file) => {
+      file.servers.push(remote, local)
+    })
+    expect(storage.encryptString).toHaveBeenCalled()
+    vi.clearAllMocks()
+
+    const reopened = createMcpServersStore(path, safeStorageMcpCodec(storage, 'darwin'))
+    const connectRemote = vi.fn(() => fakeRemote())
+    const connectLocal = vi.fn(fakeLocal)
+    const session = rig(reopened, { remote: connectRemote, local: connectLocal })
+    await session.hub.load()
+    expect(session.hub.editorList()).toHaveLength(3)
+    expect(
+      session.hub.settingsView().servers.find((s) => s.id === remote.id)?.headers.Authorization,
+    ).toEqual({ state: 'saved', last4: '' })
+    await session.hub.edit(remote.id, { name: 'renamed' })
+    expect(storage.isEncryptionAvailable).not.toHaveBeenCalled()
+    expect(storage.decryptString).not.toHaveBeenCalled()
+    storage.isEncryptionAvailable.mockReturnValue(false)
+    expect(await session.hub.test(remote.id)).toMatchObject({ ok: false })
+    expect(connectRemote).not.toHaveBeenCalled()
+    expect(session.hub.settingsView().sealing).toBe(false)
+    expect(await session.hub.test(local.id)).toMatchObject({ ok: false })
+    expect(connectLocal).not.toHaveBeenCalled()
+    expect(await session.hub.signIn(remote.id)).toEqual({ ok: false, reason: 'denied' })
+    storage.isEncryptionAvailable.mockReturnValue(true)
+    await session.hub.test(remote.id)
+    expect(connectRemote).toHaveBeenCalledWith(
+      expect.objectContaining({ headers: remote.headers }),
+      expect.anything(),
+    )
+    expect(storage.decryptString.mock.calls.map(([bytes]) => bytes.toString())).not.toContain(
+      local.env.API_KEY,
+    )
+    await session.hub.test(local.id)
+    expect(connectLocal).toHaveBeenCalledWith(
+      expect.objectContaining({ env: local.env }),
+      expect.anything(),
+    )
+  })
+
   it('is built from the stored approved definitions before anything connects (7.1)', async () => {
     const store = await storeWith(remoteServer(), localServer())
     const { hub, remotes, locals } = rig(store)

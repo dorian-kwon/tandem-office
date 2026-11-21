@@ -22,6 +22,7 @@ import {
   projectChoiceRemember,
   useAiChoice,
   useAiRunStatus,
+  useProjectEditorRun,
   useTranslationLock,
   AI_QUEUE_LABELS,
   AiSubscriptionUsageLine,
@@ -1823,6 +1824,16 @@ export function AiPanel({
     }
     showStoredChat(opened.entries)
   }
+
+  useProjectEditorRun({
+    turn: runStatus.projectTurn,
+    path: filePath,
+    ready: !project.chat.available || project.chat.ready,
+    gate: sendGate.peek,
+    busy: busy,
+    send: (prompt) => runWith(prompt, prompt, [], null),
+    stop: cancel,
+  })
 
   const copyMessage = (text: string, idx: number) => {
     void navigator.clipboard.writeText(text)

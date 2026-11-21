@@ -22,7 +22,10 @@ export async function saveAsNoticeFor(
     if (result.status === 'canceled') return null
     if (result.status === 'unsaved')
       return { text: translateText(lang, 'saveAsUnsaved'), isError: true }
-    return { text: translateText(lang, 'saveAsDone'), isError: false }
+    return {
+      text: [translateText(lang, 'saveAsDone'), result.warning].filter(Boolean).join(' · '),
+      isError: false,
+    }
   } catch (err) {
     return { text: translateErrorText(lang, err), isError: true }
   }

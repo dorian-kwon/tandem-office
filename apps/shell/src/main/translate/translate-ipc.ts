@@ -1,7 +1,10 @@
+import type { ProjectBatchStart, ProjectBatchSnapshot } from '../../shared/project-batch'
+import { ProjectBatchQueue, type ProjectBatchEditorRequest } from './project-batch'
+import { runBatchMedia, type ProjectBatchMediaDeps } from './project-batch-media'
 import { isAdHocDir } from './adhoc-dirs'
 import { randomUUID } from 'node:crypto'
-import { rm, stat } from 'node:fs/promises'
-import { basename, dirname, isAbsolute, resolve } from 'node:path'
+import { lstat, mkdir, rm, stat } from 'node:fs/promises'
+import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path'
 import type { IpcMain } from 'electron'
 import {
   addGlossary,
@@ -33,6 +36,7 @@ import {
 import { convertReference } from './reference-convert'
 import { checkOcrPopupResult, type OcrPopupResult } from '../../shared/ocr-popup'
 import { createPictureInfo } from './picture-info'
+import { placeNewFile, temporaryPath } from './output-file'
 import { PickAllowlist } from './pick-allowlist'
 import { createOcrService, type OcrService, type OcrServiceDeps } from './ocr'
 import { buildTranslationInstructions } from './context-injection'
@@ -43,8 +47,10 @@ import {
 } from './non-editable'
 import {
   isResultOf,
+  latestResult,
   openTranslation,
   openTranslationResult,
+  prepareTranslationCopy,
   plainFileName,
   type TranslationViewDeps,
 } from './open-translation'
@@ -63,6 +69,7 @@ import {
   toTranslateIpcError,
   TranslateIpcError,
   type TranslateApi,
+  type ProjectDocumentRequest,
   type TranslateAddMaterialArgs,
   type TranslateExportArgs,
   type TranslateExportResult,
@@ -110,6 +117,11 @@ import {
  */
 
 export interface TranslateIpcDeps {
+  convertBatchWorkbook?: (sourcePath: string, outputPath: string) => Promise<void>
+  runBatchEditor?: (request: ProjectBatchEditorRequest) => Promise<void>
+  batchChanged?: (state: ProjectBatchSnapshot) => void
+  batchMedia?: ProjectBatchMediaDeps
+  runEditorRequest?: (output: string, prompt: string, signal: AbortSignal) => Promise<string>
   wiki?: Pick<TranslateApi, 'openWiki' | 'resumeWiki'>
   /** path of userData/app-settings.json (read per call: userData is final only after ready) */
   settingsPath: () => string
@@ -223,6 +235,9 @@ function requireKind(value: unknown): TranslateMaterialKind {
 export function createTranslateHandlers(deps: TranslateIpcDeps) {
   const raw = createRawHandlers(deps)
   return {
+    batchStart: guard(raw.batchStart),
+    batchStop: guard(raw.batchStop),
+    batchStatus: guard(raw.batchStatus),
     list: guard(raw.list),
     recent: guard(raw.recent),
     adoptOutputAsSource: guard(raw.adoptOutputAsSource),
@@ -240,6 +255,7 @@ export function createTranslateHandlers(deps: TranslateIpcDeps) {
     pickParentDir: guard(raw.pickParentDir),
     makeFolder: guard(raw.makeFolder),
     openTranslation: guard(raw.openTranslation),
+    runDocumentRequest: guard(raw.runDocumentRequest),
     setPaneHidden: guard(raw.setPaneHidden),
     ocrPrepare: guard(raw.ocrPrepare),
     ocrStart: guard(raw.ocrStart),
@@ -280,6 +296,7 @@ function guard<A extends unknown[], R>(fn: (...a: A) => Promise<R>): (...a: A) =
 }
 
 function createRawHandlers(deps: TranslateIpcDeps) {
+  const batch = new ProjectBatchQueue((state) => deps.batchChanged?.(state))
   const materialPicks = new PickAllowlist<TranslateMaterialKind>(deps.now, deps.newToken)
   const parentPicks = new PickAllowlist<null>(deps.now, deps.newToken)
   const newToken = deps.newToken ?? (() => randomUUID())
@@ -307,6 +324,25 @@ function createRawHandlers(deps: TranslateIpcDeps) {
     if (!listed) throw new TranslateIpcError('NOT_LISTED', 'this document is not in the project')
     const entry = nonEditableService ? await nonEditableService.resolveKind(dir, listed) : listed
     return { project, entry }
+  }
+
+  async function convertProjectWorkbook(
+    sourcePath: string,
+    outputFolder: string,
+    file: string,
+    signal: AbortSignal,
+  ): Promise<string> {
+    if (!deps.convertBatchWorkbook)
+      throw new TranslateIpcError('OPEN_FAILED', 'The Excel converter is unavailable.')
+    const tmp = temporaryPath(outputFolder, '.xlsx')
+    try {
+      await deps.convertBatchWorkbook(sourcePath, tmp)
+      signal.throwIfAborted()
+      // Include the source extension: report.xls and report.xlsx may belong to the same project.
+      return join(outputFolder, await placeNewFile(outputFolder, file, '.xlsx', tmp))
+    } finally {
+      await rm(tmp, { force: true }).catch(() => undefined)
+    }
   }
 
   function ocr(): OcrService {
@@ -425,6 +461,146 @@ function createRawHandlers(deps: TranslateIpcDeps) {
   }
 
   return {
+    async batchStatus(dir: string) {
+      return batch.status(registeredDir(dir))
+    },
+    async batchStop(dir: string) {
+      batch.stop(registeredDir(dir))
+    },
+    async batchStart(args: ProjectBatchStart, owner: number) {
+      const dir = registeredDir(args?.dir)
+      const project = await loadProject(dir)
+      const listed = new Set(project.sources.map((entry) => entry.file))
+      const files = args.files === undefined ? [...listed] : args.files
+      if (
+        !Array.isArray(files) ||
+        !files.length ||
+        files.length > listed.size ||
+        !files.every((file) => typeof file === 'string' && plainFileName(file) && listed.has(file))
+      ) {
+        throw new TranslateIpcError('INVALID_ARGUMENT', 'Choose documents from this project.')
+      }
+      await listOnce(dir)
+      const approved = new Set<string>()
+      return batch.start(
+        dir,
+        files,
+        owner,
+        async (file, signal, report) => {
+          // Resolve symlinked material before scan detection or a converter reads it.
+          const sourceFolder = join(dir, 'source'),
+            outputFolder = join(dir, 'output')
+          const sourcePath = join(sourceFolder, file)
+          await mkdir(outputFolder, { recursive: true })
+          if (
+            !(await lstat(sourceFolder)).isDirectory() ||
+            !(await lstat(outputFolder)).isDirectory() ||
+            !(await lstat(sourcePath)).isFile()
+          )
+            throw new TranslateIpcError(
+              'OPEN_FAILED',
+              'The source or output is outside the project.',
+            )
+          const { project: current, entry } = await sourceEntry(dir, file)
+          if (
+            current.targetLang !== project.targetLang ||
+            current.sourceLang !== project.sourceLang
+          )
+            throw new TranslateIpcError(
+              'INVALID_ARGUMENT',
+              'The project languages changed during translation.',
+            )
+          const integrity = await verifySource(dir, entry)
+          if (integrity === 'missing')
+            throw new TranslateIpcError('SOURCE_MISSING', 'The source copy is missing.')
+          if (integrity === 'changed')
+            throw new TranslateIpcError(
+              'SOURCE_CHANGED',
+              'Check the changed source before translation.',
+            )
+          signal.throwIfAborted()
+          let outputPath: string
+          if (entry.kind === 'editable' && ['.xls', '.tsv'].includes(extname(file).toLowerCase())) {
+            outputPath = await convertProjectWorkbook(sourcePath, outputFolder, file, signal)
+          } else if (entry.kind === 'editable') {
+            outputPath = await prepareTranslationCopy(dir, file)
+          } else {
+            const media = deps.batchMedia
+            if (!media)
+              throw new TranslateIpcError(
+                'TRANSLATE_FAILED',
+                'PDF and OCR translation are unavailable.',
+              )
+            const output = await runBatchMedia({
+              dir,
+              project: current,
+              source: entry,
+              owner,
+              signal,
+              progress: (done, total) =>
+                report({ phase: entry.kind === 'pdf' ? 'translating' : 'ocr', done, total }),
+              media,
+              confirm: async (kind, route, count) => {
+                signal.throwIfAborted()
+                const key = JSON.stringify([kind, route])
+                if (approved.has(key)) return true
+                const yes = await media.confirm({ kind, route, count, file, total: files.length })
+                if (yes) approved.add(key)
+                else batch.stop(dir)
+                return yes && !signal.aborted
+              },
+              pdf: () => ({
+                prepare: (d, f) => nonEditable().pdfPrepare(d, f, owner),
+                store: (t, request) => nonEditable().pdfStore(t, request),
+                write: (t, bilingual) => {
+                  report({ phase: 'saving' })
+                  return nonEditable().pdfWrite(t, bilingual)
+                },
+                release: (t) => nonEditable().pdfRelease(t),
+                instructions: async (d, text) => {
+                  const built = await buildTranslationInstructions(d, text, {
+                    settingsPath: deps.settingsPath(),
+                    convertReference: convert,
+                  })
+                  return {
+                    prompts: built.promptText,
+                    material: built.materialText,
+                    references: built.referencesText,
+                  }
+                },
+              }),
+              ocr: () => ({
+                prepare: (d, names) => ocr().prepare(d, names, owner),
+                start: (t, pages) => ocr().start(t, pages),
+                pageImage: (t, index) => ocr().pageImage(t, index),
+                write: (t, pages, placement) => ocr().write(t, pages, placement),
+                release: (t) => ocr().release(t),
+              }),
+            })
+            if (output.kind === 'saved') {
+              noteRecent(dir, file, output.name)
+              return output.name
+            }
+            outputPath = output.path
+          }
+          signal.throwIfAborted()
+          if (!deps.runBatchEditor)
+            throw new TranslateIpcError('OPEN_FAILED', 'No document editor is available.')
+          await deps.runBatchEditor({
+            dir,
+            file,
+            outputPath,
+            sourceLang: project.sourceLang,
+            targetLang: project.targetLang,
+            signal,
+            report,
+          })
+          noteRecent(dir, file, basename(outputPath))
+          return basename(outputPath)
+        },
+        args.retry === true && args.files !== undefined,
+      )
+    },
     async list(): Promise<TranslateProjectListEntry[]> {
       const out: TranslateProjectListEntry[] = []
       for (const entry of readTranslationProjects(deps.settingsPath())) {
@@ -501,12 +677,14 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       const dir = registeredDir(args?.dir)
       // deleting under an open tab loses its unsaved edits, and a later save would make
       // files again in a half-deleted folder: the tabs are closed first
+      if (batch.busy(dir)) throw new TranslateIpcError('TRANSLATE_BUSY', 'Translation is running.')
       if (args.deleteFolder === true && deps.isPathOpen?.(dir))
         throw new TranslateIpcError(
           'PROJECT_IN_USE',
           'documents of this project are open; close them before deleting the folder',
         )
       const dropEntry = () => {
+        batch.forget(dir)
         const path = deps.settingsPath()
         writeTranslationProjects(
           path,
@@ -675,6 +853,52 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       return { token: parentPicks.add(null, [dir]), dir }
     },
 
+    async runDocumentRequest(args: ProjectDocumentRequest, signal: AbortSignal): Promise<string> {
+      const dir = registeredDir(args?.dir)
+      const file = requireString(args?.file, 'file')
+      const prompt = requireString(args?.prompt, 'prompt').trim()
+      if (!prompt || !deps.runEditorRequest || !plainFileName(file))
+        throw new TranslateIpcError('INVALID_ARGUMENT', 'invalid editor request')
+      const { project, entry } = await sourceEntry(dir, file)
+      if ((await verifySource(dir, entry)) !== 'ok')
+        throw new TranslateIpcError(
+          'SOURCE_CHANGED',
+          'check the original source before running the editor',
+        )
+      await listOnce(dir)
+      signal.throwIfAborted()
+      const workbook =
+        entry.kind === 'editable' && ['.xls', '.tsv'].includes(extname(file).toLowerCase())
+      const outputDir = join(dir, 'output')
+      const prior =
+        entry.kind !== 'editable' || workbook
+          ? await latestResult(dir, entry, project.targetLang)
+          : null
+      let output: string
+      if (prior) {
+        output = join(outputDir, prior)
+        const info = await lstat(output)
+        if (!(await lstat(outputDir)).isDirectory() || !info.isFile() || info.nlink > 1)
+          throw new TranslateIpcError('OPEN_FAILED', 'the result is not a separate project file')
+      } else if (entry.kind === 'image' || entry.kind === 'scan') {
+        throw new TranslateIpcError('UNSUPPORTED_SOURCE', 'read this source with project OCR first')
+      } else if (workbook) {
+        const sourceDir = join(dir, 'source')
+        const source = join(sourceDir, file)
+        if (
+          !(await lstat(sourceDir)).isDirectory() ||
+          !(await lstat(outputDir)).isDirectory() ||
+          !(await lstat(source)).isFile()
+        )
+          throw new TranslateIpcError('OPEN_FAILED', 'the workbook is not a local project file')
+        output = await convertProjectWorkbook(source, outputDir, file, signal)
+      } else {
+        output = await prepareTranslationCopy(dir, file)
+      }
+      signal.throwIfAborted()
+      return deps.runEditorRequest(output, prompt, signal)
+    },
+
     async openTranslation(
       args: TranslateOpenTranslationArgs,
     ): Promise<TranslateOpenTranslationResult> {
@@ -690,7 +914,7 @@ function createRawHandlers(deps: TranslateIpcDeps) {
         ocr: project.ocr,
         targetLang: project.targetLang,
       })
-      if (result.flow === 'edit') noteRecent(dir, entry.file, entry.file)
+      if (result.flow === 'edit') noteRecent(dir, entry.file, result.output ?? entry.file)
       return result
     },
 
@@ -840,6 +1064,7 @@ function createRawHandlers(deps: TranslateIpcDeps) {
     },
 
     async ocrForgetOwner(owner: number): Promise<void> {
+      batch.stopOwner(owner)
       ocrService?.forgetOwner(owner)
       nonEditableService?.forgetOwner(owner)
     },
@@ -919,6 +1144,11 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       const dir = registeredDir(args?.dir)
       const kind = requireKind(args.kind)
       const file = requireString(args.file, 'file')
+      if (kind === 'source' && batch.busy(dir))
+        throw new TranslateIpcError(
+          'TRANSLATE_BUSY',
+          'Stop the translation before removing its source.',
+        )
       if (kind === 'source') return removeSource(dir, file)
       if (kind === 'reference') return removeReference(dir, file, { convert })
       return removeGlossary(dir, file)
@@ -967,16 +1197,22 @@ export function registerTranslateIpc(
   }
   // an OCR listing or run belongs to the window that made it: closing or crashing that
   // window ends it at once instead of after the idle expiry
+  const documentRuns = new Map<number, { id: string; controller: AbortController }>()
   const watched = new Set<number>()
   const watchOcrSender = (sender: OcrSender): number => {
     const id = sender.id
     if (!watched.has(id)) {
       watched.add(id)
+      const stopEditor = () => documentRuns.get(id)?.controller.abort()
       sender.once('destroyed', () => {
+        stopEditor()
         watched.delete(id)
         void h.ocrForgetOwner(id)
       })
-      sender.on('render-process-gone', () => void h.ocrForgetOwner(id))
+      sender.on('render-process-gone', () => {
+        stopEditor()
+        void h.ocrForgetOwner(id)
+      })
     }
     return id
   }
@@ -991,6 +1227,13 @@ export function registerTranslateIpc(
       isWikiSender,
     )
   }
+  handle(
+    TRANSLATE_CHANNELS.batchStart,
+    (e, args: ProjectBatchStart) => h.batchStart(args, watchOcrSender(e.sender as OcrSender)),
+    isWikiSender,
+  )
+  handle(TRANSLATE_CHANNELS.batchStatus, (_e, dir: string) => h.batchStatus(dir), isWikiSender)
+  handle(TRANSLATE_CHANNELS.batchStop, (_e, dir: string) => h.batchStop(dir), isWikiSender)
   handle(TRANSLATE_CHANNELS.list, () => h.list())
   handle(TRANSLATE_CHANNELS.recent, () => h.recent())
   handle(TRANSLATE_CHANNELS.adoptOutputAsSource, (_e, args: { dir: string; file: string }) =>
@@ -1019,6 +1262,25 @@ export function registerTranslateIpc(
   )
   handle(TRANSLATE_CHANNELS.pickParentDir, () => h.pickParentDir())
   handle(TRANSLATE_CHANNELS.makeFolder, (_e, args: TranslateMakeFolderArgs) => h.makeFolder(args))
+  handle(TRANSLATE_CHANNELS.runDocumentRequest, async (event, args: ProjectDocumentRequest) => {
+    const owner = watchOcrSender(event.sender as OcrSender)
+    if (!args || typeof args.requestId !== 'string' || !args.requestId || documentRuns.has(owner))
+      throw new TranslateIpcError(
+        'INVALID_ARGUMENT',
+        'another document request is running or the request is invalid',
+      )
+    const controller = new AbortController()
+    documentRuns.set(owner, { id: args.requestId, controller })
+    try {
+      return await h.runDocumentRequest(args, controller.signal)
+    } finally {
+      documentRuns.delete(owner)
+    }
+  })
+  handle(TRANSLATE_CHANNELS.cancelDocumentRequest, (event, requestId: string) => {
+    const run = documentRuns.get((event.sender as OcrSender).id)
+    if (run && run.id === requestId) run.controller.abort()
+  })
   handle(TRANSLATE_CHANNELS.openTranslation, (_e, args: TranslateOpenTranslationArgs) =>
     h.openTranslation(args),
   )

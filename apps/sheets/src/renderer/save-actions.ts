@@ -103,6 +103,7 @@ export async function handleSave(
   mode: 'save' | 'save-as' | 'recovery' | 'template',
   quiet = false,
   explicitTarget?: { path: string; overwrite: boolean },
+  projectOutput?: string,
 ): Promise<SaveOutcome> {
   const state = ctx.lazyWorkbookRef.current
   // Captured at save start (the Ctrl+S moment): the post-save session swap
@@ -322,7 +323,7 @@ export async function handleSave(
     // forever ("wait for loading to finish") with the Save-As-.xlsx escape
     // hatch unreachable. Streamed sessions that insist on CSV still get the
     // message (and are asked again next time instead of being remembered).
-    if (!confirmedCsvSaves.has(csvPath)) {
+    if (projectOutput !== csvPath && !confirmedCsvSaves.has(csvPath)) {
       const choice = await window.desktopApi.confirmCsvSave()
       if (choice === 'cancel') {
         ctx.setMessage(t('appSaveCanceled'))

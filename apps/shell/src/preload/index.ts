@@ -64,7 +64,13 @@ import { MCP_SERVERS_CHANNELS, MCP_SERVERS_SETTINGS_KEY } from '../shared/mcp-se
 import type { McpServersApi, McpServersSettingsView } from '../shared/mcp-servers-api'
 import type { ResultStoreApi } from '../shared/result-store-api'
 import { TRANSLATE_CHANNELS, TRANSLATE_EVENTS } from '../shared/translate-api'
+import type { ProjectBatchSnapshot } from '../shared/project-batch'
 import type { TranslateApi } from '../shared/translate-api'
+import {
+  FILE_CONVERSION_CHANNELS,
+  type FileConversionApi,
+  type FileConversionResult,
+} from '../shared/file-conversion'
 import type { TabsApi, TabSummary } from '../shared/tabs-api'
 import { TABS_CHANNELS } from '../shared/tabs-api'
 import { SPLIT_TABS_CHANNELS } from '../shared/split-view-api'
@@ -703,6 +709,16 @@ contextBridge.exposeInMainWorld('aiOfficeResultStore', resultStoreApi)
 // Translation tool projects: the folder list, project files and materials.
 // Main only accepts folders from its registered list, so paths here are requests, not access.
 const translateApi: TranslateApi = {
+  batchStart: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.batchStart, args),
+  batchStop: (dir) => ipcRenderer.invoke(TRANSLATE_CHANNELS.batchStop, dir),
+  batchStatus: (dir) => ipcRenderer.invoke(TRANSLATE_CHANNELS.batchStatus, dir),
+  onBatchChanged: (listener) => {
+    const receive = (_event: unknown, snapshot: ProjectBatchSnapshot) => listener(snapshot)
+    ipcRenderer.on(TRANSLATE_EVENTS.batchChanged, receive)
+    return () => {
+      ipcRenderer.removeListener(TRANSLATE_EVENTS.batchChanged, receive)
+    }
+  },
   openWiki: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.openWiki),
   resumeWiki: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.resumeWiki),
   list: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.list),
@@ -721,6 +737,8 @@ const translateApi: TranslateApi = {
   pickMaterials: (kind) => ipcRenderer.invoke(TRANSLATE_CHANNELS.pickMaterials, kind),
   pickParentDir: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.pickParentDir),
   makeFolder: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.makeFolder, args),
+  runDocumentRequest: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.runDocumentRequest, args),
+  cancelDocumentRequest: (id) => ipcRenderer.invoke(TRANSLATE_CHANNELS.cancelDocumentRequest, id),
   openTranslation: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.openTranslation, args),
   setPaneHidden: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.setPaneHidden, args),
   ocrPrepare: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.ocrPrepare, args),
@@ -755,6 +773,19 @@ const translateApi: TranslateApi = {
   pictureInfo: (dir) => ipcRenderer.invoke(TRANSLATE_CHANNELS.pictureInfo, dir),
 }
 contextBridge.exposeInMainWorld('translateApi', translateApi)
+
+const fileConversionApi: FileConversionApi = {
+  pick: () => ipcRenderer.invoke(FILE_CONVERSION_CHANNELS.pick),
+  run: (ids, target) => ipcRenderer.invoke(FILE_CONVERSION_CHANNELS.run, ids, target),
+  onProgress: (listener) => {
+    const handler = (_event: unknown, result: FileConversionResult): void => listener(result)
+    ipcRenderer.on(FILE_CONVERSION_CHANNELS.progress, handler)
+    return () => {
+      ipcRenderer.removeListener(FILE_CONVERSION_CHANNELS.progress, handler)
+    }
+  },
+}
+contextBridge.exposeInMainWorld('fileConversionApi', fileConversionApi)
 
 // Google Drive (decisions 0033, 0085): state, picking, listing and opening.
 // Main keeps the tokens; this bridge only carries states, file lists and file ids.

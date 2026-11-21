@@ -1,0 +1,50 @@
+/* Keep the translation project mounted when switching between Home tools. */
+.home-tool-slot:not([hidden]) {
+  display: contents;
+}
+
+.file-conversion-pane {
+  max-width: 820px;
+}
+
+.file-conversion-files {
+  max-height: 52vh;
+  overflow-y: auto;
+}
+
+.file-conversion-file {
+  flex: 1;
+  min-width: 0;
+  padding: 4px;
+  overflow-wrap: anywhere;
+}
+
+.file-conversion-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.file-conversion-result {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin-top: 3px;
+  user-select: text;
+}
+
+.file-conversion-result[data-failed] {
+  color: var(--danger);
+}
+
+.file-conversion-remove {
+  display: grid;
+  place-items: center;
+}
+
+.file-conversion-actions {
+  align-items: flex-end;
+}
+
+.file-conversion-actions select {
+  min-width: 132px;
+}

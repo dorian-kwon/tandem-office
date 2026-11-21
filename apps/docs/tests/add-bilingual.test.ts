@@ -236,6 +236,7 @@ describe('add_bilingual: body paragraphs', () => {
       }),
     )
     const left = () => remainingUntranslated(editor, undefined, 'ko').body
+    expect(remainingUntranslated(editor, undefined, 'ko').progress).toEqual({ done: 1, total: 2 })
     expect(left()).toEqual(['2'])
     expect(readRunGroups(editor, 0, 2)[1]?.skip).toMatch(/translation added/)
     readRunGroups(editor, 0, 2)

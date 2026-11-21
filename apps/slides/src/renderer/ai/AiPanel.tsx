@@ -121,6 +121,7 @@ import {
   projectChoiceRemember,
   useAiChoice,
   useAiRunStatus,
+  useProjectEditorRun,
   AI_QUEUE_LABELS,
   AiScopeQuote,
   AiUsageChip,
@@ -2544,6 +2545,16 @@ export function AiPanel({
     sentAttachmentsRef.current = []
     readAttachmentPathsRef.current.clear()
   }
+
+  useProjectEditorRun({
+    turn: runStatus.projectTurn,
+    path: currentFilePath,
+    ready: !projectPanel.chat.available || projectPanel.chat.ready,
+    gate: sendGate.peek,
+    busy: busy,
+    send: (prompt) => runWith(prompt, prompt, { attachments: [] }),
+    stop: cancel,
+  })
 
   const copyMessage = (text: string, idx: number) => {
     void navigator.clipboard.writeText(text)

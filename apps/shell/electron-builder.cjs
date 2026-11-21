@@ -699,9 +699,36 @@ const config = {
       { target: 'zip', arch: includeMacX64 ? ['arm64', 'x64'] : ['arm64'] },
     ],
     category: 'public.app-category.productivity',
-    // the bundle file stays "<machine name>.app" (productName); only the name
-    // Finder, the Dock and the menu bar show is the display name
-    extendInfo: { CFBundleName: PRODUCT_NAME, CFBundleDisplayName: PRODUCT_NAME },
+    // Electron derives the helper executable path from CFBundleName and checks
+    // its exact spelling. Keep the Finder display name independent of that path.
+    extendInfo: {
+      CFBundleName: PRODUCT_MACHINE_NAME,
+      CFBundleDisplayName: PRODUCT_NAME,
+      // The UI translations ship in JavaScript, so macOS cannot discover them as .lproj folders.
+      CFBundleLocalizations: [
+        'zh',
+        'en',
+        'ja',
+        'ko',
+        'fr',
+        'de',
+        'es',
+        'th',
+        'id',
+        'ru',
+        'ar',
+        'pt',
+        'it',
+        'pl',
+        'cs',
+        'nl',
+        'ms',
+        'he',
+        'hi',
+        'zh-TW',
+        'vi',
+      ],
+    },
     fileAssociations: FILE_ASSOCIATIONS,
     hardenedRuntime: true,
     gatekeeperAssess: false,

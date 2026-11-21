@@ -92,6 +92,20 @@ describe('openTranslation', () => {
     })
   })
 
+  it.each(['xls', 'tsv'])(
+    'reopens the translated XLSX when a .%s project source is selected',
+    async (ext) => {
+      const file = 'sample.' + ext
+      const entry = await addSource(file, 'source')
+      const output = file + ' (2).xlsx'
+      writeFileSync(join(dir, 'output', output), 'translated workbook')
+      const result = await openTranslation(dir, entry, deps)
+      expect(opened).toEqual([join(dir, 'source', file), join(dir, 'output', output)])
+      expect(result).toMatchObject({ flow: 'edit', output })
+      expect(readFileSync(join(dir, 'output', output), 'utf8')).toBe('translated workbook')
+    },
+  )
+
   it('creates output copy once and reuses it on reopen', async () => {
     const entry = await addSource('a.md', '# hello')
     await openTranslation(dir, entry, deps)

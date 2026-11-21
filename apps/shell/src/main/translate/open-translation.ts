@@ -1,9 +1,10 @@
 import { constants } from 'node:fs'
-import { copyFile, mkdir, readdir, stat } from 'node:fs/promises'
+import { copyFile, lstat, mkdir, readdir, stat } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import {
   IMAGE_SOURCE_EXTENSIONS,
   verifySource,
+  withProjectLock,
   type OcrMode,
   type SourceEntry,
 } from '@genoffice/translate-project'
@@ -72,6 +73,8 @@ export function isResultOf(source: SourceEntry, output: string, targetLang: stri
   }
   if (source.kind === 'scan' || source.kind === 'image')
     return new RegExp(`^${stem} \\(OCR\\)( \\(\\d+\\))?\\.docx$`).test(output)
+  if (source.kind === 'editable' && ['.xls', '.tsv'].includes(extname(source.file).toLowerCase()))
+    return new RegExp(`^${escape(source.file)}( \\(\\d+\\))?\\.xlsx$`, 'i').test(output)
   if (source.kind === 'editable' && supportsEmbeddedOcr(source.file))
     return new RegExp(`^${stem} \\(OCR\\)( \\(\\d+\\))?${escape(extname(source.file))}$`, 'i').test(
       output,
@@ -170,21 +173,51 @@ export async function openTranslation(
       existing: await latestResult(dir, source, targetLang),
     }
 
-  const outputDir = join(dir, 'output')
-  const outputPath = join(outputDir, source.file)
-  await mkdir(outputDir, { recursive: true })
-  try {
-    // COPYFILE_EXCL: an existing output copy (the person's edits) is kept as is
-    await copyFile(sourcePath, outputPath, constants.COPYFILE_EXCL)
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
+  if (['.xls', '.tsv'].includes(extname(source.file).toLowerCase())) {
+    const workbook = await latestResult(dir, source, targetLang)
+    if (workbook) {
+      const outputPath = join(dir, 'output', workbook)
+      const info = await lstat(outputPath)
+      if (!(await lstat(join(dir, 'output'))).isDirectory() || !info.isFile() || info.nlink > 1)
+        throw new TranslateIpcError('OPEN_FAILED', 'The result is not a separate project file.')
+      const tabs = await openPair(sourcePath, outputPath, deps)
+      return { flow: 'edit', ...tabs, hashStatus, output: workbook }
+    }
   }
-  // something else under that name (a folder) is not the person's output copy
-  if (!(await stat(outputPath)).isFile())
-    throw new TranslateIpcError('OPEN_FAILED', 'the output path is not a file')
-
+  const outputPath = await prepareTranslationCopy(dir, source.file)
   const { sourceTabId, outputTabId } = await openPair(sourcePath, outputPath, deps)
   return { flow: 'edit', sourceTabId, outputTabId, hashStatus }
+}
+
+/** Prepare the same editable output for the split view, batch worker and project chat. */
+export async function prepareTranslationCopy(dir: string, file: string): Promise<string> {
+  if (!plainFileName(file))
+    throw new TranslateIpcError('INVALID_ARGUMENT', 'invalid source file name')
+  return withProjectLock(dir, async () => {
+    const sourceDir = join(dir, 'source')
+    const outputDir = join(dir, 'output')
+    const source = join(sourceDir, file)
+    const output = join(outputDir, file)
+    await mkdir(outputDir, { recursive: true })
+    if (
+      !(await lstat(sourceDir)).isDirectory() ||
+      !(await lstat(outputDir)).isDirectory() ||
+      !(await lstat(source)).isFile()
+    )
+      throw new TranslateIpcError(
+        'OPEN_FAILED',
+        'the project source or output is not a local project file',
+      )
+    try {
+      await copyFile(source, output, constants.COPYFILE_EXCL)
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
+    }
+    const info = await lstat(output)
+    if (!info.isFile() || info.nlink > 1)
+      throw new TranslateIpcError('OPEN_FAILED', 'the output is not a separate regular file')
+    return output
+  })
 }
 
 /** the source copy read-only on the left, `outputPath` on the right, output focused */

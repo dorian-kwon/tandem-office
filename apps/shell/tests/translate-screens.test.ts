@@ -4,8 +4,9 @@
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ProjectFile } from '@genoffice/translate-project'
+import type { ProjectBatchItem, ProjectBatchSnapshot } from '../src/shared/project-batch'
 import type { TranslateApi, TranslateProjectListEntry } from '../src/shared/translate-api'
 import { ProjectList } from '../src/renderer/src/translate/ProjectList'
 import { ProjectDetail } from '../src/renderer/src/translate/ProjectDetail'
@@ -533,6 +534,164 @@ describe('ProjectDetail', () => {
     expect(buttonByText('Start translation').disabled).toBe(false)
     await click(buttonByText('Start translation'))
     expect(p.onStartTranslation).toHaveBeenCalledWith('a.docx')
+  })
+})
+
+describe('project batch dialogs', () => {
+  const dir = '/p/a'
+  const props = () => ({ dir, onBack: vi.fn(), onStartTranslation: vi.fn() })
+  const element = (name: string) =>
+    host.querySelector<HTMLButtonElement>('[data-testid="project-batch-' + name + '"]')
+  const status = (items: ProjectBatchItem[], running = false): ProjectBatchSnapshot => ({
+    dir,
+    running,
+    stopping: false,
+    items,
+  })
+  let publish: (snapshot: ProjectBatchSnapshot) => void
+  beforeAll(() => {
+    Object.defineProperties(HTMLDialogElement.prototype, {
+      showModal: {
+        configurable: true,
+        value(this: HTMLDialogElement) {
+          this.open = true
+        },
+      },
+      close: {
+        configurable: true,
+        value(this: HTMLDialogElement) {
+          this.open = false
+        },
+      },
+    })
+  })
+  afterAll(() => {
+    Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal')
+    Reflect.deleteProperty(HTMLDialogElement.prototype, 'close')
+  })
+  beforeEach(() => {
+    api.getProject.mockResolvedValue(
+      project({
+        sources: ['a.docx', 'b.pdf', 'c.hwpx'].map((file) => ({
+          file,
+          sha256: 'hash',
+          kind: 'editable',
+        })),
+      }),
+    )
+    api.batchStatus = vi.fn().mockResolvedValue(null)
+    api.batchStart = vi.fn()
+    api.batchStop = vi.fn().mockResolvedValue(undefined)
+    api.onBatchChanged = vi.fn((fn) => {
+      publish = fn
+      return () => undefined
+    })
+  })
+
+  it('selects all by default and submits only checked documents in project order', async () => {
+    await render(ProjectDetail, props())
+    await click(element('start')!)
+    expect(api.batchStart).not.toHaveBeenCalled()
+    const boxes = element('select')!.querySelectorAll('input')
+    expect([...boxes].map((box) => box.checked)).toEqual([true, true, true, true])
+    await click(boxes[0]!)
+    expect(element('submit')!.disabled).toBe(true)
+    await click(boxes[3]!)
+    await click(boxes[1]!)
+    expect(boxes[0]!.indeterminate).toBe(true)
+    expect(element('select')!.textContent).toContain('2 of 3')
+    api.batchStart.mockResolvedValue(
+      status(
+        [
+          { file: 'a.docx', state: 'running' },
+          { file: 'c.hwpx', state: 'waiting' },
+        ],
+        true,
+      ),
+    )
+    await click(element('submit')!)
+    expect(api.batchStart).toHaveBeenCalledWith({ dir, files: ['a.docx', 'c.hwpx'] })
+    expect(element('select')).toBeNull()
+    expect(element('progress')!.hasAttribute('open')).toBe(true)
+    expect(element('progress')!.querySelectorAll('[data-batch-file]')).toHaveLength(2)
+  })
+
+  it('shows chat-started work, keeps a dismissed dialog closed, and reopens live progress', async () => {
+    await render(ProjectDetail, props())
+    const active = status(
+      [
+        { file: 'a.docx', state: 'running', phase: 'opening' },
+        { file: 'c.hwpx', state: 'waiting' },
+      ],
+      true,
+    )
+    act(() => publish(active))
+    expect(element('progress')!.textContent).toContain('Opening')
+    expect(element('progress')!.querySelector('[aria-label="a.docx"]')?.hasAttribute('value')).toBe(
+      false,
+    )
+    await click(element('close')!)
+    expect(api.batchStop).not.toHaveBeenCalled()
+    act(() =>
+      publish(
+        status(
+          [
+            {
+              file: 'a.docx',
+              state: 'running',
+              phase: 'translating',
+              operations: 3,
+              done: 1,
+              total: 4,
+            },
+            { file: 'c.hwpx', state: 'waiting' },
+          ],
+          true,
+        ),
+      ),
+    )
+    expect(element('progress')).toBeNull()
+    await click(element('show-progress')!)
+    expect(element('progress')!.textContent).toContain('Edits: 3')
+    expect(
+      element('progress')!.querySelector('[aria-label="Overall progress"]')?.getAttribute('value'),
+    ).toBe('0.25')
+    await click(element('stop')!)
+    expect(api.batchStop).toHaveBeenCalledWith(dir)
+    act(() => publish({ ...active, stopping: true }))
+    expect(element('stop')!.disabled).toBe(true)
+    act(() =>
+      publish(
+        status([{ file: 'a.docx', state: 'running', phase: 'saving', done: 4, total: 4 }], true),
+      ),
+    )
+    expect(element('progress')!.textContent).toContain('Saving')
+    expect(
+      element('progress')!.querySelector('[aria-label="Overall progress"]')?.hasAttribute('value'),
+    ).toBe(false)
+    act(() => publish(status([{ file: 'a.docx', state: 'saved' }])))
+    expect(
+      element('progress')!.querySelector('[aria-label="Overall progress"]')?.getAttribute('value'),
+    ).toBe('1')
+  })
+
+  it('offers separate retries for failed and stopped files and excludes files removed from the project', async () => {
+    const finished = status([
+      { file: 'a.docx', state: 'saved' },
+      { file: 'b.pdf', state: 'failed', error: 'Bad file' },
+      { file: 'c.hwpx', state: 'stopped' },
+      { file: 'removed.docx', state: 'failed' },
+    ])
+    api.batchStatus.mockResolvedValue(finished)
+    api.batchStart.mockResolvedValue(finished)
+    await render(ProjectDetail, props())
+    expect(element('progress')).toBeNull()
+    await click(element('show-progress')!)
+    expect(element('progress')!.textContent).toContain('Bad file')
+    await click(element('retry')!)
+    expect(api.batchStart).toHaveBeenLastCalledWith({ dir, files: ['b.pdf'], retry: true })
+    await click(element('resume')!)
+    expect(api.batchStart).toHaveBeenLastCalledWith({ dir, files: ['c.hwpx'], retry: true })
   })
 })
 

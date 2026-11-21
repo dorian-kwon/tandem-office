@@ -1,6 +1,25 @@
 import type { zh } from './zh'
 
 export const nl = {
+  openProjectAi: 'Project-AI openen',
+  closeProjectAi: 'Project-AI sluiten',
+  batchTranslate: 'Meerdere documenten vertalen',
+  batchRetry: 'Mislukte documenten opnieuw proberen',
+  batchResume: 'Gestopte documenten hervatten',
+  batchSelectTitle: 'Kies de te vertalen documenten',
+  batchTranslateSelected: 'Selectie vertalen',
+  batchProgress: 'Vertaalvoortgang',
+  batchOverall: 'Totale voortgang',
+  batchOpening: 'Wordt geopend',
+  batchOcr: 'OCR wordt uitgevoerd',
+  batchSaving: 'Wordt opgeslagen',
+  batchOperations: 'Bewerkingen: {n}',
+  batchWaiting: 'In wachtrij',
+  batchRunning: 'Bezig met vertalen',
+  batchStopped: 'Gestopt',
+  batchFailed: 'Mislukt',
+  batchConsent:
+    'Gebruik deze AI voor de {n} gekozen documenten. Dit bestand vereist ongeveer {calls} aanvragen.',
   wikiView: 'Wiki bekijken',
   wikiSetup: 'Open de onderstaande map als kluis in Obsidian en ga dan terug naar {app}.',
   wikiDownload: 'Rond de installatie van Obsidian af en ga terug naar {app} om de wiki te openen.',

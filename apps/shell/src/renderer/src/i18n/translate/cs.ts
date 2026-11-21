@@ -1,6 +1,25 @@
 import type { zh } from './zh'
 
 export const cs = {
+  openProjectAi: 'Otevřít AI projektu',
+  closeProjectAi: 'Zavřít AI projektu',
+  batchTranslate: 'Hromadný překlad',
+  batchRetry: 'Znovu přeložit dokumenty s chybou',
+  batchResume: 'Pokračovat v překladu zastavených dokumentů',
+  batchSelectTitle: 'Vyberte dokumenty k překladu',
+  batchTranslateSelected: 'Přeložit vybrané',
+  batchProgress: 'Průběh překladu',
+  batchOverall: 'Celkový průběh',
+  batchOpening: 'Otevírání',
+  batchOcr: 'Čtení pomocí OCR',
+  batchSaving: 'Ukládání',
+  batchOperations: 'Počet úprav: {n}',
+  batchWaiting: 'Ve frontě',
+  batchRunning: 'Překládá se',
+  batchStopped: 'Zastaveno',
+  batchFailed: 'Selhalo',
+  batchConsent:
+    'Použít tuto AI pro vybrané dokumenty ({n}). Aktuální soubor vyžaduje přibližně {calls} požadavků.',
   wikiView: 'Zobrazit wiki',
   wikiSetup:
     'V Obsidianu otevřete níže uvedenou složku jako trezor a potom se vraťte do aplikace {app}.',

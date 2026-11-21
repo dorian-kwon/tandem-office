@@ -1,6 +1,25 @@
 import type { zh } from './zh'
 
 export const ja = {
+  openProjectAi: 'プロジェクトの AI を開く',
+  closeProjectAi: 'プロジェクトの AI を閉じる',
+  batchTranslate: '一括翻訳',
+  batchRetry: '失敗した文書を再試行',
+  batchResume: '停止した文書の翻訳を再開',
+  batchSelectTitle: '翻訳する文書を選択',
+  batchTranslateSelected: '選択した文書を翻訳',
+  batchProgress: '翻訳の進捗',
+  batchOverall: '全体の進捗',
+  batchOpening: '開いています',
+  batchOcr: 'OCRで読み取り中',
+  batchSaving: '保存中',
+  batchOperations: '編集回数：{n}',
+  batchWaiting: '待機中',
+  batchRunning: '翻訳中',
+  batchStopped: '停止',
+  batchFailed: '失敗',
+  batchConsent:
+    '選択した {n} 件の文書にこの AI を使用します。このファイルの呼び出し回数は約 {calls} 回です。',
   wikiView: 'ウィキを表示',
   wikiSetup:
     'Obsidian で「保管庫としてフォルダを開く」を選び、下のフォルダを開いてから {app} に戻ってください。',

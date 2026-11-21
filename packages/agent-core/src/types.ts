@@ -83,6 +83,8 @@ export interface ToolDisplay {
 
 /** outcome of one tool execution */
 export interface ToolExecution {
+  /** Count of currently handled translation units in the whole document, computed by the editor. UI only. */
+  translationProgress?: { done: number; total: number }
   /** Local navigation metadata, excluded from model messages. */
   changeLocations?: readonly AiChangeLocation[]
 

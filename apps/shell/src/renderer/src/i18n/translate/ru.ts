@@ -1,6 +1,25 @@
 import type { zh } from './zh'
 
 export const ru = {
+  openProjectAi: 'Открыть ИИ проекта',
+  closeProjectAi: 'Закрыть ИИ проекта',
+  batchTranslate: 'Пакетный перевод',
+  batchRetry: 'Повторить для документов с ошибкой',
+  batchResume: 'Продолжить перевод остановленных документов',
+  batchSelectTitle: 'Выберите документы для перевода',
+  batchTranslateSelected: 'Перевести выбранные',
+  batchProgress: 'Ход перевода',
+  batchOverall: 'Общий ход работы',
+  batchOpening: 'Открытие',
+  batchOcr: 'Распознавание текста',
+  batchSaving: 'Сохранение',
+  batchOperations: 'Правок: {n}',
+  batchWaiting: 'В очереди',
+  batchRunning: 'Переводится',
+  batchStopped: 'Остановлено',
+  batchFailed: 'Ошибка',
+  batchConsent:
+    'Использовать этот ИИ для выбранных документов ({n}). Для текущего файла потребуется около {calls} запросов.',
   wikiView: 'Открыть вики',
   wikiSetup: 'В Obsidian откройте указанную ниже папку как хранилище, затем вернитесь в {app}.',
   wikiDownload: 'Завершите установку Obsidian и вернитесь в {app}, чтобы открыть вики.',

@@ -68,6 +68,8 @@ import { driveUiText } from './i18n/strings-drive'
 import { ProjectsPanel, subscribeProjectScreen, type ProjectScreenRequest } from './ProjectsPanel'
 import { projectsText } from './i18n/strings-projects'
 import { translateText } from './i18n/strings-translate'
+import { FileConversionPanel } from './FileConversionPanel'
+import { fileConversionText } from './i18n/strings-file-conversion'
 import { TranslationPanel } from './translate/TranslationPanel'
 import './translate/translate-global'
 
@@ -1121,7 +1123,11 @@ export function Home({
   const driveOffered = driveState !== null && driveState.state !== 'unavailable'
   // the project screen (decision 0088) takes over the content area the same way
   const [projectsMode, setProjectsMode] = useState(false)
-  const [translateMode, setTranslateMode] = useState(TRANSLATION_ONLY)
+  const [homeTool, setHomeTool] = useState<'translate' | 'file-conversion' | null>(
+    TRANSLATION_ONLY ? 'translate' : null,
+  )
+  const translateMode = homeTool === 'translate'
+  const conversionOffered = Boolean(window.fileConversionApi)
   const [projectRequest, setProjectRequest] = useState<ProjectScreenRequest | null>(null)
   // the project screen asked for the first-connection notice ("[tidy up]" waits behind it)
   const [projectsNoticeAsked, setProjectsNoticeAsked] = useState(false)
@@ -1134,7 +1140,7 @@ export function Home({
     () =>
       subscribeProjectScreen(window.projectFolderApi, (request) => {
         setProjectsMode(true)
-        setTranslateMode(false)
+        setHomeTool(null)
         setAskMode(false)
         setDriveMode(false)
         setSelectedFolder(null)
@@ -1628,7 +1634,7 @@ export function Home({
     setAskMode(false)
     setDriveMode(false)
     setProjectsMode(false)
-    setTranslateMode(false)
+    setHomeTool(null)
     setSelected(new Set())
     setRowMenu(null)
     setGroupFilter(null)
@@ -1651,7 +1657,7 @@ export function Home({
     setAskMode(false)
     setDriveMode(false)
     setProjectsMode(false)
-    setTranslateMode(false)
+    setHomeTool(null)
     setSelected(new Set())
     setRowMenu(null)
     setFolderMenu(null)
@@ -2985,7 +2991,7 @@ export function Home({
           }
           return
         }
-      } else if (event.key === ' ' && !askMode && !driveMode && !projectsMode && !translateMode) {
+      } else if (event.key === ' ' && !askMode && !driveMode && !projectsMode && !homeTool) {
         const checkedPath = selectedFolder ? folderSelectedPaths[0] : selectedPaths[0]
         const candidate = hoveredFilePathRef.current ?? checkedPath ?? null
         if (candidate) {
@@ -3317,14 +3323,18 @@ export function Home({
 
   const activeNav =
     !selectedFolder && !driveMode
-      ? translateMode
-        ? 'translate'
-        : projectsMode
-          ? 'projects'
-          : askMode
-            ? 'ask'
-            : view
+      ? (homeTool ?? (projectsMode ? 'projects' : askMode ? 'ask' : view))
       : null
+
+  const openHomeTool = (tool: 'translate' | 'file-conversion') => {
+    setHomeTool(tool)
+    setProjectsMode(false)
+    setAskMode(false)
+    setDriveMode(false)
+    setSelectedFolder(null)
+    setSelected(new Set())
+    setRowMenu(null)
+  }
 
   const onSidebarResizeStart = (e: ReactPointerEvent<HTMLDivElement>) => {
     const startX = e.clientX
@@ -3411,7 +3421,7 @@ export function Home({
                   setAskMode(true)
                   setDriveMode(false)
                   setProjectsMode(false)
-                  setTranslateMode(false)
+                  setHomeTool(null)
                   setSelectedFolder(null)
                   setSelected(new Set())
                   setRowMenu(null)
@@ -3440,7 +3450,7 @@ export function Home({
                   data-testid="home-projects-nav"
                   onClick={() => {
                     setProjectsMode(true)
-                    setTranslateMode(false)
+                    setHomeTool(null)
                     setAskMode(false)
                     setDriveMode(false)
                     setSelectedFolder(null)
@@ -3472,15 +3482,7 @@ export function Home({
               className={`nav-item${activeNav === 'translate' ? ' active' : ''}`}
               aria-current={activeNav === 'translate' ? 'page' : undefined}
               data-testid="home-translate-nav"
-              onClick={() => {
-                setTranslateMode(true)
-                setProjectsMode(false)
-                setAskMode(false)
-                setDriveMode(false)
-                setSelectedFolder(null)
-                setSelected(new Set())
-                setRowMenu(null)
-              }}
+              onClick={() => openHomeTool('translate')}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                 <path
@@ -3499,6 +3501,26 @@ export function Home({
                 />
               </svg>
               <span className="nav-label">{translateText(lang, 'navTranslate')}</span>
+            </button>
+          )}
+          {conversionOffered && (
+            <button
+              type="button"
+              className={`nav-item${activeNav === 'file-conversion' ? ' active' : ''}`}
+              aria-current={activeNav === 'file-conversion' ? 'page' : undefined}
+              data-testid="home-file-conversion-nav"
+              onClick={() => openHomeTool('file-conversion')}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path
+                  d="M2 5h11m-3-3 3 3-3 3M14 11H3m3-3-3 3 3 3"
+                  stroke="currentColor"
+                  strokeWidth="1.3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span className="nav-label">{fileConversionText(lang, 'title')}</span>
             </button>
           )}
           {!TRANSLATION_ONLY && (
@@ -3544,7 +3566,7 @@ export function Home({
                     setDriveMode(true)
                     setAskMode(false)
                     setProjectsMode(false)
-                    setTranslateMode(false)
+                    setHomeTool(null)
                     setSelectedFolder(null)
                     setSelected(new Set())
                     setRowMenu(null)
@@ -3567,6 +3589,7 @@ export function Home({
         />
       </aside>
       <div className="sidebar-resizer" onPointerDown={onSidebarResizeStart} />
+      {conversionOffered && <FileConversionPanel visible={activeNav === 'file-conversion'} />}
       {selectedFolder && rootOf(selectedFolder, roots)?.readable ? (
         renderFolderContent()
       ) : driveMode && driveOffered ? (
@@ -3575,14 +3598,17 @@ export function Home({
           dateLocale={i18n.dateLocale}
           onOpenSettings={() => setSettingsRequest({ section: 'integrations' })}
         />
-      ) : translateMode && translateOffered ? (
-        <TranslationPanel
-          aiSettings={aiSettings}
-          connection={connection}
-          onNoticeNeeded={() => setTranslateNoticeAsked(true)}
-          onOpenAiSettings={() => setSettingsRequest({ section: 'aiModel' })}
-        />
-      ) : projectsMode && projectsOffered ? (
+      ) : homeTool && translateOffered ? (
+        <div className="home-tool-slot" hidden={activeNav !== 'translate'}>
+          <TranslationPanel
+            aiSettings={aiSettings}
+            connection={connection}
+            onNoticeNeeded={() => setTranslateNoticeAsked(true)}
+            onOpenAiSettings={() => setSettingsRequest({ section: 'aiModel' })}
+          />
+        </div>
+      ) : homeTool === 'file-conversion' && conversionOffered ? null : projectsMode &&
+        projectsOffered ? (
         <ProjectsPanel
           request={projectRequest}
           aiSettings={aiSettings}
@@ -3592,7 +3618,7 @@ export function Home({
           onOpenAiSettings={() => setSettingsRequest({ section: 'aiModel' })}
           onOpenHomeAsk={(chat) => {
             setProjectsMode(false)
-            setTranslateMode(false)
+            setHomeTool(null)
             setAskMode(true)
             setAskOpenChat((prev) => ({ ...chat, seq: (prev?.seq ?? 0) + 1 }))
           }}

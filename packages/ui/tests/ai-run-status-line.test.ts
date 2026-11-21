@@ -2,10 +2,14 @@
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AgentLoopEvents } from '@genoffice/agent-core'
+import type { AgentLoopEvents, ToolExecution } from '@genoffice/agent-core'
 import { AiRunStatusLine } from '../src/AiRunStatusLine'
 import { IDLE_RUN_STATUS, reduceRunStatus, type RunStatusState } from '../src/ai-run-status'
-import { RUN_STATUS_DONE_MS, useAiRunStatus, type AiRunStatusController } from '../src/use-ai-run-status'
+import {
+  RUN_STATUS_DONE_MS,
+  useAiRunStatus,
+  type AiRunStatusController,
+} from '../src/use-ai-run-status'
 
 describe('AiRunStatusLine and useAiRunStatus', () => {
   let host: HTMLDivElement
@@ -27,7 +31,10 @@ describe('AiRunStatusLine and useAiRunStatus', () => {
   it('renders nothing while idle, a polite status region while running', () => {
     act(() => root.render(createElement(AiRunStatusLine, { state: IDLE_RUN_STATUS, lang: 'en' })))
     expect(host.querySelector('[role="status"]')).toBeNull()
-    const running: RunStatusState = reduceRunStatus(IDLE_RUN_STATUS, { type: 'begin', at: Date.now() })
+    const running: RunStatusState = reduceRunStatus(IDLE_RUN_STATUS, {
+      type: 'begin',
+      at: Date.now(),
+    })
     act(() => root.render(createElement(AiRunStatusLine, { state: running, lang: 'en' })))
     const line = host.querySelector('[role="status"]')
     expect(line?.getAttribute('aria-live')).toBe('polite')
@@ -92,6 +99,59 @@ describe('AiRunStatusLine and useAiRunStatus', () => {
       vi.advanceTimersByTime(RUN_STATUS_DONE_MS + 10)
     })
     expect(host.querySelector('[role="status"]')).toBeNull()
+  })
+
+  it('sends one measured progress event per successful live mutation and rejects stale or fabricated counts', () => {
+    let ctl!: AiRunStatusController
+    function Probe() {
+      ctl = useAiRunStatus(true)
+      return null
+    }
+    act(() => root.render(createElement(Probe)))
+    const events = ctl.wrap({})
+    const notify = vi.fn()
+    const turn = (id: string) => ({
+      id,
+      observedBusy: true,
+      inspected: false,
+      operations: 0,
+      mutated: false,
+      notifyProgress: notify,
+    })
+    const call = () => ({ id: 'reused-model-id', name: 'translate_blocks', input: {} })
+    const settle = (c: ReturnType<typeof call>, result: Partial<ToolExecution>) =>
+      events.onToolExecuted?.({
+        call: c,
+        execution: { output: '100/100', runNote: '100%', summary: 'edited', ...result },
+      })
+    const run = (result: Partial<ToolExecution>) => {
+      const c = call()
+      events.onToolStart?.(c)
+      settle(c, result)
+      return c
+    }
+    act(() => {
+      ctl.projectTurn.current = turn('one')
+      const old = call()
+      events.onToolStart?.(old)
+      ctl.projectTurn.current = turn('two')
+      settle(old, { mutated: true })
+      run({ isError: true, mutated: true })
+      run({})
+      run({ translationProgress: { done: 0, total: 5 } })
+      run({ translationProgress: { done: 0, total: 5 } })
+      const c = run({ mutated: true, translationProgress: { done: 3, total: 5 } })
+      settle(c, { mutated: true })
+      run({ mutated: true, translationProgress: { done: 200, total: 5 } })
+      run({ translationProgress: { done: 1, total: Infinity } })
+      ctl.projectTurn.current!.stopRequested = true
+      run({ mutated: true })
+    })
+    expect(notify.mock.calls.flat()).toEqual([
+      { kind: 'progress', id: 'two', operations: 0, done: 0, total: 5 },
+      { kind: 'progress', id: 'two', operations: 1, done: 3, total: 5 },
+      { kind: 'progress', id: 'two', operations: 2 },
+    ])
   })
 
   it('says Stopped on a user stop and keeps the panel handlers', () => {

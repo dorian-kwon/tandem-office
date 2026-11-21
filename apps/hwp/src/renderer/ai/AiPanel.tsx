@@ -18,6 +18,7 @@ import {
   projectChoiceRemember,
   useAiChoice,
   useAiRunStatus,
+  useProjectEditorRun,
   AiScopeQuote,
   type AiScopeQuoteData,
   AiSubscriptionUsageLine,
@@ -1086,6 +1087,16 @@ export function AiPanel({
   /** "Continue with …" on a blocked run: that provider becomes the selection, then the request reruns */
   const continueWith = (provider: AiSubscriptionProviderId): void =>
     sendGate.continueWith(provider, retry)
+
+  useProjectEditorRun({
+    turn: runStatus.projectTurn,
+    path: filePath,
+    ready: !project.chat.available || project.chat.ready,
+    gate: sendGate.peek,
+    busy: busy,
+    send: (prompt) => send(prompt, [], null),
+    stop: stop,
+  })
 
   const copyMessage = (text: string, idx: number): void => {
     void navigator.clipboard.writeText(text)

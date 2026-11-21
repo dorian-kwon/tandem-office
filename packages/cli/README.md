@@ -74,6 +74,10 @@ ieumoffice epub translate novel.epub --to ko --json            # estimate only: 
 ieumoffice epub translate novel.epub --to ko --chapters 1-5,8 --kind translated,bilingual --out out/novel --partial --restart --yes --allow-paid --force   # out/novel.epub + out/novel.bilingual.epub (default: novel.ko.epub, novel.ko.bilingual.epub beside the source); progress on stderr
 ieumoffice epub status novel.epub --json                       # translations the result store holds for the book, each with its job
 ieumoffice convert notice.hwpx --to pdf --out notice.pdf                 # render a .hwp or .hwpx with the Hangul editor in a hidden window
+ieumoffice convert notice.hwp --to hwpx --out notice.hwpx               # native editable Hangul export, also available in reverse
+ieumoffice convert notice.hwpx --to docx --out notice.docx              # editable body interchange, including tables and embedded pictures
+ieumoffice convert book.epub --to hwp --out chapters.hwp                # reading-order text, tables and supported pictures
+ieumoffice convert plan.xmind --to hwpx --out outline.hwpx              # sheet and topic outline, with notes; map styling and diagrams are omitted
 ieumoffice hwp read notice.hwp [--offset 20000] [--full] --json           # text of a Hangul (HWP / HWPX) document, tables as "a | b" rows (first 20000 characters by default); no app process
 ieumoffice hwp apply form.hwp --ops ops.json [--out filled.hwpx] [--dry-run] [--force] --json   # the in-app AI's tools as ops (replace_text, insert_paragraphs, fill_cells, fill_field ...; `guide hwp`); written back in its own format, the replaced file kept as form.hwp.bak
 ieumoffice create --type hwp --ops ops.json --out minutes.hwp             # a new Hangul document: the same ops on a blank A4 page (--type hwpx for .hwpx)

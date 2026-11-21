@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SEALED_PREFIX, setAiSecretCodec } from '@genoffice/ai-provider'
 import { normalizeFileSearchSettings } from '../src/main/file-index/rerank'
 import {
@@ -113,12 +113,15 @@ describe('sealStoredAiSettings', () => {
     expect(sealStoredAiSettings(path)).toBe(false)
   })
 
-  it('leaves the file alone where it cannot seal', () => {
-    setAiSecretCodec(safeStorageCodec(fakeStorage(), 'darwin'))
+  it('leaves the file alone without querying the macOS keychain during startup migration', () => {
+    const storage = fakeStorage()
+    const check = vi.spyOn(storage, 'isEncryptionAvailable')
+    setAiSecretCodec(safeStorageCodec(storage, 'darwin'))
     const path = file(stored)
     const before = readFileSync(path, 'utf8')
     expect(sealStoredAiSettings(path)).toBe(false)
     expect(readFileSync(path, 'utf8')).toBe(before)
+    expect(check).not.toHaveBeenCalled()
   })
 })
 

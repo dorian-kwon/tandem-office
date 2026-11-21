@@ -140,13 +140,18 @@ function view() {
   }
 }
 
-function handlers(v = view(), overrides: Partial<NonEditableDeps> = {}) {
+function handlers(
+  v = view(),
+  overrides: Partial<NonEditableDeps> = {},
+  batch: Partial<Parameters<typeof createTranslateHandlers>[0]> = {},
+) {
   return createTranslateHandlers({
     settingsPath: () => settingsPath,
     now: () => 1000,
     showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
     view: v,
     nonEditable: { ...nonEditableDeps(), ...overrides },
+    ...batch,
   })
 }
 
@@ -1032,4 +1037,84 @@ describe('a detection in flight', () => {
       flow: 'translate-pdf',
     })
   })
+})
+
+it('runs a project batch through the PDF writer and OCR editor while keeping the project visible', async () => {
+  await addOriginal('report.pdf', textPdf)
+  await addOriginal('scan.pdf', scanPdf)
+  await addOriginal('image.png', new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]))
+  const v = view()
+  const confirm = vi.fn(async () => true)
+  const sent: Array<{ system: string; prompt: string }> = []
+  const { markdownToDocx } = await import('../../../packages/cli/src/formats/markdown')
+  const { default: JSZip } = await import('jszip')
+  const docText = async (path: string) =>
+    (await JSZip.loadAsync(await readFile(path))).file('word/document.xml')!.async('string')
+  const runBatchEditor = vi.fn(async ({ outputPath }: { outputPath: string }) => {
+    expect(await docText(outputPath)).toContain('Read text')
+    writeFileSync(outputPath, await markdownToDocx('Translated OCR output'))
+  })
+  let destination = ''
+
+  const h = handlers(
+    v,
+    {},
+    {
+      batchMedia: {
+        text: () => ({
+          route: { provider: 'claude-code', model: '', paid: false },
+          send: fakeSend(sent),
+        }),
+        ocr: {
+          route: () => ({ ...model, paid: false }),
+          ask: async () => '<page-content>Read text</page-content>',
+        },
+        confirm,
+      },
+      ocr: {
+        pdfPageCount: async () => 2,
+        renderPdfPage: async () => new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+        markdownToDocx,
+      },
+      runBatchEditor,
+      exportTranslation: {
+        documentsDir: () => root,
+        isDirty: async () => false,
+        showSaveDialog: async () => ({ canceled: false, filePath: destination }),
+      },
+    },
+  )
+  await h.updateSettings({ dir, patch: { ocr: { kind: 'ai', provider: 'claude' } } })
+  await h.batchStart({ dir }, 10)
+  await vi.waitFor(async () => expect((await h.batchStatus(dir))?.running).toBe(false), {
+    timeout: 15_000,
+  })
+  expect((await h.batchStatus(dir))?.items).toEqual([
+    expect.objectContaining({ state: 'saved', output: 'report.de.pdf' }),
+    expect.objectContaining({ state: 'saved', output: 'scan (OCR).docx' }),
+    expect.objectContaining({ state: 'saved', output: 'image (OCR).docx' }),
+  ])
+  expect(confirm.mock.calls).toHaveLength(2)
+  expect(runBatchEditor).toHaveBeenCalledTimes(2)
+  expect(
+    pageText(await loadPdfium(), readFileSync(join(dir, 'output', 'report.de.pdf'))),
+  ).toContain('DE ')
+  expect(v.opened).toEqual([])
+  for (const [source, output] of [
+    ['scan.pdf', 'scan (OCR).docx'],
+    ['image.png', 'image (OCR).docx'],
+  ] as const) {
+    expect(await h.openTranslation({ dir, file: source })).toMatchObject({
+      flow: 'ocr',
+      existing: output,
+    })
+    await h.openResult({ dir, file: source, output: output })
+    expect(v.opened.at(-1)).toBe(join(dir, 'output', output))
+    destination = join(root, 'exported-' + output)
+    expect(await h.exportTranslation({ dir, file: source })).toMatchObject({
+      status: 'saved',
+      path: destination,
+    })
+    expect(await docText(destination)).toContain('Translated OCR output')
+  }
 })

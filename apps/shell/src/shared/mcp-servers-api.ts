@@ -171,8 +171,8 @@ export interface McpServerRecordView {
 }
 
 export interface McpServersView {
-  /** this PC seals secrets; when false, cards say they must be entered again after a restart */
-  sealing: boolean
+  /** null until the first protected operation on macOS; false means memory-only */
+  sealing: boolean | null
   runtimes: Record<string, { allowed: boolean }>
   servers: McpServerRecordView[]
 }
@@ -241,7 +241,7 @@ export interface McpServerSettingsView extends McpServerRecordView {
 }
 
 export interface McpServersSettingsView {
-  sealing: boolean
+  sealing: boolean | null
   runtimes: Record<string, { allowed: boolean }>
   servers: McpServerSettingsView[]
 }

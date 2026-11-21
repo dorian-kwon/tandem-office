@@ -39,6 +39,7 @@ import {
   projectChoiceRemember,
   useAiChoice,
   useAiRunStatus,
+  useProjectEditorRun,
   AI_QUEUE_LABELS,
   AiScopeQuote,
   AiSubscriptionUsageLine,
@@ -1037,6 +1038,16 @@ export function AiPanel({
       : NO_SKILL_USE
 
   /** the composer's typed text: the chosen skills ride along */
+  useProjectEditorRun({
+    turn: runStatus.projectTurn,
+    path: filePath,
+    ready: !projectPanel.chat.available || projectPanel.chat.ready,
+    gate: sendGate.peek,
+    busy: busy,
+    send: (prompt) => send(prompt, null),
+    stop: stop,
+  })
+
   const sendTyped = () => {
     const text = prompt.trim()
     if (!text) return

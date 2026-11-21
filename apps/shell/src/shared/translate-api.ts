@@ -1,3 +1,4 @@
+import type { ProjectBatchSnapshot, ProjectBatchStart } from './project-batch'
 import type { OcrPopupResult } from './ocr-popup'
 import type {
   OcrMode,
@@ -28,6 +29,9 @@ import type {
  * in the registered list (`translationProjects` in app-settings.json).
  */
 export const TRANSLATE_CHANNELS = {
+  batchStart: 'translate:batch-start',
+  batchStatus: 'translate:batch-status',
+  batchStop: 'translate:batch-stop',
   list: 'translate:list',
   openWiki: 'translate:open-wiki',
   resumeWiki: 'translate:resume-wiki',
@@ -44,6 +48,8 @@ export const TRANSLATE_CHANNELS = {
   pickParentDir: 'translate:pick-parent-dir',
   makeFolder: 'translate:make-folder',
   openTranslation: 'translate:open-translation',
+  runDocumentRequest: 'translate:run-document-request',
+  cancelDocumentRequest: 'translate:cancel-document-request',
   setPaneHidden: 'translate:set-pane-hidden',
   ocrPrepare: 'translate:ocr-prepare',
   ocrStart: 'translate:ocr-start',
@@ -241,6 +247,8 @@ export type TranslateSourceHashStatus = 'ok' | 'changed' | 'missing'
 export type TranslateOpenTranslationResult =
   | {
       flow: 'edit'
+      /** A normalized workbook may have a different output filename. */
+      output?: string
       sourceTabId: string
       outputTabId: string
       hashStatus: TranslateSourceHashStatus
@@ -364,6 +372,7 @@ export interface TranslateOcrPageImageArgs {
 
 /** Events main pushes to the shell renderer. */
 export const TRANSLATE_EVENTS = {
+  batchChanged: 'translate:batch-changed',
   /** a translation output tab's Save As (tab menu) asks the shell screen to run Save as */
   saveAsRequested: 'translate:event:save-as-requested',
 } as const
@@ -382,6 +391,10 @@ export interface TranslationWikiOpenResult {
 }
 
 export interface TranslateApi {
+  batchStart(args: ProjectBatchStart): Promise<ProjectBatchSnapshot>
+  batchStop(dir: string): Promise<void>
+  batchStatus(dir: string): Promise<ProjectBatchSnapshot | null>
+  onBatchChanged(listener: (snapshot: ProjectBatchSnapshot) => void): () => void
   openWiki(): Promise<TranslationWikiOpenResult>
   resumeWiki(): Promise<TranslationWikiOpenResult>
   list(): Promise<TranslateProjectListEntry[]>
@@ -406,6 +419,8 @@ export interface TranslateApi {
   pickParentDir(): Promise<TranslatePickedParentDir | null>
   makeFolder(args: TranslateMakeFolderArgs): Promise<TranslatePickedParentDir>
   /** the translation view: the source copy read-only on the left, the output copy on the right */
+  runDocumentRequest(args: ProjectDocumentRequest): Promise<string>
+  cancelDocumentRequest(requestId: string): Promise<void>
   openTranslation(args: TranslateOpenTranslationArgs): Promise<TranslateOpenTranslationResult>
   /** after the person agreed: copy the translation into source/ as the original, then open again */
   adoptOutputAsSource(args: { dir: string; file: string }): Promise<void>
@@ -589,7 +604,9 @@ export function parseTranslateError(err: unknown): { code: TranslateErrorCode; m
 
 /** What exporting a translation did: copied, the person cancelled, or the editor must save first. */
 export type TranslateExportResult =
-  { status: 'saved'; path: string } | { status: 'canceled' } | { status: 'unsaved' }
+  | { status: 'saved'; path: string; warning?: string }
+  | { status: 'canceled' }
+  | { status: 'unsaved' }
 
 /**
  * Export the current saved translation. Either a source of a project (main finds its output),
@@ -597,3 +614,10 @@ export type TranslateExportResult =
  */
 export type TranslateExportArgs =
   { dir: string; file: string; output?: string } | { outputPath: string }
+
+export interface ProjectDocumentRequest {
+  dir: string
+  file: string
+  prompt: string
+  requestId: string
+}

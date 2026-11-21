@@ -65,7 +65,7 @@ export async function markdownToDocx(
   )
 }
 
-async function loadLocalImage(src: string, images?: MarkdownImageSource) {
+export async function loadLocalImage(src: string, images?: MarkdownImageSource) {
   if (!images || !src) return null
   // only real URL schemes are remote; a Windows drive letter (C:\...) is a path
   if (/^(https?|data|blob):/i.test(src)) return null

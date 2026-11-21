@@ -3063,7 +3063,7 @@ export interface DesktopApi {
   /// Mirrors the pending-edit badge to the main process for the close guard.
   notifyPendingEdits(count: number): void
   /// Main asks the renderer to save before closing; reply via reportCloseSaveResult.
-  onCloseSaveRequest(callback: () => void): () => void
+  onCloseSaveRequest(callback: (projectOutput?: string) => void): () => void
   reportCloseSaveResult(ok: boolean): void
   /// The workbook just opened in this tab keeps no recovery copy (password
   /// protected): main sends the localized notice once per tab.

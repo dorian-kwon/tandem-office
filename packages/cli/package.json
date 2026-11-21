@@ -10,6 +10,7 @@
     "./install": "./src/install.ts",
     "./agent-skills": "./src/agent-skills.ts",
     "./mcp-launch": "./src/mcp-launch.ts",
+    "./conversion-routes": "./src/conversion-routes.ts",
     "./control-protocol": "./src/control-protocol.ts"
   },
   "bin": {
@@ -26,6 +27,7 @@
     "@genoffice/ai-provider": "*",
     "@genoffice/ai-search": "*",
     "@genoffice/docx-engine": "*",
+    "@genoffice/epub-engine": "*",
     "@genoffice/file-parse": "*",
     "@genoffice/odt-engine": "*",
     "@genoffice/pdf2docx": "*",
@@ -34,6 +36,7 @@
     "@genoffice/pptx-ops": "*",
     "@genoffice/pptx-render": "*",
     "@genoffice/xlsx-gateway": "*",
+    "@genoffice/xmind-engine": "*",
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@tiptap/core": "3.31.0",
     "jsdom": "^28.0.0",

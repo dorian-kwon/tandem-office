@@ -3104,7 +3104,17 @@ export async function requestSheetsClose(
   }
   // The window went away (or a quit started) while the prompt was up: don't save
   if (shuttingDown() || contents.isDestroyed()) return true
-  return await new Promise<boolean>((resolve) => {
+  return requestWorkbookSave(contents)
+}
+
+/** Save the live workbook in its current format. A project request names the
+ * output copy so the renderer can verify its identity before serializing. */
+export function requestWorkbookSave(
+  contents: WebContents,
+  projectOutput?: string,
+): Promise<boolean> {
+  if (contents.isDestroyed() || closeSaveWaiters.has(contents.id)) return Promise.resolve(false)
+  return new Promise<boolean>((resolve) => {
     const timer = setTimeout(() => {
       closeSaveWaiters.delete(contents.id)
       resolve(false)
@@ -3113,7 +3123,7 @@ export async function requestSheetsClose(
       clearTimeout(timer)
       resolve(ok)
     })
-    contents.send(IPC_CHANNELS.closeSaveRequest)
+    contents.send(IPC_CHANNELS.closeSaveRequest, projectOutput)
   })
 }
 

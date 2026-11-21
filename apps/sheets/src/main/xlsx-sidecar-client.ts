@@ -128,6 +128,10 @@ export class XlsxSidecarClient {
     return this.request({ command: 'convert_workbook', ...input }, ARCHIVE_TIMEOUT_MS)
   }
 
+  async convertToOds(input: { path: string; targetPath: string }): Promise<unknown> {
+    return this.request({ command: 'convert_to_ods', ...input }, ARCHIVE_TIMEOUT_MS)
+  }
+
   async archiveManifest(path: string): Promise<unknown> {
     return this.request({ command: 'archive_manifest', path }, ARCHIVE_TIMEOUT_MS)
   }

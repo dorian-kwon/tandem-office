@@ -1,6 +1,25 @@
 import type { zh } from './zh'
 
 export const es = {
+  openProjectAi: 'Abrir la IA del proyecto',
+  closeProjectAi: 'Cerrar la IA del proyecto',
+  batchTranslate: 'Traducción por lotes',
+  batchRetry: 'Reintentar los documentos fallidos',
+  batchResume: 'Reanudar los documentos detenidos',
+  batchSelectTitle: 'Elegir documentos para traducir',
+  batchTranslateSelected: 'Traducir la selección',
+  batchProgress: 'Progreso de la traducción',
+  batchOverall: 'Progreso general',
+  batchOpening: 'Abriendo',
+  batchOcr: 'Leyendo mediante OCR',
+  batchSaving: 'Guardando',
+  batchOperations: 'Ediciones: {n}',
+  batchWaiting: 'En cola',
+  batchRunning: 'Traduciendo',
+  batchStopped: 'Detenido',
+  batchFailed: 'Error',
+  batchConsent:
+    'Usar esta IA para los {n} documentos seleccionados. Este archivo requiere unas {calls} solicitudes.',
   wikiView: 'Ver la wiki',
   wikiSetup: 'Abre la carpeta de abajo como bóveda en Obsidian y vuelve a {app}.',
   wikiDownload: 'Termina de instalar Obsidian y vuelve a {app} para abrir la wiki.',

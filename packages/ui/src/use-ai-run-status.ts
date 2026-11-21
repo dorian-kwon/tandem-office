@@ -1,3 +1,5 @@
+import { finishProjectTurn, type ProjectTurn } from './use-project-editor-run'
+import type { RefObject } from 'react'
 import { acquireEditorAiWork, useEditorAiBusy } from './editor-ai-busy'
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
 import type { AgentLoopEvents, AgentToolCall } from '@genoffice/agent-core'
@@ -8,6 +10,7 @@ export const RUN_STATUS_DONE_MS = 4000
 export const RUN_STATUS_STOPPED_MS = 5000
 
 export interface AiRunStatusController {
+  readonly projectTurn: RefObject<ProjectTurn | null>
   readonly state: RunStatusState
   /** Returns the same loop events with the status updates added in front of the panel's own handlers. */
   wrap<S>(events: AgentLoopEvents<S>): AgentLoopEvents<S>
@@ -22,6 +25,7 @@ export interface AiRunStatusController {
  * behind by a reset. Everything else comes from the loop through `wrap`.
  */
 export function useAiRunStatus(busy: boolean): AiRunStatusController {
+  const projectTurn = useRef<ProjectTurn | null>(null)
   const [state, dispatch] = useReducer(reduceRunStatus, IDLE_RUN_STATUS)
   useEditorAiBusy(busy || state.awaiting || !state.ended)
 
@@ -43,6 +47,7 @@ export function useAiRunStatus(busy: boolean): AiRunStatusController {
   // Call object identity distinguishes overlapping runs even if model call IDs repeat.
   // Do not release on reset/unmount: an aborted tool may still be writing.
   const toolWork = useRef(new WeakMap<AgentToolCall, () => void>())
+  const toolTurns = useRef(new WeakMap<AgentToolCall, ProjectTurn>())
   const wrap = useCallback(
     <S>(events: AgentLoopEvents<S>): AgentLoopEvents<S> => ({
       ...events,
@@ -51,6 +56,7 @@ export function useAiRunStatus(busy: boolean): AiRunStatusController {
         events.onText?.(text)
       },
       onToolStart: (call) => {
+        if (projectTurn.current) toolTurns.current.set(call, projectTurn.current)
         dispatchRef.current({ type: 'tool-start', name: call.name })
         events.onToolStart?.(call)
       },
@@ -64,6 +70,50 @@ export function useAiRunStatus(busy: boolean): AiRunStatusController {
         events.onToolPending?.(call, pending)
       },
       onToolExecuted: (event) => {
+        const owner = toolTurns.current.get(event.call)
+        toolTurns.current.delete(event.call)
+        const turn =
+          owner === projectTurn.current && !owner?.result && !owner?.stopRequested ? owner : null
+        if (turn && !event.execution.isError) {
+          if (event.execution.mutated) {
+            turn.mutated = true
+            turn.operations += 1
+          }
+          const measured = event.execution.translationProgress
+          const valid =
+            measured &&
+            Number.isSafeInteger(measured.done) &&
+            Number.isSafeInteger(measured.total) &&
+            measured.total > 0 &&
+            measured.done >= 0 &&
+            measured.done <= measured.total
+          const changed =
+            valid &&
+            (turn.progress?.done !== measured.done || turn.progress?.total !== measured.total)
+          if (valid) turn.progress = measured
+          // A generic edit can change the denominator; drop the older snapshot until a new measurement.
+          else if (event.execution.mutated) turn.progress = undefined
+          if (changed || event.execution.mutated)
+            turn.notifyProgress({
+              kind: 'progress',
+              id: turn.id,
+              operations: turn.operations,
+              ...turn.progress,
+            })
+          if (
+            /^(?:read_(?:document|blocks|runs|cells|range|table|slide|pages?|source(?:_units)?|map|topic|chapter|section|book|content|paragraphs?)|get_(?:document_context|workbook_context|outline)|find_(?:text|cells)|search_text)$/.test(
+              event.call.name,
+            )
+          )
+            turn.inspected = true
+        }
+        if (turn && event.execution.awaitingUser) {
+          turn.result = {
+            kind: 'error',
+            id: turn.id,
+            error: 'The document AI needs your input.',
+          }
+        }
         dispatchRef.current({
           type: 'tool-done',
           awaitingUser: event.execution.awaitingUser === true,
@@ -75,14 +125,20 @@ export function useAiRunStatus(busy: boolean): AiRunStatusController {
       onDone: (result) => {
         dispatchRef.current({ type: 'done', cancelled: result.cancelled })
         events.onDone?.(result)
+        finishProjectTurn(projectTurn.current, result)
       },
       onError: (error) => {
         dispatchRef.current({ type: 'error' })
         events.onError?.(error)
+        if (projectTurn.current)
+          projectTurn.current.result = { kind: 'error', id: projectTurn.current.id, error }
       },
     }),
     [],
   )
   const resolveWaiting = useCallback(() => dispatchRef.current({ type: 'resolve-waiting' }), [])
-  return useMemo(() => ({ state, wrap, resolveWaiting }), [state, wrap, resolveWaiting])
+  return useMemo(
+    () => ({ state, wrap, resolveWaiting, projectTurn }),
+    [state, wrap, resolveWaiting],
+  )
 }

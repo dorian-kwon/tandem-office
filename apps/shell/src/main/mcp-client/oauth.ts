@@ -62,7 +62,10 @@ export interface McpOAuthAccess {
 /** The store's OAuth values of one server; writing adds the OAuth block when it is missing */
 export function storeOAuthAccess(store: McpServersStore, serverId: string): McpOAuthAccess {
   return {
-    read: () => store.server(serverId)?.oauth ?? null,
+    read: () => {
+      const server = store.server(serverId)
+      return server?.oauth ? store.forConnection(server).oauth : null
+    },
     writeTokens: async (tokens) => {
       await store.update((file) => {
         const server = file.servers.find((s) => s.id === serverId)

@@ -1,6 +1,25 @@
 import type { zh } from './zh'
 
 export const ko = {
+  openProjectAi: '프로젝트 AI 열기',
+  closeProjectAi: '프로젝트 AI 닫기',
+  batchTranslate: '일괄 번역',
+  batchRetry: '실패한 문서만 다시 번역',
+  batchResume: '중지한 문서 이어서 번역',
+  batchSelectTitle: '번역할 문서 선택',
+  batchTranslateSelected: '선택해서 번역하기',
+  batchProgress: '번역 진행 상황',
+  batchOverall: '전체 진행',
+  batchOpening: '여는 중',
+  batchOcr: 'OCR 중',
+  batchSaving: '저장 중',
+  batchOperations: '편집 작업 {n}회',
+  batchWaiting: '대기 중',
+  batchRunning: '번역 중',
+  batchStopped: '중지됨',
+  batchFailed: '실패',
+  batchConsent:
+    '선택한 문서 {n}개에 같은 AI를 계속 사용합니다. 현재 파일의 예상 호출 수는 {calls}회입니다.',
   wikiView: '위키 보기',
   wikiSetup:
     'Obsidian에서 ‘폴더를 보관함으로 열기’를 선택하고 아래 폴더를 여세요. 그런 다음 {app}로 돌아오세요.',

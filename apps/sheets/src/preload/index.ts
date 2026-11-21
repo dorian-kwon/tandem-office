@@ -569,7 +569,8 @@ const desktopApi: DesktopApi = {
     ipcRenderer.send(IPC_CHANNELS.pendingEditsChanged, Math.floor(count))
   },
   onCloseSaveRequest(callback) {
-    const listener = (): void => callback()
+    const listener = (_event: unknown, path?: unknown): void =>
+      callback(typeof path === 'string' ? path : undefined)
     ipcRenderer.on(IPC_CHANNELS.closeSaveRequest, listener)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.closeSaveRequest, listener)
   },

@@ -88,6 +88,58 @@ afterEach(() => {
 })
 
 describe('translate IPC handlers', () => {
+  it('runs project AI only on a listed output copy, keeping current edits and protecting the source', async () => {
+    const runEditorRequest = vi.fn(async (file: string) => {
+      expect(readFileSync(file, 'utf8')).toBe('Prior edit')
+      writeFileSync(file, 'Edited by the document AI')
+      return 'Finished editing'
+    })
+    const h = handlers({ runEditorRequest })
+    const { dir } = await createIn(h, { name: 'Project AI', sourceLang: 'ko', targetLang: 'en' })
+    const path = join(root, 'source.md')
+    writeFileSync(path, 'Original')
+    await addPicked(h, dir, 'source', path)
+    const request = { dir, file: 'source.md', prompt: 'Revise the title', requestId: 'test' }
+    const signal = new AbortController().signal
+    writeFileSync(join(dir, 'output', 'source.md'), 'Prior edit')
+    expect(await h.runDocumentRequest(request, signal)).toBe('Finished editing')
+    expect(runEditorRequest).toHaveBeenCalledWith(
+      join(dir, 'output', 'source.md'),
+      request.prompt,
+      signal,
+    )
+    expect(readFileSync(join(dir, 'source', 'source.md'), 'utf8')).toBe('Original')
+    await expect(h.runDocumentRequest({ ...request, file: 'outside.md' }, signal)).rejects.toThrow(
+      'NOT_LISTED',
+    )
+    await expect(
+      h.runDocumentRequest({ ...request, file: '../source.md' }, signal),
+    ).rejects.toThrow('INVALID_ARGUMENT')
+    expect(runEditorRequest).toHaveBeenCalledOnce()
+  })
+
+  it.each([
+    ['scan.png', 'scan (OCR).docx'],
+    ['book.xls', 'book.xls.xlsx'],
+    ['book.tsv', 'book.tsv.xlsx'],
+  ])('edits the existing result of %s through its native editor', async (file, result) => {
+    const runEditorRequest = vi.fn().mockResolvedValue('Revised')
+    const h = handlers({ runEditorRequest })
+    const { dir } = await createIn(h, {
+      name: 'Project result',
+      sourceLang: 'ko',
+      targetLang: 'en',
+    })
+    const source = join(root, file)
+    writeFileSync(source, 'Source')
+    await addPicked(h, dir, 'source', source)
+    const output = join(dir, 'output', result)
+    writeFileSync(output, 'Existing result')
+    const signal = new AbortController().signal
+    await h.runDocumentRequest({ dir, file, prompt: 'Revise', requestId: 'test' }, signal)
+    expect(runEditorRequest).toHaveBeenCalledWith(output, 'Revise', signal)
+  })
+
   it('create registers the folder and list reports it', async () => {
     const h = handlers()
     const { dir } = await createIn(h, {
@@ -1096,5 +1148,128 @@ describe('exportTranslation handler', () => {
     await expect(h.exportTranslation({ dir, file: 'a.md' })).rejects.toMatchObject({
       code: 'EXPORT_REFUSED',
     })
+  })
+})
+
+describe('project batch translation', () => {
+  it('waits for a saved output before the next editor, and retries only unfinished documents', async () => {
+    const order: string[] = []
+    let release!: () => void
+    const gate = new Promise<void>((r) => {
+      release = r
+    })
+    let fail = true
+    let reportUnmeasuredEdit!: () => void
+    const h = handlers({
+      runBatchEditor: async ({ file, outputPath, sourceLang, targetLang, report }) => {
+        expect([sourceLang, targetLang]).toEqual(['ko', 'en'])
+        order.push(file)
+        report({ phase: 'translating', operations: 1, done: 1, total: 2 })
+        if (file === 'first.md') {
+          reportUnmeasuredEdit = () => report({ operations: 2 })
+          await gate
+        }
+        if (file === 'second.md' && fail) throw new Error('Disconnected')
+        writeFileSync(outputPath, 'Translated ' + file)
+      },
+    })
+    const { dir } = await createIn(h, { name: 'Batch', sourceLang: 'ko', targetLang: 'en' })
+    for (const file of ['first.md', 'second.md']) {
+      const input = join(root, file)
+      writeFileSync(input, 'Original')
+      await addPicked(h, dir, 'source', input)
+    }
+    await expect(h.batchStart({ dir, files: ['../outside.md'] }, 5)).rejects.toThrow()
+    await h.batchStart({ dir }, 5)
+    await vi.waitFor(() => expect(order).toEqual(['first.md']))
+    await expect(h.batchStart({ dir }, 5)).rejects.toMatchObject({ code: 'TRANSLATE_BUSY' })
+    await expect(h.removeMaterial({ dir, kind: 'source', file: 'first.md' })).rejects.toMatchObject(
+      { code: 'TRANSLATE_BUSY' },
+    )
+    expect((await h.batchStatus(dir))?.items[0]).toMatchObject({
+      state: 'running',
+      phase: 'translating',
+      operations: 1,
+      done: 1,
+      total: 2,
+    })
+    reportUnmeasuredEdit()
+    const current = (await h.batchStatus(dir))?.items[0]
+    expect(current?.operations).toBe(2)
+    expect(current?.total).toBeUndefined()
+    expect(current?.done).toBeUndefined()
+    expect(readFileSync(join(dir, 'source', 'first.md'), 'utf8')).toBe('Original')
+    release()
+    await vi.waitFor(async () => expect((await h.batchStatus(dir))?.running).toBe(false))
+    expect((await h.batchStatus(dir))?.items.map((i) => i.state)).toEqual(['saved', 'failed'])
+    expect(readFileSync(join(dir, 'output', 'first.md'), 'utf8')).toBe('Translated first.md')
+    fail = false
+    await h.batchStart({ dir, files: ['first.md', 'second.md'], retry: true }, 5)
+    await vi.waitFor(async () => expect((await h.batchStatus(dir))?.running).toBe(false))
+    expect(order).toEqual(['first.md', 'second.md', 'second.md'])
+    expect((await h.batchStatus(dir))?.items.map((i) => i.state)).toEqual(['saved', 'saved'])
+    writeFileSync(join(dir, 'source', 'first.md'), 'Changed outside the project')
+    await h.batchStart({ dir, files: ['first.md'] }, 5)
+    await vi.waitFor(async () => expect((await h.batchStatus(dir))?.running).toBe(false))
+    expect((await h.batchStatus(dir))?.items).toMatchObject([
+      { file: 'first.md', state: 'failed', error: expect.stringContaining('changed source') },
+    ])
+    expect(order).toEqual(['first.md', 'second.md', 'second.md'])
+  })
+
+  it('aborts the active editor and leaves other sources unstarted when the project stops', async () => {
+    const runBatchEditor = vi.fn(async ({ signal }: { signal: AbortSignal }) => {
+      await new Promise<void>((_r, j) =>
+        signal.addEventListener('abort', () => j(new Error('Stopped')), { once: true }),
+      )
+    })
+    const h = handlers({ runBatchEditor })
+    const { dir } = await createIn(h, { name: 'Stop', sourceLang: 'en', targetLang: 'ko' })
+    for (const file of ['a.md', 'b.md']) {
+      const path = join(root, file)
+      writeFileSync(path, 'original')
+      await addPicked(h, dir, 'source', path)
+    }
+    await h.batchStart({ dir }, 1)
+    await vi.waitFor(() => expect(runBatchEditor).toHaveBeenCalledTimes(1))
+    await h.batchStop(dir)
+    await vi.waitFor(async () => expect((await h.batchStatus(dir))?.running).toBe(false))
+    expect((await h.batchStatus(dir))?.items.map((i) => i.state)).toEqual(['stopped', 'stopped'])
+    expect(existsSync(join(dir, 'output', 'b.md'))).toBe(false)
+  })
+
+  it('edits XLS as a separate XLSX and refuses a symlinked source', async () => {
+    const h = handlers({
+      convertBatchWorkbook: async (src, out) => {
+        expect(readFileSync(src, 'utf8')).toBe('legacy input')
+        writeFileSync(out, 'converted workbook')
+      },
+      runBatchEditor: async ({ outputPath }) => {
+        expect(outputPath.endsWith('.xlsx')).toBe(true)
+        writeFileSync(outputPath, 'translated workbook')
+      },
+    })
+    const { dir } = await createIn(h, { name: 'Legacy', sourceLang: 'ko', targetLang: 'en' })
+    const input = join(root, 'table.xls')
+    writeFileSync(input, 'legacy input')
+    await addPicked(h, dir, 'source', input)
+    writeFileSync(join(dir, 'output', 'table.xls.xlsx'), 'existing unrelated workbook')
+    await h.batchStart({ dir }, 1)
+    await vi.waitFor(async () => expect((await h.batchStatus(dir))?.running).toBe(false))
+    expect((await h.batchStatus(dir))?.items[0]).toMatchObject({
+      state: 'saved',
+      output: 'table.xls (2).xlsx',
+    })
+    expect(readFileSync(input, 'utf8')).toBe('legacy input')
+    expect(readFileSync(join(dir, 'output', 'table.xls.xlsx'), 'utf8')).toBe(
+      'existing unrelated workbook',
+    )
+    if (process.platform !== 'win32') {
+      rmSync(join(dir, 'source', 'table.xls'))
+      symlinkSync(input, join(dir, 'source', 'table.xls'))
+      await h.batchStart({ dir }, 1)
+      await vi.waitFor(async () => expect((await h.batchStatus(dir))?.running).toBe(false))
+      expect((await h.batchStatus(dir))?.items[0]?.state).toBe('failed')
+    }
   })
 })

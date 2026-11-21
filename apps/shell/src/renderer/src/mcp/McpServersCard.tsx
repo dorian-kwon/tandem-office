@@ -80,7 +80,7 @@ export function McpServersCard() {
         {s('direction')}
       </div>
       <div className="set-field-desc set-intg-lead">{s('desc')}</div>
-      {view && !view.sealing && <div className="mcp-note set-field-desc">{s('noSealing')}</div>}
+      {view?.sealing === false && <div className="mcp-note set-field-desc">{s('noSealing')}</div>}
 
       {view &&
         (servers.length === 0 ? (

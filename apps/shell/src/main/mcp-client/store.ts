@@ -25,8 +25,8 @@ import {
 /**
  * `mcp-servers.json` in the app data folder (user MCP spec 10, 12.1): the
  * registered servers, their tool permissions and approval fingerprints. Only
- * the app reads it; the terminal command does not. In memory every secret is
- * plain; on disk it is sealed or, where this PC cannot seal, left empty.
+ * the app reads it; the terminal command does not. On macOS stored values stay
+ * sealed until the tool connects. On disk secrets are sealed or left empty.
  */
 
 export const MCP_SERVERS_FILE_NAME = 'mcp-servers.json'
@@ -271,11 +271,19 @@ export interface McpStoreLoad {
   unreadable: { serverId: string; secret: McpSecretRef }[]
 }
 
+export class McpCredentialsLocked extends Error {
+  constructor() {
+    super('Could not unlock MCP credentials')
+  }
+}
+
 export interface McpServersStore {
   load(): Promise<McpStoreLoad>
-  /** a copy with plain secrets: main process only, never sent to a screen */
+  /** Main-process configuration. Stored secrets may still be sealed. */
   get(): McpServersFile
   server(id: string): McpServerConfig | null
+  /** Resolve credentials for a single connection without changing the stored values. */
+  forConnection(server: McpServerConfig): McpServerConfig
   /** change and save; calls run one after another */
   update(change: (file: McpServersFile) => McpServersFile | void): Promise<McpServersFile>
   /** drop a server and every secret it held (4.9); false when there was none */
@@ -376,6 +384,7 @@ export function createMcpServersStore(filePath: string, codec: McpSecretCodec): 
         const file = normalizeMcpServersFile(raw)
         const unreadable: McpStoreLoad['unreadable'] = []
         const servers = file.servers.map((s) => {
+          if (codec.deferredStatus) return s
           const opened = openServerSecrets(s, codec)
           for (const secret of opened.unreadable) unreadable.push({ serverId: s.id, secret })
           return opened.server
@@ -386,6 +395,12 @@ export function createMcpServersStore(filePath: string, codec: McpSecretCodec): 
         return { state: 'ok', unreadable }
       }),
     get: () => copy(state),
+    forConnection: (server) => {
+      if (!codec.deferredStatus) return server
+      const opened = openServerSecrets(server, codec)
+      if (opened.unreadable.length > 0) throw new McpCredentialsLocked()
+      return opened.server
+    },
     server: (id) => {
       const found = state.servers.find((s) => s.id === id)
       return found ? copy(found) : null
@@ -405,7 +420,7 @@ export function createMcpServersStore(filePath: string, codec: McpSecretCodec): 
       }),
     sealing: () => codec.canSeal(),
     view: () => ({
-      sealing: codec.canSeal(),
+      sealing: codec.deferredStatus ? codec.deferredStatus() : codec.canSeal(),
       runtimes: copy(state.runtimes),
       servers: state.servers.map(serverView),
     }),

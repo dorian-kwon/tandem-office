@@ -1,6 +1,25 @@
 import type { zh } from './zh'
 
 export const hi = {
+  openProjectAi: 'प्रोजेक्ट का AI खोलें',
+  closeProjectAi: 'प्रोजेक्ट का AI बंद करें',
+  batchTranslate: 'एक साथ अनुवाद करें',
+  batchRetry: 'विफल दस्तावेज़ों का फिर अनुवाद करें',
+  batchResume: 'रोके गए दस्तावेज़ों का अनुवाद जारी रखें',
+  batchSelectTitle: 'अनुवाद के लिए दस्तावेज़ चुनें',
+  batchTranslateSelected: 'चुने हुए दस्तावेज़ों का अनुवाद करें',
+  batchProgress: 'अनुवाद की प्रगति',
+  batchOverall: 'कुल प्रगति',
+  batchOpening: 'खोला जा रहा है',
+  batchOcr: 'OCR से पढ़ा जा रहा है',
+  batchSaving: 'सहेजा जा रहा है',
+  batchOperations: 'संपादन: {n}',
+  batchWaiting: 'कतार में',
+  batchRunning: 'अनुवाद हो रहा है',
+  batchStopped: 'रुका हुआ',
+  batchFailed: 'विफल',
+  batchConsent:
+    'चुने हुए {n} दस्तावेज़ों के लिए इस AI का उपयोग करें। इस फ़ाइल के लिए लगभग {calls} अनुरोध चाहिए।',
   wikiView: 'विकी देखें',
   wikiSetup: 'Obsidian में नीचे दिए गए फ़ोल्डर को वॉल्ट के रूप में खोलें। फिर {app} पर लौटें।',
   wikiDownload: 'Obsidian इंस्टॉल करने के बाद विकी खोलने के लिए {app} पर लौटें।',

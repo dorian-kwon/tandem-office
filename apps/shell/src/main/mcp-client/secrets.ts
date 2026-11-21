@@ -12,6 +12,8 @@ import type { McpSecretView } from '../../shared/mcp-servers-api'
  */
 
 export interface McpSecretCodec {
+  /** On macOS even checking availability can open the Keychain permission dialog. */
+  deferredStatus?(): boolean | null
   /** whether a value sealed now is really protected (the Drive vault rule) */
   canSeal(): boolean
   /** the `sealed:v1:` form; only called when `canSeal()` */
@@ -30,11 +32,15 @@ export function safeStorageMcpCodec(
   storage: SafeStorageLike,
   platform: NodeJS.Platform = process.platform,
 ): McpSecretCodec {
+  let lastAvailability: boolean | null = null
   return {
-    canSeal: () => driveTokenSeals(storage, platform),
+    deferredStatus: platform === 'darwin' ? () => lastAvailability : undefined,
+    canSeal: () => (lastAvailability = driveTokenSeals(storage, platform)),
     seal: (plain) => SEALED_PREFIX + storage.encryptString(plain).toString('base64'),
     open: (sealed) => {
-      if (!isSealedSecret(sealed) || !storage.isEncryptionAvailable()) return null
+      if (!isSealedSecret(sealed)) return null
+      lastAvailability = storage.isEncryptionAvailable()
+      if (!lastAvailability) return null
       try {
         return storage.decryptString(Buffer.from(sealed.slice(SEALED_PREFIX.length), 'base64'))
       } catch {
@@ -90,9 +96,10 @@ export function sealServerSecrets<T extends McpSecretFields>(
   codec: McpSecretCodec,
 ): { server: T; memoryOnly: McpSecretRef[] } {
   const memoryOnly: McpSecretRef[] = []
-  const canSeal = codec.canSeal()
+  let canSeal: boolean | undefined
   const sealed = mapServerSecrets(server, (value, ref) => {
     if (value === '' || isSealedSecret(value)) return value
+    canSeal ??= codec.canSeal()
     if (canSeal) {
       try {
         return codec.seal(value)
@@ -139,6 +146,7 @@ const MIN_LENGTH_TO_SHOW_LAST4 = 8
 /** A secret as a screen may see it */
 export function secretView(value: string, memoryOnly: boolean): McpSecretView {
   if (value === '') return { state: 'missing', last4: '' }
+  if (value.startsWith(SEALED_PREFIX)) return { state: 'saved', last4: '' }
   return {
     state: memoryOnly ? 'memory-only' : 'saved',
     last4: value.length >= MIN_LENGTH_TO_SHOW_LAST4 ? value.slice(-4) : '',
