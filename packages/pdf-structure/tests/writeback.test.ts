@@ -27,6 +27,7 @@ import {
   type WritebackFontLocator,
   type WritebackOptions,
 } from '../src/writeback'
+import { objectFillColor } from '../src/writeback/pdfium'
 import {
   buildPdf,
   buildScannedPdf,
@@ -348,6 +349,7 @@ interface PageCensus {
   sizes: number[]
   /** fill color of every text object */
   textColors: number[][]
+  pathColors: number[][]
 }
 
 function census(m: PdfiumModule, pdf: Uint8Array, pageIndex = 0): PageCensus {
@@ -356,14 +358,13 @@ function census(m: PdfiumModule, pdf: Uint8Array, pageIndex = 0): PageCensus {
     try {
       const counts = new Map<number, number>()
       const textColors: number[][] = []
+      const pathColors: number[][] = []
       const walk = (obj: number) => {
         const type = m._FPDFPageObj_GetType(obj)
         counts.set(type, (counts.get(type) ?? 0) + 1)
-        if (type === 1) {
-          const p = m._malloc(16)
-          m._FPDFPageObj_GetFillColor(obj, p, p + 4, p + 8, p + 12)
-          textColors.push(Array.from(m.HEAPU32.subarray(p >> 2, (p >> 2) + 3)))
-          m._free(p)
+        if (type === 1 || type === 2) {
+          const color = objectFillColor(m, obj)
+          if (color) (type === 1 ? textColors : pathColors).push([...color])
         }
         if (type === 5 && m._FPDFFormObj_CountObjects && m._FPDFFormObj_GetObject) {
           for (let i = 0; i < m._FPDFFormObj_CountObjects(obj); i++)
@@ -389,6 +390,7 @@ function census(m: PdfiumModule, pdf: Uint8Array, pageIndex = 0): PageCensus {
         annots: m._FPDFPage_GetAnnotCount?.(page) ?? 0,
         sizes,
         textColors,
+        pathColors,
       }
     } finally {
       m._FPDF_ClosePage(page)
@@ -998,16 +1000,16 @@ describe('scanned and AI-read pages', () => {
     { text: 'This scanned paragraph has', box: { x0: 0.12, y0: 0.79, x1: 0.62, y1: 0.81 } },
     { text: 'several plain words in it', box: { x0: 0.12, y0: 0.765, x1: 0.6, y1: 0.785 } },
   ]
-  const fakeOcr: OcrEngine = () => ({
+  const fakeOcr = () => ({
     lines: LINES.map((l) => ({ ...l, confidence: 0.95 })),
   })
 
-  async function ocrTree() {
+  async function ocrTree(pdf = buildScannedPdf(), ocr: OcrEngine = fakeOcr) {
     const m = await loadPdfium()
-    const pdf = await buildScannedPdf()
-    const { tree } = await extractDocumentTree(pdf, { pdfium: m, ocr: fakeOcr })
+    const bytes = await pdf
+    const { tree } = await extractDocumentTree(bytes, { pdfium: m, ocr })
     expect(tree.pages[0]!.status).toBe('ocr')
-    return { m, pdf, tree }
+    return { m, pdf: bytes, tree }
   }
 
   const translateAll = (tree: DocumentTree) => {
@@ -1029,26 +1031,41 @@ describe('scanned and AI-read pages', () => {
     }),
   })
 
-  it('paints over the OCR lines and draws the translation on a scanned page', async () => {
-    const { m, pdf, tree } = await ocrTree()
-    const translated = translateAll(tree)
-    const { pdf: out, report } = await run(pdf, tree, translated, {
-      ocr: fakeOcr,
-      fontLocator: koreanLocator,
-    })
-    const src = census(m, pdf)
-    const res = census(m, out)
-    expect(squash(res.text)).toContain(squash(KO.scanBody))
-    expect(res.images).toBe(src.images)
-    // one painted box per OCR line, nothing else added
-    expect(res.paths).toBe(src.paths + LINES.length)
-    // the text stands out from the (solid red) scan it is drawn on
-    expect(res.textColors.length).toBeGreaterThan(0)
-    const lum = (c: readonly number[]) => 0.299 * c[0]! + 0.587 * c[1]! + 0.114 * c[2]!
-    expect(res.textColors.every((c) => Math.abs(lum(c) - lum([220, 30, 30])) >= 80)).toBe(true)
-    expect(report.originalPages).toEqual([])
-    expect(report.translated).toBe(report.total)
-  })
+  it.each(['paper', 'red'] as const)(
+    'draws legible translated OCR lines on a %s scan',
+    async (background) => {
+      // The OCR results are supplied here. For the dark-colored page, explicitly
+      // report its paper threshold so recognition heuristics do not discard the fixture.
+      const colored = background === 'red'
+      const ocr = colored ? Object.assign(() => fakeOcr(), { paperThreshold: () => 25 }) : fakeOcr
+      const input = colored
+        ? buildPdf([[{ kind: 'image', x: 0, y: 0, width: 612, height: 792, png: tinyPng() }]])
+        : buildScannedPdf()
+      const { m, pdf, tree } = await ocrTree(input, ocr)
+      const translated = translateAll(tree)
+      const { pdf: out, report } = await run(pdf, tree, translated, {
+        ocr,
+        fontLocator: koreanLocator,
+      })
+      const src = census(m, pdf)
+      const res = census(m, out)
+      expect(squash(res.text)).toContain(squash(KO.scanBody))
+      expect(res.images).toBe(src.images)
+      // one painted box per OCR line, nothing else added
+      expect(res.paths).toBe(src.paths + LINES.length)
+      // Compare the embedded text to the actual paint under it in the saved PDF.
+      expect(res.textColors.length).toBeGreaterThan(0)
+      const lum = (c: readonly number[]) => 0.299 * c[0]! + 0.587 * c[1]! + 0.114 * c[2]!
+      expect(res.pathColors).toHaveLength(LINES.length)
+      for (const paint of res.pathColors) {
+        expect(paint).toEqual(colored ? [220, 30, 30] : [255, 255, 255])
+        for (const ink of res.textColors)
+          expect(Math.abs(lum(ink) - lum(paint))).toBeGreaterThanOrEqual(80)
+      }
+      expect(report.originalPages).toEqual([])
+      expect(report.translated).toBe(report.total)
+    },
+  )
 
   it('places AI-read blocks on the OCR lines that match them', async () => {
     const { m, pdf, tree } = await ocrTree()
