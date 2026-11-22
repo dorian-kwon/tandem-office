@@ -487,11 +487,6 @@ function paragraphsIn(b: TopBlock, scoped: SelRange | null): ParagraphHit[] {
   return hits
 }
 
-/** true when [from, to) lies inside the block's selected span (no clip = whole block is fair game) */
-function insideClip(b: TopBlock, from: number, to: number): boolean {
-  return !b.clip || (from >= b.clip.from && to <= b.clip.to)
-}
-
 const targetOf = (op: Op): Target => op.target as Target
 
 // ---- executors (each reads tr.doc fresh, so sequential ops compose) ----
@@ -619,30 +614,121 @@ function applyFontRange(
   })
 }
 
-function runSetFont(op: Op, env: RunEnv): OpResult {
-  const { tr, ctx, sel } = env
-  const matched = matchTarget(tr.doc, targetOf(op), sel)
+/** Walk cell paragraphs in their own coordinate space. Model-backed nested
+ * tables occupy a single position in the parent and commit as one attribute edit. */
+function runFontOp(op: Op, env: RunEnv): OpResult {
+  const { tr, ctx, editor, sel } = env
+  const target = op.target
+  const range = target ? scopedRange(target, sel) : null
+  const matched = target
+    ? matchTarget(tr.doc, target, sel, (node) => editableBlockText(editor, node))
+    : topLevelBlocks(tr.doc)
   const boolKeys = present(op, Object.keys(BOOL_MARK_TYPES))
   const markPatch = buildTextMarkPatch(op)
+  const pattern = op.op === 'setMatchedFont' ? literalPattern(String(op.text), op.matchCase) : null
   let changed = 0
   let skippedProtected = 0
+  let skippedDeleted = 0
+  let occurrences = 0
+
+  function visit(
+    node: PmDocNode,
+    pos: number,
+    transaction: Transaction,
+    scope: SelRange | null,
+    deleted: boolean,
+  ) {
+    if (node.attrs.gridGap || (scope && (pos + node.nodeSize <= scope.from || pos >= scope.to)))
+      return
+    deleted ||= [node.attrs.blockRevision, node.attrs.rowRevision, node.attrs.cellRevision].some(
+      (revision) => revision?.kind === 'del',
+    )
+    if (node.type.name === 'docNestedTable') {
+      if (
+        deleted ||
+        !node.attrs.model?.rows.length ||
+        (scope && (pos < scope.from || pos + 1 > scope.to))
+      )
+        return
+      const draft = draftNestedTable(editor, node.attrs.model)
+      const inner = draft.editor.state.tr
+      visit(inner.doc.firstChild!, 0, inner, null, false)
+      if (inner.docChanged)
+        transaction.setNodeAttribute(pos, 'model', draft.result(false, inner.doc.firstChild!))
+      return
+    }
+    if (!node.isTextblock) {
+      node.forEach((child, offset) => visit(child, pos + 1 + offset, transaction, scope, deleted))
+      return
+    }
+    // A phrase can span runs with different font sizes. Inline objects,
+    // withheld text and revision boundaries must break the match.
+    const start = pos + 1
+    let segment = ''
+    let offset = 0
+    let struck = deleted
+    const style = (from: number, to: number) => {
+      if (scope && scope.from < scope.to) {
+        if (pattern && (from < scope.from || to > scope.to)) return
+        from = Math.max(scope.from, from)
+        to = Math.min(scope.to, to)
+      }
+      if (from >= to) return
+      if (struck) {
+        skippedDeleted++
+        return
+      }
+      applyFontRange({ ...env, tr: transaction }, op, boolKeys, markPatch, from, to, node, start)
+      occurrences++
+    }
+    const flush = () => {
+      if (!segment) return
+      if (pattern) {
+        for (const match of segment.matchAll(pattern)) {
+          const from = start + offset + match.index
+          style(from, from + match[0].length)
+        }
+      } else style(start + offset, start + offset + segment.length)
+      segment = ''
+    }
+    node.forEach((child, at) => {
+      if (!child.isText || child.marks.some((m) => m.type.name === REDACT_MARK)) {
+        flush()
+        return
+      }
+      const removed = deleted || child.marks.some((m) => m.type.name === 'del')
+      if (removed !== struck) flush()
+      if (!segment) offset = at
+      struck = removed
+      segment += child.text
+    })
+    flush()
+  }
+
   for (const b of matched) {
     if (b.node.type.name === 'docProtected') {
-      skippedProtected++
+      if (!pattern || blockText(b.node).search(pattern) !== -1) skippedProtected++
       continue
     }
-    const before = b.node
-    const contentFrom = b.pos + 1
-    const from = b.clip?.from ?? contentFrom
-    const to = b.clip?.to ?? contentFrom + b.node.content.size
-    if (from < to) applyFontRange(env, op, boolKeys, markPatch, from, to, b.node, contentFrom)
-    const after = tr.doc.nodeAt(b.pos)
-    if (after && !after.eq(before)) {
-      changed++
+    const prior = occurrences
+    visit(b.node, b.pos, tr, range, false)
+    const edited = !tr.doc.nodeAt(b.pos)?.eq(b.node)
+    if (pattern ? occurrences > prior : edited) {
+      if (edited && b.node.type.name === 'docTable' && !b.node.attrs.fontRunsEdited) {
+        tr.setNodeAttribute(b.pos, 'fontRunsEdited', true)
+      }
       markChanged(tr, b.pos, ctx)
+      changed++
     }
   }
-  return { op: 'setFont', matched: matched.length, changed, skippedProtected }
+  return {
+    op: op.op,
+    matched: pattern ? changed : matched.length,
+    changed,
+    skippedProtected,
+    skippedDeleted,
+    ...(pattern ? { detail: String(occurrences) } : {}),
+  }
 }
 
 function runSetParagraphFormat(op: Op, env: RunEnv): OpResult {
@@ -934,24 +1020,28 @@ function replaceBlockRuns(
   }
 }
 
+function literalPattern(text: string, matchCase: unknown): RegExp {
+  return new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), matchCase === false ? 'giu' : 'gu')
+}
+
+function editableBlockText(editor: Editor, node: PmDocNode): string {
+  if (node.type.name !== 'docTable') return blockText(node)
+  return liveText(node, false, {
+    leafText: (leaf) =>
+      leaf.type.name === 'docNestedTable' && leaf.attrs.model
+        ? editableBlockText(editor, nestedTableNode(editor, leaf.attrs.model))
+        : (leaf.type.spec.leafText?.(leaf) ?? ''),
+  })
+}
+
 function runFindReplace(op: Op, env: RunEnv): OpResult {
   const { tr, editor, ctx, sel } = env
   const find = String(op.find)
   const replace = String(op.replace ?? '')
-  const pattern = new RegExp(
-    find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
-    op.matchCase === false ? 'giu' : 'gu',
-  )
-  const textOf = (node: PmDocNode): string => {
-    if (node.type.name !== 'docTable') return blockText(node)
-    return liveText(node, false, {
-      leafText: (leaf) =>
-        leaf.type.name === 'docNestedTable' && leaf.attrs.model
-          ? textOf(nestedTableNode(editor, leaf.attrs.model))
-          : (leaf.type.spec.leafText?.(leaf) ?? ''),
-    })
-  }
-  const blocks = op.target ? matchTarget(tr.doc, op.target, sel, textOf) : topLevelBlocks(tr.doc)
+  const pattern = literalPattern(find, op.matchCase)
+  const blocks = op.target
+    ? matchTarget(tr.doc, op.target, sel, (node) => editableBlockText(editor, node))
+    : topLevelBlocks(tr.doc)
   const range = op.target ? scopedRange(op.target, sel) : null
   const stats = { occurrences: 0, skippedDeleted: 0 }
   const recording = editor.storage.trackChanges as { enabled: boolean; author: string } | undefined
@@ -978,59 +1068,6 @@ function runFindReplace(op: Op, env: RunEnv): OpResult {
     skippedProtected,
     skippedDeleted: stats.skippedDeleted,
     detail: t('aiCmdReplacedCount', { count: stats.occurrences }),
-  }
-}
-
-function runSetMatchedFont(op: Op, env: RunEnv): OpResult {
-  const { tr, ctx, sel } = env
-  const text = String(op.text)
-  const matchCase = op.matchCase !== false
-  const needle = matchCase ? text : text.toLowerCase()
-  const blocks = op.target ? matchTarget(tr.doc, targetOf(op), sel) : topLevelBlocks(tr.doc)
-  const boolKeys = present(op, Object.keys(BOOL_MARK_TYPES))
-  const markPatch = buildTextMarkPatch(op)
-  const touched = new Set<number>()
-  let styledCount = 0
-  let skippedProtected = 0
-  let skippedDeleted = 0
-
-  for (const b of blocks) {
-    if (b.node.type.name === 'docProtected') {
-      if (blockText(b.node).includes(text)) skippedProtected++
-      continue
-    }
-    const blockDeleted = isTrackedDeleted(b.node)
-    const contentFrom = b.pos + 1
-    b.node.forEach((child, offset) => {
-      if (!child.isText || !child.text) return
-      const struck = blockDeleted || child.marks.some((m) => m.type.name === 'del')
-      const hay = matchCase ? child.text : child.text.toLowerCase()
-      let at = hay.indexOf(needle)
-      while (at !== -1) {
-        const from = contentFrom + offset + at
-        const to = from + needle.length
-        if (struck) {
-          skippedDeleted++
-        } else if (insideClip(b, from, to)) {
-          applyFontRange(env, op, boolKeys, markPatch, from, to, b.node, contentFrom)
-          styledCount++
-          touched.add(b.index)
-        }
-        at = hay.indexOf(needle, at + needle.length)
-      }
-    })
-  }
-  // mark steps never shift positions, so block offsets are still valid here
-  for (const b of topLevelBlocks(tr.doc)) {
-    if (touched.has(b.index)) markChanged(tr, b.pos, ctx)
-  }
-  return {
-    op: 'setMatchedFont',
-    matched: touched.size,
-    changed: touched.size,
-    skippedProtected,
-    skippedDeleted,
-    detail: String(styledCount),
   }
 }
 
@@ -1233,7 +1270,7 @@ register({
   validate(op, where) {
     return validateShape(op, this, where) ?? validateFontFields(op, where)
   },
-  apply: runSetFont,
+  apply: runFontOp,
 })
 
 register({
@@ -1250,7 +1287,7 @@ register({
     }
     return validateFontFields(op, where)
   },
-  apply: runSetMatchedFont,
+  apply: runFontOp,
 })
 
 register({

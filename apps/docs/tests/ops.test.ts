@@ -345,6 +345,27 @@ describe('findReplace', () => {
     },
   ]
 
+  it('formats a phrase in a nested table without touching other cells', () => {
+    const editor = createEditor(tableFixture())
+    const before = editor.state.doc
+    const outcome = executeOps(editor, [
+      {
+        op: 'setMatchedFont',
+        text: 'deep fee',
+        fontSize: 14,
+        target: { nodeType: 'table', containsText: 'deep' },
+      },
+    ])
+    expect(outcome.results[0]?.detail).toBe('1')
+    const model = editor.state.doc.child(1).firstChild!.firstChild!.child(1).attrs.model
+    expect(model.rows[0][0].nestedTables[0].rows[0][0].richParas[0].runs[0]).toMatchObject({
+      text: 'deep fee',
+      sizeHalfPoints: 28,
+    })
+    expect(editor.commands.undo()).toBe(true)
+    expect(editor.state.doc.eq(before)).toBe(true)
+  })
+
   it('repairs matching runs inside a targeted table and its nested models in one undo', () => {
     const editor = createEditor(tableFixture())
     const before = editor.state.doc

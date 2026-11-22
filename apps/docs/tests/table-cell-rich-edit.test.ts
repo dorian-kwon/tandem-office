@@ -1,6 +1,7 @@
+import { executeOps } from '../src/renderer/ai/ops'
 import { Editor } from '@tiptap/core'
 import { TextSelection } from '@tiptap/pm/state'
-import { parseDocx } from '@genoffice/docx-engine'
+import { parseDocx, saveDocx } from '@genoffice/docx-engine'
 import { describe, expect, it } from 'vitest'
 import { buildDocx } from '../../../packages/docx-engine/tests/helpers/build-docx'
 import { blocksToPmDoc, pmDocToSavePlan, type PmNode } from '../src/renderer/editor/convert'
@@ -63,3 +64,61 @@ describe('rich table cell edits', () => {
     expect(xml).toContain('<w:t>other cell</w:t>')
   })
 })
+
+it.each(['setMatchedFont', 'setFont'] as const)(
+  'saves 14pt for only the requested phrase in a table with %s',
+  async (op) => {
+    const phrase = '법령에 따라'
+    const bodyXml = TABLE.replace(
+      '<w:r><w:t xml:space="preserve">contact </w:t></w:r>',
+      '<w:r><w:rPr><w:sz w:val="26"/></w:rPr><w:t>앞 법령에</w:t></w:r>' +
+        '<w:r><w:rPr><w:b/><w:sz w:val="28"/></w:rPr><w:t xml:space="preserve"> 따라 뒤</w:t></w:r>',
+    )
+    const parsed = await parseDocx(await buildDocx({ bodyXml, extraRels: RELS }))
+    const editor = new Editor({
+      element: document.createElement('div'),
+      extensions: editorExtensions,
+      content: blocksToPmDoc(parsed.blocks) as never,
+    })
+    try {
+      const before = editor.state.doc
+      let from = -1
+      before.descendants((node, pos) => {
+        if (node.text === '앞 법령에') from = pos + 2
+      })
+      expect(from).toBeGreaterThan(-1)
+      editor.commands.setTextSelection({ from, to: from + phrase.length })
+      const outcome = executeOps(editor, [
+        op === 'setFont'
+          ? { op, target: { scope: 'selection' }, fontSize: 14 }
+          : { op, text: phrase, target: { nodeType: 'table' }, fontSize: 14 },
+      ])
+      expect(outcome.results[0].changed).toBe(1)
+      const plan = pmDocToSavePlan(editor.state.doc.toJSON() as PmNode, parsed.blocks)
+      const xml = (plan.saveBlocks[0] as { xml: string }).xml
+      const reopened = await parseDocx(await saveDocx(parsed, plan.saveBlocks))
+      const doc = editor.schema.nodeFromJSON(blocksToPmDoc(reopened.blocks))
+      const runs: unknown[] = []
+      doc.firstChild!.firstChild!.firstChild!.firstChild!.forEach((node) => {
+        runs.push([
+          node.text,
+          node.marks.find((m) => m.type.name === 'docTextStyle')?.attrs.sizeHalfPoints,
+          node.marks.some((m) => m.type.name === 'bold'),
+        ])
+      })
+      expect(runs).toEqual(
+        expect.arrayContaining([
+          ['앞 ', 26, false],
+          ['법령에', 28, false],
+          [' 따라 뒤', 28, true],
+        ]),
+      )
+      expect(xml).toContain('<w:gridCol w:w="4000"/>')
+      expect(xml).toContain('<w:t>other cell</w:t>')
+      expect(editor.commands.undo()).toBe(true)
+      expect(editor.state.doc.eq(before)).toBe(true)
+    } finally {
+      editor.destroy()
+    }
+  },
+)

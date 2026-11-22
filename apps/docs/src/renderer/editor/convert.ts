@@ -1297,6 +1297,24 @@ export function tableFormattingSignature(table: PmNode): string {
   )
 }
 
+function onlyTableRunFormattingChanged(table: PmNode): boolean {
+  const original = table.attrs?.originalFormatting
+  if (typeof original !== 'string') return false
+  // Compare the same paragraph and list entries as tableFormattingSignature,
+  // omitting only the third tuple element (inline marks).
+  const withoutMarks = (signature: string) =>
+    JSON.stringify(
+      JSON.parse(signature).map((row: unknown[][][]) =>
+        row.map((cell) => cell.map((paragraph) => paragraph.slice(0, 2))),
+      ),
+    )
+  try {
+    return withoutMarks(original) === withoutMarks(tableFormattingSignature(table))
+  } catch {
+    return false
+  }
+}
+
 function paragraphText(node: PmNode): string {
   return inlineToRuns(node.content ?? [])
     .map((run) => run.text)
@@ -2129,6 +2147,22 @@ export function pmDocToSavePlan(inputDoc: PmNode, originalBlocks: Block[]): Save
           changedCount++
           pushBlock({ kind: 'xml', xml: unwrapBlockRevisionXml(original.originalXml) })
           continue
+        }
+        // A run-only edit can keep the original grid, widths and cell XML.
+        // Paragraph/list changes still go through the full table writer.
+        if (
+          structurallyUnchanged &&
+          node.attrs?.fontRunsEdited &&
+          original.originalXml &&
+          original.table &&
+          (formattingUnchanged || onlyTableRunFormattingChanged(node))
+        ) {
+          const patch = nestedTextsDiff(model, original.table)
+          if (Array.isArray(patch) && !cellBoxParasPatchFromModel(model, original)) {
+            changedCount++
+            pushBlock({ kind: 'xml', xml: patchTableCellTexts(original.originalXml, patch) })
+            continue
+          }
         }
         const tableTexts =
           structurallyUnchanged && formattingUnchanged

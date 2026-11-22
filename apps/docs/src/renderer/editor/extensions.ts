@@ -3485,6 +3485,7 @@ export const DocTable = Node.create({
       tblAltEdited: { default: false },
       originalStructure: { default: null as string | null },
       originalFormatting: { default: null as string | null },
+      fontRunsEdited: { default: false, rendered: false },
       blockRevision: { default: null as Record<string, string> | null },
     }
   },
