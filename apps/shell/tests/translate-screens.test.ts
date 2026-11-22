@@ -4,7 +4,7 @@
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ProjectFile } from '@genoffice/translate-project'
 import type { ProjectBatchItem, ProjectBatchSnapshot } from '../src/shared/project-batch'
 import type { TranslateApi, TranslateProjectListEntry } from '../src/shared/translate-api'
@@ -739,26 +739,6 @@ describe('project batch dialogs', () => {
     items,
   })
   let publish: (snapshot: ProjectBatchSnapshot) => void
-  beforeAll(() => {
-    Object.defineProperties(HTMLDialogElement.prototype, {
-      showModal: {
-        configurable: true,
-        value(this: HTMLDialogElement) {
-          this.open = true
-        },
-      },
-      close: {
-        configurable: true,
-        value(this: HTMLDialogElement) {
-          this.open = false
-        },
-      },
-    })
-  })
-  afterAll(() => {
-    Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal')
-    Reflect.deleteProperty(HTMLDialogElement.prototype, 'close')
-  })
   beforeEach(() => {
     api.getProject.mockResolvedValue(
       project({

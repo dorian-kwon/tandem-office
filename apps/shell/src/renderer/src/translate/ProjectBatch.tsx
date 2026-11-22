@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { AiComposer, AiTypingIndicator, Markdown } from '@genoffice/ui'
 import sendEnterOn from '../assets/send-enter-on.png'
 import sendEnterOff from '../assets/send-enter-off.png'
@@ -11,11 +12,13 @@ import { batchChatTargets } from './batch-chat-targets'
 type BatchView = 'select' | 'progress' | null
 
 function BatchDialog({
+  workspace,
   view,
   title,
   children,
   close,
 }: {
+  workspace: HTMLElement
   view: Exclude<BatchView, null>
   title: string
   children: ReactNode
@@ -25,33 +28,47 @@ function BatchDialog({
   const titleId = useId()
   useEffect(() => {
     const node = ref.current
-    node?.showModal()
-    return () => node?.close()
+    const previous = document.activeElement
+    if (node && getComputedStyle(node).visibility === 'visible') node.focus()
+    return () => {
+      if (node?.contains(document.activeElement) && previous instanceof HTMLElement)
+        previous.focus()
+    }
   }, [])
-  return (
-    <dialog
-      ref={ref}
-      className="modal translate-batch-dialog"
-      aria-labelledby={titleId}
-      data-testid={'project-batch-' + view}
-      onCancel={(event) => {
-        event.preventDefault()
-        close()
-      }}
-    >
-      <h3 id={titleId}>{title}</h3>
-      {children}
-    </dialog>
+  return createPortal(
+    <div className="translate-batch-layer">
+      <dialog
+        open
+        tabIndex={-1}
+        ref={ref}
+        className="modal translate-batch-dialog"
+        aria-labelledby={titleId}
+        data-testid={'project-batch-' + view}
+        onKeyDown={(event) => {
+          if (event.key !== 'Escape' || event.defaultPrevented || event.nativeEvent.isComposing)
+            return
+          event.stopPropagation()
+          event.preventDefault()
+          close()
+        }}
+      >
+        <h3 id={titleId}>{title}</h3>
+        {children}
+      </dialog>
+    </div>,
+    workspace,
   )
 }
 
 function BatchSelection({
+  workspace,
   files,
   start,
   close,
   pending,
   error,
 }: {
+  workspace: HTMLElement
   files: string[]
   start: (files: string[]) => void
   close: () => void
@@ -68,7 +85,7 @@ function BatchSelection({
     if (allCheck.current) allCheck.current.indeterminate = !all && chosen.length > 0
   }, [all, chosen.length])
   return (
-    <BatchDialog view="select" title={s('batchSelectTitle')} close={close}>
+    <BatchDialog workspace={workspace} view="select" title={s('batchSelectTitle')} close={close}>
       <div className="translate-batch-selection-heading">
         <label>
           <input
@@ -543,12 +560,14 @@ function BatchConversation({
 }
 
 export function ProjectBatchControl({
+  workspace,
   api,
   dir,
   files,
   primary,
   wikiAvailable,
 }: {
+  workspace: HTMLElement | null
   wikiAvailable: boolean
   dir: string
   files: string[]
@@ -673,8 +692,9 @@ export function ProjectBatchControl({
           {s('batchProgress')}
         </button>
       )}
-      {view === 'select' && (
+      {view === 'select' && workspace && (
         <BatchSelection
+          workspace={workspace}
           files={files}
           start={(chosen) => void act('start', chosen)}
           close={close}
@@ -682,8 +702,8 @@ export function ProjectBatchControl({
           error={error}
         />
       )}
-      {view === 'progress' && state && (
-        <BatchDialog view="progress" title={s('batchProgress')} close={close}>
+      {view === 'progress' && state && workspace && (
+        <BatchDialog workspace={workspace} view="progress" title={s('batchProgress')} close={close}>
           <div className="translate-batch-progress-body">
             <BatchConversation
               key={dir}
@@ -696,7 +716,13 @@ export function ProjectBatchControl({
               send={async (prompt, files, useWiki) => {
                 if (!state.id) return
                 const before = events.current
-                const next = await api.batchSend({ dir, batchId: state.id, prompt, files, useWiki })
+                const next = await api.batchSend({
+                  dir,
+                  batchId: state.id,
+                  prompt,
+                  files,
+                  useWiki,
+                })
                 if (before === events.current) setState(next)
               }}
             />

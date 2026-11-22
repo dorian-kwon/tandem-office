@@ -251,6 +251,12 @@ test('project batch saves only selected documents, shows live progress and retri
         orientation: 'side',
         focus: 'b',
       })
+    await expect(progress).toBeHidden()
+    await page.locator('.tab-home').click()
+    await expect(progress).toBeVisible()
+    await expect(second).toHaveAttribute('data-batch-state', 'saved')
+    await page.locator('.tab-item:not(.tab-home)').last().click()
+    await expect(progress).toBeHidden()
     expect(await readFile(join(dir, 'source', 'second.docx'))).toEqual(await readFile(word))
   } finally {
     await closeAndSaveVideo(launched, 'project-batch')

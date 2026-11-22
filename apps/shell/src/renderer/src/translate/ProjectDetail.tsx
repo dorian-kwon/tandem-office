@@ -123,6 +123,7 @@ function ProjectContent({
   const [renamingTitle, setRenamingTitle] = useState(false)
   const [titleSaved, setTitleSaved] = useState(false)
   // the newest project object, so a blur-save never writes a stale list over an upload
+  const [workspace, setWorkspace] = useState<HTMLDivElement | null>(null)
   const latest = useRef<ProjectFile | null>(null)
   // each reference's conversion status; null until main answered
   const [refStatus, setRefStatus] = useState<Record<string, TranslateReferenceStatus> | null>(null)
@@ -609,6 +610,7 @@ function ProjectContent({
               )}
               {offersBatch && api && (
                 <ProjectBatchControl
+                  workspace={workspace}
                   api={api}
                   key={dir}
                   dir={dir}
@@ -814,7 +816,7 @@ function ProjectContent({
     </main>
   )
   return (
-    <div className="translation-project-workspace">
+    <div className="translation-project-workspace" ref={setWorkspace}>
       {detail}
       {assistant && project && (
         <ProjectAssistant
