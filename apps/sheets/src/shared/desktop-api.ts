@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { AiReadPagePayload } from '../../../../packages/pdf-structure/src/ai-read/content'
 
 import {
   HEADER_FOOTER_PICTURE_POSITION,
@@ -47,9 +48,13 @@ export type OcrPicturesResponse =
   | { ok: true; opened: boolean; alreadyOpen?: boolean }
   | { ok: false; error: string }
 
-/** What the OCR popup read, as the shell hands it to the asking panel (plain text only). */
+/** What the OCR popup read, as the shell hands it to the asking panel with its selected structure. */
 export interface OcrPopupResult {
-  pages: { index: number; location: string; text: string }[]
+  referenceOnly?: true
+  placement?:
+    | { kind: 'xlsx-cells'; sheet: string; cell: string; overwrite: boolean }
+    | { kind: 'xlsx-new-sheet'; sheet: string }
+  pages: { index: number; location: string; text: string; form?: AiReadPagePayload }[]
   /** pictures that gave no text (nothing found, or could not be read) when the person went on */
   unread?: { index: number; location: string; reason: 'empty' | 'failed' }[]
   /** the local placement analysis; absent when none was made */

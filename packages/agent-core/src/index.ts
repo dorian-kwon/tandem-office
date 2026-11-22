@@ -178,3 +178,9 @@ export {
   translationExampleLookupTool,
   translationWikiCategories,
 } from './translation-wiki-lookup'
+
+export {
+  documentTranslationSkill,
+  translationWorkflowTools,
+  type DocumentTranslationHost,
+} from './document-translation'

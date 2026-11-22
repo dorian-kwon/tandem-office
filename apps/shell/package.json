@@ -1,7 +1,7 @@
 {
   "name": "@genoffice/shell",
   "productName": "tandem office",
-  "version": "0.15.13",
+  "version": "0.15.14",
   "license": "Apache-2.0",
   "homepage": "https://github.com/dorian-kwon/tandem-office",
   "private": true,

@@ -2,13 +2,14 @@ import { checkPlaceholders, placeholderSource, REDACT_MARK } from './redact'
 import type { Editor } from '@tiptap/core'
 import type { Node as PmDocNode, Schema } from '@tiptap/pm/model'
 import type { Transaction } from '@tiptap/pm/state'
-import { generateTocFieldXml, type TocEntry } from '@genoffice/docx-engine'
+import { generateTocFieldXml, type TableModel, type TocEntry } from '@genoffice/docx-engine'
 import { isEastAsianFontName } from '../font-list'
 import { t } from '../i18n/locale'
 import { blockRangePositions, isTrackedDeleted, liveText } from './doc-utils'
 import { styleOpDefs, type AiStyleAccess } from './style-ops'
 import { fieldOpDefs } from './field-ops'
 import { tableOpDefs } from './table-ops'
+import { draftNestedTable, nestedTableNode } from './nested-table-draft'
 
 /**
  * Canonical edit ops for the document. The model (apply_ops) and, later, the
@@ -402,7 +403,12 @@ function blockText(node: PmDocNode): string {
   return liveText(node)
 }
 
-function matchTarget(doc: PmDocNode, target: Target, sel: SelRange): TopBlock[] {
+function matchTarget(
+  doc: PmDocNode,
+  target: Target,
+  sel: SelRange,
+  textOf = blockText,
+): TopBlock[] {
   return topLevelBlocks(doc).filter((b) => {
     if (target.blockIndexes && !target.blockIndexes.includes(b.index)) return false
     if (target.nodeType === 'image') {
@@ -417,7 +423,7 @@ function matchTarget(doc: PmDocNode, target: Target, sel: SelRange): TopBlock[] 
       if (Number(b.node.attrs.level) !== target.headingLevel) return false
     }
     if (target.containsText) {
-      const text = blockText(b.node)
+      const text = textOf(b.node)
       const hit =
         target.matchCase === false
           ? text.toLowerCase().includes(target.containsText.toLowerCase())
@@ -824,138 +830,154 @@ function modelViewOf(node: PmDocNode): { text: string; markers: string[] } {
   return { text: out, markers }
 }
 
-/**
- * Document ranges a withheld span covers in a block, in the same coordinates
- * the replacements are collected in.
- *
- * This is what catches an edit aimed at the span itself. Placeholder spelling
- * cannot: `find` matches the real text, so a model that never saw the words
- * cannot name them, and an edit that did reach them is a range collision
- * rather than a marker the model spelled wrong.
- */
-function redactionRangesOf(node: PmDocNode, base: number): Array<{ from: number; to: number }> {
-  const out: Array<{ from: number; to: number }> = []
-  node.forEach((child, offset) => {
-    if (!child.isText || !child.text) return
-    if (!child.marks.some((m) => m.type.name === REDACT_MARK)) return
-    out.push({ from: base + offset, to: base + offset + child.text.length })
-  })
-  return out
-}
-
-function runFindReplace(op: Op, env: RunEnv): OpResult {
-  const { tr, schema, ctx, sel } = env
-  const find = String(op.find)
-  const replace = String(op.replace ?? '')
-  const matchCase = op.matchCase !== false
-  const needle = matchCase ? find : find.toLowerCase()
-  const blocks = op.target ? matchTarget(tr.doc, targetOf(op), sel) : topLevelBlocks(tr.doc)
-  const replacements: Array<{ from: number; to: number; marks: PmDocNode['marks'] }> = []
-  const touchedIndexes = new Set<number>()
-  let skippedProtected = 0
-  let skippedDeleted = 0
-
-  for (const b of blocks) {
-    if (b.node.type.name === 'docProtected') {
-      if (blockText(b.node).includes(find)) skippedProtected++
-      continue
-    }
-    const blockDeleted = isTrackedDeleted(b.node)
-    b.node.forEach((child, offset) => {
-      if (!child.isText || !child.text) return
-      const struck = blockDeleted || child.marks.some((m) => m.type.name === 'del')
-      const hay = matchCase ? child.text : child.text.toLowerCase()
-      let at = hay.indexOf(needle)
-      while (at !== -1) {
-        const from = b.pos + 1 + offset + at
-        if (struck) {
-          skippedDeleted++
-        } else if (insideClip(b, from, from + needle.length)) {
-          replacements.push({ from, to: from + needle.length, marks: child.marks })
-          touchedIndexes.add(b.index)
-        }
-        at = hay.indexOf(needle, at + needle.length)
-      }
-    })
-  }
-
-  // A rewrite is refused only when it would actually touch a withheld span: the
-  // collected replacements are exactly the text the model is about to
-  // overwrite, so a batch that edits a different paragraph — or the words
-  // beside a marker — is left alone, while one that eats a span is stopped
-  // before anything is dispatched.
-  if (replacements.length > 0) {
-    // 1. no replacement may overlap the words the model was never shown
-    let overlaps = 0
-    for (const b of blocks) {
-      if (!touchedIndexes.has(b.index)) continue
-      for (const span of redactionRangesOf(b.node, b.pos + 1)) {
-        for (const r of replacements) {
-          if (r.from < span.to && r.to > span.from) overlaps++
-        }
-      }
-    }
-    if (overlaps > 0) {
-      throw new Error(
-        `this edit would overwrite ${overlaps} private placeholder(s) — those words are withheld from the model, so rewrite around them instead of replacing them`,
+/** Replace runs in a single block. A nested table occupies one position in
+ * the outer document and has its own text coordinates in a detached draft. */
+function replaceBlockRuns(
+  editor: Editor,
+  tr: Transaction,
+  b: TopBlock,
+  pattern: RegExp,
+  replace: string,
+  range: SelRange | null,
+  stats: { occurrences: number; skippedDeleted: number },
+  nestedTrack?: { author: string } | null,
+  detached = false,
+): void {
+  const edits: Array<{ from: number; to: number; marks: PmDocNode['marks'] }> = []
+  const tables: Array<{ pos: number; model: TableModel }> = []
+  const nonemptyRange = range && range.from < range.to ? range : null
+  const inside = (from: number, to: number) =>
+    !nonemptyRange || (from >= nonemptyRange.from && to <= nonemptyRange.to)
+  const visit = (node: PmDocNode, pos: number, deleted: boolean) => {
+    if (node.attrs.gridGap) return
+    if (range && (pos + node.nodeSize < range.from || pos > range.to)) return
+    deleted ||= [node.attrs.blockRevision, node.attrs.rowRevision, node.attrs.cellRevision].some(
+      (revision) => revision?.kind === 'del',
+    )
+    if (node.type.name === 'docNestedTable') {
+      const model = node.attrs.model as TableModel | null
+      // A partial selection on the surrounding cell never selects text inside the atom.
+      if (
+        deleted ||
+        !model?.rows.length ||
+        (range && !inside(pos, pos + 1)) ||
+        (range && !nonemptyRange)
       )
+        return
+      const draft = draftNestedTable(editor, model)
+      const inner = draft.editor.state.tr
+      replaceBlockRuns(
+        editor,
+        inner,
+        { index: 0, pos: 0, node: inner.doc.firstChild! },
+        pattern,
+        replace,
+        null,
+        stats,
+        nestedTrack,
+        true,
+      )
+      if (inner.docChanged) tables.push({ pos, model: draft.result(false, inner.doc.firstChild!) })
+      return
     }
-
-    // 2. and whatever the model wrote must leave every marker it was given
-    //    standing. Both sides are the model's own view: comparing markers
-    //    against raw text would report every batch as a deletion.
-    //
-    //    A block is policed only when it actually holds a withheld span. A
-    //    block with none is the document's own text, and a `{{token}}` in it
-    //    is content to be filled in rather than a marker of ours — a mail
-    //    merge template is the normal case, and policing it is what stopped
-    //    `genoffice merge` from filling a docx at all. Where a block is
-    //    policed, the whole `{{...}}` bag has to match, so a marker cannot be
-    //    renamed, split, or shadowed by a token the model invented.
-    //
-    //    The "after" side is read off the transaction *after* applying the
-    //    replacements, rather than computed by shifting offsets. A withheld
-    //    span is longer or shorter than the marker that stands in for it, so
-    //    any arithmetic between the two coordinate systems drifts; replaying
-    //    the real steps cannot. executeOps discards the transaction when this
-    //    throws, so nothing reaches the document.
-    const before = new Map<number, { text: string; markers: string[] }>()
-    for (const b of blocks) {
-      if (touchedIndexes.has(b.index)) before.set(b.index, modelViewOf(b.node))
+    if (node.isTextblock) {
+      node.forEach((child, offset) => {
+        if (!child.isText || !child.text) return
+        for (const match of child.text.matchAll(pattern)) {
+          const from = pos + 1 + offset + match.index
+          const to = from + match[0].length
+          if (!inside(from, to)) continue
+          if (deleted || child.marks.some((m) => m.type.name === 'del')) {
+            stats.skippedDeleted++
+          } else if (child.marks.some((m) => m.type.name === REDACT_MARK)) {
+            throw new Error(
+              'this edit would overwrite a private placeholder — those words are withheld from the model, so rewrite around them instead of replacing them',
+            )
+          } else {
+            edits.push({ from, to, marks: child.marks })
+          }
+        }
+      })
+      return
     }
-
-    // the redaction mark belongs to the reader, so a rewrite never inherits it
-    for (const r of [...replacements].reverse()) {
-      const marks = r.marks.filter((m) => m.type.name !== REDACT_MARK)
-      if (replace) tr.replaceWith(r.from, r.to, schema.text(replace, marks))
-      else tr.delete(r.from, r.to)
+    node.forEach((child, offset) => visit(child, pos + 1 + offset, deleted))
+  }
+  visit(b.node, b.pos, false)
+  if (!edits.length && !tables.length) return
+  const before = edits.length ? modelViewOf(b.node) : null
+  // Attribute updates keep the atom's size. The text edits follow in reverse
+  // order so their coordinates stay valid across unequal-length replacements.
+  for (const table of tables) tr.setNodeAttribute(table.pos, 'model', table.model)
+  const tracked =
+    detached && nestedTrack ? { author: nestedTrack.author, date: new Date().toISOString() } : null
+  for (const edit of edits.reverse()) {
+    if (tracked) {
+      if (replace) {
+        const ins = editor.schema.marks.ins.create(tracked)
+        tr.insert(edit.to, editor.schema.text(replace, ins.addToSet(edit.marks)))
+      }
+      tr.addMark(edit.from, edit.to, editor.schema.marks.del.create(tracked))
+    } else if (replace) {
+      tr.replaceWith(edit.from, edit.to, editor.schema.text(replace, edit.marks))
+    } else {
+      tr.delete(edit.from, edit.to)
     }
-
-    let damaged = 0
-    for (const b of topLevelBlocks(tr.doc)) {
-      const was = before.get(b.index)
-      if (was === undefined || was.markers.length === 0) continue
-      damaged += checkPlaceholders(was.text, modelViewOf(b.node).text).length
-    }
-    if (damaged > 0) {
+  }
+  stats.occurrences += edits.length
+  if (before?.markers.length) {
+    const damaged = checkPlaceholders(before.text, modelViewOf(tr.doc.nodeAt(b.pos)!).text).length
+    if (damaged) {
       throw new Error(
         `this edit would damage ${damaged} private placeholder(s) (dropped, renamed, split or duplicated) — reproduce each {{...}} exactly and rephrase around them instead`,
       )
     }
   }
+}
 
-  if (touchedIndexes.size > 0) {
-    for (const b of topLevelBlocks(tr.doc)) {
-      if (touchedIndexes.has(b.index)) markChanged(tr, b.pos, ctx)
+function runFindReplace(op: Op, env: RunEnv): OpResult {
+  const { tr, editor, ctx, sel } = env
+  const find = String(op.find)
+  const replace = String(op.replace ?? '')
+  const pattern = new RegExp(
+    find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+    op.matchCase === false ? 'giu' : 'gu',
+  )
+  const textOf = (node: PmDocNode): string => {
+    if (node.type.name !== 'docTable') return blockText(node)
+    return liveText(node, false, {
+      leafText: (leaf) =>
+        leaf.type.name === 'docNestedTable' && leaf.attrs.model
+          ? textOf(nestedTableNode(editor, leaf.attrs.model))
+          : (leaf.type.spec.leafText?.(leaf) ?? ''),
+    })
+  }
+  const blocks = op.target ? matchTarget(tr.doc, op.target, sel, textOf) : topLevelBlocks(tr.doc)
+  const range = op.target ? scopedRange(op.target, sel) : null
+  const stats = { occurrences: 0, skippedDeleted: 0 }
+  const recording = editor.storage.trackChanges as { enabled: boolean; author: string } | undefined
+  const track = ctx.track ?? (recording?.enabled ? recording : null)
+  let skippedProtected = 0
+  let changed = 0
+  for (const b of blocks.reverse()) {
+    if (b.node.type.name === 'docProtected') {
+      if (pattern.test(blockText(b.node))) skippedProtected++
+      pattern.lastIndex = 0
+      continue
+    }
+    const prior = stats.occurrences
+    replaceBlockRuns(editor, tr, b, pattern, replace, range, stats, track)
+    if (stats.occurrences > prior) {
+      markChanged(tr, b.pos, ctx)
+      changed++
     }
   }
   return {
     op: 'findReplace',
-    matched: touchedIndexes.size,
-    changed: touchedIndexes.size,
+    matched: changed,
+    changed,
     skippedProtected,
-    skippedDeleted,
-    detail: t('aiCmdReplacedCount', { count: replacements.length }),
+    skippedDeleted: stats.skippedDeleted,
+    detail: t('aiCmdReplacedCount', { count: stats.occurrences }),
   }
 }
 

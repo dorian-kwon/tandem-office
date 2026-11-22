@@ -1,3 +1,6 @@
+import { readHfStoryRuns, type AiHfStoryAccess } from './hf-translation'
+import { runFingerprint } from './run-fingerprint'
+export { runFingerprint } from './run-fingerprint'
 import { applySlotRoles, bilingualSlots } from './bilingual-table-slots'
 import {
   AddMarkStep,
@@ -171,22 +174,6 @@ export function groupsOf(block: ProseMirrorNode, pos: number): Group[] {
     }
   }
   return groups
-}
-
-/**
- * A short fingerprint of a paragraph's translatable text (FNV-1a, base 36).
- * read_runs hands it out and translate_blocks checks it, so an index that
- * shifted since the read (an earlier edit in the same turn, a user edit)
- * cannot write a translation into the wrong paragraph.
- */
-export function runFingerprint(segments: readonly string[]): string {
-  let hash = 0x811c9dc5
-  const text = segments.join('\u0001')
-  for (let i = 0; i < text.length; i++) {
-    hash ^= text.charCodeAt(i)
-    hash = Math.imul(hash, 0x01000193)
-  }
-  return (hash >>> 0).toString(36)
 }
 
 type LocatedBlock = { node: ProseMirrorNode; pos: number }
@@ -534,12 +521,23 @@ function boxGroupsOf(runs: readonly Run[]): BoxGroup[] {
 }
 
 /** read_runs lines for the paragraphs of a block's text boxes (a read-only box is listed once, as skipped) */
-function boxRunEntries(index: number, refs: readonly BoxRef[]): RunParagraph[] {
+function boxRunEntries(
+  index: number,
+  refs: readonly BoxRef[],
+  inspectBlocked = false,
+): RunParagraph[] {
   const out: RunParagraph[] = []
   let unwritable = false
-  refs.forEach(({ box, key }) => {
+  refs.forEach(({ box, key }, at) => {
     const listed = box.paras.map((p) => boxGroupsOf(p.runs).map((g) => g.text))
     const hasText = listed.some((segments) => segments.length > 0)
+    if (inspectBlocked && (key === undefined || box.readOnly)) {
+      listed.forEach((segments, paragraph) => {
+        if (segments.length)
+          out.push({ index, box: key ?? at, paragraph, segments, skip: 'read-only text box' })
+      })
+      return
+    }
     if (key === undefined) {
       // a cell box nothing can be written to (no segment number, or read-only): said once per block
       if (hasText) unwritable = true
@@ -579,7 +577,7 @@ export function readRunGroups(
     const blocks = textblocksOf(node, pos)
     if (!blocks) {
       const refs = boxRefsOf(node, pos)
-      if (refs) out.push(...boxRunEntries(index, refs))
+      if (refs) out.push(...boxRunEntries(index, refs, options.compact))
       else out.push({ index, skip: String(node.attrs.blockType || node.type.name) })
       continue
     }
@@ -588,6 +586,17 @@ export function readRunGroups(
     if (inTable) {
       nestedTablesOf(node, pos).forEach(({ model }, nestedTable) => {
         const table = nestedTableNode(editor, model)
+        if (options.compact) {
+          const refs = boxRefsOf(table, 0)
+          if (refs)
+            out.push(
+              ...boxRunEntries(index, refs, true).map((entry) => ({
+                ...entry,
+                nestedTable,
+                skip: 'text box inside a nested table',
+              })),
+            )
+        }
         const paragraphs = textblocksOf(table, 0)
         if (paragraphs) {
           out.push(
@@ -604,7 +613,7 @@ export function readRunGroups(
     // text boxes inside the cells of this table (the boxes OCR puts over a picture)
     if (inTable) {
       const refs = boxRefsOf(node, pos)
-      if (refs) out.push(...boxRunEntries(index, refs))
+      if (refs) out.push(...boxRunEntries(index, refs, options.compact))
     }
   }
   return out
@@ -721,6 +730,7 @@ export const TAG_LIKE = new RegExp(
 )
 
 export interface RunTranslationReport {
+  source?: UnitSource
   index: number
   /** depth-first number of a nested table in this block */
   nestedTable?: number
@@ -1104,6 +1114,10 @@ function planParagraph(doc: ProseMirrorNode, item: RunTranslationItem): PlanResu
       stale: true,
       error: `${where} changed since read_runs (fingerprint mismatch); read it again`,
     }
+  report.source = translationUnitSource(
+    groups.map((g) => g.text),
+    item.fp,
+  )
   if (item.tagged !== undefined) return planTagged(item, where, block, groups, report)
   // italic spans ride along as ranges; everything below works on the plain text
   const parsed = (item.segments as string[]).map(parseItalicSegment)
@@ -1213,6 +1227,10 @@ function planBoxParagraph(doc: ProseMirrorNode, item: RunTranslationItem): BoxPl
       stale: true,
       error: `${where} changed since read_runs (fingerprint mismatch); read it again`,
     }
+  report.source = translationUnitSource(
+    groups.map((g) => g.text),
+    item.fp,
+  )
   // a text box run takes plain text: italic spans cannot ride along here
   const plain = (item.segments as string[]).map((segment) => parseItalicSegment(segment).plain)
   if (plain.length > 0 && plain.every((text) => text.trim() === ''))
@@ -1601,6 +1619,7 @@ export interface NoteTranslationItem {
 }
 
 export interface NoteTranslationReport {
+  source?: UnitSource
   note: NoteKind
   id: string
   paragraph?: number
@@ -1665,6 +1684,10 @@ export function planNoteTranslations(
       errors.push(`${where} changed since read_runs (fingerprint mismatch); read it again`)
       continue
     }
+    report.source = translationUnitSource(
+      target.groups.map((g) => g.text),
+      item.fp,
+    )
     // notes live outside the document model: italic tags are dropped, the text stays plain
     const plainSegments = item.segments.map(stripItalicTags)
     if (plainSegments.length > 0 && plainSegments.every((s) => s.trim() === '')) {
@@ -1729,6 +1752,8 @@ export function planNoteTranslations(
 // ---------------------------------------------------------------------------
 
 type HandledUnit = {
+  story?: string
+  source?: UnitSource
   index?: number
   paragraph?: number
   box?: number
@@ -1738,8 +1763,32 @@ type HandledUnit = {
   fp?: string
   incomplete?: unknown
 }
-const handledUnits = new WeakMap<object, Map<string, string>>()
+interface UnitSource {
+  fp: string
+  /** Script membership of the source, without storing its original text. */
+  scriptMask: number
+}
+type UnitReceipt = { complete: boolean; reviewOnly?: boolean; source?: UnitSource }
+const handledUnits = new WeakMap<object, Map<string, UnitReceipt>>()
+const translationLanguages = new WeakMap<object, string>()
+/** Opening a different file can reuse the same TipTap editor. Saves retain its receipts. */
+export function clearTranslationProgress(editor: Editor): void {
+  const live = originalAiEditor(editor)
+  handledUnits.delete(live)
+  translationLanguages.delete(live)
+  twinPairs.delete(live)
+  pairedNodes.delete(live)
+  placedInDocument.delete(live)
+  shiftedSinceRead.delete(live)
+}
+export function setTranslationSourceLanguage(editor: Editor, language: string): void {
+  if (language.trim()) translationLanguages.set(originalAiEditor(editor), language.trim())
+}
+export function getTranslationSourceLanguage(editor: Editor): string | undefined {
+  return translationLanguages.get(originalAiEditor(editor))
+}
 function unitKey(unit: HandledUnit): string {
+  if (unit.story) return JSON.stringify(['story', unit.story, unit.paragraph])
   return JSON.stringify([
     unit.note ?? 'body',
     unit.id ?? unit.index,
@@ -1751,24 +1800,45 @@ function unitKey(unit: HandledUnit): string {
 /** Only the fingerprint of the applied result at this address is complete.
  * Repeated source strings in other cells and a paragraph restored by Undo
  * must still be eligible when the source and target share a script. */
-export function recordHandled(editor: Editor, units: HandledUnit[]): void {
+export function recordHandled(
+  editor: Editor,
+  units: HandledUnit[],
+  reviewedInputs?: HandledUnit[],
+): void {
   let handled = handledUnits.get(originalAiEditor(editor))
   if (!handled) handledUnits.set(originalAiEditor(editor), (handled = new Map()))
+  const inputsByKey =
+    reviewedInputs && new Map(reviewedInputs.map((input) => [unitKey(input), input.fp]))
   for (const unit of units) {
-    if (unit.fp && !unit.incomplete) handled.set(unitKey(unit), unit.fp)
+    if (!unit.fp) continue
+    const key = unitKey(unit)
+    const before = unit.source?.fp ?? inputsByKey?.get(key)
+    const previous = before ? handled.get(key + ':' + before) : undefined
+    const source = previous?.source ?? unit.source
+    handled.set(key + ':' + unit.fp, {
+      complete: !unit.incomplete && !(reviewedInputs && previous?.complete === false),
+      ...(reviewedInputs && (!previous || previous.reviewOnly) && { reviewOnly: true }),
+      ...(source && { source }),
+    })
   }
 }
 
 const SCRIPT_PATTERNS: Array<{ language: RegExp; script: RegExp }> = [
-  { language: /^(ko\b|korea|한국|한국어|한글)/i, script: /[ᄀ-ᇿ㄰-㆏가-힯]/ },
-  { language: /^(ja\b|japan|日本|일본)/i, script: /[぀-ヿ一-鿿]/ },
-  { language: /^(zh\b|chinese|中文|汉|漢|중국)/i, script: /[一-鿿]/ },
-  { language: /^(ru\b|russia|uk\b|ukrain|bg\b|bulgar|러시아)/i, script: /[Ѐ-ӿ]/ },
-  { language: /^(ar\b|arabic|fa\b|persian)/i, script: /[؀-ۿ]/ },
-  { language: /^(he\b|hebrew)/i, script: /[֐-׿]/ },
-  { language: /^(th\b|thai)/i, script: /[฀-๿]/ },
-  { language: /^(el\b|greek)/i, script: /[Ͱ-Ͽ]/ },
-  { language: /^(hi\b|hindi)/i, script: /[ऀ-ॿ]/ },
+  { language: /^(ko\b|korea|한국|한국어|한글)/i, script: /\p{Script=Hangul}/u },
+  {
+    language: /^(ja\b|japan|日本|일본)/i,
+    script: /(?=\p{L})[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u,
+  },
+  { language: /^(zh\b|chinese|中文|汉|漢|중국)/i, script: /\p{Script=Han}/u },
+  {
+    language: /^(ru\b|russia|uk\b|ukrain|bg\b|bulgar|러시아)/i,
+    script: /(?=\p{L})\p{Script=Cyrillic}/u,
+  },
+  { language: /^(ar\b|arabic|fa\b|persian)/i, script: /(?=\p{L})\p{Script=Arabic}/u },
+  { language: /^(he\b|hebrew)/i, script: /(?=\p{L})\p{Script=Hebrew}/u },
+  { language: /^(th\b|thai)/i, script: /(?=\p{L})\p{Script=Thai}/u },
+  { language: /^(el\b|greek)/i, script: /(?=\p{L})\p{Script=Greek}/u },
+  { language: /^(hi\b|hindi)/i, script: /(?=\p{L})\p{Script=Devanagari}/u },
 ]
 
 /** the script test of a source language ("ko", "Korean", ...); null for a Latin-script or unknown language */
@@ -1778,8 +1848,37 @@ export function sourceScriptOf(language: string | undefined): RegExp | null {
   return SCRIPT_PATTERNS.find((p) => p.language.test(name))?.script ?? null
 }
 
+// Languages sharing a script are intentionally conservative: a French source
+// and an English target need an explicit handled receipt for Latin-script text.
+const latinLanguages =
+  /^(?:(?:en|fr|de|es|id|pt|it|pl|cs|nl|ms|vi)\b|english|french|german|spanish|indonesian|portuguese|italian|polish|czech|dutch|malay|vietnamese|영어|프랑스어|독일어|스페인어|베트남어)/i
+const completionScripts = [
+  { language: latinLanguages, script: /\p{Script=Latin}/u },
+  ...SCRIPT_PATTERNS,
+]
+const anyLetter = /\p{L}/u
+function sourceRule(language: string | undefined): number {
+  return completionScripts.findIndex((rule) => rule.language.test(language?.trim() ?? ''))
+}
+function matchesRule(text: string, rule: number): boolean {
+  return anyLetter.test(text) && (rule < 0 || completionScripts[rule]!.script.test(text))
+}
+export function translationUnitSource(segments: readonly string[], fp?: string): UnitSource {
+  const text = segments.join(' ')
+  let scriptMask = 0
+  if (anyLetter.test(text)) {
+    scriptMask = 1
+    completionScripts.forEach(({ script }, index) => {
+      if (script.test(text)) scriptMask |= 1 << (index + 1)
+    })
+  }
+  return { fp: fp ?? runFingerprint(segments), scriptMask }
+}
+
 export interface RemainingReport {
-  /** Fingerprints successfully handled out of all text-bearing translation units, independent of language heuristics. */
+  blocked?: string[]
+  stories?: string[]
+  /** Eligible original-language units handled or still awaiting translation in this document. */
   progress: { done: number; total: number }
   /** body blocks (top-level index, plus the cell paragraph number in a table) still untranslated */
   body: string[]
@@ -1796,45 +1895,60 @@ export function remainingUntranslated(
   editor: Editor,
   access: AiNotesAccess | undefined,
   language?: string,
-  /** `tracking`: revision tracking is on, so text box paragraphs (which cannot carry revisions) are not counted */
-  options: { tracking?: boolean; notesOnly?: boolean } = {},
+  /** `tracking`: revision tracking prevents writing to text boxes, so source text in them is reported as blocked */
+  options: { tracking?: boolean; notesOnly?: boolean; stories?: AiHfStoryAccess } = {},
 ): RemainingReport {
-  const script = sourceScriptOf(language)
+  const rule = sourceRule(language ?? getTranslationSourceLanguage(editor))
   const handled = handledUnits.get(originalAiEditor(editor))
   const progress = { done: 0, total: 0 }
   const pending = (segments: string[], fp: string, unit: HandledUnit): boolean => {
-    if (handled?.get(unitKey(unit)) === fp) {
-      progress.done++
-      progress.total++
-      return false
-    }
-    const text = segments.join(' ')
-    const hasLetters = /\p{L}/u.test(text)
-    if (hasLetters) progress.total++
-    return script ? script.test(text) : hasLetters
+    const current = handled?.get(unitKey(unit) + ':' + fp)
+    const eligible = current?.source
+      ? (current.source.scriptMask & (1 << (rule + 1))) !== 0
+      : matchesRule(segments.join(' '), rule)
+    if (!eligible) return false
+    progress.total++
+    if (!current?.complete || (current.reviewOnly && rule >= 0)) return true
+    progress.done++
+    return false
   }
   const body: string[] = []
+  const blocked: string[] = []
   const doc = editor.state.doc
   for (const entry of options.notesOnly
     ? []
-    : readRunGroups(editor, 0, doc.childCount - 1, { compact: true })) {
-    // The two bilingual sides form one handled source unit.
-    if (entry.skip === TWIN_SKIP.source) {
-      progress.done++
-      progress.total++
+    : readRunGroups(editor, 0, doc.childCount - 1, { compact: true, review: true })) {
+    // A bilingual pair contributes its original once, regardless of the target text.
+    if (entry.role === 'translation') continue
+    if (entry.role === 'original') {
+      if (entry.segments && matchesRule(entry.segments.join(' '), rule)) {
+        progress.done++
+        progress.total++
+      }
       continue
     }
-    if (!entry.segments || !entry.fp) continue
-    if (options.tracking && entry.box !== undefined) continue
-    if (pending(entry.segments, entry.fp, entry))
+    if (entry.skip && entry.segments) {
+      if (matchesRule(entry.segments.join(' '), rule)) {
+        progress.total++
+        const table = entry.nestedTable === undefined ? '' : ` nested table ${entry.nestedTable}`
+        blocked.push(
+          `${entry.index}${table} box ${entry.box} paragraph ${entry.paragraph} (${entry.skip})`,
+        )
+      }
+      continue
+    }
+    if (!entry.segments || !entry.fp || !pending(entry.segments, entry.fp, entry)) continue
+    if (entry.box !== undefined) {
+      const location = `${entry.index} (box ${entry.box} paragraph ${entry.paragraph})`
+      if (options.tracking) blocked.push(location + ' (tracked changes enabled)')
+      else body.push(location)
+    } else if (entry.nestedTable !== undefined)
+      body.push(`${entry.index} (nested table ${entry.nestedTable} paragraph ${entry.paragraph})`)
+    else
       body.push(
-        entry.box !== undefined
-          ? `${entry.index} (box ${entry.box} paragraph ${entry.paragraph})`
-          : entry.nestedTable !== undefined
-            ? `${entry.index} (nested table ${entry.nestedTable} paragraph ${entry.paragraph})`
-            : entry.paragraph === undefined
-              ? `${entry.index}`
-              : `${entry.index} (paragraph ${entry.paragraph})`,
+        entry.paragraph === undefined
+          ? `${entry.index}`
+          : `${entry.index} (paragraph ${entry.paragraph})`,
       )
   }
   const notes: string[] = []
@@ -1846,5 +1960,18 @@ export function remainingUntranslated(
         )
     }
   }
-  return { body, notes, progress }
+  const report: RemainingReport = { body, notes, progress }
+  if (options.stories && !options.notesOnly) {
+    const stories: string[] = []
+    for (const unit of readHfStoryRuns(options.stories)) {
+      if (!pending(unit.segments, unit.fp, unit)) continue
+      const location = `${unit.story} paragraph ${unit.paragraph}`
+      if (options.tracking) blocked.push(location + ' (tracked changes enabled)')
+      else if (unit.readOnly || !options.stories.writable()) blocked.push(location + ' (read-only)')
+      else stories.push(location)
+    }
+    report.stories = stories
+  }
+  if (blocked.length) report.blocked = blocked
+  return report
 }

@@ -756,7 +756,9 @@ export function AiPanel({
       imageGenAvailable: () => imageGenAvailableRef.current,
       fetchImage: (url) => apiRef.current.fetchImage(url),
     }
+    const documentSkill = createPdfSkill(deps)
     loopRef.current = new AgentLoop({
+      documentSkill,
       documentTranslation: {
         documentKey: () => savedPathRef.current,
         analyzingLabel: () => analyzingDocumentLabel[langRef.current],
@@ -767,7 +769,7 @@ export function AiPanel({
       toolsAllowed: () =>
         settingsRef.current ? localModelCapabilities(settingsRef.current).tools !== false : true,
       skill: composeWithDrive('pdf', '', () => loopRef.current?.messages ?? [], [
-        createPdfSkill(deps),
+        documentSkill,
         // the person's skills: use_skill, read_skill_file, propose_skill (app-run tools)
         ...panelUserSkills({
           lang: () => langRef.current,
@@ -1041,6 +1043,8 @@ export function AiPanel({
 
   /** the composer's typed text: the chosen skills ride along */
   useProjectEditorRun({
+    documentEditor: 'pdf',
+    documentLoop: () => loopRef.current,
     turn: runStatus.projectTurn,
     path: filePath,
     ready: !projectPanel.chat.available || projectPanel.chat.ready,

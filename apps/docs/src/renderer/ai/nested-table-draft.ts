@@ -211,7 +211,20 @@ export function draftNestedTable(editor: Editor, model: TableModel) {
               runs: text ? [{ text, bold: cell.bold, color: cell.color }] : [],
             }))
           let p = 0
+          let nestedTables = cell.nestedTables
           newCell.forEach((node, _offset, i) => {
+            const old = oldCell.child(i)
+            if (
+              node.type.name === 'docNestedTable' &&
+              old.attrs.model !== node.attrs.model &&
+              nestedTables
+            ) {
+              const index = nestedTables.indexOf(old.attrs.model)
+              if (index >= 0) {
+                if (nestedTables === cell.nestedTables) nestedTables = nestedTables.slice()
+                nestedTables[index] = node.attrs.model
+              }
+            }
             if (!node.isTextblock) return
             const index = p++
             if (node.content.eq(oldCell.child(i).content)) return
@@ -219,7 +232,7 @@ export function draftNestedTable(editor: Editor, model: TableModel) {
             richParas[index] = { ...richParas[index], runs }
             paras[index] = runs.map((run) => run.text).join('')
           })
-          return { ...cell, paras, richParas }
+          return { ...cell, paras, richParas, ...(nestedTables ? { nestedTables } : {}) }
         })
       })
       return { ...previous, rows }

@@ -1,7 +1,9 @@
 import { test, expect } from '@playwright/test'
 import { mkdir, readFile, writeFile, rm, readdir, stat } from 'node:fs/promises'
-import { resolve, join } from 'node:path'
+import { join } from 'node:path'
 import JSZip from 'jszip'
+import { Document, Packer, Paragraph, Header } from 'docx'
+import { runFingerprint } from '../apps/docs/src/renderer/ai/run-fingerprint'
 import { createProject, addSource } from '@genoffice/translate-project'
 import { launchShell, closeAndSaveVideo } from './helpers'
 import {
@@ -21,7 +23,23 @@ test('project batch saves only selected documents, shows live progress and retri
   const markdown = join(root, 'first.md')
   const word = join(root, 'second.docx')
   await writeFile(markdown, 'First paragraph.')
-  await writeFile(word, await readFile(resolve(__dirname, '../fixtures/generated/simple.docx')))
+  const buffer = await Packer.toBuffer(
+    new Document({
+      sections: [
+        {
+          headers: { default: new Header({ children: [new Paragraph('Report title')] }) },
+          children: [new Paragraph('Second document.')],
+        },
+      ],
+    }),
+  )
+  await writeFile(word, buffer)
+  const documentXml = await (
+    await JSZip.loadAsync(buffer)
+  )
+    .file('word/document.xml')!
+    .async('string')
+  const headerId = /<w:headerReference[^>]*r:id="([^"]+)"/.exec(documentXml)![1]!
   await addSource(dir, markdown)
   await addSource(dir, word)
   const already = join(root, 'third.md')
@@ -76,17 +94,47 @@ test('project batch saves only selected documents, shows live progress and retri
           },
         ],
       },
-      { text: 'PROJECT_TRANSLATION_COMPLETE', hold: true },
+      { text: '번역을 마쳤습니다.', hold: true },
+      { text: 'PROJECT_TRANSLATION_COMPLETE' },
       {
         toolCalls: [
           {
             id: 'change-word',
-            name: 'replace_blocks',
-            input: { startBlockIndex: 1, endBlockIndex: 1, html: '<p>두 번째 문서입니다.</p>' },
+            name: 'translate_blocks',
+            input: {
+              blocks: [
+                {
+                  index: 0,
+                  fp: runFingerprint(['Second document.']),
+                  segments: ['두 번째 문서입니다.'],
+                },
+              ],
+            },
           },
         ],
       },
       { text: 'PROJECT_TRANSLATION_COMPLETE' },
+      // A premature completion claim must lead back to the outstanding header.
+      {
+        toolCalls: [
+          {
+            id: 'change-header',
+            name: 'translate_blocks',
+            input: {
+              blocks: [
+                {
+                  story: 'header:default:' + headerId,
+                  paragraph: 0,
+                  fp: runFingerprint(['Report title']),
+                  segments: ['보고서 제목'],
+                },
+              ],
+            },
+          },
+        ],
+      },
+      { text: 'PROJECT_TRANSLATION_COMPLETE' },
+      { text: 'PROJECT_ALREADY_TRANSLATED\nPROJECT_TRANSLATION_COMPLETE' },
       { text: 'PROJECT_ALREADY_TRANSLATED\nPROJECT_TRANSLATION_COMPLETE' },
     ])
     await page.evaluate(() => {
@@ -117,6 +165,7 @@ test('project batch saves only selected documents, shows live progress and retri
     await expect(batchRow(progress, 'excluded.md')).toHaveCount(0)
     await expect(first).toHaveAttribute('data-batch-state', 'running')
     await expect(second).toHaveAttribute('data-batch-state', 'waiting')
+    await expect(second.getByTestId('project-batch-open-result')).toHaveCount(0)
     // The mock pauses the completion reply after the editor has applied its first edit.
     await expect
       .poll(() => app.evaluate(() => typeof (globalThis as Record<string, unknown>).__pfHeldReply))
@@ -144,6 +193,11 @@ test('project batch saves only selected documents, shows live progress and retri
         ),
       ),
     ).toBe(true)
+    const verification = (await recorded(app)).streams.filter((r) =>
+      r.includes('Report the status of the translation you just worked on'),
+    )
+    expect(verification).toHaveLength(2)
+    expect(verification[0]).toContain('번역을 마쳤습니다.')
     const firstSave = await stat(join(dir, 'output', 'first.md'))
     const secondSave = await stat(join(dir, 'output', 'second.docx'))
     const requestsBeforeRetry = (await recorded(app)).streams.length
@@ -171,6 +225,29 @@ test('project batch saves only selected documents, shows live progress and retri
     const zip = await JSZip.loadAsync(await readFile(join(dir, 'output', 'second.docx')))
     expect(await zip.file('word/document.xml')!.async('string')).toContain('두 번째 문서입니다.')
     expect(await readFile(join(dir, 'source', 'first.md'), 'utf8')).toBe('First paragraph.')
+    expect(await zip.file('word/header1.xml')!.async('string')).toContain('보고서 제목')
+    await page.getByTestId('project-batch-show-progress').click()
+    await second.getByTestId('project-batch-open-result').click()
+    await expect
+      .poll(() =>
+        page.evaluate(async () => {
+          const split = await window.aiOfficeTabs.getSplit()
+          const tabs = await window.aiOfficeTabs.list()
+          if (!split) return null
+          return {
+            left: tabs.find((t) => t.id === split.aTabId)?.filePath,
+            right: tabs.find((t) => t.id === split.bTabId)?.filePath,
+            orientation: split.orientation,
+            focus: split.focus,
+          }
+        }),
+      )
+      .toEqual({
+        left: join(dir, 'source', 'second.docx'),
+        right: join(dir, 'output', 'second.docx'),
+        orientation: 'side',
+        focus: 'b',
+      })
     expect(await readFile(join(dir, 'source', 'second.docx'))).toEqual(await readFile(word))
   } finally {
     await closeAndSaveVideo(launched, 'project-batch')

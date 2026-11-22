@@ -288,15 +288,27 @@ describe('the source the chat takes when no project is open', () => {
         now: Date.now,
         newToken: () => 'session',
       })
-      const run = (action: 'inspect' | 'read' | 'propose' | 'apply', turnId: string, extra = {}) =>
+      const run = (
+        action: 'inspect' | 'list' | 'read' | 'propose' | 'apply',
+        turnId: string,
+        extra = {},
+      ) =>
         service.execute(
           1,
           { action, turnId, requestId: action, ...extra },
           { docPath, projectRoot: null },
         )
       const { session, imageCount } = parsed(await run('inspect', '1'))
-      const selected = ext === 'pdf' ? 1 : 2
-      expect(imageCount).toBe(selected)
+      expect(imageCount).toBe(ext === 'pdf' ? 1 : 2)
+      const { items } = parsed(await run('list', '1', { session }))
+      const selected =
+        ext === 'pdf'
+          ? 1
+          : items.find(
+              (item: { name: string }) =>
+                item.name === (ext === 'hwp' ? 'BIN0001.png' : 'image1.png'),
+            )?.index
+      expect(selected).toBeTypeOf('number')
       expect((await run('read', '2', { session, pages: [selected] })).isError).not.toBe(true)
       if (ext !== 'pdf') {
         expect(seen).toEqual(['43e6ae2e04d12092acd29fe5905598d589e2339a1c7f0cfe7d71db210f4c0519'])

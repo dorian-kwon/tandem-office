@@ -725,7 +725,13 @@ describe('project batch dialogs', () => {
   const dir = '/p/a'
   const props = () => ({ dir, onBack: vi.fn(), onStartTranslation: vi.fn() })
   const element = (name: string) =>
-    host.querySelector<HTMLButtonElement>('[data-testid="project-batch-' + name + '"]')
+    host.querySelector<HTMLButtonElement>(
+      name === 'chat-input'
+        ? '.batch-chat textarea'
+        : name === 'chat-send'
+          ? '.batch-chat .ai-send-btn'
+          : '[data-testid="project-batch-' + name + '"]',
+    )
   const status = (items: ProjectBatchItem[], running = false): ProjectBatchSnapshot => ({
     dir,
     running,
@@ -816,9 +822,8 @@ describe('project batch dialogs', () => {
     expect(api.batchSend).toHaveBeenLastCalledWith(
       expect.objectContaining({ prompt: '제목을 다듬어', files: ['a.docx'] }),
     )
-    await click(element('progress')!.querySelector('[aria-label="Chat about c.hwpx"]')!)
-    expect(document.activeElement).toBe(draft())
-    await send('What did you change?')
+    expect(element('progress')!.querySelector('[aria-label="Chat about c.hwpx"]')).toBeNull()
+    await send('What did you change in c.hwpx?')
     expect(api.batchSend).toHaveBeenLastCalledWith(expect.objectContaining({ files: ['c.hwpx'] }))
     await act(async () =>
       publish({
@@ -842,7 +847,7 @@ describe('project batch dialogs', () => {
     expect(p.onStartTranslation).not.toHaveBeenCalled()
   })
 
-  it('asks about the local wiki even without selected notes, once per editing message, keeping the intended file if progress advances', async () => {
+  it('uses the project wiki setting immediately for a batch chat editing request', async () => {
     api.getProject.mockResolvedValue(
       project({
         sources: ['a.docx', 'b.pdf'].map((file) => ({ file, sha256: 'hash', kind: 'editable' })),
@@ -866,18 +871,6 @@ describe('project batch dialogs', () => {
       '  Polish the current file.  ',
     )
     await click(element('chat-send')!)
-    expect(api.batchSend).not.toHaveBeenCalled()
-    const choice = element('chat-wiki')!.querySelector('button')!
-    await act(async () =>
-      publish({
-        ...snap,
-        items: [
-          { file: 'a.docx', state: 'saved' },
-          { file: 'b.pdf', state: 'running' },
-        ],
-      }),
-    )
-    await click(choice)
     expect(api.batchSend).toHaveBeenCalledTimes(1)
     expect(api.batchSend).toHaveBeenCalledWith({
       dir,
@@ -955,8 +948,10 @@ describe('project batch dialogs', () => {
     await click(element('show-progress')!)
     expect(element('progress')!.textContent).toContain('Edits: 3')
     expect(
-      element('progress')!.querySelector('[aria-label="Overall progress"]')?.getAttribute('value'),
-    ).toBe('0.25')
+      element('progress')!
+        .querySelector('progress[aria-label="Overall progress"]')
+        ?.getAttribute('value'),
+    ).toBe('0')
     await click(element('stop')!)
     expect(api.batchStop).toHaveBeenCalledWith(dir)
     act(() => publish({ ...active, stopping: true }))
@@ -968,12 +963,80 @@ describe('project batch dialogs', () => {
     )
     expect(element('progress')!.textContent).toContain('Saving')
     expect(
-      element('progress')!.querySelector('[aria-label="Overall progress"]')?.hasAttribute('value'),
-    ).toBe(false)
+      element('progress')!
+        .querySelector('progress[aria-label="Overall progress"]')
+        ?.getAttribute('value'),
+    ).toBe('0')
     act(() => publish(status([{ file: 'a.docx', state: 'saved' }])))
     expect(
-      element('progress')!.querySelector('[aria-label="Overall progress"]')?.getAttribute('value'),
+      element('progress')!
+        .querySelector('progress[aria-label="Overall progress"]')
+        ?.getAttribute('value'),
     ).toBe('1')
+  })
+
+  it('distinguishes reported units, verified results and saved files, with an open button only for an actual saved result', async () => {
+    const items: ProjectBatchItem[] = [
+      {
+        file: 'source.pdf',
+        state: 'saved',
+        output: 'source English.docx',
+        phase: 'saving',
+        done: 3,
+        total: 3,
+        verified: true,
+      },
+      { file: 'input.hwp', state: 'saved', output: 'input EN.hwpx' },
+      { file: 'draft.docx', state: 'running', phase: 'translating', done: 2, total: 3 },
+      { file: 'still.xlsx', state: 'waiting' },
+      { file: 'broken.pptx', state: 'failed' },
+    ]
+    api.batchOpenResult = vi.fn().mockResolvedValue(undefined)
+    await render(ProjectDetail, props())
+    act(() => publish({ ...status(items, true), id: 'verified-run' }))
+    const row = (file: string) =>
+      host.querySelector<HTMLElement>('[data-batch-file="' + file + '"]')!
+    expect(element('progress')!.textContent).toContain('Documents saved 2 / 5')
+    expect(row('source.pdf').textContent).toContain(
+      'Processed 3 of 3 translation units · Checked for remaining source text',
+    )
+    expect(row('input.hwp').textContent).toContain('Remaining source text not checked')
+    expect(row('draft.docx').textContent).toContain('Processed 2 of 3 translation units')
+    expect(row('draft.docx').querySelector('[data-batch-coverage="verified"]')).toBeNull()
+    expect(host.querySelectorAll('[data-testid="project-batch-open-result"]')).toHaveLength(2)
+    for (const file of ['source.pdf', 'input.hwp']) {
+      const button = row(file).querySelector('button[data-testid="project-batch-open-result"]')!
+      expect(button.textContent).toBe('Open')
+      await click(button)
+      expect(api.batchOpenResult).toHaveBeenLastCalledWith({ dir, batchId: 'verified-run', file })
+    }
+    act(() =>
+      publish({
+        ...status([
+          {
+            file: 'empty.docx',
+            state: 'saved',
+            phase: 'saving',
+            done: 0,
+            total: 0,
+            verified: true,
+          },
+        ]),
+        id: 'verified-run',
+      }),
+    )
+    expect(row('empty.docx').textContent).toContain('No translation units remaining')
+    act(() =>
+      publish({
+        ...status(
+          [{ file: 'other.docx', state: 'running', phase: 'translating', operations: 3 }],
+          true,
+        ),
+        id: 'verified-run',
+      }),
+    )
+    expect(row('other.docx').textContent).toContain('Translation unit total unknown')
+    expect(row('other.docx').querySelector('progress')?.hasAttribute('value')).toBe(false)
   })
 
   it('offers separate retries for failed and stopped files and excludes files removed from the project', async () => {

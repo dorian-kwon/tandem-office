@@ -27,11 +27,19 @@ function describePlacement(recommendation: OcrPopupResult['recommendation']): st
   return `${where}; reason: ${recommendation.reason}`
 }
 
-/**
- * The message that carries the OCR popup's result to the AI. The text of the pictures is data
- * (quoted, bounded); the model reads it, shows the person a short preview and asks where it
- * goes with ask_choice. Nothing here decides a placement.
- */
+/** The same bounded reading is used for both the preview and its pagination cursor. */
+type Picture = OcrPopupResult['pages'][number]
+const structuredReadings = new WeakMap<Picture, string>()
+function pictureReading(page: Picture): string {
+  if (!page.form) return page.text
+  let reading = structuredReadings.get(page)
+  if (reading === undefined) {
+    reading = JSON.stringify({ blocks: page.form.blocks, footnotes: page.form.footnotes })
+    structuredReadings.set(page, reading)
+  }
+  return reading
+}
+
 export function formatOcrResultMessage(
   result: OcrPopupResult,
   resultId?: string,
@@ -41,19 +49,20 @@ export function formatOcrResultMessage(
   let truncated = false
   const unread = result.unread ?? []
   const lines = result.pages.map((p) => {
-    const head = `${p.index}. ${anchor(p.location)} (${p.text.length} chars)`
+    const reading = pictureReading(p)
+    const head = `${p.index}. ${anchor(p.location)} (${reading.length} chars)${p.form ? ' [structured OCR layout]' : ''}`
     if (budget <= 0) {
       hidden += 1
-      truncated ||= p.text.length > 0
+      truncated ||= reading.length > 0
       return head
     }
     const limit = Math.min(OCR_RESULT_MAX_PER_PICTURE, budget)
-    const shown = p.text.slice(0, limit)
+    const shown = reading.slice(0, limit)
     budget -= shown.length
-    truncated ||= shown.length < p.text.length
+    truncated ||= shown.length < reading.length
     const cut =
-      shown.length < p.text.length
-        ? ` [truncated: showing ${shown.length} of ${p.text.length} characters]`
+      shown.length < reading.length
+        ? ` [truncated: showing ${shown.length} of ${reading.length} characters]`
         : ''
     return `${head}: ${quote(shown)}${cut}`
   })
@@ -77,8 +86,16 @@ export function formatOcrResultMessage(
           )
           .join('; ')}`
       : '',
-    `Local structure analysis (no model call): suggested placement is ${describePlacement(result.recommendation)}.`,
-    'Next: show the person a short preview of what was recognised in the chat, then ask where it goes with ask_choice (id ocrPlacement), the recommended option first and marked. Write nothing into the workbook before they answer.',
+    ...(result.referenceOnly
+      ? ['The person selected reference only. Keep the readings available, and do not write.']
+      : result.placement
+        ? [
+            `The person chose and confirmed this exact workbook destination before recognition: ${JSON.stringify(result.placement)}. Apply it now without another placement question. Inspect the actual cells and stop on conflicts unless overwrite is explicitly true. Leave all other cells alone.`,
+          ]
+        : [
+            `Local structure analysis (no model call): suggested placement is ${describePlacement(result.recommendation)}.`,
+            'Next: show the person a short preview of what was recognised in the chat, then ask where it goes with ask_choice (id ocrPlacement), the recommended option first and marked. Write nothing into the workbook before they answer.',
+          ]),
   ]
     .filter(Boolean)
     .join('\n')
@@ -90,24 +107,27 @@ export function readOcrResultPage(result: OcrPopupResult, position: number, offs
   if (!Number.isSafeInteger(position) || position < 0 || position >= result.pages.length)
     return null
   const first = result.pages[position]!
-  if (!Number.isSafeInteger(offset) || offset < 0 || offset > first.text.length) return null
+  if (!Number.isSafeInteger(offset) || offset < 0 || offset > pictureReading(first).length)
+    return null
 
   const pages = []
   let budget = OCR_RESULT_MAX_TOTAL
   while (position < result.pages.length && pages.length < 24 && budget > 0) {
     const picture = result.pages[position]!
-    let end = Math.min(picture.text.length, offset + budget)
+    const reading = pictureReading(picture)
+    let end = Math.min(reading.length, offset + budget)
     // Keep surrogate pairs together, including at a page boundary between tool calls.
-    if (end < picture.text.length && /[\uD800-\uDBFF]/.test(picture.text.charAt(end - 1))) end--
-    if (end === offset && end < picture.text.length) break
+    if (end < reading.length && /[\uD800-\uDBFF]/.test(reading.charAt(end - 1))) end--
+    if (end === offset && end < reading.length) break
     pages.push({
       index: picture.index,
       location: picture.location,
       offset,
-      text: picture.text.slice(offset, end),
+      text: reading.slice(offset, end),
+      ...(picture.form ? { format: 'structured-ocr' } : {}),
     })
     budget -= end - offset
-    if (end < picture.text.length) {
+    if (end < reading.length) {
       offset = end
       break
     }

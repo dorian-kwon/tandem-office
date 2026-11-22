@@ -3,6 +3,8 @@ import { copyFile, lstat, mkdir, readdir, stat } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import {
   IMAGE_SOURCE_EXTENSIONS,
+  loadProject,
+  saveProject,
   verifySource,
   withProjectLock,
   type OcrMode,
@@ -10,7 +12,7 @@ import {
 } from '@genoffice/translate-project'
 import { appForPath } from '../app-routing'
 import { pdfTranslationTargetOf } from '../../shared/translate-pdf'
-import { supportsEmbeddedOcr } from './embedded-images'
+import { supportsEmbeddedOcr, supportsExtractedOcr } from './embedded-images'
 import {
   TranslateIpcError,
   type TranslateOpenResultAnswer,
@@ -71,7 +73,11 @@ export function isResultOf(source: SourceEntry, output: string, targetLang: stri
     if (!lang) return false
     return new RegExp(`^${stem}\\.${escape(lang)}(\\.bilingual)?( \\(\\d+\\))?\\.pdf$`).test(output)
   }
-  if (source.kind === 'scan' || source.kind === 'image')
+  if (
+    source.kind === 'scan' ||
+    source.kind === 'image' ||
+    (source.kind === 'editable' && supportsExtractedOcr(source.file))
+  )
     return new RegExp(`^${stem} \\(OCR\\)( \\(\\d+\\))?\\.docx$`).test(output)
   if (source.kind === 'editable' && ['.xls', '.tsv'].includes(extname(source.file).toLowerCase()))
     return new RegExp(`^${escape(source.file)}( \\(\\d+\\))?\\.xlsx$`, 'i').test(output)
@@ -82,22 +88,87 @@ export function isResultOf(source: SourceEntry, output: string, targetLang: stri
   return false
 }
 
-/** the newest earlier result of `source` in output/ (for the current target language), or null */
+/** Prefer the output explicitly opened or previously created for this source. Older
+ * projects can recover a unique association from the writer's naming convention. */
 export async function latestResult(
   dir: string,
   source: SourceEntry,
   targetLang: string,
+  chosen?: { lastOpened?: string; knownOnly: boolean },
 ): Promise<string | null> {
-  const outputDir = join(dir, 'output')
-  const names = await readdir(outputDir).catch(() => [] as string[])
+  const folder = join(dir, 'output')
+  const preferred =
+    source.workingOutput?.targetLang === targetLang ? source.workingOutput.name : chosen?.lastOpened
+  if (chosen?.knownOnly && !preferred) return null
+  const entries = (await loadProject(dir)).sources
+  const others = entries.filter((e) => e.file !== source.file)
+  const reserved = (name: string) =>
+    others.some(
+      (e) =>
+        e.file.normalize('NFC').toLowerCase() === name.normalize('NFC').toLowerCase() ||
+        e.workingOutput?.name === name,
+    )
+  if (
+    preferred &&
+    plainFileName(preferred) &&
+    isResultOf(source, preferred, targetLang) &&
+    !reserved(preferred)
+  ) {
+    const info = await lstat(join(folder, preferred)).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') return null
+      throw error
+    })
+    if (info?.isFile() && info.nlink === 1) return preferred
+    if (info)
+      throw new TranslateIpcError(
+        'OPEN_FAILED',
+        'The working output is not a separate regular file.',
+      )
+  }
+  if (chosen?.knownOnly) return null
+  const names = await readdir(folder).catch(() => [] as string[])
   let best: { name: string; at: number } | null = null
   for (const name of names) {
-    if (name.startsWith('.') || !isResultOf(source, name, targetLang)) continue
-    const info = await stat(join(outputDir, name)).catch(() => null)
-    if (!info?.isFile()) continue
+    if (
+      name.startsWith('.') ||
+      !isResultOf(source, name, targetLang) ||
+      reserved(name) ||
+      others.some((e) => isResultOf(e, name, targetLang))
+    )
+      continue
+    const info = await lstat(join(folder, name)).catch(() => null)
+    if (!info?.isFile() || info.nlink !== 1) continue
     if (!best || info.mtimeMs > best.at) best = { name, at: info.mtimeMs }
   }
   return best?.name ?? null
+}
+
+export async function rememberWorkingOutput(
+  dir: string,
+  entry: SourceEntry,
+  targetLang: string,
+  name: string,
+) {
+  if (!plainFileName(name) || !isResultOf(entry, name, targetLang)) return
+  await withProjectLock(dir, async () => {
+    const project = await loadProject(dir)
+    const source = project.sources.find((s) => s.file === entry.file && s.sha256 === entry.sha256)
+    if (!source || project.targetLang !== targetLang)
+      throw new TranslateIpcError('SOURCE_CHANGED', 'The project source or language changed.')
+    if (
+      project.sources.some(
+        (s) =>
+          s !== source &&
+          (s.file.normalize('NFC').toLowerCase() === name.normalize('NFC').toLowerCase() ||
+            s.workingOutput?.name === name),
+      )
+    )
+      throw new TranslateIpcError('OPEN_FAILED', 'This output belongs to another source.')
+    if (source.workingOutput?.name === name && source.workingOutput.targetLang === targetLang)
+      return
+    source.workingOutput = { name, targetLang }
+    await saveProject(dir, project)
+  })
 }
 
 /**
@@ -173,7 +244,10 @@ export async function openTranslation(
       existing: await latestResult(dir, source, targetLang),
     }
 
-  if (['.xls', '.tsv'].includes(extname(source.file).toLowerCase())) {
+  if (
+    source.workingOutput?.targetLang === targetLang ||
+    ['.xls', '.tsv'].includes(extname(source.file).toLowerCase())
+  ) {
     const workbook = await latestResult(dir, source, targetLang)
     if (workbook) {
       const outputPath = join(dir, 'output', workbook)
@@ -221,7 +295,7 @@ export async function prepareTranslationCopy(dir: string, file: string): Promise
 }
 
 /** the source copy read-only on the left, `outputPath` on the right, output focused */
-async function openPair(
+export async function openPair(
   sourcePath: string,
   outputPath: string,
   deps: TranslationViewDeps,

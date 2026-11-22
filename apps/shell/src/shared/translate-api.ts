@@ -29,6 +29,7 @@ import type {
  * in the registered list (`translationProjects` in app-settings.json).
  */
 export const TRANSLATE_CHANNELS = {
+  batchOpenResult: 'translate:batch-open-result',
   batchStart: 'translate:batch-start',
   batchSend: 'translate:batch-send',
   batchStatus: 'translate:batch-status',
@@ -405,6 +406,7 @@ export interface TranslationWikiOpenResult {
 
 export interface TranslateApi {
   batchSend(args: ProjectBatchSend): Promise<ProjectBatchSnapshot>
+  batchOpenResult(args: { dir: string; batchId: string; file: string }): Promise<void>
   batchStart(args: ProjectBatchStart): Promise<ProjectBatchSnapshot>
   batchStop(dir: string): Promise<void>
   batchStatus(dir: string): Promise<ProjectBatchSnapshot | null>

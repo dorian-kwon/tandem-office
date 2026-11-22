@@ -58,6 +58,19 @@ describe('AI roll-back snapshot', () => {
     editor.destroy()
   })
 
+  it('separates touching edits from consecutive chat turns in native history', () => {
+    const editor = createEditor()
+    captureRollbackSnapshot(editor)
+    aiEditor(editor).commands.insertContentAt(1, 'A')
+    const correction = captureRollbackSnapshot(editor)
+    aiEditor(editor).commands.insertContentAt(2, 'B')
+    expect(restoreRollbackSnapshot(editor, correction)).toBe(true)
+    expect(editor.state.doc.firstChild?.textContent).toBe('AFirst block')
+    expect(editor.commands.undo()).toBe(true)
+    expect(editor.state.doc.firstChild?.textContent).toBe('First block')
+    editor.destroy()
+  })
+
   it('shares the blocks the run left alone instead of copying them', () => {
     const editor = createEditor()
     const snapshot = captureRollbackSnapshot(editor)

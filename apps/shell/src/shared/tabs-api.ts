@@ -67,6 +67,8 @@ export interface TabsApi {
    * (x, y) in window CSS coordinates. Native for the same reason as showMenu.
    */
   showTabMenu(id: string, x: number, y: number): Promise<void>
+  /** Run local OCR for this window's focused editor, using its current document. */
+  ocrDocument(id: string): Promise<void>
   /** detach a document tab into its own window ("Open in New Window") */
   detach(id: string): Promise<void>
   /**
@@ -133,6 +135,7 @@ export const TABS_CHANNELS = {
   showMenu: 'tabs:show-menu',
   showNewMenu: 'tabs:show-new-menu',
   showTabMenu: 'tabs:show-tab-menu',
+  ocrDocument: 'tabs:ocr-document',
   detach: 'tabs:detach',
   tearOff: 'tabs:tear-off',
   dragTornWindow: 'tabs:drag-torn-window',

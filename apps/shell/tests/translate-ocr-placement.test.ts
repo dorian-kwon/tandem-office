@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import JSZip from 'jszip'
+import { parseAiPageResponse } from '../../../packages/pdf-structure/src/ai-read/parse'
 import { placeOcrText } from '../src/main/translate/ocr-placement'
 const image = Buffer.from([1, 2, 3, 4])
 async function xlsx() {
@@ -20,10 +21,50 @@ async function xlsx() {
     'xl/worksheets/sheet1.xml',
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Original value</t></is></c></row></sheetData><drawing r:id="draw"/></worksheet>',
   )
+  z.file(
+    'xl/worksheets/_rels/sheet1.xml.rels',
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="draw" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>',
+  )
+  z.file(
+    'xl/drawings/drawing1.xml',
+    '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"/>',
+  )
   z.file('xl/media/image1.png', image)
   return z.generateAsync({ type: 'nodebuffer' })
 }
 describe('OCR placement in the source format', () => {
+  it.each(['existing', 'new'])(
+    'writes selected OCR as editable cells and merged ranges in a %s worksheet',
+    async (mode) => {
+      const form = parseAiPageResponse(
+        '<page-content>\n<table><tr><th colspan="2">Amount</th></tr><tr><td rowspan="2">Busan</td><td>23</td></tr><tr><td>42</td></tr></table>\n</page-content>',
+        { page: 1, pageFingerprint: '' },
+      )
+      if (!form.ok) throw Error('invalid fixture')
+      const source = await xlsx()
+      const chosen = [{ index: 2, text: 'only scan 2', form: form.reading.payload }]
+      const location =
+        mode === 'existing'
+          ? { kind: 'xlsx-cells', sheet: 'Original', cell: 'B2', overwrite: false }
+          : { kind: 'xlsx-new-sheet', sheet: 'Read' }
+      const out = await JSZip.loadAsync(await placeOcrText(source, 'xlsx', chosen, location))
+      const xml = await out
+        .file('xl/worksheets/sheet' + (mode === 'existing' ? 1 : 2) + '.xml')!
+        .async('string')
+      expect(xml).toContain(mode === 'existing' ? 'B2:C2' : 'A1:B1')
+      expect(xml).toContain(mode === 'existing' ? 'B3:B4' : 'A2:A3')
+      expect(xml).toContain('Busan')
+      expect(await out.file('xl/media/image1.png')!.async('nodebuffer')).toEqual(image)
+      await expect(
+        placeOcrText(source, 'xlsx', chosen, {
+          kind: 'xlsx-cells',
+          sheet: 'Original',
+          cell: 'A1',
+          overwrite: true,
+        }),
+      ).rejects.toThrow('empty range')
+    },
+  )
   it('keeps the workbook, media and original values while putting OCR in the chosen cells', async () => {
     const source = await xlsx()
     const result = await placeOcrText(
@@ -175,5 +216,134 @@ it('recommends an empty neighbouring cell based on the Excel image location', as
   ).toEqual({
     placement: { kind: 'xlsx-cells', sheet: 'Original', cell: 'B7', overwrite: false },
     reason: 'empty-cells',
+  })
+})
+
+describe('picture-relative Word OCR placement', () => {
+  const part = 'word/document.xml'
+  const pic = (id: string) => '<w:r><w:drawing><a:blip r:embed="' + id + '"/></w:drawing></w:r>'
+  const p = (text: string) => '<w:p><w:r><w:t>' + text + '</w:t></w:r></w:p>'
+  const row = (content: string) =>
+    '<w:tbl><w:tr><w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr>' +
+    content +
+    '</w:tc></w:tr></w:tbl>'
+  const two = '<w:p>' + pic('second') + pic('third') + '</w:p>'
+  const table = row(row(two) + p('end of cell'))
+  const first = '<w:p>' + pic('shared') + '</w:p>'
+  const words = [
+    { index: 2, part, relId: 'second', location: 'document.xml · ¶2', text: 'Two' },
+    { index: 3, part, relId: 'third', location: 'document.xml · ¶2', text: 'Three' },
+  ]
+  async function source() {
+    const z = new JSZip()
+    z.file(
+      part,
+      '<w:document xmlns:w="urn:word" xmlns:r="urn:rel" xmlns:a="urn:drawing"><w:body>' +
+        first +
+        table +
+        first +
+        p('After') +
+        '<w:sectPr/></w:body></w:document>',
+    )
+    z.file(
+      'word/header1.xml',
+      '<w:hdr xmlns:w="urn:word" xmlns:a="urn:drawing" xmlns:r="urn:rel">' + first + '</w:hdr>',
+    )
+    z.file('word/media/source.png', image)
+    return z.generateAsync({ type: 'uint8array' })
+  }
+  it('inserts ordered OCR blocks before the selected nested-cell paragraph', async () => {
+    const result = await JSZip.loadAsync(
+      await placeOcrText(await source(), 'docx', words, { kind: 'docx-before-images' }),
+    )
+    const xml = await result.file(part)!.async('string')
+    expect(xml).toContain(
+      '<w:gridSpan w:val="2"/></w:tcPr><w:p><w:r><w:t xml:space="preserve">Two</w:t></w:r></w:p><w:p><w:r><w:t xml:space="preserve">Three</w:t></w:r></w:p>' +
+        two,
+    )
+    expect(xml.match(/>Two<|>Three</g)).toHaveLength(2)
+    expect(await result.file('word/media/source.png')!.async('nodebuffer')).toEqual(image)
+  })
+  it('keeps the original merged tables intact and starts one new body page per shared anchor', async () => {
+    const result = await JSZip.loadAsync(
+      await placeOcrText(await source(), 'docx', words, { kind: 'docx-next-page' }),
+    )
+    const xml = await result.file(part)!.async('string')
+    const start = xml.indexOf('<w:br w:type="page"/>')
+    expect(xml).toContain(table + '<w:p><w:r><w:br w:type="page"/></w:r></w:p>')
+    expect(start).toBeGreaterThan(xml.indexOf(table))
+    expect(xml.indexOf('Two', start)).toBeLessThan(xml.indexOf('Three', start))
+    expect(xml.indexOf('Three', start)).toBeLessThan(xml.indexOf('After', start))
+    expect(xml.match(/<w:br w:type="page"\/>/g)).toHaveLength(1)
+    expect(xml).toContain('<w:sectPr/></w:body>')
+  })
+  it('writes editable recognised tables on separate new pages for two body picture paragraphs', async () => {
+    const { parseAiPageResponse } =
+      await import('../../../packages/pdf-structure/src/ai-read/parse')
+    const reading = parseAiPageResponse(
+      '<page-content>\n<table><tr><td>Station</td><td>Busan</td></tr></table>\n</page-content>',
+      { page: 1, pageFingerprint: '' },
+    )
+    if (!reading.ok) throw Error('invalid table fixture')
+    const items = [1, 4].map((ordinal, index) => ({
+      index: index + 1,
+      part,
+      relId: 'shared',
+      location: 'document.xml · ¶' + ordinal,
+      text: 'Station Busan',
+      form: reading.reading.payload,
+    }))
+    const result = await JSZip.loadAsync(
+      await placeOcrText(await source(), 'docx', items, { kind: 'docx-next-page' }),
+    )
+    const xml = await result.file(part)!.async('string')
+    expect(xml.split(first + '<w:p><w:r><w:br w:type="page"/></w:r></w:p><w:tbl>').length - 1).toBe(
+      2,
+    )
+    expect(xml.match(/>Station<|>Busan</g)).toHaveLength(4)
+    expect(xml).toContain(table)
+  })
+  it('refuses stale picture identity and page breaks in repeating headers', async () => {
+    await expect(
+      placeOcrText(await source(), 'docx', [{ ...words[0]!, relId: 'gone' }], {
+        kind: 'docx-before-images',
+      }),
+    ).rejects.toThrow(/missing/)
+    await expect(
+      placeOcrText(
+        await source(),
+        'docx',
+        [
+          {
+            index: 1,
+            text: 'Header',
+            part: 'word/header1.xml',
+            relId: 'shared',
+            location: 'header1.xml · ¶1',
+          },
+        ],
+        { kind: 'docx-next-page' },
+      ),
+    ).rejects.toThrow(/body/)
+  })
+  it('relocates a selected anchor in a live copy and keeps other occurrences of its picture untouched', async () => {
+    const { placeOcrIntoOpenDocx } = await import('../src/main/translate/ocr-docx-placement')
+    const input = await source()
+    const selected = {
+      index: 1,
+      text: 'Selected',
+      part,
+      relId: 'shared',
+      location: 'document.xml · ¶4',
+    }
+    const out = await placeOcrIntoOpenDocx(input, [selected], { kind: 'docx-next-page' })
+    const xml = await (await JSZip.loadAsync(out.bytes)).file(part)!.async('string')
+    expect(xml).toContain(table + first + '<w:p><w:r><w:br w:type="page"/></w:r></w:p>')
+    expect(xml.match(/>Selected</g)).toHaveLength(1)
+    await expect(
+      placeOcrIntoOpenDocx(input, [{ ...selected, location: 'document.xml · ¶9' }], {
+        kind: 'docx-before-images',
+      }),
+    ).rejects.toThrow(/no picture/)
   })
 })

@@ -93,7 +93,7 @@ describe('translation and anchored text boxes', () => {
     ])
   })
 
-  it('skips a read-only text box with a reason and lists nothing for an empty box', () => {
+  it('skips a read-only text box with a reason and lists nothing for an empty box', async () => {
     const editor = createEditor([
       boxBlock([
         { paras: [para({ text: 'table inside' })], readOnly: true },
@@ -103,6 +103,23 @@ describe('translation and anchored text boxes', () => {
     ])
 
     expect(readRunGroups(editor, 0, 0)).toEqual([{ index: 0, box: 0, skip: 'read-only text box' }])
+    expect(remainingUntranslated(editor, undefined, 'en')).toMatchObject({
+      progress: { done: 0, total: 1 },
+      blocked: ['0 box 0 paragraph 0 (read-only text box)'],
+    })
+    expect(remainingUntranslated(editor, undefined, 'ko').progress).toEqual({ done: 0, total: 0 })
+    const check = await executeTool(
+      editor,
+      {
+        id: 'verify',
+        name: 'read_runs',
+        input: { checkRemaining: true, sourceLanguage: 'en' },
+      },
+      { bullet: null, ordered: null },
+    )
+    expect(check.translationProgress).toEqual({ done: 0, total: 1 })
+    expect(check.output).toMatch(/unavailable to the current editor.*read-only text box/i)
+    expect(check.output).not.toContain('Nothing left')
   })
 
   it('translate_blocks writes the translation into the box runs and keeps the run formatting', () => {
@@ -272,9 +289,13 @@ describe('translation and anchored text boxes', () => {
     if (!outcome.ok) expect(outcome.errors.join(' ')).toMatch(/tracked changes/)
   })
 
-  it('remainingUntranslated leaves text box paragraphs out while tracking, so the check can finish', () => {
+  it('reports eligible but unwritable text boxes as blocked while tracking', () => {
     const editor = createEditor([boxBlock([{ paras: [para({ text: '안녕하세요' })] }])])
     expect(remainingUntranslated(editor, undefined, 'ko').body).toEqual(['0 (box 0 paragraph 0)'])
     expect(remainingUntranslated(editor, undefined, 'ko', { tracking: true }).body).toEqual([])
+    expect(remainingUntranslated(editor, undefined, 'ko', { tracking: true })).toMatchObject({
+      progress: { done: 0, total: 1 },
+      blocked: ['0 (box 0 paragraph 0) (tracked changes enabled)'],
+    })
   })
 })

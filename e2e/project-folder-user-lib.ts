@@ -43,6 +43,8 @@ export async function shot(page: Page, name: string): Promise<void> {
 export interface FakeTurn {
   /** Hold this reply while an E2E asserts the live progress UI; releaseHeldTurn resumes it. */
   hold?: boolean
+  /** Initial stream delta shown before releasing a held response. */
+  partialText?: string
   text?: string
   toolCalls?: Array<{ id: string; name: string; input: Record<string, unknown> }>
 }
@@ -105,6 +107,7 @@ export async function stubEverything(app: ElectronApplication): Promise<void> {
         for (const call of turn.toolCalls ?? []) send({ type: 'tool-call', toolCall: call })
         send({ type: 'done' })
       }
+      if (turn.partialText) send({ type: 'delta', text: turn.partialText })
       if (turn.hold) g.__pfHeldReply = reply
       else setTimeout(reply, 60)
     })

@@ -1,3 +1,9 @@
+import {
+  BATCH_MODEL_EVENT,
+  BATCH_MODEL_REQUEST,
+  type BatchModelCommand,
+  type BatchModelRelay,
+} from '../shared/batch-model-relay'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { IpcRendererEvent } from 'electron'
 import {
@@ -667,6 +673,19 @@ const homeApi: HomeApi = {
 
 contextBridge.exposeInMainWorld('aiOffice', homeApi)
 
+const batchModelRelay: BatchModelRelay = {
+  onCommand(handler) {
+    const listen = (_event: Electron.IpcRendererEvent, command: BatchModelCommand) =>
+      handler(command)
+    ipcRenderer.on(BATCH_MODEL_REQUEST, listen)
+    return () => ipcRenderer.removeListener(BATCH_MODEL_REQUEST, listen)
+  },
+  report(event) {
+    ipcRenderer.send(BATCH_MODEL_EVENT, event)
+  },
+}
+contextBridge.exposeInMainWorld('aiOfficeBatchModel', batchModelRelay)
+
 const integrationsApi: IntegrationsApi = {
   async status() {
     return (await ipcRenderer.invoke(INTEGRATIONS_CHANNELS.status)) as IntegrationsStatus
@@ -712,6 +731,7 @@ contextBridge.exposeInMainWorld('aiOfficeResultStore', resultStoreApi)
 // Main only accepts folders from its registered list, so paths here are requests, not access.
 const translateApi: TranslateApi = {
   batchSend: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.batchSend, args),
+  batchOpenResult: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.batchOpenResult, args),
   batchStart: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.batchStart, args),
   batchStop: (dir) => ipcRenderer.invoke(TRANSLATE_CHANNELS.batchStop, dir),
   batchStatus: (dir) => ipcRenderer.invoke(TRANSLATE_CHANNELS.batchStatus, dir),
@@ -983,6 +1003,9 @@ const tabsApi: TabsApi = {
   },
   async showNewMenu(x, y) {
     await ipcRenderer.invoke(TABS_CHANNELS.showNewMenu, x, y)
+  },
+  async ocrDocument(id) {
+    await ipcRenderer.invoke(TABS_CHANNELS.ocrDocument, id)
   },
   async showTabMenu(id, x, y) {
     await ipcRenderer.invoke(TABS_CHANNELS.showTabMenu, id, x, y)

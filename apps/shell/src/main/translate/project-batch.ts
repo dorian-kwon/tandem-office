@@ -13,6 +13,10 @@ import type {
 import { TranslateIpcError } from '../../shared/translate-api'
 
 export interface ProjectBatchEditorRequest {
+  owner: number
+  batchId: string
+  instructions: string
+  conversation: BatchConversation
   choices?: BatchTranslationChoices
   useWiki?: boolean
   dir: string
@@ -31,11 +35,13 @@ type Translate = (
 ) => Promise<string | void>
 
 export type { BatchConversation } from '@genoffice/project-store/editor-run'
-type Deliver = (
-  item: ProjectBatchItem,
+type DeliverMany = (
+  items: ProjectBatchItem[],
   prompt: string,
   conversation: BatchConversation,
   signal: AbortSignal,
+  onText: (text: string) => void,
+  onMutated: (file: string) => void,
 ) => Promise<string>
 
 /** Keep the last few exchanges as separately labeled background for references like
@@ -43,20 +49,14 @@ type Deliver = (
 function conversationBefore(
   messages: ProjectBatchMessage[],
   current: ProjectBatchMessage,
-  file: string,
 ): BatchConversation {
   return messages
     .slice(0, messages.indexOf(current))
     .slice(-4)
-    .map((message) => {
-      const answered =
-        message.targets.find((t) => t.file === file && t.state === 'done' && t.reply) ??
-        message.targets.find((t) => t.state === 'done' && t.reply)
-      return {
-        prompt: message.prompt.slice(0, 2000),
-        ...(answered ? { file: answered.file, reply: answered.reply!.slice(0, 2000) } : {}),
-      }
-    })
+    .map((message) => ({
+      prompt: message.prompt.slice(0, 2000),
+      ...(message.reply ? { reply: message.reply.slice(0, 2000) } : {}),
+    }))
 }
 
 /** A single editor works at a time, including its save and teardown. */
@@ -64,7 +64,7 @@ export class ProjectBatchQueue {
   private active?: { dir: string; controller: AbortController; owner: number }
   private readonly projects = new Map<string, ProjectBatchSnapshot>()
 
-  private readonly deliveries = new WeakMap<ProjectBatchMessage, Deliver>()
+  private readonly deliveries = new WeakMap<ProjectBatchMessage, DeliverMany>()
 
   constructor(private readonly changed: (value: ProjectBatchSnapshot) => void) {}
 
@@ -93,7 +93,7 @@ export class ProjectBatchQueue {
     this.emit(state)
   }
 
-  send(args: ProjectBatchSend, owner: number, deliver: Deliver): ProjectBatchSnapshot {
+  sendUnified(args: ProjectBatchSend, owner: number, deliver: DeliverMany): ProjectBatchSnapshot {
     const state = this.projects.get(args.dir)
     if (
       !state ||
@@ -141,12 +141,24 @@ export class ProjectBatchQueue {
       progress: ProjectBatchEditorRequest['report'],
     ) => Promise<string | void>,
     retry: boolean,
+    rerunBatchId?: string,
   ): ProjectBatchSnapshot {
     if (this.active)
       throw new TranslateIpcError('TRANSLATE_BUSY', 'A project translation is already running.')
     const wanted = new Set(files)
-    const prior = retry ? this.projects.get(dir) : undefined
+    const rerun = rerunBatchId !== undefined
+    const prior = retry || rerun ? this.projects.get(dir) : undefined
     const previous = prior?.items
+    if (rerun) {
+      if (!rerunBatchId || prior?.id !== rerunBatchId)
+        throw new TranslateIpcError('TRANSLATE_BUSY', 'This batch is no longer available.')
+      const included = new Set(prior.items.map((item) => item.file))
+      if (retry || !wanted.size || files.some((file) => !included.has(file)))
+        throw new TranslateIpcError(
+          'INVALID_ARGUMENT',
+          'Choose documents from this batch to rerun.',
+        )
+    }
     if (retry) {
       const unfinished = new Set(
         previous
@@ -193,39 +205,62 @@ export class ProjectBatchQueue {
     run?: Translate,
   ): Promise<void> {
     try {
-      // One scheduler owns editing, saving and closing. Take a queued human turn
-      // as soon as its selected output is available, including already saved files.
+      // Process user turns in submission order. A turn spanning multiple documents
+      // waits until all of their outputs have settled; translation advances meanwhile.
       const itemsByFile = new Map(state.items.map((item) => [item.file, item]))
-      const ready = (t: ProjectBatchMessage['targets'][number]) => {
-        const item = itemsByFile.get(t.file)
-        return t.state === 'queued' && item && item.state !== 'waiting' && item.state !== 'running'
-      }
       while (!signal.aborted) {
         const messages = state.messages ?? []
-        const message = messages.find((m) => m.targets.some(ready))
+        const message = messages.find((m) => m.targets.some((t) => t.state === 'queued'))
         if (message) {
-          const target = message.targets.find(ready)!
-          const item = itemsByFile.get(target.file)!
-          const deliver = this.deliveries.get(message)!
-          target.state = 'running'
-          this.emit(state)
-          try {
-            const reply = await deliver(
-              item,
-              message.prompt,
-              conversationBefore(messages, message, item.file),
-              signal,
-            )
-            signal.throwIfAborted()
-            target.reply = reply
-            target.state = 'done'
-          } catch (error) {
-            target.state = signal.aborted ? 'stopped' : 'failed'
-            if (!signal.aborted)
-              target.error = String(error instanceof Error ? error.message : error).slice(0, 320)
+          const selected = message.targets.map((t) => itemsByFile.get(t.file)!)
+          if (selected.every((item) => item.state !== 'waiting' && item.state !== 'running')) {
+            const deliver = this.deliveries.get(message)!
+            this.deliveries.delete(message)
+            for (const t of message.targets) t.state = 'running'
+            this.emit(state)
+            let lastUpdate = 0
+            try {
+              const reply = await deliver(
+                selected,
+                message.prompt,
+                conversationBefore(messages, message),
+                signal,
+                (text) => {
+                  if (signal.aborted || !message.targets.some((t) => t.state === 'running')) return
+                  message.partialReply = text
+                  if (Date.now() - lastUpdate >= 100) {
+                    lastUpdate = Date.now()
+                    this.emit(state)
+                  }
+                },
+                (file) => {
+                  const item = selected.find((row) => row.file === file)
+                  if (
+                    !item ||
+                    !message.targets.some((t) => t.file === file && t.state === 'running')
+                  )
+                    return
+                  if (item.done === undefined && item.total === undefined && !item.verified) return
+                  delete item.verified
+                  delete item.done
+                  delete item.total
+                  this.emit(state)
+                },
+              )
+              signal.throwIfAborted()
+              message.reply = reply
+              for (const t of message.targets) t.state = 'done'
+            } catch (error) {
+              const detail = String(error instanceof Error ? error.message : error).slice(0, 320)
+              for (const t of message.targets) {
+                t.state = signal.aborted ? 'stopped' : 'failed'
+                if (!signal.aborted) t.error = detail
+              }
+            }
+            delete message.partialReply
+            this.emit(state)
+            continue
           }
-          this.emit(state)
-          continue
         }
         const item = state.items.find((i) => i.state === 'waiting' && wanted.has(i.file))
         if (!item || !run) break
@@ -241,40 +276,53 @@ export class ProjectBatchQueue {
           this.emit(state)
         }
         try {
-          const output = await run(item.file, signal, ({ phase, operations, done, total }) => {
-            if (item.state !== 'running' || signal.aborted) return
-            const changedPhase = phase !== undefined && phase !== item.phase
-            if (changedPhase) {
-              // Page recognition and text translation use different units.
-              if (item.phase === 'ocr') {
-                delete item.done
-                delete item.total
+          const output = await run(
+            item.file,
+            signal,
+            ({ phase, operations, done, total, verified }) => {
+              if (item.state !== 'running' || signal.aborted) return
+              const changedPhase = phase !== undefined && phase !== item.phase
+              if (changedPhase) {
+                // Page recognition and text translation use different units.
+                if (item.phase === 'ocr' || phase === 'ocr') {
+                  delete item.verified
+                  delete item.done
+                  delete item.total
+                }
+                item.phase = phase
               }
-              item.phase = phase
-            }
-            if (operations !== undefined && Number.isSafeInteger(operations) && operations >= 0) {
-              item.operations = Math.max(item.operations ?? 0, operations)
-              // An ordinary edit may invalidate the earlier unit count.
-              if (done === undefined || total === undefined) {
-                delete item.done
-                delete item.total
+              if (operations !== undefined && Number.isSafeInteger(operations) && operations >= 0) {
+                delete item.verified
+                item.operations = Math.max(item.operations ?? 0, operations)
+                // An ordinary edit may invalidate the earlier unit count.
+                if (done === undefined || total === undefined) {
+                  delete item.done
+                  delete item.total
+                }
               }
-            }
-            if (
-              total !== undefined &&
-              done !== undefined &&
-              Number.isSafeInteger(total) &&
-              total > 0 &&
-              Number.isSafeInteger(done) &&
-              done >= 0
-            ) {
-              item.done = Math.min(done, total)
-              item.total = total
-            }
-            const remaining = 250 - (Date.now() - lastUpdate)
-            if (changedPhase || remaining <= 0) flush()
-            else pending ??= setTimeout(flush, remaining)
-          })
+              if (
+                total !== undefined &&
+                done !== undefined &&
+                Number.isSafeInteger(total) &&
+                (total > 0 ||
+                  (total === 0 &&
+                    verified === true &&
+                    item.phase === 'translating' &&
+                    done === 0)) &&
+                Number.isSafeInteger(done) &&
+                done >= 0
+              ) {
+                if (verified === true && item.phase === 'translating' && done === total)
+                  item.verified = true
+                else delete item.verified
+                item.done = Math.min(done, total)
+                item.total = total
+              }
+              const remaining = 250 - (Date.now() - lastUpdate)
+              if (changedPhase || remaining <= 0) flush()
+              else pending ??= setTimeout(flush, remaining)
+            },
+          )
           if (output) item.output = output
           item.state = 'saved'
         } catch (err) {
@@ -287,9 +335,11 @@ export class ProjectBatchQueue {
       }
     } finally {
       for (const item of state.items) if (item.state === 'waiting') item.state = 'stopped'
-      for (const message of state.messages ?? [])
+      for (const message of state.messages ?? []) {
+        this.deliveries.delete(message)
         for (const target of message.targets)
           if (target.state === 'queued') target.state = 'stopped'
+      }
       this.active = undefined
       state.running = false
       state.stopping = false

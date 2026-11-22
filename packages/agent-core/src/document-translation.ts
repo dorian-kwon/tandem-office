@@ -111,6 +111,9 @@ function short(value: unknown, limit: number): string {
   return typeof value === 'string' ? value.trim().slice(0, limit) : ''
 }
 
+// A remote document session advertises once; execution still checks the active workflow phase.
+export const translationWorkflowTools: readonly AgentToolDef[] = [start, overview, batch]
+
 const workflow =
   'A single selection, sentence revision or unrelated task uses the ordinary editor tools. ' +
   'In a bilingual layout identify the source and target slots first. Keep source text and layout intact, and edit only the requested targets. Never insert the analysis, reference excerpts or batch notes into document content.'

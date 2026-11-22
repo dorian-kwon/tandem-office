@@ -82,7 +82,11 @@ async function source(path: string) {
   }
 }
 
-async function readPart(src: ByteSource, entry: ZipEntry, limit: number): Promise<Buffer> {
+export async function readOcrZipPart(
+  src: ByteSource,
+  entry: ZipEntry,
+  limit: number,
+): Promise<Buffer> {
   if (entry.usize > limit || entry.csize > limit || entry.flags & 1)
     throw new Error('OCR archive part exceeds its limit')
   const raw = await src.read(entry.dataOffset, entry.csize)
@@ -232,7 +236,7 @@ export async function listEmbeddedImages(path: string): Promise<EmbeddedImage[]>
       if (cache.has(part)) return cache.get(part)!
       const entry = entries.get(part)
       if (!entry) return ''
-      const data = await readPart(src.bytes, entry, MAX_XML)
+      const data = await readOcrZipPart(src.bytes, entry, MAX_XML)
       xmlBytes += data.length
       if (xmlBytes > MAX_XML_TOTAL) throw new Error('OCR XML exceeds its limit')
       const value = data.toString('utf8')
@@ -397,7 +401,7 @@ export async function listEmbeddedImages(path: string): Promise<EmbeddedImage[]>
       return await byLayout(
         await src.bytes.read(0, src.bytes.size),
         images,
-        async (image) => new Uint8Array(await readPart(src.bytes, image.entry!, MAX_IMAGE)),
+        async (image) => new Uint8Array(await readOcrZipPart(src.bytes, image.entry!, MAX_IMAGE)),
       )
     return images
   } finally {
@@ -451,7 +455,7 @@ export async function readEmbeddedImage(path: string, image: EmbeddedImage): Pro
       )
     }
     if (!image.entry) throw new Error('this picture has no package part to read')
-    const data = new Uint8Array(await readPart(src.bytes, image.entry, MAX_IMAGE))
+    const data = new Uint8Array(await readOcrZipPart(src.bytes, image.entry, MAX_IMAGE))
     const mime =
       data.length >= 8 &&
       Buffer.from(data.subarray(0, 8)).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))

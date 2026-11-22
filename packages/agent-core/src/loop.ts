@@ -67,6 +67,8 @@ export interface CompactionOptions {
 export interface AgentLoopOptions<TSnapshot = unknown> {
   transport: AgentTransport
   skill: AgentSkill
+  documentSkill?: AgentSkill
+  afterDocumentTool?(result: ToolExecution): void
   documentTranslation?: DocumentTranslationHost
   events?: AgentLoopEvents<TSnapshot>
   /** hard cap on model round-trips per run (default DEFAULT_MAX_TURNS) */
@@ -566,8 +568,50 @@ export class AgentLoop<TSnapshot = unknown> {
     this.options = options
   }
 
+  private projectToolsActive = false
+
+  openDocumentTools(
+    prepare: (
+      skill: AgentSkill,
+      host?: DocumentTranslationHost,
+    ) => Pick<AgentSkill, 'tools' | 'systemPrompt' | 'executeTool'>,
+  ) {
+    const skill = this.options.documentSkill
+    if (!skill || this.busy) return null
+    const document = prepare(skill, this.options.documentTranslation)
+    this.projectToolsActive = true
+    let active = true
+    return {
+      tools: document.tools,
+      systemPrompt: document.systemPrompt,
+      executeTool: async (call: AgentToolCall, signal?: AbortSignal) => {
+        if (!active) throw new Error('The document tool session has ended.')
+        const tool = document.tools.find((t) => t.name === call.name)
+        const input = coerceArgumentFields(tool, call.input)
+        const invalid = [
+          ...missingRequiredFields(tool, input),
+          ...invalidArgumentFields(tool, input),
+        ]
+        if (invalid.length)
+          return {
+            summary: call.name,
+            output: 'Invalid tool arguments: ' + invalid.join(', '),
+            isError: true,
+          }
+        const result = await document.executeTool({ ...call, input }, signal)
+        this.options.afterDocumentTool?.(result)
+        return result
+      },
+      close: () => {
+        if (!active) return
+        active = false
+        this.projectToolsActive = false
+      },
+    }
+  }
+
   get busy(): boolean {
-    return this.running
+    return this.running || this.projectToolsActive
   }
 
   get messages(): readonly AgentMessage[] {
@@ -696,7 +740,7 @@ export class AgentLoop<TSnapshot = unknown> {
 
   /** images: inline attachments for this user turn (vision input; see AgentImage) */
   run(instruction: string, images?: AgentImage[]): void {
-    if (this.running || !instruction) return
+    if (this.busy || !instruction) return
     this.running = true
     this.resumingAfterStop = this.lastRunStopped
     this.lastRunStopped = false

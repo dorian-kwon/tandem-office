@@ -1,9 +1,12 @@
+import type { OcrPlacement } from '../../shared/translate-ocr'
 import type { OcrPopupResult } from '../../shared/ocr-popup'
 
 /** What the asking panel is told when the popup ends. */
 export type OcrPopupOutcome = { kind: 'result'; result: OcrPopupResult } | { kind: 'closed' }
 
 export interface OcrPopupTarget {
+  purpose?: 'editor'
+  placement?: OcrPlacement
   dir: string
   file: string
 }

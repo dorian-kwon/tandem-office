@@ -89,12 +89,17 @@ export function sheetsToOutline(
 }
 
 /** The outline of one sheet. With no options: the whole sheet, no ids. */
-export function sheetToOutline(sheet: XmindSheet, options: OutlineOptions = {}): string {
+export function sheetToOutline(
+  sheet: XmindSheet,
+  options: OutlineOptions = {},
+  onTopicLine?: (line: number, topic: XmindTopic) => void,
+): string {
   const title = escapeHeading(oneLine(sheet.title))
   const lines = [title === '' ? '#' : `# ${title}`, '']
   const root = sheet.rootTopic
   const walk: Walk = {
     lines,
+    onTopicLine,
     ids: options.ids === true,
     foldBelow: foldLevel(root, options),
     relationships: relationshipTexts(sheet),
@@ -109,6 +114,7 @@ export function countSheetTopics(sheet: XmindSheet): number {
 }
 
 interface Walk {
+  onTopicLine?: (line: number, topic: XmindTopic) => void
   lines: string[]
   ids: boolean
   /** the last level written in full, or null when nothing is folded */
@@ -124,6 +130,7 @@ interface Walk {
 function writeTopic(topic: XmindTopic, level: number, kind: OutlineKind | null, walk: Walk): void {
   const indent = '  '.repeat(level)
   const below = `${indent}  `
+  walk.onTopicLine?.(walk.lines.length, topic)
   walk.lines.push(`${indent}-${spaced(topicText(topic, kind, walk.ids))}`)
   for (const line of noteLines(topic.notes)) walk.lines.push(`${below}>${spaced(line)}`)
 

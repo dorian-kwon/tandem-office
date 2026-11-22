@@ -6,6 +6,7 @@ import { TEAR_OFF_SLACK, insertionIndexForX, isBeyondBand } from '../../shared/t
 import { notifyFilesChanged } from './file-events'
 import { productName } from '@genoffice/i18n'
 import { useI18n } from './locale'
+import { fileConversionText } from './i18n/strings-file-conversion'
 import { TranslationPaneToggle } from './translate/TranslationPaneToggle'
 import iconDocx from './assets/file-docx.svg'
 import iconXlsx from './assets/file-xlsx.svg'
@@ -391,7 +392,24 @@ export function TabBar({ split }: TabBarProps) {
   }, [])
 
   // keep the active tab in view — new tabs open at the far end of the strip
-  const activeId = tabs.find((tab) => tab.active)?.id
+  const activeTab = tabs.find((tab) => tab.active)
+  const activeId = activeTab?.id
+  const [ocrPending, setOcrPending] = useState<ReadonlySet<string>>(() => new Set())
+  async function recognizeDocument(id: string) {
+    if (ocrPending.has(id)) return
+    setOcrPending((ids) => new Set(ids).add(id))
+    try {
+      await window.aiOfficeTabs.ocrDocument(id)
+    } catch {
+      window.alert(fileConversionText(lang, 'ocrDocumentFailed'))
+    } finally {
+      setOcrPending((ids) => {
+        const next = new Set(ids)
+        next.delete(id)
+        return next
+      })
+    }
+  }
   useEffect(() => {
     // pointer-down activation runs while the user is pressing that tab — it is
     // already visible, and scrolling the strip mid-press would invalidate the
@@ -612,6 +630,27 @@ export function TabBar({ split }: TabBarProps) {
         >
           {t(splitHint.orientation === 'side' ? 'splitHintRight' : 'splitHintBottom')}
         </div>
+      )}
+      {activeTab && activeTab.kind !== 'home' && activeTab.kind !== 'help' && (
+        <button
+          type="button"
+          className="tab-overflow-btn document-ocr-button"
+          data-testid="document-ocr"
+          title={fileConversionText(
+            lang,
+            !activeTab.filePath
+              ? 'ocrSaveBeforeRun'
+              : ocrPending.has(activeTab.id)
+                ? 'ocrRunning'
+                : 'ocrDocumentAction',
+          )}
+          aria-label={fileConversionText(lang, 'ocrDocumentAction')}
+          aria-busy={ocrPending.has(activeTab.id)}
+          disabled={!activeTab.filePath || ocrPending.has(activeTab.id)}
+          onClick={() => void recognizeDocument(activeTab.id)}
+        >
+          OCR
+        </button>
       )}
       <TranslationPaneToggle split={split} tabs={tabs} />
       <button

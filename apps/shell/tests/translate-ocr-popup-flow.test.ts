@@ -121,6 +121,7 @@ async function render(ask: OcrAsk) {
       ),
     )
   })
+  await click(button('Preserve original layout'))
 }
 const button = (text: string): HTMLButtonElement => {
   const found = [...host.querySelectorAll('button')].find((b) => b.textContent?.trim() === text)
@@ -134,6 +135,7 @@ const click = async (el: Element) =>
 const pickAllAndStart = async () => {
   await click(button('Choose items'))
   await click(button('Select all'))
+  await click(button('Next'))
   await click(button('Next'))
   await click(button('Start'))
 }

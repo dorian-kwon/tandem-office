@@ -1,10 +1,12 @@
 import { memo, useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { AiComposer, AiTypingIndicator, Markdown } from '@genoffice/ui'
+import sendEnterOn from '../assets/send-enter-on.png'
+import sendEnterOff from '../assets/send-enter-off.png'
 import type { TranslateApi } from '../../../shared/translate-api'
 import type { ProjectBatchItem, ProjectBatchSnapshot } from '../../../shared/project-batch'
 import { useI18n } from '../locale'
 import { makeText, translateErrorText } from './shared'
 import { batchChatTargets } from './batch-chat-targets'
-import { isWikiEditingRequest, wikiChatLabels } from '../../../shared/wiki-chat'
 
 type BatchView = 'select' | 'progress' | null
 
@@ -147,46 +149,114 @@ const DocumentProgress = memo(function DocumentProgress({
   total,
   phase,
   operations,
+  verified,
+  openPair,
   output,
   error,
-  chat,
-}: ProjectBatchItem & { chat?: (file: string) => void }) {
-  const { lang } = useI18n()
+  rerun,
+  rerunDisabled,
+}: ProjectBatchItem & {
+  openPair?: (file: string) => Promise<void>
+  rerun: (file: string) => void
+  rerunDisabled: boolean
+}) {
+  const { lang, t } = useI18n()
   const s = makeText(lang)
+  const [openError, setOpenError] = useState('')
+  const [opening, setOpening] = useState(false)
   const label = s(state === 'running' && phase ? phaseLabel[phase] : stateLabel[state])
-  const known = total !== undefined && total > 0
+  const known = done !== undefined && total !== undefined
+  const confirmed = state === 'saved' && verified === true && known && done === total
+  const open = async () => {
+    if (!openPair || opening) return
+    setOpening(true)
+    setOpenError('')
+    try {
+      await openPair(file)
+    } catch (cause) {
+      setOpenError(translateErrorText(lang, cause))
+    } finally {
+      setOpening(false)
+    }
+  }
   return (
     <li data-batch-file={file} data-batch-state={state}>
       <div className="translate-batch-file">
         <strong dir="auto">{file}</strong>
         <span>{label}</span>
+        {state === 'saved' && openPair && output && (
+          <button
+            type="button"
+            className="btn btn-secondary batch-open-pair"
+            data-testid="project-batch-open-result"
+            title={s('batchOpenPair')}
+            aria-label={s('batchOpenPair') + ' · ' + file}
+            disabled={opening}
+            onClick={() => void open()}
+          >
+            {t('open')}
+          </button>
+        )}
+        {state !== 'waiting' && state !== 'running' && (
+          <button
+            type="button"
+            className="projects-ghost batch-rerun-file"
+            disabled={rerunDisabled}
+            title={s('batchRerunFile', { file })}
+            aria-label={s('batchRerunFile', { file })}
+            data-testid="project-batch-rerun-file"
+            onClick={() => rerun(file)}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M3 10a9 9 0 1 1 2 8M3 4v6h6" />
+            </svg>
+          </button>
+        )}
       </div>
-      {state === 'saved' || state === 'waiting' || state === 'running' || known ? (
+      {state === 'running' && (
         <progress
           aria-label={file}
-          value={state === 'saved' ? 1 : state === 'waiting' ? 0 : known ? (done ?? 0) : undefined}
-          max={state === 'saved' || !known ? 1 : total}
+          value={known && total > 0 ? done : undefined}
+          max={known && total > 0 ? total : 1}
         />
-      ) : null}
-      {known && state !== 'waiting' && (
-        <small>
-          {done ?? 0} / {total}
+      )}
+      {state !== 'waiting' && known && (
+        <small data-batch-coverage={confirmed ? 'verified' : 'reported'}>
+          {confirmed && total === 0 ? (
+            s('batchNoRemaining')
+          ) : (
+            <>
+              {s(phase === 'ocr' ? 'batchOcrCount' : 'batchReportedCount', { done, total })}
+              {confirmed && ' · ' + s('batchVerifiedCount')}
+            </>
+          )}
+        </small>
+      )}
+      {state === 'running' && phase === 'translating' && !known && (
+        <small>{s('batchUnknownCount')}</small>
+      )}
+      {state === 'saved' && !confirmed && (
+        <small data-batch-coverage="unverified">{s('batchUnverified')}</small>
+      )}
+      {openError && (
+        <small role="alert" className="is-warning">
+          {openError}
         </small>
       )}
       {operations !== undefined && operations > 0 && (
         <small data-batch-operations={operations}>{s('batchOperations', { n: operations })}</small>
       )}
       {output && output !== file && <small dir="auto">{output}</small>}
-      {chat && (
-        <button
-          type="button"
-          className="projects-ghost batch-document-chat"
-          aria-label={s('batchChatFile', { file })}
-          onClick={() => chat(file)}
-        >
-          {s('batchChat')}
-        </button>
-      )}
       {error && (
         <small className="is-warning" dir="auto">
           {error}
@@ -205,10 +275,18 @@ const messageStateLabel = {
 } as const
 
 function BatchConversation({
+  openPair,
   state,
   send,
   wikiAvailable,
+  rerun,
+  pending,
+  availableFiles,
 }: {
+  openPair?: (file: string) => Promise<void>
+  rerun: (file: string) => void
+  pending: boolean
+  availableFiles: ReadonlySet<string>
   state: ProjectBatchSnapshot
   wikiAvailable: boolean
   send: (prompt: string, targets: string[], useWiki: boolean) => Promise<void>
@@ -216,12 +294,10 @@ function BatchConversation({
   const { lang, t } = useI18n()
   const s = makeText(lang)
   const label = useId()
-  const input = useRef<HTMLTextAreaElement>(null)
   const sending = useRef(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [draft, setDraft] = useState('')
-  const [pinned, setPinned] = useState<string>()
   const [choices, setChoices] = useState<string[] | null>(null)
   const current =
     state.items.find((item) => item.state === 'running')?.file ??
@@ -230,14 +306,14 @@ function BatchConversation({
       ?.targets.find((target) => target.state === 'running')?.file
   const files = state.items.map((item) => item.file)
   const canSend = Boolean(state.id && !state.stopping && !busy && draft.trim())
-  const [askWiki, setAskWiki] = useState<string[] | null>(null)
-  const pin = useCallback((file: string) => {
-    setAskWiki(null)
-    setPinned(file)
-    setChoices(null)
-    input.current?.focus()
-  }, [])
-  async function submit(targets?: string[], useWiki?: boolean) {
+  const thread = useRef<HTMLDivElement>(null)
+  const last = state.messages?.at(-1)
+  const lastStates = last?.targets.map((target) => target.state).join(',')
+  const follow = useRef(true)
+  useEffect(() => {
+    if (thread.current && follow.current) thread.current.scrollTop = thread.current.scrollHeight
+  }, [last?.id, last?.reply, last?.partialReply, lastStates])
+  async function submit(targets?: string[]) {
     if (!canSend || sending.current) return
     const resolved =
       targets ??
@@ -245,7 +321,6 @@ function BatchConversation({
         draft,
         files,
         current,
-        pinned,
         state.messages?.at(-1)?.targets.map((target) => target.file),
         { all: s('batchChatAll'), current: s('batchChatCurrent') },
       )
@@ -253,20 +328,13 @@ function BatchConversation({
       setChoices([])
       return
     }
-    const canUseWiki = wikiAvailable && isWikiEditingRequest(draft)
-    if (canUseWiki && useWiki === undefined) {
-      setChoices(null)
-      setAskWiki(resolved)
-      return
-    }
-    setAskWiki(null)
     sending.current = true
     setBusy(true)
     setError('')
     try {
-      // Keep the user's original wording (including whitespace) for every editor.
-      await send(draft, resolved, canUseWiki && useWiki === true)
-      setDraft('')
+      // The project agent receives the user's exact words, including whitespace.
+      await send(draft, resolved, wikiAvailable)
+      setDraft((current) => (current === draft ? '' : current))
       setChoices(null)
     } catch (cause) {
       setError(translateErrorText(lang, cause))
@@ -277,156 +345,147 @@ function BatchConversation({
   }
   return (
     <>
-      <ul className="translate-batch-list translate-batch-documents">
-        {state.items.map((item) => (
-          <DocumentProgress key={item.file} {...item} chat={state.id ? pin : undefined} />
-        ))}
-      </ul>
+      <section className="batch-progress-files" aria-label={s('batchOverall')}>
+        <BatchTotals state={state} />
+        <ul className="translate-batch-list translate-batch-documents">
+          {state.items.map((item) => (
+            <DocumentProgress
+              key={item.file}
+              {...item}
+              openPair={openPair}
+              rerun={rerun}
+              rerunDisabled={
+                !state.id || pending || state.running || !availableFiles.has(item.file)
+              }
+            />
+          ))}
+        </ul>
+      </section>
       {state.id && (
-        <section className="batch-chat" aria-labelledby={label}>
+        <section className="kb-ask batch-chat" aria-labelledby={label}>
           <h4 id={label}>{s('batchChat')}</h4>
-          {Boolean(state.messages?.length) && (
-            <div
-              className="batch-chat-history"
-              role="log"
-              aria-label={s('batchChat')}
-              data-testid="project-batch-chat-history"
-            >
-              {state.messages?.map((message) => (
-                <article key={message.id}>
-                  <p dir="auto" className="batch-chat-prompt">
-                    {message.prompt}
-                  </p>
-                  {message.targets.map((target) => (
-                    <div className="batch-chat-response" key={target.file}>
-                      <strong dir="auto">{target.file}</strong> ·{' '}
-                      {s(messageStateLabel[target.state])}
-                      {target.reply && <p dir="auto">{target.reply}</p>}
-                      {target.error && (
-                        <p className="is-warning" dir="auto">
-                          {target.error}
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                </article>
-              ))}
-            </div>
-          )}
-          {pinned && (
-            <div className="batch-chat-pinned">
-              <span dir="auto">{pinned}</span>
-              <button
-                type="button"
-                className="projects-ghost"
-                aria-label={s('cancel')}
-                onClick={() => {
-                  setAskWiki(null)
-                  setPinned(undefined)
-                  setChoices(null)
-                  input.current?.focus()
-                }}
-              >
-                ×
-              </button>
-            </div>
-          )}
-          <form
-            onSubmit={(event) => {
-              event.preventDefault()
-              void submit(choices ?? undefined)
+          <div
+            ref={thread}
+            className="kb-ask-thread batch-chat-history"
+            role="log"
+            aria-label={s('batchChat')}
+            data-testid="project-batch-chat-history"
+            onScroll={(event) => {
+              const el = event.currentTarget
+              follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40
             }}
           >
-            <textarea
-              ref={input}
-              rows={2}
-              aria-label={s('batchChat')}
-              data-testid="project-batch-chat-input"
-              value={draft}
-              disabled={busy || state.stopping}
-              dir="auto"
-              onChange={(event) => {
-                setAskWiki(null)
-                setDraft(event.target.value)
-                setChoices(null)
-                setError('')
-              }}
-              onKeyDown={(event) => {
-                if (
-                  event.key === 'Enter' &&
-                  !event.shiftKey &&
-                  !event.nativeEvent.isComposing &&
-                  event.nativeEvent.keyCode !== 229
-                ) {
-                  event.preventDefault()
-                  if (!askWiki && (choices === null || choices.length))
-                    void submit(choices ?? undefined)
-                }
-              }}
-            />
-            {choices !== null && (
-              <fieldset data-testid="project-batch-chat-choose" className="batch-chat-scope">
-                <legend>{s('batchChatWhich')}</legend>
-                <label>
+            {state.messages?.map((message) => {
+              const inFlight = message.targets.some(
+                (t) => t.state === 'queued' || t.state === 'running',
+              )
+              const failures = [
+                ...new Set(
+                  message.targets
+                    .filter((target) => target.state === 'failed')
+                    .map((target) => target.error || s('batchFailed')),
+                ),
+              ]
+              const answer =
+                message.reply ??
+                (inFlight ? message.partialReply : undefined) ??
+                (!inFlight
+                  ? message.targets
+                      .map((t) => t.reply)
+                      .filter(Boolean)
+                      .join('\n\n')
+                  : '')
+              return (
+                <article key={message.id}>
+                  <div dir="auto" className="kb-ask-msg kb-ask-user">
+                    {message.prompt}
+                  </div>
+                  {answer ? (
+                    <div dir="auto" className="kb-ask-msg kb-ask-assistant">
+                      <Markdown text={answer} />
+                    </div>
+                  ) : (
+                    inFlight && <AiTypingIndicator label={t('askHintBusy')} />
+                  )}
+                  {failures.map((failure) => (
+                    <p key={failure} role="alert" className="is-warning" dir="auto">
+                      {failure}
+                    </p>
+                  ))}
+                  {message.targets.length > 0 && (
+                    <details className="batch-chat-targets">
+                      <summary>
+                        {s('batchProgress')} · {message.targets.length}
+                      </summary>
+                      {message.targets.map((target) => (
+                        <div key={target.file}>
+                          <strong dir="auto">{target.file}</strong> ·{' '}
+                          {s(messageStateLabel[target.state])}
+                        </div>
+                      ))}
+                    </details>
+                  )}
+                </article>
+              )
+            })}
+          </div>
+          {choices !== null && (
+            <fieldset data-testid="project-batch-chat-choose" className="batch-chat-scope">
+              <legend>{s('batchChatWhich')}</legend>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={choices.length === files.length}
+                  onChange={(e) => setChoices(e.target.checked ? files : [])}
+                />
+                {s('batchChatAll')}
+              </label>
+              {files.map((file) => (
+                <label key={file}>
                   <input
                     type="checkbox"
-                    checked={choices.length === files.length}
-                    onChange={(e) => setChoices(e.target.checked ? files : [])}
+                    checked={choices.includes(file)}
+                    onChange={(e) =>
+                      setChoices(
+                        e.target.checked
+                          ? [...choices, file]
+                          : choices.filter((name) => name !== file),
+                      )
+                    }
                   />
-                  {s('batchChatAll')}
+                  <span dir="auto">{file}</span>
+                  {file === current && <small>{s('batchChatCurrent')}</small>}
                 </label>
-                {files.map((file) => (
-                  <label key={file}>
-                    <input
-                      type="checkbox"
-                      checked={choices.includes(file)}
-                      onChange={(e) =>
-                        setChoices(
-                          e.target.checked
-                            ? [...choices, file]
-                            : choices.filter((name) => name !== file),
-                        )
-                      }
-                    />
-                    <span dir="auto">{file}</span>
-                    {file === current && <small>{s('batchChatCurrent')}</small>}
-                  </label>
-                ))}
-              </fieldset>
-            )}
-            {askWiki && (
-              <fieldset data-testid="project-batch-chat-wiki" className="batch-chat-scope">
-                <legend>{wikiChatLabels[lang][0]}</legend>
-                <button
-                  className="btn btn-primary"
-                  type="button"
-                  onClick={() => void submit(askWiki, true)}
-                >
-                  {wikiChatLabels[lang][1]}
-                </button>
-                <button
-                  className="btn btn-secondary"
-                  type="button"
-                  onClick={() => void submit(askWiki, false)}
-                >
-                  {wikiChatLabels[lang][2]}
-                </button>
-              </fieldset>
-            )}
-            {error && (
-              <p role="alert" className="is-warning">
-                {error}
-              </p>
-            )}
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={!canSend || Boolean(askWiki) || choices?.length === 0}
-              data-testid="project-batch-chat-send"
-            >
-              {t('askSend')}
-            </button>
-          </form>
+              ))}
+            </fieldset>
+          )}
+
+          {error && (
+            <p role="alert" className="is-warning">
+              {error}
+            </p>
+          )}
+          <AiComposer
+            value={draft}
+            busy={false}
+            sendDisabled={!canSend || choices?.length === 0}
+            placeholder={s('batchChat')}
+            ariaLabel={s('batchChat')}
+            hintIdle={t('askHintIdle')}
+            hintBusy={t('askHintBusy')}
+            sendLabel={t('askSend')}
+            stopLabel={t('askStop')}
+            iconOnly
+            sendIconEnabled={<img src={sendEnterOn} alt="" aria-hidden />}
+            sendIconDisabled={<img src={sendEnterOff} alt="" aria-hidden />}
+            onChange={(value) => {
+              setDraft(value)
+              setChoices(null)
+              setError('')
+            }}
+            onSend={() => void submit(choices ?? undefined)}
+            onStop={() => {}}
+          />
         </section>
       )}
     </>
@@ -454,6 +513,13 @@ export function ProjectBatchControl({
   const [pending, setPending] = useState(false)
   // Keep a dismissed dialog closed during progress ticks. A newly started batch,
   // including one requested in chat, gets its own progress dialog.
+  const batchId = state?.id
+  const openPair = useCallback(
+    async (file: string) => {
+      if (batchId) await api.batchOpenResult({ dir, batchId, file })
+    },
+    [api, dir, batchId],
+  )
   const wasRunning = useRef(false)
   const events = useRef(0)
   useEffect(() => {
@@ -486,32 +552,37 @@ export function ProjectBatchControl({
     }
   }, [api, dir])
 
-  const act = async (mode: 'start' | 'retry' | 'stop', selected?: string[]) => {
-    if (pending) return
-    const before = events.current
-    setPending(true)
-    setError('')
-    try {
-      if (mode === 'stop') await api.batchStop(dir)
-      else {
-        const snapshot = await api.batchStart({
-          dir,
-          files: selected,
-          ...(mode === 'retry' && { retry: true }),
-        })
-        // Progress can be delivered before the start acknowledgement.
-        if (before === events.current) {
-          wasRunning.current = snapshot.running
-          setState(snapshot)
-          setView('progress')
+  const act = useCallback(
+    async (mode: 'start' | 'retry' | 'rerun' | 'stop', selected?: string[]) => {
+      if (pending) return
+      const before = events.current
+      setPending(true)
+      setError('')
+      try {
+        if (mode === 'stop') await api.batchStop(dir)
+        else {
+          const snapshot = await api.batchStart({
+            dir,
+            files: selected,
+            ...(mode === 'retry' && { retry: true }),
+            ...(mode === 'rerun' && { rerunBatchId: batchId }),
+          })
+          // Progress can be delivered before the start acknowledgement.
+          if (before === events.current) {
+            wasRunning.current = snapshot.running
+            setState(snapshot)
+            setView('progress')
+          }
         }
+      } catch (cause) {
+        setError(translateErrorText(lang, cause))
+      } finally {
+        setPending(false)
       }
-    } catch (cause) {
-      setError(translateErrorText(lang, cause))
-    } finally {
-      setPending(false)
-    }
-  }
+    },
+    [api, batchId, dir, lang, pending],
+  )
+  const rerunFile = useCallback((file: string) => void act('rerun', [file]), [act])
   const close = () => setView(null)
   const listed = new Set(files)
   const actionable = (status: 'failed' | 'stopped') =>
@@ -557,24 +628,49 @@ export function ProjectBatchControl({
       )}
       {view === 'progress' && state && (
         <BatchDialog view="progress" title={s('batchProgress')} close={close}>
-          <BatchTotals state={state} />
-          <BatchConversation
-            key={state.id ?? dir}
-            wikiAvailable={wikiAvailable}
-            state={state}
-            send={async (prompt, files, useWiki) => {
-              if (!state.id) return
-              const before = events.current
-              const next = await api.batchSend({ dir, batchId: state.id, prompt, files, useWiki })
-              if (before === events.current) setState(next)
-            }}
-          />
+          <div className="translate-batch-progress-body">
+            <BatchConversation
+              key={dir}
+              openPair={batchId ? openPair : undefined}
+              availableFiles={listed}
+              pending={pending}
+              rerun={rerunFile}
+              wikiAvailable={wikiAvailable}
+              state={state}
+              send={async (prompt, files, useWiki) => {
+                if (!state.id) return
+                const before = events.current
+                const next = await api.batchSend({ dir, batchId: state.id, prompt, files, useWiki })
+                if (before === events.current) setState(next)
+              }}
+            />
+          </div>
           {error && (
             <p role="alert" className="projects-note is-warning">
               {error}
             </p>
           )}
-          <div className="modal-buttons">
+          <div className="modal-buttons batch-progress-actions">
+            <button
+              type="button"
+              className="btn btn-secondary batch-rerun-all"
+              data-testid="project-batch-rerun-all"
+              disabled={
+                pending ||
+                state.running ||
+                !state.id ||
+                !state.items.length ||
+                state.items.some((item) => !listed.has(item.file))
+              }
+              onClick={() =>
+                void act(
+                  'rerun',
+                  state.items.map((item) => item.file),
+                )
+              }
+            >
+              {s('batchRerunAll')}
+            </button>
             {state.running && (
               <button
                 type="button"
@@ -629,33 +725,20 @@ function BatchTotals({ state }: { state: ProjectBatchSnapshot }) {
   const saved = state.items.filter((item) => item.state === 'saved').length
   const failed = state.items.filter((item) => item.state === 'failed').length
   const stopped = state.items.filter((item) => item.state === 'stopped').length
-  const processed = saved + failed
-  const current = state.items.find((item) => item.state === 'running')
-  // OCR precedes document translation. Its page count belongs to the file row.
-  const units =
-    current?.phase !== 'ocr' && current?.total
-      ? Math.min(1, (current.done ?? 0) / current.total)
-      : 0
-  const overall = processed + units
-  // The editor may have translated the last unit while a save is pending.
-  const awaitingSave = state.running && overall >= state.items.length
   return (
     <div className="translate-batch-totals">
       <div>
         <strong>{s('batchOverall')}</strong>
-        <span>
-          {processed} / {state.items.length}
-        </span>
+        <span>{s('batchSavedCount', { done: saved, total: state.items.length })}</span>
       </div>
-      <progress
-        aria-label={s('batchOverall')}
-        value={awaitingSave ? undefined : overall}
-        max={state.items.length || 1}
-      />
-      <p role="status">
-        {s('saved')} {saved} · {s('batchFailed')} {failed}
-        {stopped > 0 && ' · ' + s('batchStopped') + ' ' + stopped}
-      </p>
+      <progress aria-label={s('batchOverall')} value={saved} max={state.items.length || 1} />
+      {(failed > 0 || stopped > 0) && (
+        <p role="status">
+          {[failed && s('batchFailed') + ' ' + failed, stopped && s('batchStopped') + ' ' + stopped]
+            .filter(Boolean)
+            .join(' · ')}
+        </p>
+      )}
     </div>
   )
 }

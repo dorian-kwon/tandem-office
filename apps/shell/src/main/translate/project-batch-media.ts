@@ -94,7 +94,7 @@ export async function runBatchMedia(options: {
   ocr: () => OcrBridge
   media: ProjectBatchMediaDeps
   confirm: (kind: 'pdf' | 'ocr', route: BatchMediaRoute, count: number) => Promise<boolean>
-  progress: (done: number, total: number) => void
+  progress: (done: number, total: number, verified?: boolean) => void
 }): Promise<{ kind: 'saved'; name: string } | { kind: 'edit'; path: string }> {
   const { dir, source, owner, signal, progress, media } = options
   if (source.kind === 'pdf') {
@@ -129,6 +129,7 @@ export async function runBatchMedia(options: {
         return { model: route, send, restart: false, bilingual: false }
       },
       onProgress: ({ done, total }) => progress(done, total),
+      onWriting: ({ done, total }) => progress(done, total, done === total),
     })
     if (result.token) await bridge.release(result.token)
     if (!result.output) throw new Error('The PDF translation is incomplete.')

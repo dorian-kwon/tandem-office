@@ -5,7 +5,7 @@ import type { NoteInfo } from '@genoffice/docx-engine'
 import type { PmNode } from '../src/renderer/editor/convert'
 import { AGENT_TOOLS, executeTool } from '../src/renderer/ai/tools'
 import type { AiNotesAccess, NoteKind } from '../src/renderer/ai/note-ops'
-import { settleTexts, sourceScriptOf } from '../src/renderer/ai/translate-runs'
+import { runFingerprint, settleTexts, sourceScriptOf } from '../src/renderer/ai/translate-runs'
 
 /** footnote translation, the stray-space fix and the completion check */
 
@@ -392,6 +392,64 @@ describe('completion check', () => {
     expect(out.output).not.toMatch(/Body blocks: 0, 1/)
     expect(out.output).toMatch(/Notes: footnote 1\b/)
     expect(out.output).not.toMatch(/footnote 2/)
+    expect(out.translationProgress).toEqual({ done: 0, total: 2 })
+  })
+
+  it('keeps original-language totals between writes, including notes, Undo and the final check', async () => {
+    const editor = await createEditor([
+      paragraph('원문'),
+      paragraph('Already English'),
+      paragraph('123'),
+    ])
+    const n = notesAccess([richNote('1', [run('각주')]), richNote('2', [run('Paris')])])
+    const check = () => exec(editor, 'read_runs', { checkRemaining: true }, n.access)
+    const preflight = await exec(
+      editor,
+      'read_runs',
+      { checkRemaining: true, sourceLanguage: 'ko' },
+      n.access,
+    )
+    expect(preflight.translationProgress).toEqual({ done: 0, total: 2 })
+    // A model may send already-English text back unchanged in the same batch.
+    const body = await exec(
+      editor,
+      'translate_blocks',
+      {
+        blocks: [
+          { index: 0, fp: runFingerprint(['원문']), segments: ['Source'] },
+          { index: 1, fp: runFingerprint(['Already English']), segments: ['Already English'] },
+        ],
+      },
+      n.access,
+    )
+    expect(body.translationProgress).toEqual({ done: 1, total: 2 })
+    expect(body.output).toMatch(/0 body block\(s\) and 1 note/)
+    const finish = await exec(
+      editor,
+      'translate_blocks',
+      {
+        blocks: [
+          { note: 'footnote', id: '1', fp: runFingerprint(['각주']), segments: ['Footnote'] },
+          { note: 'footnote', id: '2', fp: runFingerprint(['Paris']), segments: ['Paris'] },
+        ],
+      },
+      n.access,
+    )
+    expect(finish.translationProgress).toEqual({ done: 2, total: 2 })
+    expect((await check()).translationProgress).toEqual({ done: 2, total: 2 })
+    editor.commands.undo()
+    expect((await check()).translationProgress).toEqual({ done: 1, total: 2 })
+    editor.commands.redo()
+    expect((await check()).translationProgress).toEqual({ done: 2, total: 2 })
+    const other = await createEditor([paragraph('English content')])
+    expect((await exec(other, 'read_runs', { checkRemaining: true })).translationProgress).toEqual({
+      done: 0,
+      total: 1,
+    })
+    expect(
+      (await exec(other, 'read_runs', { checkRemaining: true, sourceLanguage: 'ko' }))
+        .translationProgress,
+    ).toEqual({ done: 0, total: 0 })
   })
 
   it('reports nothing left once everything was translated', async () => {
@@ -446,6 +504,10 @@ describe('completion check', () => {
     const check = () =>
       exec(editor, 'read_runs', { checkRemaining: true, sourceLanguage: 'French' })
     expect((await check()).output).toMatch(/Body blocks: 1$/m)
+    // The same editor can display another file with the same text at the same address.
+    const { noteDocumentSwapped } = await import('../src/renderer/file-actions')
+    noteDocumentSwapped(editor)
+    expect((await check()).translationProgress).toEqual({ done: 0, total: 2 })
   })
 
   it('undoes each note paragraph and lists it again on resume', async () => {

@@ -1786,7 +1786,9 @@ export function App({
 
   const agentLoopRef = useRef<AgentLoop | null>(null)
   if (!agentLoopRef.current) {
+    const documentSkill = createWorkbookSkill(sheetsSkillDeps())
     agentLoopRef.current = new AgentLoop({
+      documentSkill,
       documentTranslation: {
         documentKey: () => translationFileRef.current,
         analyzingLabel: () => analyzingDocumentLabel[getLang()],
@@ -1800,7 +1802,7 @@ export function App({
           ? localModelCapabilities(aiSettingsRef.current).tools !== false
           : true,
       skill: composeWithDrive('sheets+files', '', () => agentLoopRef.current?.messages ?? [], [
-        createWorkbookSkill(sheetsSkillDeps()),
+        documentSkill,
         createFilesSkill(availableAttachments),
         createMergeSkill({
           getAttachments: availableAttachments,
@@ -2128,6 +2130,8 @@ export function App({
   /// A citation link in an AI answer ([B12](sheetnav://B12)): jump the grid to
   /// the cited cell or range through the same path the Name Box uses.
   useProjectEditorRun({
+    documentEditor: 'sheets',
+    documentLoop: () => agentLoopRef.current,
     turn: aiRunStatus.projectTurn,
     path: templateFilePath,
     ready: (!project.chat.available || project.chat.ready) && !openingWorkbook,

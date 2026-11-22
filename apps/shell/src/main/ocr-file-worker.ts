@@ -10,6 +10,12 @@ async function run() {
   const { input, target, output, resourcesPath, helper, options } = workerData
   if (!process.resourcesPath && resourcesPath)
     Object.defineProperty(process, 'resourcesPath', { value: resourcesPath })
+  if (workerData.task === 'sheetHtml') {
+    const { sheetOcrHtml } = await import('./ocr-office-sheets')
+    await sheetOcrHtml(input, output)
+    parentPort!.postMessage({ missing: [] })
+    return
+  }
   const create = process.platform === 'darwin' ? createVisionOcrEngine : createWindowsOcrEngine
   const missing = await convertOcrFile(
     input,
@@ -18,6 +24,10 @@ async function run() {
     await ensurePdfium(),
     create(helper, options?.language ? [options.language] : undefined, Boolean(options?.language)),
     options?.pageRange,
+    options?.replacePictures,
+    options?.placement,
+    options?.destination,
+    options?.plainText,
   )
   parentPort!.postMessage({ missing })
 }

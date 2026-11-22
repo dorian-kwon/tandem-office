@@ -9,6 +9,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs'
+import { previewBatchSourceImage } from './translate/batch-image-preview'
 import { randomUUID } from 'node:crypto'
 import { release } from 'node:os'
 import { basename, dirname, extname, join, resolve } from 'node:path'
@@ -119,6 +120,7 @@ import {
   agentSkillNoticeDue,
   markAgentSkillNoticeSeen,
   readAppSettings,
+  readTranslationProjects,
   writeAgentPrefs,
   writeAppSetting,
   writeAppSettings,
@@ -140,11 +142,16 @@ import { installCliLinkBestEffort } from './cli-link'
 import { createDefaultAppService, execFileRunner } from './default-app'
 import { registerIntegrationsIpc } from './integrations-ipc'
 import { registerResultStoreIpc } from './result-store-ipc'
-import { registerOcrIpc } from './ocr-file-ipc'
+import { registerOcrIpc, withPreparedOcrFile, recognizeFile } from './ocr-file-ipc'
+import { runEditorOcrInsert, supportsEditorOcrInsert } from './editor-ocr-insert'
+import { writeEditorOcr } from './editor-ocr'
 import { registerFileConversionIpc, convertWithBundledCli } from './file-conversion-ipc'
+import { BatchProjectAgent, type BatchDocumentTools } from './translate/batch-project-agent'
+import { openBatchEditorTools } from './translate/batch-editor-tools'
+import { createBatchModelTransport } from './translate/batch-model-transport'
 import { projectEditorTurn } from './translate/project-editor-turn'
-import type { BatchConversation, ProjectBatchEditorRequest } from './translate/project-batch'
-import { registerTranslateIpc } from './translate/translate-ipc'
+import type { ProjectBatchEditorRequest } from './translate/project-batch'
+import { registerTranslateIpc, type TranslateIpcDeps } from './translate/translate-ipc'
 import { createOpenWikiService } from './translate/open-wiki'
 import { learnFinalPaths } from './translate/wiki-import'
 import { maintainTranslationWiki, withWikiAccess } from './translate/wiki-maintenance'
@@ -181,7 +188,6 @@ import type {
 } from './pdf-structure/protocol'
 import { ResultStore } from '../../../../packages/pdf-structure/src/store'
 import type { TranslationViewDeps } from './translate/open-translation'
-import { isWikiEditingRequest, wikiChatLabels } from '../shared/wiki-chat'
 import { translationContextForFolder } from './translate/context-injection'
 import { translationLanguagesOfFile } from './translate/language-of-file'
 import { FixedContextLedger } from './translate/fixed-context'
@@ -436,7 +442,8 @@ import {
   type AiPanelPrefs,
 } from '@genoffice/ui/ai-panel-prefs'
 import type { DocumentTabKind, TabKind } from '../shared/tabs-api'
-import { TABS_CHANNELS } from '../shared/tabs-api'
+import { TABS_CHANNELS, type OpenDocumentTab } from '../shared/tabs-api'
+import { runEditorOcrAction } from './editor-ocr-action'
 import { SPLIT_TABS_CHANNELS } from '../shared/split-view-api'
 import type {
   SplitDropIntent,
@@ -6090,6 +6097,19 @@ function lookupWikiCategories(categories: TranslationWikiCategories) {
   return withWikiAccess(profile, () => findWikiCategoryExamples(profile, currentLang(), categories))
 }
 
+async function lookupProjectWiki(
+  root: string,
+  categories: TranslationWikiCategories,
+  path?: string,
+) {
+  if ((await loadTranslationProject(root)).useWiki === false) return { text: '' }
+  if (path !== undefined) {
+    const profile = app.getPath('userData')
+    return withWikiAccess(profile, () => readTranslationWikiPage(profile, path))
+  }
+  return lookupWikiCategories(categories)
+}
+
 let chatOcrService: OcrChatService | null = null
 
 function registerProjectFolderChannels(): void {
@@ -6101,30 +6121,8 @@ function registerProjectFolderChannels(): void {
         return handler(event.sender.id, args)
       }),
     windowOf: projectWindowOf,
-    lookupWikiCategories: async (root, categories, path) => {
-      if ((await loadTranslationProject(root)).useWiki === false) return { text: '' }
-      if (path !== undefined) {
-        const profile = app.getPath('userData')
-        return withWikiAccess(profile, () => readTranslationWikiPage(profile, path))
-      }
-      return lookupWikiCategories(categories)
-    },
-    wikiForChat: async (sender, query) => {
-      // A delegated editor turn already has its caller's decision (or the batch button default).
-      const delegated = editorTurnWiki.get(sender)
-      if (delegated !== undefined) return delegated
-      if (!isWikiEditingRequest(query)) return false
-      const [message, yes, no] = wikiChatLabels[currentLang()]
-      return (
-        (await projectMessageBox(sender, {
-          type: 'question',
-          message,
-          buttons: [yes, no],
-          defaultId: 0,
-          cancelId: 1,
-        })) === 0
-      )
-    },
+    lookupWikiCategories: lookupProjectWiki,
+    wikiForChat: async (sender) => editorTurnWiki.get(sender) ?? true,
     ocr: (sender, args, context) =>
       chatOcrService
         ? chatOcrService.execute(sender, args, context)
@@ -7775,7 +7773,152 @@ function tabMenuActions(): TabMenuActions {
   }
 }
 
+async function saveEditorOutput(wc: WebContents, item: OpenDocumentTab & { filePath: string }) {
+  const { kind, filePath: outputPath } = item
+  if (kind === 'sheets') {
+    if (!(await requestWorkbookSave(wc, outputPath)))
+      throw new Error('The spreadsheet editor could not save its output workbook.')
+  } else if (kind === 'hwp') {
+    if (!(await flushHwpSave(wc, outputPath)))
+      throw new Error('The Hangul editor could not save the output document.')
+  } else if (kind === 'pdf') {
+    if (!(await flushPdfSave(wc, true)))
+      throw new Error('The PDF editor could not save the output document.')
+  } else {
+    const projectDocumentControl = currentMcpRuntimeDeps()?.openDocumentsControl
+    if (!projectDocumentControl) throw new Error('The editor is unavailable.')
+    const result = await projectDocumentControl.save(item)
+    if (canonicalPath(result.savedPath) !== canonicalPath(outputPath))
+      throw new Error('The editor saved to a different file.')
+  }
+}
+
 function registerTabsIpc(): void {
+  const ocrPaths = new Set<string>()
+  ipcMain.handle(TABS_CHANNELS.ocrDocument, async (event, id: unknown) => {
+    const owner = shellWindow
+    const manager = tabManager
+    if (
+      !owner ||
+      owner.isDestroyed() ||
+      event.sender !== owner.webContents ||
+      !event.senderFrame ||
+      event.senderFrame !== event.sender.mainFrame ||
+      !manager ||
+      typeof id !== 'string'
+    )
+      return
+    const tab = manager.list().find((t) => t.id === id && t.active)
+    if (!tab?.filePath || tab.kind === 'home' || tab.kind === 'help') return
+    const path = tab.filePath
+    const kind = tab.kind
+    const key = canonicalPath(path)
+    if (!key || !appForPath(path) || ocrPaths.has(key) || projectEditorJobs.has(key)) return
+    const wc = manager.webContentsForTab(id)
+    if (!wc || wc.isDestroyed()) return
+    const parent = dirname(path)
+    const project = ['source', 'output'].includes(basename(parent).toLowerCase())
+      ? readTranslationProjects(APP_SETTINGS_PATH()).find(
+          (p) => canonicalPath(p.dir) === canonicalPath(dirname(parent)),
+        )
+      : undefined
+    const projectSource = Boolean(project) && basename(parent).toLowerCase() === 'source'
+    const outputDir = projectSource ? join(dirname(parent), 'output') : parent
+    const readOnly = Boolean(tab.readOnly || projectSource)
+    const current = async () =>
+      !wc.isDestroyed() &&
+      manager.webContentsForTab(id) === wc &&
+      manager.list().some((t) => t.id === id && t.filePath && canonicalPath(t.filePath) === key) &&
+      !projectEditorJobs.has(key)
+    const unedited = async () => (await current()) && !(await manager.isFileDirty(path))
+    const controller = new AbortController()
+    const abort = () => controller.abort()
+    wc.once('destroyed', abort)
+    ocrPaths.add(key)
+    try {
+      await runEditorOcrAction({
+        owner,
+        lang: currentLang(),
+        path,
+        readOnly,
+        outputDir,
+        cancelLabel: tm('btnCancel'),
+        saveLabel: tm('menuSave'),
+        current,
+        insertAtDestination: async (apply, keepFormatting, placement) => {
+          const cli = bundledCliRunner()
+          const lang = currentLang()
+          if (/\.(xlsm|xls)$/i.test(path)) {
+            if (
+              !placement ||
+              (placement.kind !== 'xlsx-cells' && placement.kind !== 'xlsx-new-sheet')
+            )
+              throw Error('OCR_SHEET_DESTINATION_INVALID')
+            if (placement.kind === 'xlsx-cells' && placement.overwrite)
+              throw Error('OCR_SHEET_DESTINATION_INVALID')
+            const destination =
+              placement.kind === 'xlsx-cells'
+                ? { ...placement, overwrite: false as const }
+                : placement
+            if (!(await unedited())) return
+            const format = /\.xls$/i.test(path) ? 'xlsx' : 'xlsm'
+            const written = await writeEditorOcr(
+              path,
+              { format, apply },
+              {
+                outputDir,
+                readOnly,
+                current: unedited,
+                recognize: (input, target, output) =>
+                  recognizeFile(
+                    input,
+                    target,
+                    output,
+                    { destination, plainText: !keepFormatting },
+                    lang,
+                    cli,
+                  ),
+              },
+            )
+            return written.outputPath
+          }
+          const ocrMode = project ? (await loadTranslationProject(project.dir)).ocr : chatOcrMode()
+          const insert = async (prepared: string) =>
+            (
+              await runEditorOcrInsert({
+                ownerId: wc.id,
+                path: prepared,
+                originalPath: path,
+                placement,
+                keepFormatting,
+                outputDir,
+                readOnly,
+                apply,
+                current: unedited,
+                workDir: chatOcrWorkDir,
+                ocrMode: () => ocrMode,
+                ocr: createOcrService(translationOcrRuntime, Date.now, randomUUID),
+                popup: ocrChatPopup.popup,
+                signal: controller.signal,
+              })
+            )?.outputPath
+          return supportsEditorOcrInsert(path)
+            ? insert(path)
+            : withPreparedOcrFile(path, 'pdf', undefined, lang, cli, insert)
+        },
+        dirty: () => manager.isFileDirty(path),
+        save: () => saveEditorOutput(wc, { ...tab, kind, filePath: path, dirty: true }),
+        open: (output, applied) => {
+          if (applied) manager.reloadTab(id)
+          else if (!openGeneratedDocument(output)) throw new Error(output)
+        },
+        cli: bundledCliRunner,
+      })
+    } finally {
+      wc.removeListener('destroyed', abort)
+      ocrPaths.delete(key)
+    }
+  })
   ipcMain.on(TABS_CHANNELS.chromePressed, (event) => broadcastChromePressed(event.sender))
   ipcMain.handle(TABS_CHANNELS.list, () => tabManager?.list() ?? [])
   ipcMain.handle(TABS_CHANNELS.activate, (_event, id: unknown) => {
@@ -9216,7 +9359,12 @@ registerIntegrationsIpc({
     : join(APPS_ROOT, '..', 'packages', 'cli', 'package.json'),
 })
 registerResultStoreIpc(ipcMain, () => app.getPath('userData'))
-registerOcrIpc(() => shellWindow, currentLang)
+registerOcrIpc(
+  () => shellWindow,
+  currentLang,
+  bundledCliRunner,
+  () => tm('filterSupported'),
+)
 registerFileConversionIpc(
   () => shellWindow,
   bundledCliRunner,
@@ -9360,15 +9508,7 @@ const editorTurnWiki = new Map<number, boolean>()
 // A failed background job can resume its own dirty tab until the user takes it over.
 const backgroundProjectEditors = new WeakSet<WebContents>()
 
-async function runProjectEditorRequest(
-  outputPath: string,
-  prompt: string,
-  signal: AbortSignal,
-  report?: ProjectBatchEditorRequest['report'],
-  useWiki = true,
-  batchChoices?: ProjectBatchEditorRequest['choices'],
-  batchConversation?: BatchConversation,
-): Promise<string> {
+async function openProjectEditor(outputPath: string, signal: AbortSignal) {
   signal.throwIfAborted()
   const key = canonicalPath(outputPath)
   const kind = appForPath(outputPath)
@@ -9404,6 +9544,21 @@ async function runProjectEditorRequest(
         ),
       })
     let saved = false
+    let saving = false
+    const close = async () => {
+      try {
+        const contents = manager.webContentsForTab(tab)
+        if (
+          (!existing || continuing) &&
+          (!contents || backgroundProjectEditors.has(contents)) &&
+          !manager.list().find((item) => item.id === tab)?.active &&
+          (saved || (!saving && !signal.aborted && !(await manager.isFileDirty(outputPath))))
+        )
+          manager.closeTabWithoutPrompt(tab)
+      } finally {
+        projectEditorJobs.delete(key)
+      }
+    }
     try {
       const loaded = await manager.ensureTabLoaded(tab)
       if (loaded.status !== 'ready')
@@ -9413,47 +9568,10 @@ async function runProjectEditorRequest(
         backgroundProjectEditors.add(wc)
         wc.once('focus', () => backgroundProjectEditors.delete(wc))
       }
-      report?.({ phase: 'translating' })
-      const editorId = wc.id
-      editorTurnWiki.set(editorId, useWiki)
-      const result = await projectEditorTurn(
-        wc,
-        outputPath,
-        prompt,
-        signal,
-        ({ operations, done, total }) =>
-          report?.({
-            operations,
-            ...(done !== undefined && total !== undefined ? { done, total } : {}),
-          }),
-        batchChoices,
-        batchConversation,
-      ).finally(() => editorTurnWiki.delete(editorId))
-      signal.throwIfAborted()
-      if (result.incomplete)
-        throw new Error('The document AI stopped before finishing its request.')
-      const dirty = await manager.isFileDirty(outputPath)
-      const alreadyTranslated =
-        result.inspected && /^PROJECT_ALREADY_TRANSLATED\s*$/m.test(result.text)
-      if (
-        report &&
-        (!result.text.trimEnd().endsWith('PROJECT_TRANSLATION_COMPLETE') ||
-          (!result.mutated && !alreadyTranslated))
-      )
-        throw new Error('The editor has not confirmed that the entire document is translated.')
-      report?.({ phase: 'saving' })
-      if (result.mutated || dirty) {
-        if (kind === 'sheets') {
-          if (!(await requestWorkbookSave(wc, outputPath)))
-            throw new Error('The spreadsheet editor could not save its output workbook.')
-        } else if (kind === 'hwp') {
-          if (!(await flushHwpSave(wc, outputPath)))
-            throw new Error('The Hangul editor could not save the output document.')
-        } else if (kind === 'pdf') {
-          if (!(await flushPdfSave(wc, true)))
-            throw new Error('The PDF editor could not save the output document.')
-        } else {
-          const result = await projectDocumentControl.save({
+      const save = async (mutated: boolean) => {
+        saving = true
+        if (mutated || (await manager.isFileDirty(outputPath))) {
+          await saveEditorOutput(wc, {
             id: tab,
             kind,
             title,
@@ -9461,45 +9579,154 @@ async function runProjectEditorRequest(
             active: false,
             dirty: true,
           })
-          if (canonicalPath(result.savedPath) !== key)
-            throw new Error('The editor saved to a different file.')
         }
+        saved = true
       }
-      saved = true
-      return result.text
-    } finally {
-      // Keep a partially edited tab available for inspection or retry after a failed run.
-      const contents = manager.webContentsForTab(tab)
-      if (
-        (!existing || continuing) &&
-        (!contents || backgroundProjectEditors.has(contents)) &&
-        !manager.list().find((item) => item.id === tab)?.active &&
-        (saved || (!signal.aborted && !(await manager.isFileDirty(outputPath))))
-      )
-        manager.closeTabWithoutPrompt(tab)
+      return { wc, save, close }
+    } catch (error) {
+      await close()
+      throw error
     }
-  } finally {
+  } catch (error) {
     projectEditorJobs.delete(key)
+    throw error
+  }
+}
+
+async function runProjectEditorRequest(
+  outputPath: string,
+  prompt: string,
+  signal: AbortSignal,
+  useWiki = true,
+) {
+  const tab = await openProjectEditor(outputPath, signal)
+  const id = tab.wc.id
+  editorTurnWiki.set(id, useWiki)
+  try {
+    const result = await projectEditorTurn(tab.wc, outputPath, prompt, signal)
+    signal.throwIfAborted()
+    if (result.incomplete) throw new Error('The document AI stopped before finishing its request.')
+    await tab.save(result.mutated)
+    return result.text
+  } finally {
+    editorTurnWiki.delete(id)
+    await tab.close()
+  }
+}
+
+async function batchDocumentTools(
+  output: string,
+  signal: AbortSignal,
+  useWiki = true,
+  choices: ProjectBatchEditorRequest['choices'] = {},
+  report?: ProjectBatchEditorRequest['report'],
+): Promise<BatchDocumentTools> {
+  const tab = await openProjectEditor(output, signal)
+  const id = tab.wc.id
+  editorTurnWiki.set(id, useWiki)
+  try {
+    const editor = await openBatchEditorTools(tab.wc, output, signal, choices)
+    report?.({ phase: 'translating' })
+    return {
+      get tools() {
+        return editor.tools
+      },
+      get systemPrompt() {
+        return editor.systemPrompt
+      },
+      executeTool: (call, toolSignal) => editor.executeTool(call, toolSignal),
+      async finish(mutated) {
+        try {
+          editor.close()
+          report?.({ phase: 'saving' })
+          await tab.save(mutated)
+        } finally {
+          editorTurnWiki.delete(id)
+          await tab.close()
+        }
+      },
+    }
+  } catch (error) {
+    editorTurnWiki.delete(id)
+    await tab.close()
+    throw error
+  }
+}
+
+let activeBatchAgent: { id: string; agent: BatchProjectAgent } | undefined
+async function withBatchAgent<T>(
+  id: string,
+  owner: number,
+  signal: AbortSignal,
+  work: (
+    agent: BatchProjectAgent,
+    model: ReturnType<typeof createBatchModelTransport>,
+  ) => Promise<T>,
+) {
+  const wc = shellWindow?.webContents
+  if (!wc || wc.isDestroyed() || wc.id !== owner)
+    throw new Error('The project window is unavailable.')
+  if (activeBatchAgent?.id !== id) activeBatchAgent = { id, agent: new BatchProjectAgent() }
+  const transport = createBatchModelTransport(wc, signal)
+  try {
+    return await work(activeBatchAgent.agent, transport)
+  } finally {
+    transport.dispose()
   }
 }
 
 async function runProjectBatchDocument(request: ProjectBatchEditorRequest): Promise<void> {
   const prompt = [
     `Translate the entire document from ${request.sourceLang} into ${request.targetLang}. Work in this document only.`,
-    'This is an unattended project batch. Use saved project choices first. For translation output mode, bilingual layout, table placement or wording style, select and apply the recommended local formatting, then continue editing. If using ask_choice, set id to outputMode, bilingual, tableLayout or style and recommendedFormat to the supported setting you recommend. An automatic formatting result is not permission for another action. Operations requiring human consent must stop.',
-    'Use the project glossary and style instructions. First inspect the document, then use the editor tools to translate all remaining editable text in batches. Preserve formatting and structure, including nested content. Leave numbers, formulas, code and identifiers intact.',
-    'If no changes are needed because the document is already in the target language, inspect its contents using the editor tools, then put PROJECT_ALREADY_TRANSLATED on its own line before the completion marker.',
-    'Check the document again for remaining source-language text. Only after verifying that every translation unit is complete, end your response with PROJECT_TRANSLATION_COMPLETE. If anything remains or you need input, describe it without the completion marker.',
+    'This is an unattended project batch. Apply saved formatting choices or the recommended local format. Human consent is required for other actions.',
+    'Read the current working output first. Preserve existing translations and manual revisions. Translate the remaining source-language passages in batches. Use the project glossary and style instructions. Preserve formatting, nested content, numbers, formulas, code and identifiers.',
   ].join('\n')
-  await runProjectEditorRequest(
-    request.outputPath,
-    prompt,
-    request.signal,
-    request.report,
-    request.useWiki,
-    request.choices ?? {},
+  await withBatchAgent(request.batchId, request.owner, request.signal, (agent, transport) =>
+    agent.run(
+      {
+        transport,
+        lookupWiki:
+          request.useWiki === false
+            ? undefined
+            : (categories, path) => lookupProjectWiki(request.dir, categories, path),
+        instructions: request.instructions,
+        sourceLanguage: request.sourceLang,
+        signal: request.signal,
+        conversation: request.conversation,
+        items: [{ file: request.file, state: 'running' }],
+        report: request.report,
+        open: () =>
+          batchDocumentTools(
+            request.outputPath,
+            request.signal,
+            request.useWiki,
+            request.choices,
+            request.report,
+          ),
+      },
+      prompt,
+      request.file,
+    ),
   )
 }
+
+const runProjectBatchChat: NonNullable<TranslateIpcDeps['runBatchChat']> = (request) =>
+  withBatchAgent(request.batchId, request.owner, request.signal, (agent, transport) =>
+    agent.run(
+      {
+        ...request,
+        lookupWiki:
+          request.useWiki === false
+            ? undefined
+            : (categories, path) => lookupProjectWiki(request.dir, categories, path),
+        transport,
+        open: async (file) =>
+          batchDocumentTools(await request.resolveOutput(file), request.signal, request.useWiki),
+      },
+      request.prompt,
+    ),
+  )
+
 registerTranslateIpc(
   ipcMain,
   {
@@ -9588,16 +9815,8 @@ registerTranslateIpc(
         return results
       })
     },
-    runEditorRequest: (path, prompt, signal, useWiki, conversation) =>
-      runProjectEditorRequest(
-        path,
-        prompt,
-        signal,
-        undefined,
-        useWiki,
-        conversation ? {} : undefined,
-        conversation,
-      ),
+    runEditorRequest: runProjectEditorRequest,
+    runBatchChat: runProjectBatchChat,
     settingsPath: APP_SETTINGS_PATH,
     now: () => Date.now(),
     showOpenDialog: (options) => {
@@ -9612,6 +9831,7 @@ registerTranslateIpc(
       if (st.chatgpt?.state === 'ready' || st.codex?.state === 'ready') return 'chatgpt'
       return 'claude'
     },
+    batchImagePreview: (source) => previewBatchSourceImage(source, app.getPath('temp')),
     runBatchEditor: runProjectBatchDocument,
     view: translationViewDeps(),
     projects: {

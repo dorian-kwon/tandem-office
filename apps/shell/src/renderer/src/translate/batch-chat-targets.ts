@@ -4,7 +4,6 @@ export function batchChatTargets(
   prompt: string,
   files: readonly string[],
   current?: string,
-  pinned?: string,
   lastTargets?: readonly string[],
   labels?: { all: string; current: string },
 ): string[] | null {
@@ -50,7 +49,7 @@ export function batchChatTargets(
     }
     remaining = remaining.replace(pattern, (name) => ' '.repeat(name.length))
   }
-  // An unrecognized named file cannot safely be treated as the pinned file.
+  // An unrecognized named file cannot safely be routed to a different file.
   if (
     /[\p{L}\p{N}_-]+\.(?:docx?|hwpx?|pdf|pptx?|xlsx?|xlsm|odt|odp|ods|epub|md|txt|rtf|csv|xmind|png|jpe?g|gif|tiff?|webp|bmp)\b/iu.test(
       remaining,
@@ -86,7 +85,6 @@ export function batchChatTargets(
       scope,
     ) ||
     (localizedCurrent && !qualification)
-  const currentFile = pinned ?? current
   const currentOnlyNegated =
     /(?:이|현재|지금)\s*(?:문서|파일)(?:만\s*(?:이?\s*)?(?:아니라|말고)|(?:가|이)\s*아니라)|not (?:just|only) (?:this|the current) (?:document|file)/iu.test(
       scope,
@@ -96,7 +94,7 @@ export function batchChatTargets(
     /(?:이|현재|지금)\s*(?:문서|파일)(?:만|는|은|를|을|에)?\s*(?:빼고|제외|말고)|(?:except(?: for)?|excluding|other than) (?:this|(?:the )?current) (?:document|file|one)/iu.test(
       scope,
     )
-  if (currentExcluded && currentFile) excluded.add(currentFile)
+  if (currentExcluded && current) excluded.add(current)
   if ([...mentioned].some((file) => excluded.has(file))) return null
   if (excluded.size && !mentioned.size && !all) return null
   if (all && here && !currentExcluded && !currentOnlyNegated) {
@@ -105,20 +103,19 @@ export function batchChatTargets(
       /(?:이|현재|지금|해당)\s*(?:문서|파일)(?:만|를|을|의)?\s*전체/u.test(scope) &&
       !/(?:모든|전체)\s*(?:문서|파일)/u.test(scope)
     )
-      return currentFile ? [currentFile] : null
+      return current ? [current] : null
     return null
   }
   if (all && mentioned.size) return null
   if (all) {
-    if (currentExcluded && !currentFile) return null
+    if (currentExcluded && !current) return null
     const chosen = files.filter((file) => !excluded.has(file))
     return chosen.length ? chosen : null
   }
-  if (here && !currentExcluded && currentFile) mentioned.add(currentFile)
+  if (here && !currentExcluded && current) mentioned.add(current)
   if (mentioned.size) return files.filter((file) => mentioned.has(file))
   if (here || negAll || currentExcluded || excluded.size) return null
   if ((localizedAll || localizedCurrent) && qualification) return null
-  if (pinned && files.includes(pinned)) return [pinned]
   if (
     lastTargets?.length &&
     /^(?:네[, ]*|응[, ]*)?(?:그렇게|그대로|아까처럼|계속해|이어서)|^(?:yes[, ]+)?(?:do that|continue|go ahead|same as before)\b/iu.test(

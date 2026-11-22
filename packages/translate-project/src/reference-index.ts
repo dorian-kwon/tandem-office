@@ -632,22 +632,27 @@ export async function queryReferences(
       ? /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(md)
       : null
     const generatedExample = !!header && /^kind: final-style-example\r?$/m.test(header[1]!)
-    const scope = generatedExample ? wikiScopeLine(md) : ''
-    for (const c of entry.chunks) {
-      let text = md.slice(c.offset, c.offset + c.length)
-      // Generated notes put the source excerpts under level-three headings. The
-      // front matter and catalog links only help navigation inside Obsidian.
-      if (generatedExample) {
-        const sample = /^### [^\r\n]+\r?\n\r?\n {4}[^\r\n]+/.exec(text)
-        if (!sample) continue
-        text = scope ? scope + '\n' + sample[0] : sample[0]
+    if (generatedExample) {
+      // A generated note can be indexed as one block including front matter and
+      // navigation, or a chunk boundary can fall inside an excerpt.
+      const scope = wikiScopeLine(md)
+      for (const sample of md.matchAll(/^### ([^\r\n]+)\r?\n\r?\n {4}[^\r\n]+/gm)) {
+        const text = scope ? scope + '\n' + sample[0] : sample[0]
+        if (text.length > maxChars) continue
+        const terms = termCounts(text)
+        chunks.push({
+          file: entry.file,
+          heading: sample[1]!,
+          text,
+          terms,
+          size: Object.values(terms).reduce((sum, count) => sum + count, 0),
+        })
       }
-      // Rank only the labels and excerpts that can actually appear in the prompt.
-      const terms = generatedExample
-        ? termCounts(text)
-        : c.terms && typeof c.terms === 'object'
-          ? c.terms
-          : {}
+      continue
+    }
+    for (const c of entry.chunks) {
+      const text = md.slice(c.offset, c.offset + c.length)
+      const terms = c.terms && typeof c.terms === 'object' ? c.terms : {}
       let size = 0
       for (const v of Object.values(terms)) size += v
       chunks.push({

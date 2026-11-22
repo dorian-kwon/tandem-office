@@ -14,6 +14,8 @@
 import { extractIrDocument, isScannedDocument, type ConvertOptions } from './pipeline'
 import type { PageResult } from './pipeline'
 import { rebuildDocx } from './rebuild'
+import { withPdfDocument, renderPageByIndexPng } from './extract'
+import type { IrPage } from './ir'
 
 export type { PdfiumModule, PdfLoadErrorCode } from './extract/pdfium'
 export { PdfLoadError } from './extract/pdfium'
@@ -42,10 +44,51 @@ export interface ConvertResult {
 
 export async function convertPdfToDocx(
   pdf: Uint8Array,
-  opts: ConvertOptions,
+  opts: ConvertOptions & { keepScanAboveText?: boolean },
 ): Promise<ConvertResult> {
   const { irPages, warnings, pageResults, furnitureHf } = extractIrDocument(pdf, opts)
-  const docx = await rebuildDocx(irPages, { furnitureHf })
+  // A full-page scan occupies its own page. Place its editable transcription
+  // immediately after it, leaving authored pages and unrecognized scans single.
+  const pages =
+    opts.keepScanAboveText && irPages.some((p) => p.ocrRecovered)
+      ? withPdfDocument(
+          opts.pdfium,
+          pdf,
+          (doc) => {
+            const result: IrPage[] = []
+            for (const page of irPages) {
+              if (page.ocrRecovered) {
+                const render = renderPageByIndexPng(
+                  opts.pdfium,
+                  doc,
+                  page.index,
+                  opts.renderScale ?? 2,
+                )
+                if (!render) throw new Error('Could not retain original scan')
+                result.push({
+                  index: result.length,
+                  widthPt: page.widthPt,
+                  heightPt: page.heightPt,
+                  rotation: page.rotation,
+                  scanned: true,
+                  degraded: false,
+                  hasStructTree: false,
+                  blocks: [],
+                  render,
+                })
+              }
+              result.push({
+                ...page,
+                index: result.length,
+                flowsFromPrev: page.ocrRecovered ? false : page.flowsFromPrev,
+              })
+            }
+            return result
+          },
+          opts.password,
+        )
+      : irPages
+  const docx = await rebuildDocx(pages, { furnitureHf })
   return {
     docx,
     pages: irPages.length,

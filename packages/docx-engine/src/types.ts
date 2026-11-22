@@ -59,6 +59,8 @@ export interface TextGlow {
 }
 
 export interface Run {
+  /** Source XML text leaves in a header/footer. Negative indexes are immutable fields and separators. */
+  hfTextLeaves?: Array<{ index: number; text: string }>
   text: string
   /**
    * Original <w:rPr> slice (serialized from the parse tree). Written back via
@@ -1027,6 +1029,9 @@ export interface NumberingDef {
 
 /** Content for the default page header / footer. */
 export interface HeaderFooter {
+  /** A text-only translation can patch its original XML, preserving fields, drawings and table structure.
+   * The paragraph identity prevents applying stale patches after another kind of edit. */
+  translationText?: { paras: HfParagraph[]; values: Record<number, string> }
   text: string
   /** append an automatic page number (PAGE field), footer only */
   pageNumber?: boolean

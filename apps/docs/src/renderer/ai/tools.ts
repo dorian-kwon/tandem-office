@@ -1,3 +1,9 @@
+import {
+  readHfStoryRuns,
+  planHfTranslations,
+  type AiHfStoryAccess,
+  type HfItem,
+} from './hf-translation'
 import { changedBlockLocations, type AiChangeLocation } from '@genoffice/agent-core'
 import { noteTranslationSteps } from './note-translation-history'
 import { aiEditor, originalAiEditor, withAiEdit } from './ai-history-gate'
@@ -102,6 +108,8 @@ import {
   readRunGroups,
   recordHandled,
   remainingUntranslated,
+  setTranslationSourceLanguage,
+  translationUnitSource,
   sourceScriptOf,
   type NoteTranslationItem,
   type RunParagraph,
@@ -216,6 +224,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       'A text box block is listed per box paragraph ({"index","box","paragraph","fp","segments"}); translate those with translate_blocks, passing box and paragraph back. ' +
       'Batch outer and nested entries together. For nested tables, keep index, nestedTable and paragraph. ' +
       'Long ranges are paged: a truncated result says which startBlockIndex to continue from. ' +
+      'With headerFooters:true read section headers and footers, including first and even-page variants, as {story,paragraph,fp,segments}. For bilingual headers/footers pass keepOriginal:true with these entries in translate_blocks. ' +
       'With notes:true it lists every footnote and endnote the same way ({"note","id","fp","segments"}; no block range needed). ' +
       'With checkRemaining:true (and sourceLanguage) it lists the body paragraphs and notes that still look untranslated; translation is finished only when it reports none. ' +
       'With review:true (for revise_blocks) both sides of a bilingual pair are listed: the translation with its fp, the original as "role":"original" without one (read-only).',
@@ -224,6 +233,12 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       properties: {
         startBlockIndex: { type: 'integer', description: 'start block index (0-based, inclusive)' },
         endBlockIndex: { type: 'integer', description: 'end block index (inclusive)' },
+        headerFooters: {
+          type: 'boolean',
+          description:
+            'read header/footer paragraphs and layout-table cells; resume at the storyOffset returned when truncated',
+        },
+        storyOffset: { type: 'integer', description: 'offset in header/footer units' },
         notes: { type: 'boolean', description: 'list footnotes and endnotes instead of blocks' },
         review: {
           type: 'boolean',
@@ -236,7 +251,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
         sourceLanguage: {
           type: 'string',
           description:
-            'with checkRemaining: the language the document was written in, e.g. Korean or ko',
+            'the translation source language (e.g. Korean or ko); pass on the first read so subsequent batch progress uses the same language',
         },
       },
       required: [],
@@ -250,12 +265,22 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        keepOriginal: {
+          type: 'boolean',
+          description:
+            'for bilingual headers/footers only: retain each original segment alongside its translation',
+        },
         blocks: {
           type: 'array',
           description: 'one entry per translated paragraph',
           items: {
             type: 'object',
             properties: {
+              story: {
+                type: 'string',
+                description:
+                  'header/footer story address from read_runs headerFooters:true, instead of index; include paragraph',
+              },
               index: { type: 'integer', description: 'block index from read_runs' },
               nestedTable: {
                 type: 'integer',
@@ -906,6 +931,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
  * dirty flags), so the docx save path needs no changes.
  */
 export interface AiHeaderFooterAccess {
+  stories?: AiHfStoryAccess
   read(): AiHfState
   /** returns an error message, or null on success */
   set(kind: 'header' | 'footer', view: 'default' | 'first' | 'even', text: string): string | null
@@ -1562,7 +1588,7 @@ function noteStatusLine(editor: Editor, notes: AiNotesAccess | undefined): strin
     `This document has ${count(foot, 'footnote')} and ${count(end, 'endnote')}; ` +
     (left > 0
       ? `${count(left, 'note paragraph')} not translated yet: read_runs notes:true, then translate_blocks.`
-      : 'every note paragraph has been handled.')
+      : 'no source-language note paragraph remains.')
   )
 }
 
@@ -1600,9 +1626,14 @@ const BILINGUAL_NOTES_NOTE =
   'Bilingual output (add_bilingual) does not duplicate footnotes or endnotes: leave them in the original language and tell the person.'
 
 /** what translate_blocks still leaves open, by its own tracking (short) */
-function remainingLine(editor: Editor, notes: AiNotesAccess | undefined, tracking: boolean) {
-  const report = remainingUntranslated(editor, notes, undefined, { tracking })
-  if (report.body.length + report.notes.length === 0)
+function remainingLine(
+  editor: Editor,
+  notes: AiNotesAccess | undefined,
+  tracking: boolean,
+  stories?: AiHfStoryAccess,
+) {
+  const report = remainingUntranslated(editor, notes, undefined, { tracking, stories })
+  if (report.progress.done === report.progress.total)
     return {
       progress: report.progress,
       text: "Nothing is left by this tool's own tracking; confirm once with read_runs checkRemaining:true and sourceLanguage.",
@@ -1610,11 +1641,15 @@ function remainingLine(editor: Editor, notes: AiNotesAccess | undefined, trackin
   const next = [
     report.body.length > 0 ? 'read_runs for the body blocks' : '',
     report.notes.length > 0 ? 'read_runs notes:true for the notes' : '',
+    report.stories?.length ? 'read_runs headerFooters:true for headers and footers' : '',
+    report.blocked?.length
+      ? `${report.blocked.length} source paragraph(s) unavailable to this editor: ${report.blocked.slice(0, 5).join(', ')}`
+      : '',
   ].filter(Boolean)
   return {
     progress: report.progress,
     text:
-      `Still untranslated: ${report.body.length} body block(s) and ${report.notes.length} note paragraph(s) (not finished; ${next.join(' and ')}). ` +
+      `Still untranslated: ${report.body.length} body block(s) and ${report.notes.length} note paragraph(s)${report.stories?.length ? ` and ${report.stories.length} header/footer paragraph(s)` : ''} (not finished; ${next.join(' and ')}). ` +
       'Spacing around punctuation is tidied by the tool; do not fix it by hand.' +
       (hasTwins(editor) && report.notes.length > 0 ? ` ${BILINGUAL_NOTES_NOTE}` : ''),
   }
@@ -1945,14 +1980,16 @@ function executeSyncTool(
     }
 
     case 'read_runs': {
+      if (typeof call.input.sourceLanguage === 'string')
+        setTranslationSourceLanguage(editor, call.input.sourceLanguage)
       if (call.input.checkRemaining === true) {
         const report = remainingUntranslated(
           editor,
           notes,
           typeof call.input.sourceLanguage === 'string' ? call.input.sourceLanguage : undefined,
-          { tracking: track !== undefined },
+          { tracking: track !== undefined, stories: hf?.stories },
         )
-        const total = report.body.length + report.notes.length
+        const total = report.progress.total - report.progress.done
         const list = (label: string, items: string[]) =>
           items.length === 0
             ? ''
@@ -1961,16 +1998,44 @@ function executeSyncTool(
           translationProgress: report.progress,
           output:
             total === 0
-              ? 'Nothing left to translate: every body paragraph and note has been handled.'
+              ? 'Nothing left to translate among the source-language units checked.'
               : `${total} item(s) still look untranslated (names, quotations and terms you deliberately kept may be listed; translate the rest).` +
                 list('Body blocks', report.body) +
                 list('Notes', report.notes) +
+                list('Headers and footers (read_runs headerFooters:true)', report.stories ?? []) +
+                list('Untranslated areas unavailable to the current editor', report.blocked ?? []) +
                 (hasTwins(editor) && report.notes.length > 0 ? `\n${BILINGUAL_NOTES_NOTE}` : ''),
           mutated: false,
           summary: t('aiSumReadRuns', {
             start: 0,
             end: Math.max(0, editor.state.doc.childCount - 1),
           }),
+        }
+      }
+      if (call.input.headerFooters === true) {
+        const summary = t('aiSumReadRuns', { start: 0, end: 0 })
+        if (!hf?.stories)
+          return fail(summary, 'The current editor does not expose header/footer stories.')
+        const entries = readHfStoryRuns(hf.stories)
+        const offset = Math.max(0, Math.trunc(Number(call.input.storyOffset) || 0))
+        const lines: string[] = []
+        let size = 0
+        for (let i = offset; i < entries.length; i++) {
+          const entry = entries[i]!
+          const line = JSON.stringify(
+            track ? { ...entry, readOnly: true, reason: 'revision tracking enabled' } : entry,
+          )
+          if (lines.length && size + line.length > READ_MAX_CHARS) {
+            lines.push(`Continue with read_runs headerFooters:true storyOffset=${i}`)
+            break
+          }
+          lines.push(line)
+          size += line.length + 1
+        }
+        return {
+          summary,
+          mutated: false,
+          output: lines.join('\n') || '(no header/footer paragraphs with editable text)',
         }
       }
       if (call.input.notes === true) {
@@ -2195,7 +2260,7 @@ function executeSyncTool(
         outcome.added.length +
         outcome.placed.length +
         outcome.tables.reduce((n, x) => n + x.paragraphs, 0)
-      const remaining = remainingLine(editor, notes, track !== undefined)
+      const remaining = remainingLine(editor, notes, track !== undefined, hf?.stories)
       lines.push(remaining.text)
       return {
         translationProgress: remaining.progress,
@@ -2280,6 +2345,7 @@ function executeSyncTool(
       recordHandled(
         editor,
         outcome.reports.filter((r) => !r.untranslated),
+        items,
       )
       const label = (r: ReviseReport) =>
         r.nestedTable !== undefined
@@ -2322,9 +2388,11 @@ function executeSyncTool(
       if (!Array.isArray(raw) || raw.length === 0)
         return fail(summary, 'blocks must be a non-empty array of { index, segments }')
       const items: RunTranslationItem[] = []
+      const storyItems: HfItem[] = []
       const noteItems: NoteTranslationItem[] = []
       for (const entry of raw as unknown[]) {
         const e = (entry ?? {}) as {
+          story?: unknown
           index?: unknown
           box?: unknown
           nestedTable?: unknown
@@ -2334,6 +2402,44 @@ function executeSyncTool(
           fp?: unknown
           segments?: unknown
           tagged?: unknown
+        }
+        if (e.story !== undefined) {
+          if (track)
+            return fail(
+              summary,
+              'This editor cannot record a Word revision in a header/footer. Translate the body separately while tracking is enabled; turn tracking off before translating headers and footers.',
+            )
+          if (
+            typeof e.story !== 'string' ||
+            !Number.isInteger(e.paragraph) ||
+            Number(e.paragraph) < 0 ||
+            typeof e.fp !== 'string' ||
+            !e.fp ||
+            e.tagged !== undefined ||
+            e.index !== undefined ||
+            e.box !== undefined ||
+            e.note !== undefined ||
+            e.nestedTable !== undefined ||
+            !Array.isArray(e.segments) ||
+            !e.segments.every((s) => typeof s === 'string' && !/[\r\n\t\uE000-\uE002]/.test(s))
+          )
+            return fail(
+              summary,
+              'A header/footer entry requires story, paragraph, fp and plain-text segments from read_runs headerFooters:true.',
+            )
+          if (!hf?.stories) return fail(summary, 'Header/footer translation is not available here.')
+          const joined = e.segments.join(' ')
+          const error = toolEchoError(joined) ?? contextMarkerError(joined)
+          if (error || /<\/?[a-zA-Z][^>]*>/.test(joined))
+            return fail(summary, error ?? 'Header/footer segments must be plain text.')
+          storyItems.push({
+            story: e.story,
+            paragraph: Number(e.paragraph),
+            fp: e.fp,
+            segments: e.segments,
+            afterBody: items.length,
+          })
+          continue
         }
         const isNote = e.note !== undefined && e.note !== null
         const isNested = e.nestedTable !== undefined && e.nestedTable !== null
@@ -2411,6 +2517,23 @@ function executeSyncTool(
           })
       }
       // Preflight the separate note part before committing any body or note unit.
+      if (call.input.keepOriginal === true && items.length + noteItems.length > 0)
+        return fail(
+          summary,
+          'keepOriginal is only for header/footer entries; use add_bilingual for body blocks.',
+        )
+      const storyPlan =
+        hf?.stories && storyItems.length
+          ? planHfTranslations(editor, hf.stories, storyItems, call.input.keepOriginal === true)
+          : undefined
+      if (storyPlan?.errors.length) return fail(summary, storyPlan.errors.join('; '))
+      if (
+        storyPlan?.stale.length &&
+        !storyPlan.reports.length &&
+        !items.length &&
+        !noteItems.length
+      )
+        return fail(summary, staleLine(storyPlan.stale, 0))
       const notePlan = notes && noteItems.length > 0 ? planNoteTranslations(notes, noteItems) : null
       if (notePlan && !notePlan.ok) {
         return fail(
@@ -2422,7 +2545,10 @@ function executeSyncTool(
         editor,
         items,
         track,
-        notePlan?.ok && notes ? noteTranslationSteps(editor, notes, notePlan.units) : [],
+        [
+          ...(notePlan?.ok && notes ? noteTranslationSteps(editor, notes, notePlan.units) : []),
+          ...(storyPlan?.steps ?? []),
+        ].sort((a, b) => a.afterBody - b.afterBody),
       )
       if (!outcome.ok) {
         return fail(
@@ -2431,7 +2557,13 @@ function executeSyncTool(
         )
       }
       const noteReports = notePlan?.ok ? notePlan.reports : []
-      recordHandled(editor, [...outcome.reports, ...noteReports])
+      const storyReports = (storyPlan?.reports ?? []).map(({ sourceSegments, sourceFp, ...r }) => ({
+        ...r,
+        source: translationUnitSource(sourceSegments, sourceFp),
+      }))
+      const storyCount = storyReports.filter((r) => r.changed).length
+      if (storyPlan?.stale.length) outcome.stale.push(...storyPlan.stale)
+      recordHandled(editor, [...outcome.reports, ...noteReports, ...storyReports])
       const label = (r: RunTranslationReport) =>
         r.box !== undefined
           ? `block ${r.index} box ${r.box} paragraph ${r.paragraph}`
@@ -2477,11 +2609,12 @@ function executeSyncTool(
       if (empty.length > 0)
         remarks.push(`Ignored (empty paragraphs, left as they are): ${empty.join(', ')}.`)
       const noteCount = translatedNotes.length
-      const remaining = remainingLine(editor, notes, track !== undefined)
+      const remaining = remainingLine(editor, notes, track !== undefined, hf?.stories)
       return {
         translationProgress: remaining.progress,
         output: [
           `Translated ${translated.length} paragraph(s)${noteCount > 0 ? ` and ${noteCount} note paragraph(s)` : ''} in place; run formatting, footnote references, paragraph styles and empty paragraphs were kept. Block indexes are unchanged.`,
+          ...(storyCount ? [`Translated ${storyCount} header/footer paragraph(s).`] : []),
           ...remarks,
           ...(outcome.stale.length > 0
             ? [staleLine(outcome.stale, outcome.reports.filter((r) => !r.empty).length)]
@@ -2493,8 +2626,8 @@ function executeSyncTool(
             : []),
           remaining.text,
         ].join('\n'),
-        mutated: translated.length > 0 || noteCount > 0,
-        summary: t('aiSumTranslatedBlocks', { count: translated.length + noteCount }),
+        mutated: translated.length + noteCount + storyCount > 0,
+        summary: t('aiSumTranslatedBlocks', { count: translated.length + noteCount + storyCount }),
       }
     }
 

@@ -84,6 +84,9 @@ export type OcrPlacement =
   | { kind: 'xlsx-cells'; sheet: string; cell: string; overwrite: boolean }
   | { kind: 'xlsx-new-sheet'; sheet: string }
   | { kind: 'docx-after-images' }
+  | { kind: 'docx-before-images' }
+  | { kind: 'docx-next-page' }
+  | { kind: 'docx-replace-images' }
   | { kind: 'docx-end' }
   | { kind: 'docx-table-cell'; table: number; row: number; column: number; overwrite: boolean }
   | { kind: 'docx-image-boxes'; images: { index: number; boxes: OcrBox[] }[] }

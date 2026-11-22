@@ -697,7 +697,20 @@ export function AiPanel({
   // The loop is built once; every mutable value goes through a ref getter
   const loopRef = useRef<AgentLoop<DocSnapshot | undefined> | null>(null)
   if (!loopRef.current) {
+    const documentSkill = createMarkdownSkill(
+      () => depsRef.current.getEditor(),
+      {
+        read: () => depsRef.current.getFrontmatter(),
+        write: (raw) => depsRef.current.setFrontmatter(raw),
+      },
+      () => imageGenAvailableRef.current,
+      () => ({
+        write: (spec, onProgress, signal) => runDocWriterRef.current(spec, onProgress, signal),
+      }),
+      () => depsRef.current.getSource?.(),
+    )
     loopRef.current = new AgentLoop<DocSnapshot | undefined>({
+      documentSkill,
       documentTranslation: {
         documentKey: () => filePathRef.current,
         analyzingLabel: () => analyzingDocumentLabel[langRef.current],
@@ -707,18 +720,7 @@ export function AiPanel({
       toolsAllowed: () =>
         settingsRef.current ? localModelCapabilities(settingsRef.current).tools !== false : true,
       skill: composeWithDrive('markdown+search', '', () => loopRef.current?.messages ?? [], [
-        createMarkdownSkill(
-          () => depsRef.current.getEditor(),
-          {
-            read: () => depsRef.current.getFrontmatter(),
-            write: (raw) => depsRef.current.setFrontmatter(raw),
-          },
-          () => imageGenAvailableRef.current,
-          () => ({
-            write: (spec, onProgress, signal) => runDocWriterRef.current(spec, onProgress, signal),
-          }),
-          () => depsRef.current.getSource?.(),
-        ),
+        documentSkill,
         createSearchSkill(),
         // the person's skills: use_skill, read_skill_file, propose_skill (app-run tools)
         ...panelUserSkills({
@@ -1271,6 +1273,8 @@ export function AiPanel({
   }, [preset])
 
   useProjectEditorRun({
+    documentEditor: 'markdown',
+    documentLoop: () => loopRef.current,
     turn: runStatus.projectTurn,
     path: filePath,
     ready: !projectPanel.chat.available || projectPanel.chat.ready,

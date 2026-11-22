@@ -308,7 +308,7 @@ export interface RunPdfTranslationOptions {
   onAnalyzing?: () => void | Promise<void>
   onProgress?: (event: JobProgressEvent<unknown>) => void
   /** called once the job ran, before the PDF is written (the screen shows "writing") */
-  onWriting?: () => void
+  onWriting?: (coverage: JobSummary<unknown>['progress']) => void
 }
 
 export interface RunPdfTranslationResult {
@@ -370,7 +370,7 @@ export async function runPdfTranslation(
       keep = true
       return { summary, output: null, token, bilingual: go.bilingual }
     }
-    o.onWriting?.()
+    o.onWriting?.(summary.progress)
     const written = await o.bridge.write(token, go.bilingual)
     return { summary, output: written.output, token: null, bilingual: go.bilingual }
   } finally {

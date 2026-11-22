@@ -128,6 +128,7 @@ import { DOCS_CONTINUE_INSTRUCTION } from './continuation'
 import { notePhasedChatInput, waitForFullContent } from '../phased-content'
 import { currentDocGeneration } from '../file-actions'
 import { createFilesSkill } from './files-skill'
+import { createUndoTurnSkill, UNDO_AI_TURN } from './undo-turn'
 import { boundChatHistory } from './chat-retention'
 import { createElectronTransport } from './transport'
 import {
@@ -718,6 +719,8 @@ export function AiPanel({
       .catch(() => undefined)
   }
   const [chat, setChat] = useState<ChatEntry[]>([])
+  const liveChatRef = useRef(chat)
+  liveChatRef.current = chat
   /** the live turn shown now, for callbacks that must decide before the next render */
   const chatNowRef = useRef(chat)
   chatNowRef.current = chat
@@ -1250,7 +1253,38 @@ export function AiPanel({
       bullet: findNumId(blocksRef.current, 'bullet') ?? numIdFallbackRef.current?.bullet ?? null,
       ordered: findNumId(blocksRef.current, 'ordered') ?? numIdFallbackRef.current?.ordered ?? null,
     })
+    const documentSkill = createDocsSkill(
+      () => editorRef.current,
+      numIds,
+      () => (trackChangesRef.current ? { author: AI_REVISION_AUTHOR } : undefined),
+      () => commentsAccessRef.current,
+      () => hfAccessRef.current,
+      () => toolCapabilitiesRef.current?.imageGeneration.available === true,
+      () => ({
+        write: (spec, onProgress, signal) => runDocWriterRef.current(spec, onProgress, signal),
+      }),
+      () => pageSetupAccessRef.current,
+      () => docExtrasRef.current,
+      () => notesAccessRef.current,
+      () =>
+        toolCapabilitiesRef.current?.imageAnalysis.available === true ||
+        toolCapabilitiesRef.current?.videoAnalysis.available === true,
+      // the model names an attachment; only files the panel shows can be found
+      () => ({
+        pathOf: (name) =>
+          availableAttachments().find((attachment) => attachment.name === name)?.path ?? null,
+        names: () =>
+          availableAttachments()
+            .filter((attachment) => ATTACHMENT_IMAGE_EXTS.has(attachment.ext))
+            .map((attachment) => attachment.name),
+      }),
+      () => aiProfileRef.current,
+    )
     loopRef.current = new AgentLoop<RollbackSnapshot | undefined>({
+      documentSkill,
+      afterDocumentTool: (result) => {
+        if (result.mutated && !trackChangesRef.current) clearAiHighlights(true)
+      },
       documentTranslation: {
         documentKey: () => savedPathRef.current,
         analyzingLabel: () => analyzingDocumentLabel[langRef.current],
@@ -1283,32 +1317,31 @@ export function AiPanel({
               }),
             ]
           : []),
-        createDocsSkill(
-          () => editorRef.current,
-          numIds,
-          () => (trackChangesRef.current ? { author: AI_REVISION_AUTHOR } : undefined),
-          () => commentsAccessRef.current,
-          () => hfAccessRef.current,
-          () => toolCapabilitiesRef.current?.imageGeneration.available === true,
-          () => ({
-            write: (spec, onProgress, signal) => runDocWriterRef.current(spec, onProgress, signal),
-          }),
-          () => pageSetupAccessRef.current,
-          () => docExtrasRef.current,
-          () => notesAccessRef.current,
-          () =>
-            toolCapabilitiesRef.current?.imageAnalysis.available === true ||
-            toolCapabilitiesRef.current?.videoAnalysis.available === true,
-          // the model names an attachment; only files the panel shows can be found
-          () => ({
-            pathOf: (name) =>
-              availableAttachments().find((attachment) => attachment.name === name)?.path ?? null,
-            names: () =>
-              availableAttachments()
-                .filter((attachment) => ATTACHMENT_IMAGE_EXTS.has(attachment.ext))
-                .map((attachment) => attachment.name),
-          }),
-          () => aiProfileRef.current,
+        documentSkill,
+        createUndoTurnSkill(
+          () => {
+            // Never rewind twice or rewind over a new edit made during this request.
+            if (
+              runSnapshotRef.current ||
+              runToolsRef.current.some((tool) => tool.name === UNDO_AI_TURN)
+            )
+              return false
+            const latest = liveChatRef.current
+              .slice()
+              .reverse()
+              .find((entry) => entry.snapshot)?.snapshot
+            if (!latest || !restoreRollbackSnapshot(editorRef.current, latest)) return false
+            setChat((entries) => {
+              const index = entries.findIndex((entry) => entry.snapshot === latest)
+              return index < 0
+                ? entries
+                : entries.map((entry, i) =>
+                    i >= index && entry.snapshot ? { ...entry, snapshot: undefined } : entry,
+                  )
+            })
+            return true
+          },
+          () => tModule('aiRollback'),
         ),
         createFilesSkill(availableAttachments),
         // the person's skills: use_skill, read_skill_file, propose_skill (app-run tools)
@@ -1351,7 +1384,12 @@ export function AiPanel({
         },
         onToolExecuted: ({ call, execution, snapshotBefore }) => {
           // The run's first pre-edit state wins so one roll-back undoes the whole run
-          if (aiEditUndoHistoryEnabled() && snapshotBefore && !runSnapshotRef.current) {
+          if (
+            call.name !== UNDO_AI_TURN &&
+            aiEditUndoHistoryEnabled() &&
+            snapshotBefore &&
+            !runSnapshotRef.current
+          ) {
             runSnapshotRef.current = snapshotBefore
           }
           if (execution.mutated) {
@@ -1727,7 +1765,11 @@ export function AiPanel({
     // nothing is consumed while no run can start
     if (!sendGate.admitQueued(() => {})) return
     const instruction = buildQueueInstruction(entries)
-    const display = buildQueueSummary(t('aiQueueSubmitted', { count: entries.length }), entries)
+    const display = buildQueueSummary(
+      t('aiQueueSubmitted', { count: entries.length }),
+      entries,
+      t('ribbonPicture'),
+    )
     // consumed at send: the run rewrites the anchored passages, which would
     // orphan the anchors anyway; a failed run is retried via the retry action
     onQueueConsume?.(editQueue.map((item) => item.qid))
@@ -1828,6 +1870,8 @@ export function AiPanel({
   }
 
   useProjectEditorRun({
+    documentEditor: 'docs',
+    documentLoop: () => loopRef.current,
     turn: runStatus.projectTurn,
     path: filePath,
     ready: !project.chat.available || project.chat.ready,

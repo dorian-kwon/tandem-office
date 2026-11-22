@@ -1,3 +1,4 @@
+import { parseAiPageResponse } from '../../../packages/pdf-structure/src/ai-read/parse'
 import {
   mkdirSync,
   mkdtempSync,
@@ -778,6 +779,20 @@ describe('working out what to place into an open Word document', () => {
     await service.start(listing.token, pages)
     return { service, token: listing.token }
   }
+
+  it('keeps a confirmed form in the placement plan for the live editor', async () => {
+    const { service, token } = await started([1])
+    const reading = parseAiPageResponse(
+      '<page-content>\n<table><tr><td>Busan</td><td>23</td></tr></table>\n</page-content>',
+      { page: 1, pageFingerprint: '' },
+    )
+    if (!reading.ok) throw Error('invalid fixture')
+    const form = reading.reading.payload
+    const plan = await service.place(token, [{ index: 1, payload: form }], {
+      kind: 'docx-replace-images',
+    })
+    expect(plan.items[0]?.form).toEqual(form)
+  })
 
   it('gives the pictures to place with their text, part and relationship id, and writes no file', async () => {
     const { service, token } = await started()

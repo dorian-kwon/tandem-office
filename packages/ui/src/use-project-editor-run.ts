@@ -1,3 +1,4 @@
+import { useProjectEditorTools } from './use-project-editor-tools'
 import { beginBatchConversation, endBatchConversation } from './project-batch-conversation'
 import { useEffect, useRef, type RefObject } from 'react'
 import type { AgentRunResult } from '@genoffice/agent-core'
@@ -36,6 +37,8 @@ export function finishProjectTurn(turn: ProjectTurn | null, result: AgentRunResu
 }
 
 export function useProjectEditorRun(options: {
+  documentEditor?: NonNullable<Parameters<typeof useProjectEditorTools>[0]['documentEditor']>
+  documentLoop?: NonNullable<Parameters<typeof useProjectEditorTools>[0]['documentLoop']>
   turn: RefObject<ProjectTurn | null>
   path: string | undefined | null
   ready: boolean
@@ -44,6 +47,7 @@ export function useProjectEditorRun(options: {
   send: (prompt: string) => unknown
   stop: () => void
 }): void {
+  useProjectEditorTools(options)
   const ref = useRef(options)
   ref.current = options
   useEffect(() => {

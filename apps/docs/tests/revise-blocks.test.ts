@@ -320,6 +320,8 @@ describe('revise_blocks', () => {
     expect(remainingUntranslated(editor, undefined).body).toEqual(['0'])
     await revise(editor, [{ index: 0, fp: FP, segments: ['The quick red fox ', 'jumps over it.'] }])
     expect(remainingUntranslated(editor, undefined).body).toEqual([])
+    // Proofreading alone cannot certify translation for a known source language.
+    expect(remainingUntranslated(editor, undefined, 'en').progress).toEqual({ done: 0, total: 1 })
   })
 
   it('is offered as a tool, described for review', () => {

@@ -24,7 +24,9 @@ export function cellAddress(row: number, column: number) {
 export async function xlsxStructure(bytes: Uint8Array) {
   const workbook = (await readBasicWorkbook(Buffer.from(bytes))).snapshot
   const zip = await loadDocxZip(bytes)
-  const sheets = parseSheetElements(await zip.file('xl/workbook.xml')!.async('string'))
+  const workbookXml = await zip.file('xl/workbook.xml')!.async('string')
+  const sheets = parseSheetElements(workbookXml)
+  const protectedSheets = new Set<string>()
   const rels = parseRelationships(await zip.file('xl/_rels/workbook.xml.rels')!.async('string'))
   const merges = new Map<
     string,
@@ -42,9 +44,9 @@ export async function xlsxStructure(bytes: Uint8Array) {
     const file = zip.file(path)
     if (!file) throw new TranslateIpcError('INVALID_ARGUMENT', 'the worksheet part is missing')
     const ranges = []
-    for (const m of (await file.async('string')).matchAll(
-      /<mergeCell\b[^>]*\bref=["']([^"']+)["']/g,
-    )) {
+    const sheetXml = await file.async('string')
+    if (/<(?:[\w.-]+:)?sheetProtection\b/.test(sheetXml)) protectedSheets.add(sheet.name)
+    for (const m of sheetXml.matchAll(/<mergeCell\b[^>]*\bref=["']([^"']+)["']/g)) {
       const [a, b] = m[1]!.split(':')
       const first = cellPosition(a!)
       const last = cellPosition(b ?? a!)
@@ -63,5 +65,12 @@ export async function xlsxStructure(bytes: Uint8Array) {
         column <= m.lastColumn &&
         (row !== m.row || column !== m.column),
     )
-  return { sheets: workbook.sheets, isFollower }
+  return {
+    sheets: workbook.sheets,
+    isFollower,
+    merges,
+    protectedSheets,
+    structureLocked:
+      /<(?:[\w.-]+:)?workbookProtection\b[^>]*\blockStructure=["'](?:true|1)["']/.test(workbookXml),
+  }
 }

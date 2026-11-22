@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { parseAiPageResponse } from '../../../packages/pdf-structure/src/ai-read/parse'
+import { parseDocx } from '../../../packages/docx-engine/src/parse'
 import JSZip from 'jszip'
 import { build } from 'esbuild'
 import { buildDocx, TINY_PNG_BASE64 } from '../../../packages/docx-engine/tests/helpers/build-docx'
@@ -163,3 +165,62 @@ describe('the module runs in the editor window', () => {
     expect(result.outputFiles[0]!.text.length).toBeGreaterThan(1000)
   })
 })
+
+it('replaces the selected scan inline in a nested Word table without removing its neighbours or other picture', async () => {
+  const p = '<w:p><w:r><w:t>Before</w:t></w:r>' + picture('a') + '<w:r><w:t>After</w:t></w:r></w:p>'
+  const cell = (body: string) => '<w:tbl><w:tr><w:tc>' + body + '</w:tc></w:tr></w:tbl>'
+  const source = await docx(cell(cell(p)) + '<w:p>' + picture('b') + '</w:p>', ['a', 'b'])
+  const result = await placeOcrIntoOpenDocx(
+    source,
+    [{ index: 1, text: 'Recognized & placed', part: 'word/document.xml', relId: 'a' }],
+    { kind: 'docx-replace-images' },
+  )
+  const xml = await bodyOf(result.bytes)
+  expect(xml).not.toContain('r:embed="a"')
+  expect(xml).toContain('r:embed="b"')
+  expect(xml).toMatch(
+    /<w:tbl>.*?<w:tbl>.*?Before.*?Recognized &amp; placed.*?After.*?<\/w:tbl>.*?<\/w:tbl>/s,
+  )
+})
+
+it.each(['docx-replace-images', 'docx-after-images'] as const)(
+  'reopens %s with the AI-read table editable in its original Word cell',
+  async (kind) => {
+    const source = await docx(
+      '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>Above</w:t></w:r></w:p><w:p>' +
+        picture('a') +
+        '</w:p></w:tc></w:tr></w:tbl>',
+      ['a'],
+    )
+    const response = parseAiPageResponse(
+      '<page-content>\n<table><tr><th colspan="2">Report</th></tr><tr><td rowspan="2">Busan</td><td>23</td></tr><tr><td>42</td></tr></table>\n</page-content>',
+      { page: 1, pageFingerprint: '' },
+    )
+    if (!response.ok) throw Error('invalid fixture')
+    const result = await placeOcrIntoOpenDocx(
+      source,
+      [
+        {
+          index: 1,
+          text: 'Report Busan 23 42',
+          form: response.reading.payload,
+          part: 'word/document.xml',
+          relId: 'a',
+        },
+      ],
+      { kind },
+    )
+    const xml = await bodyOf(result.bytes)
+    expect(xml.includes('r:embed="a"')).toBe(kind === 'docx-after-images')
+    expect(xml).toContain('<w:gridSpan w:val="2"/>')
+    expect(xml).toContain('<w:vMerge w:val="restart"/>')
+    expect(xml).toMatch(/<\/w:tbl><w:p\/><\/w:tc>/)
+    const doc = await parseDocx(result.bytes)
+    const outer = doc.blocks.find((b) => b.type === 'table')!.table!
+    expect(outer.rows[0]![0]!.paras).toContain('Above')
+    const nested = outer.rows[0]![0]!.nestedTables![0]!
+    expect(nested.rows[0]![0]!.paras).toContain('Report')
+    expect(nested.rows[1]!.map((c) => c.paras[0])).toEqual(['Busan', '23'])
+    expect(nested.rows[2]![1]!.paras).toContain('42')
+  },
+)

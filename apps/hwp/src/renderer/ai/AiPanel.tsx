@@ -763,7 +763,9 @@ export function AiPanel({
   // The loop is built once; every mutable value goes through a ref getter
   const loopRef = useRef<AgentLoop | null>(null)
   if (!loopRef.current) {
+    const documentSkill = skillRef.current.skill
     loopRef.current = new AgentLoop({
+      documentSkill,
       documentTranslation: {
         documentKey: () => filePathRef.current,
         analyzingLabel: () => analyzingDocumentLabel[langRef.current],
@@ -773,7 +775,7 @@ export function AiPanel({
       toolsAllowed: () =>
         settingsRef.current ? localModelCapabilities(settingsRef.current).tools !== false : true,
       skill: composeWithDrive('hwp+files', '', () => loopRef.current?.messages ?? [], [
-        skillRef.current.skill,
+        documentSkill,
         createFilesSkill(() => availableAttachmentsRef.current()),
         // the person's skills: use_skill, read_skill_file, propose_skill (app-run tools)
         ...panelUserSkills({
@@ -1091,6 +1093,8 @@ export function AiPanel({
     sendGate.continueWith(provider, retry)
 
   useProjectEditorRun({
+    documentEditor: 'hwp',
+    documentLoop: () => loopRef.current,
     turn: runStatus.projectTurn,
     path: filePath,
     ready: !project.chat.available || project.chat.ready,

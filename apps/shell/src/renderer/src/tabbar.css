@@ -534,3 +534,19 @@ body.overlay-title-bar .tab-bar-drag-spacer {
   left: 50%;
   transform: translate(-50%, -50%);
 }
+
+/* The active editor owns the action, including when a translation pair is split. */
+.tab-overflow-btn.document-ocr-button {
+  width: auto;
+  min-width: 34px;
+  margin-inline: 2px;
+  padding-inline: 6px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+}
+.document-ocr-button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}

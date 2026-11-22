@@ -47,6 +47,8 @@ describe('projectFolderBridge', () => {
       ...Object.keys(PROJECT_FOLDER_CHANNELS),
       ...EVENT_METHODS,
       'onEditorRequest',
+      'onEditorToolRequest',
+      'replyToEditorToolRequest',
       'replyToEditorRequest',
     ].sort()
     expect(Object.keys(bridge).sort()).toEqual(expected)

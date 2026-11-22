@@ -37,7 +37,13 @@ export const TRANSLATION_CHOICE_MAX_CHARS = 300
 
 export type SourceKind = 'editable' | 'pdf' | 'scan' | 'image'
 
-export type SourceEntry = { file: string; sha256: string; kind: SourceKind }
+export type SourceEntry = {
+  file: string
+  sha256: string
+  kind: SourceKind
+  /** The derived file this source was last edited in, when its name differs from the source. */
+  workingOutput?: { name: string; targetLang: string }
+}
 
 export type ProjectFile = {
   version: 1
@@ -201,6 +207,16 @@ function parseSource(v: unknown): SourceEntry {
     file: plainFileName(str(v, 'file', 'source '), 'source file'),
     sha256: str(v, 'sha256', 'source '),
     kind: kind as SourceKind,
+    ...(isRecord(v.workingOutput) &&
+    typeof v.workingOutput.name === 'string' &&
+    typeof v.workingOutput.targetLang === 'string'
+      ? {
+          workingOutput: {
+            name: plainFileName(v.workingOutput.name, 'working output'),
+            targetLang: v.workingOutput.targetLang,
+          },
+        }
+      : {}),
   }
 }
 

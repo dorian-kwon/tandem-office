@@ -4,8 +4,20 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import JSZip from 'jszip'
 import { Editor } from '@tiptap/core'
+import { undoDepth } from '@tiptap/pm/history'
+import { applyAiPanelPrefs } from '@genoffice/ui'
+import { readRunGroups } from '../src/renderer/ai/translate-runs'
+import {
+  captureRollbackSnapshot,
+  canRestoreRollbackSnapshot,
+  restoreRollbackSnapshot,
+} from '../src/renderer/ai/rollback-snapshot'
 import { parseDocx, readSections } from '@genoffice/docx-engine'
-import { buildDocx, TABLE_XML } from '../../../packages/docx-engine/tests/helpers/build-docx'
+import {
+  buildDocx,
+  TABLE_XML,
+  NESTED_TABLE_XML,
+} from '../../../packages/docx-engine/tests/helpers/build-docx'
 import { editorExtensions } from '../src/renderer/editor/extensions'
 import { blocksToPmDoc, pmDocOptions } from '../src/renderer/editor/convert'
 import { collectRevisions } from '../src/renderer/editor/revisions'
@@ -27,9 +39,9 @@ const first = paragraph('Unchanged opening paragraph.')
 const last = paragraph('Unchanged closing paragraph.')
 const bodyXml = first + TABLE_XML + paragraph('Respond within forty-eight (48) hours.') + last
 
-async function fixture(tracking: boolean) {
+async function fixture(tracking: boolean, body = bodyXml) {
   noteDocumentSwapped()
-  const bytes = await buildDocx({ bodyXml })
+  const bytes = await buildDocx({ bodyXml: body })
   const parsed = await parseDocx(bytes)
   const dir = await mkdtemp(join(tmpdir(), 'genoffice-save-tracked-'))
   dirs.push(dir)
@@ -183,3 +195,83 @@ describe('production save reload with track changes enabled', () => {
     expect(collectRevisions(editor.state.doc)).toHaveLength(0)
   })
 })
+
+it.each(['chat rollback', 'keyboard undo'])(
+  'keeps the preceding translation when using %s on name corrections in the body and six saved tables',
+  async (method) => {
+    applyAiPanelPrefs({ aiEditUndoHistory: true })
+    const nested = NESTED_TABLE_XML.replaceAll('InnerA', 'Author')
+    const body =
+      paragraph('Source Author') +
+      (method === 'chat rollback' ? nested : nested.replaceAll('Outer', 'Author')).repeat(6) +
+      last
+    const { editor, ctx, path } = await fixture(false, body)
+    const change = async (from: string, to: string) => {
+      const groups = readRunGroups(editor, 0, editor.state.doc.childCount - 1)
+      const blocks = groups
+        .filter((g) => g.segments?.some((s) => s.includes(from)))
+        .map(({ segments, ...address }) => ({
+          ...address,
+          segments: segments!.map((s) => s.replaceAll(from, to)),
+        }))
+      const result = await executeTool(
+        editor,
+        { id: 'change', name: 'translate_blocks', input: { blocks } },
+        { bullet: null, ordered: null },
+      )
+      expect(result.isError, result.output).toBeFalsy()
+      return blocks.length
+    }
+    expect(await change('Source', 'Translated')).toBe(1)
+    const checkpoint = captureRollbackSnapshot(editor)
+    const corrections = method === 'chat rollback' ? 7 : 13
+    expect(await change('Author', 'Document Editor')).toBe(corrections)
+    expect(undoDepth(editor.state)).toBe(checkpoint.depth + corrections)
+    expect(await save(ctx, false, true)).toBe(true)
+    expect(undoDepth(editor.state)).toBe(checkpoint.depth + corrections)
+    expect(canRestoreRollbackSnapshot(editor, checkpoint)).toBe(true)
+    if (method === 'chat rollback') expect(restoreRollbackSnapshot(editor, checkpoint)).toBe(true)
+    else {
+      // Real editor keymap, with the caret inside an ordinary cell instead of the last AI target.
+      let cellText = 0
+      editor.state.doc.descendants((node, pos) => {
+        if (!cellText && node.isText && node.text === 'Document Editor') cellText = pos + 1
+      })
+      expect(cellText).toBeGreaterThan(0)
+      editor.commands.setTextSelection(cellText)
+      editor.view.focus()
+      const mac = /Mac|iP(hone|od|ad)/.test(navigator.platform)
+      for (let i = 0; i < corrections; i++) {
+        const event = new KeyboardEvent('keydown', {
+          key: 'z',
+          code: 'KeyZ',
+          ctrlKey: !mac,
+          metaKey: mac,
+          bubbles: true,
+          cancelable: true,
+        })
+        editor.view.dom.dispatchEvent(event)
+        expect(event.defaultPrevented).toBe(true)
+      }
+    }
+    expect(undoDepth(editor.state)).toBe(checkpoint.depth)
+    ctx.dirtyRef.current = true
+    expect(await save(ctx, false, true)).toBe(true)
+    const reopened = await parseDocx(await readFile(path))
+    const opened = new Editor({
+      element: null,
+      extensions: editorExtensions,
+      content: blocksToPmDoc(reopened.blocks, readSections(reopened), pmDocOptions(reopened)),
+    })
+    try {
+      const text = readRunGroups(opened, 0, opened.state.doc.childCount - 1).flatMap(
+        (g) => g.segments ?? [],
+      )
+      expect(text).toContain('Translated Author')
+      expect(text.filter((t) => t === 'Author')).toHaveLength(corrections - 1)
+      expect(text.join(' ')).not.toContain('Document Editor')
+    } finally {
+      opened.destroy()
+    }
+  },
+)

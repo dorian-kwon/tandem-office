@@ -115,6 +115,7 @@ import { ZoteroDocumentController } from './zotero/controller'
 import { AiPanel, AI_REVISION_AUTHOR } from './ai/AiPanel'
 import { useAiDock } from './ai/use-ai-dock'
 import type { AiCommentsAccess, AiDocExtras, AiHeaderFooterAccess } from './ai/tools'
+import { hfStories } from './ai/hf-translation'
 import type { AiStyleInfo } from './ai/style-ops'
 import { applyResolvedPageSetup, describeSection, type AiPageSetupAccess } from './ai/page-setup'
 import { patchPendingSectPr, sectionIndexAtBlock } from './ai/pending-sections'
@@ -6723,11 +6724,13 @@ export function App() {
   // (same pitfall as the comments id-minting ref mirror). Recreated per render,
   // by which time React state has caught up.
   const aiHfCtx = {
+    state: hfState,
+    commitAt: commitHfAt,
     overlay: new Map<string, HeaderFooter>(),
     valueOf(kind: 'header' | 'footer', view: HfView): HeaderFooter | null {
       const pending = this.overlay.get(`${kind}:${view}`)
       if (pending) return pending
-      return hfValueAt(kind === 'header' ? 0 : lastSectionIdx, kind, view)
+      return resolveHf(this.state, kind === 'header' ? 0 : lastSectionIdx, kind, view).value
     },
     commit: commitHf,
     titlePg,
@@ -6831,6 +6834,16 @@ export function App() {
 
   const aiHfAccess = useMemo<AiHeaderFooterAccess>(
     () => ({
+      stories: {
+        list: () => hfStories(aiHfCtxRef.current.state),
+        writable: () => !aiHfCtxRef.current.locked,
+        set: ({ owner, kind, view }, next) => {
+          const ctx = aiHfCtxRef.current
+          const target = hfCommitTarget(ctx.state, owner, kind, view, owner)
+          if (!target || !ctx.commitAt(owner, kind, view, next, owner)) return
+          ctx.state = { ...ctx.state, edits: { ...ctx.state.edits, [target.key]: next } }
+        },
+      },
       read: () => {
         const ctx = aiHfCtxRef.current
         const textOf = (kind: 'header' | 'footer', view: HfView) => {

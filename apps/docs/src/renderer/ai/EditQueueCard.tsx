@@ -80,7 +80,9 @@ export function EditQueueCard({
           <ol className="ai-queue-list">
             {items.map((item, i) => {
               const resolved = resolveQueueItem(editor, item)
-              const excerpt = resolved.target?.excerpt ?? item.capturedText
+              const excerpt = resolved.target?.image
+                ? t('ribbonPicture')
+                : (resolved.target?.excerpt ?? item.capturedText)
               return (
                 <li
                   key={item.qid}

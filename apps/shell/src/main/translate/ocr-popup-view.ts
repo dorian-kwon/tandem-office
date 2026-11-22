@@ -60,6 +60,8 @@ export function mountOcrPopupView(options: {
       mode: 'ocr-popup',
       dir: target.dir,
       file: target.file,
+      ...(target.purpose ? { purpose: target.purpose } : {}),
+      ...(target.placement ? { placement: JSON.stringify(target.placement) } : {}),
     }),
   )
   view.webContents.focus()

@@ -222,6 +222,15 @@ describe('add_bilingual: body paragraphs', () => {
     expect(twin.ok).toBe(false)
   })
 
+  it('counts the source of each completed bilingual pair only if it belongs to the translation', async () => {
+    const editor = await createEditor([plain('서울'), plain('English'), plain('123')])
+    expect(
+      applyBilingual(editor, 'after', [item(0, '서울', ['Seoul']), item(1, 'English', ['EN'])]).ok,
+    ).toBe(true)
+    expect(remainingUntranslated(editor, undefined, 'ko').progress).toEqual({ done: 1, total: 1 })
+    expect(remainingUntranslated(editor, undefined, 'fr').progress).toEqual({ done: 1, total: 1 })
+  })
+
   it('resumes only the unpaired duplicate after a manual edit of the first translation', async () => {
     const editor = await createEditor([plain('동일'), plain('동일')])
     expect(applyBilingual(editor, 'after', [item(0, '동일', ['Same'])]).ok).toBe(true)

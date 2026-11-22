@@ -100,6 +100,15 @@ describe('translating text boxes inside table cells', () => {
     ])
   })
 
+  it('reports source text in a nested-table drawing when the live editor cannot write that box', async () => {
+    const inner = table(cell('Fixed', box(7, '내부 상자')))
+    const { editor } = await open(cell('Outer', inner, '<w:p/>'))
+    const report = remainingUntranslated(editor, undefined, 'ko')
+    expect(report.progress).toEqual({ done: 0, total: 1 })
+    expect(report.blocked).toHaveLength(1)
+    expect(report.blocked![0]).toContain('nested table 0')
+  })
+
   it('writes a translation into one cell box and leaves the other and the cell text alone', async () => {
     const { editor } = await open(cell('A', box(1, 'BOX ONE')), cell('B', box(2, 'BOX TWO')))
     const [, second] = boxEntries(editor)

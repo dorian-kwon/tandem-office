@@ -5,12 +5,19 @@ import { join, resolve } from 'node:path'
 import JSZip from 'jszip'
 import { PDFDocument } from 'pdf-lib'
 import type { AiStreamRequest } from '@genoffice/ai-provider'
-import { addGlossary, addSource, createProject, saveProject } from '@genoffice/translate-project'
+import {
+  addGlossary,
+  addSource,
+  createProject,
+  loadProject,
+  saveProject,
+} from '@genoffice/translate-project'
 import { createXmindDocumentFromOutline } from '@genoffice/xmind-engine'
 import { appForPath, ROUTED_EXTENSIONS } from '../apps/shell/src/main/app-routing'
 import { buildEditFixture } from '../apps/sheets/tests/fixture-builder'
 import { buildEpub, epub3Files } from '../packages/epub-engine/tests/helpers'
 import { buildOdt } from '../packages/odt-engine/tests/helpers/build-odt'
+import { searchableText } from './ocr-pdf-text'
 import { readHangulText } from './hwp-document-text'
 import { batchRow, startBatchWithFiles } from './project-batch-ui'
 import { queuePicks, queueTurns, recorded, stubEverything } from './project-folder-user-lib'
@@ -494,6 +501,26 @@ test('project batch inspects and saves every editable file format with the proje
     await writeFile(path, await cases[ext].content())
     await addSource(dir, path)
   }
+  // The PDF writer creates this separate output on its first translation. Resume
+  // it through the real PDF editor and verify its on-disk text, including a manual edit.
+  const pdfFile = 'letter.pdf'
+  const pdfOutput = 'letter.en.pdf'
+  const originalPdf = await PDFDocument.create()
+  originalPdf.addPage().drawText('Bonjour')
+  const originalBytes = await originalPdf.save()
+  await writeFile(join(parent, pdfFile), originalBytes)
+  await addSource(dir, join(parent, pdfFile))
+  const priorPdf = await PDFDocument.create()
+  const priorPage = priorPdf.addPage()
+  priorPage.drawText('Reviewed title', { x: 48, y: 650 })
+  priorPage.drawText('Bonjour', { x: 48, y: 590 })
+  await writeFile(join(dir, 'output', pdfOutput), await priorPdf.save())
+  const savedProject = await loadProject(dir)
+  savedProject.sources.find((s) => s.file === pdfFile)!.workingOutput = {
+    name: pdfOutput,
+    targetLang: 'en',
+  }
+  await saveProject(dir, savedProject)
   const { app, page } = launched
   const example = 'The mission welcomes visiting delegates.'
   const finished = join(parent, 'approved.txt')
@@ -604,6 +631,31 @@ test('project batch inspects and saves every editable file format with the proje
       await expect(page.locator('.tab-item.active:not(.tab-home)')).toHaveCount(0)
     })
   }
+  await queueTurns(app, [
+    { toolCalls: [{ id: 'inspect-pdf', name: 'read_pages', input: { start: 1, end: 1 } }] },
+    {
+      toolCalls: [
+        {
+          id: 'edit-pdf',
+          name: 'edit_text',
+          input: { page: 1, old_text: 'Bonjour', new_text: 'Hello' },
+        },
+      ],
+    },
+    { text: 'PROJECT_TRANSLATION_COMPLETE' },
+  ])
+  const pdfProgress = await startBatchWithFiles(page, [pdfFile])
+  await expect(batchRow(pdfProgress, pdfFile)).toHaveAttribute('data-batch-state', 'saved', {
+    timeout: 60000,
+  })
+  await pdfProgress.getByTestId('project-batch-close').click()
+  const pdfText = await searchableText(await readFile(join(dir, 'output', pdfOutput)))
+  expect(pdfText).toContain('Reviewedtitle')
+  expect(pdfText).toContain('Hello')
+  expect(await readFile(join(dir, 'source', pdfFile))).toEqual(Buffer.from(originalBytes))
+  expect((await readdir(join(dir, 'output'))).filter((name) => name.startsWith('letter.'))).toEqual(
+    [pdfOutput],
+  )
   expect(failures).toEqual([])
   // A resumed TXT/JSON job can find its saved outputs already translated.
   await queueTurns(
@@ -657,4 +709,121 @@ test('a Word chat change link selects the paragraph the mock edited', async () =
   await links.getByRole('button', { name: '#2', exact: true }).click()
   await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toContain(marker)
   await page.keyboard.press('ControlOrMeta+s')
+})
+
+test('Word chat undoes only the last AI turn after saving', async () => {
+  const path = test.info().outputPath('undo-name.docx')
+  await writeFile(path, await cases.docx.content())
+  const [page] = await Promise.all([
+    launched.app.waitForEvent('window'),
+    launched.page.evaluate((p) => window.aiOffice.openPath(p), path),
+  ])
+  await cases.docx.check(page)
+  const composer = page.locator('.ai-composer textarea').first()
+  if (!(await composer.isVisible())) await page.locator('.ai-rail').first().click()
+  const edit = (id: string, index: number, value: string) => ({
+    id,
+    name: 'replace_blocks',
+    input: { startBlockIndex: index, endBlockIndex: index, html: '<p>' + value + '</p>' },
+  })
+  async function turn(
+    prompt: string,
+    toolCalls:
+      ReturnType<typeof edit>[] | { id: string; name: string; input: Record<string, never> }[],
+    reply: string,
+  ) {
+    await queueTurns(launched.app, [{ toolCalls }, { text: reply }])
+    await composer.fill(prompt)
+    await page.locator('.ai-composer .ai-send-btn').first().click()
+    await expect(page.getByText(reply, { exact: true })).toBeVisible()
+  }
+  await turn(
+    'Translate the second paragraph.',
+    [edit('translate', 1, 'English translation by Byung Cheol Park.')],
+    'Translated the paragraph.',
+  )
+  const doc = page.locator(wordPage).first()
+  const before = await doc.innerText()
+  await turn(
+    'Fix the two names.',
+    [
+      edit('name-one', 0, 'Cho Soo-min'),
+      edit('name-two', 1, 'English translation by Park Byeong-cheol.'),
+    ],
+    'Updated two names.',
+  )
+  await expect(doc).toContainText('Park Byeong-cheol')
+  await doc.click()
+  await page.keyboard.press('ControlOrMeta+s')
+  const xml = async () =>
+    (await JSZip.loadAsync(await readFile(path))).file('word/document.xml')!.async('string')
+  await expect.poll(xml).toContain('Park Byeong-cheol')
+  await turn(
+    '이전 상태로 되돌려줘.',
+    [{ id: 'undo', name: 'undo_last_ai_edit', input: {} }],
+    'Undid the name changes.',
+  )
+  await expect.poll(() => doc.innerText()).toBe(before)
+  await doc.click()
+  await page.keyboard.press('ControlOrMeta+s')
+  await expect.poll(xml).toContain('English translation by Byung Cheol Park.')
+  expect(await xml()).not.toContain('Cho Soo-min')
+})
+
+test('writes searchable PDF and editable Word for every routed document format', async () => {
+  test.skip(process.env.TANDEM_TEST_LOCAL_OCR !== '1', 'Requires a native OCR helper')
+  test.setTimeout(600_000)
+  const markers: Record<Extension, string> = {
+    docx: '第一段',
+    odt: 'OpenDocument',
+    xlsx: 'Hello',
+    xlsm: 'contract',
+    xls: 'Chair',
+    csv: 'Description',
+    tsv: 'Description',
+    pptx: 'Business',
+    pdf: 'Quarterly',
+    html: 'HTML article',
+    htm: 'Short extension',
+    xmind: 'Train times',
+    hwp: '본문',
+    hwpx: '본문',
+    epub: 'First chapter',
+    md: 'Sample field',
+    markdown: 'Long extension',
+    txt: 'Plain text',
+    json: 'Northern survey',
+  }
+  const inputs = []
+  for (const ext of Object.values(ROUTED_EXTENSIONS).flat()) {
+    const path = test.info().outputPath('source-' + ext + '.' + ext)
+    await writeFile(path, await cases[ext].content())
+    inputs.push(path)
+  }
+  const { page, app } = launched
+  await queuePicks(app, [inputs])
+  const files = await page.evaluate(() => window.ocrFilesApi.pick())
+  expect(files).toHaveLength(inputs.length)
+  for (const format of ['docx', 'pdf']) {
+    const results = await page.evaluate(({ ids, format }) => window.ocrFilesApi.run(ids, format), {
+      ids: files.map((f) => f.id),
+      format,
+    })
+    expect(results).toHaveLength(files.length)
+    for (const [i, result] of results.entries()) {
+      const ext = files[i]!.name.split('.').pop() as Extension
+      expect.soft(result.error, ext + ' → ' + format).toBeUndefined()
+      if (!result.outputPath) continue
+      const bytes = await readFile(result.outputPath)
+      const content =
+        format === 'pdf'
+          ? await searchableText(bytes)
+          : (
+              await (await JSZip.loadAsync(bytes)).file('word/document.xml')!.async('string')
+            ).replace(/<[^>]*>/g, '')
+      expect
+        .soft(content.replace(/\s/g, ''), ext + ' → ' + format)
+        .toContain(markers[ext].replace(/\s/g, ''))
+    }
+  }
 })

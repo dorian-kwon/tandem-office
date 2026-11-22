@@ -36,8 +36,9 @@ export async function saveConvertedFile(
   convert: Convert,
   destination?: string,
   nameSuffix = '',
+  outputDirectory?: string,
 ): Promise<Pick<FileConversionResult, 'outputPath' | 'warning'>> {
-  const dir = dirname(destination ?? input)
+  const dir = destination ? dirname(destination) : (outputDirectory ?? dirname(input))
   const stem = basename(input, extname(input)) + nameSuffix
   // Keep relative resources valid: PDF -> Markdown writes pictures in assets/
   // beside its output. The temporary document has the real target extension.

@@ -1,8 +1,14 @@
 import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
 import type { Editor } from '@tiptap/core'
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
-import { rollbackCheckpoint, withAiEdit } from './ai-history-gate'
+import {
+  markAiHistoryBoundary,
+  rollbackCheckpoint,
+  rollbackFileBaseline,
+  withAiEdit,
+} from './ai-history-gate'
 import { closeHistory, undo, undoDepth } from '@tiptap/pm/history'
+import { sameDocAcrossSave } from '../save-reload'
 import { TRACK_IGNORE } from '../editor/revisions'
 import { TABLE_TRAILING_SKIP } from '../editor/extensions'
 
@@ -17,23 +23,27 @@ import { TABLE_TRAILING_SKIP } from '../editor/extensions'
 export interface RollbackSnapshot {
   doc: ProseMirrorNode
   depth: number
+  fileBaseline?: object
   checkpoint: object | undefined
 }
 
 export function captureRollbackSnapshot(editor: Editor): RollbackSnapshot {
+  markAiHistoryBoundary(editor)
   return {
     doc: editor.state.doc,
     depth: undoDepth(editor.state),
     checkpoint: rollbackCheckpoint(editor),
+    fileBaseline: rollbackFileBaseline(editor),
   }
 }
 
 export function canRestoreRollbackSnapshot(editor: Editor, snapshot: RollbackSnapshot): boolean {
   return (
     aiEditUndoHistoryEnabled() &&
-    (snapshot.doc !== editor.state.doc || snapshot.depth !== undoDepth(editor.state)) &&
     snapshot.checkpoint !== undefined &&
-    snapshot.checkpoint === rollbackCheckpoint(editor)
+    snapshot.checkpoint === rollbackCheckpoint(editor) &&
+    (snapshot.depth !== undoDepth(editor.state) ||
+      (snapshot.doc !== editor.state.doc && !sameDocAcrossSave(editor.state.doc, snapshot.doc)))
   )
 }
 
@@ -48,9 +58,10 @@ export function restoreRollbackSnapshot(editor: Editor, snapshot: RollbackSnapsh
   if (plugin) {
     let shadow = editor.state.reconfigure({ plugins: [plugin] })
     const tr = editor.state.tr
-    const reached = () => shadow.doc.eq(snapshot.doc) && undoDepth(shadow) === snapshot.depth
+    const reached = () =>
+      undoDepth(shadow) === snapshot.depth && sameDocAcrossSave(shadow.doc, snapshot.doc)
     while (
-      !reached() &&
+      undoDepth(shadow) > snapshot.depth &&
       undo(shadow, (part) => {
         for (const step of part.steps) tr.step(step)
         tr.setMeta(plugin, part.getMeta(plugin))
@@ -66,6 +77,8 @@ export function restoreRollbackSnapshot(editor: Editor, snapshot: RollbackSnapsh
       return true
     }
   }
+  // A fallback replacement would put stale file anchors into the new save baseline.
+  if (snapshot.fileBaseline !== rollbackFileBaseline(editor)) return false
   withAiEdit(() =>
     editor
       .chain()

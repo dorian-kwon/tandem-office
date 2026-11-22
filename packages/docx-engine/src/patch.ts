@@ -1,3 +1,4 @@
+import { patchHfTextNodes } from './hf-translation-xml'
 import JSZip from 'jszip'
 import {
   applyRevisionResolutions,
@@ -1232,6 +1233,8 @@ export async function saveDocx(
       originalXml && hf.pictureEdits
         ? patchHfPicturesXml(originalXml, hf.pictureEdits)
         : originalXml
+    if (base && hf.translationText && hf.translationText.paras === hf.paras)
+      return patchHfTextNodes(base, hf.translationText.values)
     if (base && (hf.pictureOnly || hf.keepContent)) return base
     return headerFooterPartXml(kind, hf, undefined, base, options.pageCount)
   }

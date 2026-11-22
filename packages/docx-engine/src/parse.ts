@@ -1,3 +1,4 @@
+import { indexHfTextNodes } from './hf-translation-xml'
 import JSZip from 'jszip'
 import { isEastAsianLangTag } from './char-class'
 import type { JSZipObject } from 'jszip'
@@ -4975,15 +4976,23 @@ function buildRun(
   vmlShapeTypes?: ReadonlyMap<string, Record<string, string>>,
 ): Run | null {
   let text = ''
+  let hfTextLeaves: Run['hfTextLeaves']
   let sym: (Run['sym'] & { glyph: string }) | null | undefined
   for (const child of childrenOf(rNode)) {
     const name = nameOf(child)
+    const textStart = text.length
     if (name === 'w:t' || name === 'w:delText') {
       const own = attrsOf(child)['xml:space']
-      text += wtText(
+      const value = wtText(
         decodeNumericCharRefs(textOf(child)),
         own === 'preserve' || (own === undefined && partPreserve === true),
       )
+      const leaf = attrsOf(child).genofficeHfLeaf
+      if (leaf !== undefined) {
+        if (!hfTextLeaves) hfTextLeaves = text ? [{ index: -1, text }] : []
+        hfTextLeaves.push({ index: Number(leaf), text: value })
+      } else if (hfTextLeaves) hfTextLeaves.push({ index: -1, text: value })
+      text += value
     } else if (name === 'w:tab' || name === 'w:ptab') text += '\t'
     // In-paragraph page breaks (w:br w:type="page") are encoded as \f and preserved; column/soft breaks become \n
     else if (name === 'w:br') text += breakCharOf(attrsOf(child))
@@ -4998,6 +5007,8 @@ function buildRun(
         sym = sym === undefined ? { font: a['w:font'] ?? '', char: a['w:char']!, glyph } : null
       }
     }
+    if (hfTextLeaves && name !== 'w:t' && name !== 'w:delText' && text.length > textStart)
+      hfTextLeaves.push({ index: -1, text: text.slice(textStart) })
   }
   let image: Run['image']
   if (mediaByRid) {
@@ -5084,7 +5095,7 @@ function buildRun(
   if (text === '' && !image) return null
 
   const rPr = findChild(rNode, 'w:rPr')
-  const run: Run = { text }
+  const run: Run = { text, ...(hfTextLeaves ? { hfTextLeaves } : {}) }
   // only a run that is nothing but one w:sym stays a symbol run
   if (sym && text === sym.glyph) run.sym = { font: sym.font, char: sym.char }
   if (image) run.image = image
@@ -6970,7 +6981,7 @@ function hfContentFromXml(
   // mc:AlternateContent carries the same textbox twice (DrawingML Choice + VML
   // Fallback); keeping both prints the content twice (e.g. duplicated "— PAGE —"
   // page numbers), so only the Choice branch feeds text/paragraph extraction
-  let cleaned = xml.replace(/<mc:Fallback[^>]*>[\s\S]*?<\/mc:Fallback>/g, '')
+  let cleaned = indexHfTextNodes(xml).replace(/<mc:Fallback[^>]*>[\s\S]*?<\/mc:Fallback>/g, '')
   // rewrite the complex fields by nesting depth: a child's end must not close
   // its parent (genoffice#2458 — the lazy begin-to-end span stopped at the
   // nested end and took the child's separate/cache for the parent's)

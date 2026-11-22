@@ -21,7 +21,6 @@ import {
 import { useI18n } from '../locale'
 import { kbAskProjectText } from '../kb-ask-project-strings'
 import type { SubscriptionConnection } from '../subscription-client'
-import { isWikiEditingRequest, wikiChatLabels } from '../../../shared/wiki-chat'
 import { makeText } from './shared'
 import { pdfJobRoute, pdfRouteRefusal, type PdfJobRoute } from './pdf-route'
 import { translationProjectSkill, type ProjectAssistantActions } from './project-assistant-skill'
@@ -44,7 +43,6 @@ export function ProjectAssistant(props: ProjectAssistantProps) {
   const [draft, setDraft] = useState('')
   const [messages, setMessages] = useState<Message[]>([])
   const [busy, setBusy] = useState(false)
-  const [askWiki, setAskWiki] = useState(false)
   const wikiForTurn = useRef<boolean | undefined>(undefined)
   const [waiting, setWaiting] = useState(false)
   const [showConnection, setShowConnection] = useState(false)
@@ -125,7 +123,7 @@ export function ProjectAssistant(props: ProjectAssistantProps) {
     if (expanded && thread.current) thread.current.scrollTop = thread.current.scrollHeight
   }, [expanded, messages])
 
-  async function send(useWiki?: boolean) {
+  async function send() {
     const instruction = draft.trim()
     const agent = loop.current
     if (!instruction || pinned.current || !agent) return
@@ -139,13 +137,7 @@ export function ProjectAssistant(props: ProjectAssistantProps) {
       return
     }
     const project = props.actions.project()
-    const canUse = project.useWiki !== false && isWikiEditingRequest(instruction)
-    if (canUse && useWiki === undefined) {
-      setAskWiki(true)
-      return
-    }
-    wikiForTurn.current = canUse && useWiki === true
-    setAskWiki(false)
+    wikiForTurn.current = project.useWiki !== false
     setWaiting(false)
     setShowConnection(false)
     setBusy(true)
@@ -220,17 +212,7 @@ export function ProjectAssistant(props: ProjectAssistantProps) {
             </div>
           ))}
         </div>
-        {askWiki && (
-          <div className="projects-note" role="group" aria-label={wikiChatLabels[lang][0]}>
-            <span>{wikiChatLabels[lang][0]}</span>
-            <button type="button" className="projects-primary" onClick={() => void send(true)}>
-              {wikiChatLabels[lang][1]}
-            </button>
-            <button type="button" className="projects-ghost" onClick={() => void send(false)}>
-              {wikiChatLabels[lang][2]}
-            </button>
-          </div>
-        )}
+
         {waiting && (
           <p role="status" className="projects-hint">
             {makeText(lang)('trChecking')}
@@ -270,7 +252,6 @@ export function ProjectAssistant(props: ProjectAssistantProps) {
           sendIconDisabled={<img src={sendEnterOff} alt="" aria-hidden />}
           stopIcon={<img src={sendStop} alt="" aria-hidden />}
           onChange={(value) => {
-            setAskWiki(false)
             setDraft(value)
           }}
           onSend={() => void send()}

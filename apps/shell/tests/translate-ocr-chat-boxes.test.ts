@@ -1,3 +1,4 @@
+import { parseAiPageResponse } from '../../../packages/pdf-structure/src/ai-read/parse'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createOcrChatService, type OcrChatPopup } from '../src/main/translate/ocr-chat'
 import { OCR_BOX_INSTRUCTION } from '../src/shared/ocr-boxes'
@@ -88,7 +89,12 @@ describe('reading a Word document picture that can take boxes', () => {
       images: [{ index: 1, boxes: [BOX] }],
     })
     expect(proposal.reason).toBe('on-picture')
-    expect(proposal.alternatives).toEqual([{ kind: 'docx-after-images' }, { kind: 'docx-end' }])
+    expect(proposal.alternatives).toEqual([
+      { kind: 'docx-after-images' },
+      { kind: 'docx-before-images' },
+      { kind: 'docx-next-page' },
+      { kind: 'docx-end' },
+    ])
   })
 
   it('writes the boxes: the reading keeps its places and the placement names them', async () => {
@@ -120,6 +126,19 @@ describe('reading a Word document picture that can take boxes', () => {
     )
     expect(proposal.placement).toEqual({ kind: 'docx-end' })
     expect(proposal.reason).toBe('user-requested')
+  })
+
+  it('offers or accepts next-page only for a selection entirely in the document body', async () => {
+    const prepared = await api.prepare()
+    prepared.items[1].location = 'header1.xml · ¶2'
+    api.prepare.mockResolvedValue(prepared)
+    const session = await inspected()
+    await call('read', 't2', { session, pages: [1, 2] })
+    const proposal = parsed(await call('propose', 't2', { session }))
+    expect(proposal.alternatives).not.toContainEqual({ kind: 'docx-next-page' })
+    const explicit = await call('propose', 't2', { session, placement: { kind: 'docx-next-page' } })
+    expect(explicit.isError).toBe(true)
+    expect(parsed(explicit).error).toContain('document body')
   })
 
   it('offers no boxes when no picture gave any', async () => {
@@ -174,6 +193,71 @@ describe('applying the way the person chose', () => {
 })
 
 describe('boxes from the popup', () => {
+  it.each(['docx-replace-images', 'docx-after-images', 'docx-before-images', 'docx-next-page'])(
+    'uses the prior %s choice, preserves other placements and awaits a separate confirmation',
+    async (kind) => {
+      popupAsk.mockResolvedValue({
+        kind: 'result',
+        result: {
+          picturePlacement: kind,
+          pages: [{ index: 1, location: 'document.xml · ¶2', text: 'Town', boxes: [BOX] }],
+        },
+      })
+      const session = await inspected()
+      await call('choose', 't1', { session })
+      const proposal = parsed(await call('propose', 't2', { session }))
+      expect(proposal.placement).toEqual({ kind })
+      expect(proposal.reason).toBe('user-requested')
+      expect(proposal.alternatives).toContainEqual({
+        kind: 'docx-image-boxes',
+        images: [{ index: 1, boxes: [BOX] }],
+      })
+      expect(api.write).not.toHaveBeenCalled()
+      await call('apply', 't3', { session })
+      expect(api.write.mock.calls[0]![2]).toEqual({ kind })
+    },
+  )
+
+  it('applies the exact location approved by Start on the same turn without offering another destination', async () => {
+    const chosen = { kind: 'docx-table-cell', table: 2, row: 3, column: 1, overwrite: false }
+    popupAsk.mockResolvedValue({
+      kind: 'result',
+      result: {
+        placement: chosen,
+        pages: [{ index: 1, location: 'document.xml · ¶2', text: 'Town' }],
+      },
+    })
+    const session = await inspected()
+    await call('choose', 't1', { session })
+    expect(parsed(await call('propose', 't1', { session })).needsConfirmation).toBe(false)
+    expect((await call('apply', 't1', { session, placement: { kind: 'docx-end' } })).isError).toBe(
+      true,
+    )
+    await call('apply', 't1', { session })
+    expect(api.write.mock.calls[0]![2]).toEqual(chosen)
+  })
+
+  it('passes the confirmed table payload from the popup to Word', async () => {
+    const reading = parseAiPageResponse(
+      '<page-content>\n<table><tr><td>Busan</td><td>23</td></tr></table>\n</page-content>',
+      { page: 1, pageFingerprint: '' },
+    )
+    if (!reading.ok) throw Error('invalid fixture')
+    const form = reading.reading.payload
+    popupAsk.mockResolvedValue({
+      kind: 'result',
+      result: {
+        picturePlacement: 'docx-after-images',
+        pages: [{ index: 1, location: 'document.xml · ¶2', text: 'Busan\n23', form }],
+      },
+    })
+    const session = await inspected()
+    await call('choose', 't1', { session })
+    await call('propose', 't2', { session })
+    await call('apply', 't3', { session })
+    expect(api.write.mock.calls[0]![1]).toEqual([{ index: 1, payload: form }])
+  })
+
   it('keeps the boxes a popup reading carries, and proposes them over the picture', async () => {
     popupAsk.mockResolvedValue({
       kind: 'result',
@@ -203,6 +287,16 @@ describe('boxes from the popup', () => {
 describe('the popup result check with boxes', () => {
   const page = (boxes: unknown) => ({
     pages: [{ index: 1, location: 'x', text: 'Shop', boxes }],
+  })
+
+  it.each(['docx-before-images', 'docx-next-page'])('accepts %s through popup IPC', (kind) => {
+    const placement = { kind }
+    expect(
+      checkOcrPopupResult({ ...page([BOX]), placement, picturePlacement: kind }),
+    ).toMatchObject({
+      placement,
+      picturePlacement: kind,
+    })
   })
 
   it('takes the boxes of a page and keeps them', () => {

@@ -48,7 +48,11 @@ export async function pruneOcrWorkDir(
 }
 
 /** Only main's selected project/current document is accepted; no renderer-supplied paths. */
-export function chatOcrSourceResolver(workDir: () => string, ocrMode: () => OcrMode) {
+export function chatOcrSourceResolver(
+  workDir: () => string,
+  ocrMode: () => OcrMode,
+  options: { currentFileOnly?: boolean } = {},
+) {
   return async (
     _owner: number,
     input: ChatOcrRequest,
@@ -65,11 +69,11 @@ export function chatOcrSourceResolver(workDir: () => string, ocrMode: () => OcrM
     )
       throw new Error('Choose a listed file name')
     let root = context.projectRoot
-    if (!root && context.docPath) {
+    if (!options.currentFileOnly && !root && context.docPath) {
       const parent = dirname(context.docPath)
       if (['source', 'output'].includes(basename(parent))) root = dirname(parent)
     }
-    if (root && (await projectStatus(root)) === 'ok') {
+    if (!options.currentFileOnly && root && (await projectStatus(root)) === 'ok') {
       const project = await loadProject(root)
       const wanted = given ?? (context.docPath ? basename(context.docPath) : undefined)
       const source = wanted
@@ -96,8 +100,13 @@ export function chatOcrSourceResolver(workDir: () => string, ocrMode: () => OcrM
     await mkdir(work, { recursive: true })
     await pruneOcrWorkDir(work, Date.now())
     const made = await createProject(work, randomUUID(), 'auto', 'en')
-    const project = await addSource(made.dir, path)
-    await saveProject(made.dir, { ...project, ocr: ocrMode() })
-    return { dir: made.dir, file: project.sources[0]!.file, besideSourceDir: dirname(path) }
+    try {
+      const project = await addSource(made.dir, path)
+      await saveProject(made.dir, { ...project, ocr: ocrMode() })
+      return { dir: made.dir, file: project.sources[0]!.file, besideSourceDir: dirname(path) }
+    } catch (error) {
+      await rm(made.dir, { recursive: true, force: true }).catch(() => undefined)
+      throw error
+    }
   }
 }

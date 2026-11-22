@@ -1001,8 +1001,17 @@ export function mergeRuns(runs: Run[]): Run[] {
   const merged: Run[] = []
   for (const run of runs) {
     const prev = merged[merged.length - 1]
-    if (prev && sameStyle(prev, run)) prev.text += run.text
-    else merged.push({ ...run })
+    if (prev && sameStyle(prev, run)) {
+      if (prev.hfTextLeaves || run.hfTextLeaves) {
+        prev.hfTextLeaves ??= [{ index: -1, text: prev.text }]
+        for (const leaf of run.hfTextLeaves ?? [{ index: -1, text: run.text }])
+          prev.hfTextLeaves.push(leaf)
+      }
+      prev.text += run.text
+    } else
+      merged.push(
+        run.hfTextLeaves ? { ...run, hfTextLeaves: run.hfTextLeaves.slice() } : { ...run },
+      )
   }
   return merged
 }

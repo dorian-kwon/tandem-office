@@ -37,6 +37,39 @@ function editNestedCell(editor: Editor, newText: string) {
 }
 
 describe('nested table editing end to end', () => {
+  it('saves literal corrections in nested cells through the project document tool', async () => {
+    const { editor, parsed } = await openNestedDoc()
+    try {
+      const result = await executeTool(
+        editor,
+        {
+          id: 'repair',
+          name: 'apply_ops',
+          input: {
+            ops: [
+              { op: 'findReplace', find: 'Outer', replace: 'Outer heading' },
+              { op: 'findReplace', find: 'Inner', replace: 'Corrected ' },
+            ],
+          },
+        },
+        { bullet: null, ordered: null },
+      )
+      expect(result.isError).toBeFalsy()
+      expect(result.mutated).toBe(true)
+      const { saved } = await savedBodyXml(parsed, editor)
+      const [outer] = (await parseDocx(saved)).blocks
+      const cells = outer.table!.rows[0]
+      expect(cells[0].paras[0]).toBe('Outer heading')
+      expect(cells[1].paras).toEqual(['RightCell'])
+      expect(cells[0].nestedTables![0].rows[0].map((cell) => cell.paras[0])).toEqual([
+        'Corrected A',
+        'Corrected B',
+      ])
+    } finally {
+      editor.destroy()
+    }
+  })
+
   it('undoes and redoes an interleaved batch in submission order across the outer and inner cells', async () => {
     const { editor } = await openNestedDoc()
     try {

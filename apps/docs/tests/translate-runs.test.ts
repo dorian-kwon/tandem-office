@@ -158,6 +158,38 @@ describe('readRunGroups', () => {
   })
 })
 
+it('keeps an incomplete source-language unit pending after its only source-script run changed', async () => {
+  const editor = await createEditor([
+    {
+      type: 'docParagraph',
+      content: [text('안내', STYLE_A), text('seoul', STYLE_C)],
+    },
+  ])
+  const check = () => remainingUntranslated(editor, undefined, 'ko')
+  const translate = async (fp: string, segments: string[]) =>
+    executeTool(
+      editor,
+      {
+        id: 't',
+        name: 'translate_blocks',
+        input: { blocks: [{ index: 0, fp, segments }] },
+      },
+      NUM_IDS,
+    )
+  expect(check().progress).toEqual({ done: 0, total: 1 })
+  const first = readRunGroups(editor, 0, 0)[0]!
+  expect((await translate(first.fp!, ['Guide'])).isError).toBeFalsy()
+  expect(check().progress).toEqual({ done: 0, total: 1 })
+  expect(check().body).toEqual(['0'])
+  const changed = readRunGroups(editor, 0, 0)[0]!
+  expect((await translate(changed.fp!, ['Guide', 'Seoul'])).isError).toBeFalsy()
+  expect(check().progress).toEqual({ done: 1, total: 1 })
+  editor.commands.undo()
+  expect(check().body).toEqual(['0'])
+  editor.commands.redo()
+  expect(check().progress).toEqual({ done: 1, total: 1 })
+})
+
 it('resumes a same-script translation using the applied result at each address', async () => {
   const original = 'Доброе утро'
   const editor = await createEditor(

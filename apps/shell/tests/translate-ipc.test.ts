@@ -14,7 +14,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, join } from 'node:path'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { readAppSettings, writeAppSettings } from '../src/main/app-settings'
 import { translationContextForFolder } from '../src/main/translate/context-injection'
@@ -1358,6 +1358,40 @@ describe('exportTranslation handler', () => {
 })
 
 describe('project batch translation', () => {
+  it('opens a completed source and its saved output together without recreating a missing result', async () => {
+    const opened: string[] = []
+    const view = {
+      openTab: (path: string) => {
+        opened.push(path)
+        return { tabId: path, created: true }
+      },
+      setTabReadOnly: vi.fn(() => true),
+      closeTab: vi.fn(),
+      showSplit: vi.fn(),
+      setPaneHidden: vi.fn(() => true),
+    }
+    const h = handlers({ view, runBatchEditor: async () => {} })
+    const { dir } = await createIn(h, { name: 'OpenPair', sourceLang: 'ko', targetLang: 'en' })
+    const file = 'test.md'
+    const input = join(root, file)
+    writeFileSync(input, 'Original')
+    await addPicked(h, dir, 'source', input)
+    const { id } = await h.batchStart({ dir, files: [file] }, 4)
+    await vi.waitFor(async () => expect((await h.batchStatus(dir))?.running).toBe(false))
+    const args = { dir, file, batchId: id! }
+    await h.batchOpenResult(args)
+    const source = join(dir, 'source', file),
+      output = join(dir, 'output', file)
+    expect(opened).toEqual([source, output])
+    expect(view.setTabReadOnly).toHaveBeenCalledWith(source)
+    expect(view.showSplit).toHaveBeenCalledWith(source, output)
+    await expect(h.batchOpenResult({ ...args, batchId: 'stale' })).rejects.toThrow()
+    rmSync(output)
+    await expect(h.batchOpenResult(args)).rejects.toThrow()
+    expect(existsSync(output)).toBe(false)
+    expect(opened).toHaveLength(2)
+  })
+
   it('waits for a saved output before the next editor, and retries only unfinished documents', async () => {
     const order: string[] = []
     let release!: () => void
@@ -1438,19 +1472,21 @@ describe('project batch translation', () => {
         if (file === files[0]) await gate
         writeFileSync(outputPath, 'Translated')
       },
-      runEditorRequest: async (path, prompt, _signal, useWiki, history) => {
-        const file = basename(path)
-        order.push('follow up ' + file)
+      runBatchChat: async ({ items, prompt, useWiki, conversation, resolveOutput }) => {
+        order.push('follow up ' + items.map((i) => i.file).join(','))
         expect(useWiki).toBe(false)
         if (prompt === original) {
-          expect(file).toBe(files[0])
-          expect(history).toEqual([])
+          expect(items.map((i) => i.file)).toEqual([files[0]])
+          expect(conversation).toEqual([])
         } else {
           expect(prompt).toBe(again)
-          expect(history).toEqual([{ prompt: original, file: files[0], reply: 'Title changed' }])
+          expect(conversation).toEqual([{ prompt: original, reply: 'Title changed' }])
         }
-        expect(readFileSync(path, 'utf8')).toMatch(/^Translated/)
-        writeFileSync(path, readFileSync(path, 'utf8') + '\n' + prompt)
+        for (const item of items) {
+          const path = await resolveOutput(item.file)
+          expect(readFileSync(path, 'utf8')).toMatch(/^Translated/)
+          writeFileSync(path, readFileSync(path, 'utf8') + '\n' + prompt)
+        }
         return 'Title changed'
       },
     })
@@ -1478,10 +1514,9 @@ describe('project batch translation', () => {
     await vi.waitFor(async () => expect((await h.batchStatus(dir))?.running).toBe(false))
     const snapshot = await h.batchStatus(dir)
     expect(snapshot?.messages?.map((m) => m.prompt)).toEqual([original, again])
-    expect(snapshot?.messages?.[1]?.targets).toEqual(
-      files.map((file) => ({ file, state: 'done', reply: 'Title changed' })),
-    )
-    expect(order.slice(3)).toEqual(['follow up first.md', 'follow up second.md'])
+    expect(snapshot?.messages?.[1]?.targets).toEqual(files.map((file) => ({ file, state: 'done' })))
+    expect(snapshot?.messages?.[1]?.reply).toBe('Title changed')
+    expect(order.slice(3)).toEqual(['follow up first.md,second.md'])
     expect(readFileSync(join(dir, 'output', files[0]!), 'utf8')).toBe(
       'Translated\n' + original + '\n' + again,
     )
@@ -1489,14 +1524,13 @@ describe('project batch translation', () => {
       expect(readFileSync(join(dir, 'source', file), 'utf8')).toBe('Original')
   })
 
-  it('records a failed follow-up per file and cancels outstanding follow-ups with the batch', async () => {
+  it('cancels the single conversation for all selected files', async () => {
     const files = ['a.md', 'b.md', 'c.md']
     const opened: string[] = []
     const h = handlers({
       runBatchEditor: async () => {},
-      runEditorRequest: async (path, _prompt, signal) => {
-        opened.push(basename(path))
-        if (opened.length === 1) throw new Error('Read-only output')
+      runBatchChat: async ({ items, signal }) => {
+        opened.push(...items.map((i) => i.file))
         await new Promise<void>((_resolve, reject) =>
           signal.addEventListener('abort', () => reject(new Error('Stopped')), { once: true }),
         )
@@ -1516,11 +1550,11 @@ describe('project batch translation', () => {
     const { id } = await h.batchStart({ dir, files }, 1)
     await vi.waitFor(async () => expect((await h.batchStatus(dir))?.running).toBe(false))
     await h.batchSend({ dir, files, batchId: id!, prompt: 'Check every file' }, 1)
-    await vi.waitFor(() => expect(opened).toEqual(['a.md', 'b.md']))
+    await vi.waitFor(() => expect(opened).toEqual(files))
     await h.batchStop(dir)
     await vi.waitFor(async () => expect((await h.batchStatus(dir))?.running).toBe(false))
     expect((await h.batchStatus(dir))?.messages?.[0]?.targets).toEqual([
-      { file: 'a.md', state: 'failed', error: 'Read-only output' },
+      { file: 'a.md', state: 'stopped' },
       { file: 'b.md', state: 'stopped' },
       { file: 'c.md', state: 'stopped' },
     ])
@@ -1578,6 +1612,22 @@ describe('project batch translation', () => {
     expect(readFileSync(join(dir, 'output', 'table.xls.xlsx'), 'utf8')).toBe(
       'existing unrelated workbook',
     )
+    // Reopening the project after a restart must edit exactly that numbered workbook.
+    const chosen = join(dir, 'output', 'table.xls (2).xlsx')
+    writeFileSync(chosen, '기존 수동 번역')
+    const reopened = handlers({
+      runBatchEditor: async ({ outputPath }) => {
+        expect(outputPath).toBe(chosen)
+        writeFileSync(outputPath, readFileSync(outputPath, 'utf8') + ' / continued')
+      },
+    })
+    await reopened.batchStart({ dir }, 1)
+    await vi.waitFor(async () => expect((await reopened.batchStatus(dir))?.running).toBe(false))
+    expect(readFileSync(chosen, 'utf8')).toBe('기존 수동 번역 / continued')
+    expect(readdirSync(join(dir, 'output')).sort()).toEqual([
+      'table.xls (2).xlsx',
+      'table.xls.xlsx',
+    ])
     if (process.platform !== 'win32') {
       rmSync(join(dir, 'source', 'table.xls'))
       symlinkSync(input, join(dir, 'source', 'table.xls'))

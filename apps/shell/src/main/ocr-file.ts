@@ -10,7 +10,8 @@ import {
 import { withPdfDocument } from '../../../../packages/pdf2docx/src/extract'
 import { ocrPageSelection } from './ocr-page-range'
 import { prepareScanOcr } from './ocr-scan-preparation'
-import { ocrTargets } from './ocr-targets'
+import { ocrOfficeWord } from './ocr-office-word'
+import { ocrOfficeWorkbook, type ExcelOcrDestination } from './ocr-office-workbook'
 import { searchablePdf } from './ocr-searchable'
 
 export async function convertOcrFile(
@@ -20,10 +21,31 @@ export async function convertOcrFile(
   pdfium: PdfiumModule,
   ocr: OcrEngine | null,
   pageRange?: string,
+  replacePictures = false,
+  placement?: 'below' | 'replace',
+  destination?: ExcelOcrDestination,
+  plainText = false,
 ): Promise<number[]> {
   if (!ocr) throw new Error('OCR_UNAVAILABLE')
   ocr = prepareScanOcr(ocr)
-  if (!ocrTargets(input).includes(format)) throw new Error('Unsupported OCR format')
+  const ext = extname(input).toLowerCase()
+  if (['.xlsx', '.xlsm'].includes(ext) && ext === '.' + format && !pageRange?.trim()) {
+    await ocrOfficeWorkbook(input, output, pdfium, ocr, placement, destination, plainText)
+    return []
+  }
+  if (ext === '.docx' && format === 'docx' && !pageRange?.trim()) {
+    await ocrOfficeWord(
+      input,
+      output,
+      pdfium,
+      ocr,
+      placement ? placement === 'replace' : replacePictures,
+      plainText,
+    )
+    return []
+  }
+  if (!['pdf', 'docx'].includes(format) || !['.pdf', '.png', '.jpg', '.jpeg'].includes(ext))
+    throw new Error('Unsupported OCR format')
   const original = await readFile(input)
   const pdf =
     extname(input).toLowerCase() === '.pdf'
@@ -40,7 +62,12 @@ export async function convertOcrFile(
     if (result.bytes !== original) await optimizeConvertedImages(output, format)
     return result.missing
   }
-  const result = await convertPdfToDocx(pdf, { pdfium, ocr, ocrPages: pages })
+  const result = await convertPdfToDocx(pdf, {
+    pdfium,
+    ocr,
+    ocrPages: pages,
+    keepScanAboveText: placement === 'below',
+  })
   const requested = result.pageResults.filter((p) => !pages || pages.has(p.page))
   const missing = requested
     .filter((p) => p.status === 'scanned' || p.status === 'degraded')

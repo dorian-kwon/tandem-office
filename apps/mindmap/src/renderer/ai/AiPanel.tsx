@@ -889,7 +889,20 @@ export function AiPanel({
 
   const loopRef = useRef<AgentLoop | null>(null)
   if (!loopRef.current) {
+    const documentSkill = createMindmapSkill({
+      host: () => hostRef.current,
+      turn: () => (aiEditUndoHistoryEnabled() ? turnRef.current : null),
+      imageGenAvailable: () => imageGenAvailableRef.current,
+      // the model names an attachment; only files the panel shows can be found
+      attachmentPath: (name) =>
+        availableAttachments().find((attachment) => attachment.name === name)?.path ?? null,
+      attachmentNames: () =>
+        availableAttachments()
+          .filter((attachment) => ATTACHMENT_IMAGE_EXTS.has(attachment.ext))
+          .map((attachment) => attachment.name),
+    })
     loopRef.current = new AgentLoop({
+      documentSkill,
       documentTranslation: {
         documentKey: () => filePathRef.current,
         analyzingLabel: () => analyzingDocumentLabel[langRef.current],
@@ -899,18 +912,7 @@ export function AiPanel({
       toolsAllowed: () =>
         settingsRef.current ? localModelCapabilities(settingsRef.current).tools !== false : true,
       skill: composeWithDrive('mindmap+search', '', () => loopRef.current?.messages ?? [], [
-        createMindmapSkill({
-          host: () => hostRef.current,
-          turn: () => (aiEditUndoHistoryEnabled() ? turnRef.current : null),
-          imageGenAvailable: () => imageGenAvailableRef.current,
-          // the model names an attachment; only files the panel shows can be found
-          attachmentPath: (name) =>
-            availableAttachments().find((attachment) => attachment.name === name)?.path ?? null,
-          attachmentNames: () =>
-            availableAttachments()
-              .filter((attachment) => ATTACHMENT_IMAGE_EXTS.has(attachment.ext))
-              .map((attachment) => attachment.name),
-        }),
+        documentSkill,
         createSearchSkill(),
         createFilesSkill(availableAttachments),
         // the person's skills: use_skill, read_skill_file, propose_skill (app-run tools)
@@ -1710,6 +1712,8 @@ export function AiPanel({
   }, [request])
 
   useProjectEditorRun({
+    documentEditor: 'mindmap',
+    documentLoop: () => loopRef.current,
     turn: runStatus.projectTurn,
     path: filePath,
     ready: !projectChat.available || projectChat.ready,

@@ -58,6 +58,17 @@ function normalize(raw: unknown): StoredRecent[] {
   return out.slice(0, RECENT_DOCUMENTS_LIMIT)
 }
 
+/** Earlier builds recorded the chosen output in recent documents before per-source associations existed. */
+export function lastOpenedOutput(
+  settingsPath: string,
+  dir: string,
+  file: string,
+): string | undefined {
+  return normalize(readAppSettings(settingsPath)[RECENT_DOCUMENTS_KEY]).find(
+    (entry) => fold(entry.dir) === fold(dir) && entry.file === file,
+  )?.output
+}
+
 /** Note that a document was opened in the translation view (app settings file only). */
 export function recordRecentDocument(
   settingsPath: string,
@@ -118,7 +129,8 @@ export async function listRecentDocuments(
       const isFile = async (path: string) => (await stat(path).catch(() => null))?.isFile() === true
       available =
         project.sources.some((src) => src.file === e.file) &&
-        ((await isFile(join(dir, 'source', e.file))) || (await isFile(join(dir, 'output', e.output))))
+        ((await isFile(join(dir, 'source', e.file))) ||
+          (await isFile(join(dir, 'output', e.output))))
     } catch {
       // the folder or the project file is gone: shown, but not openable
     }

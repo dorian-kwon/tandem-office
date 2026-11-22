@@ -24,7 +24,10 @@ import {
 import { PRODUCT_NAME } from '@genoffice/i18n'
 import { EMPTY_PAYLOADS, type GatewayPayloads } from './xlsx-gateway-ops'
 import { decodeCsv, csvField } from './csv'
-import type { WorkbookStyleEdit } from '@genoffice/xlsx-gateway/shared/edit-schemas'
+import type {
+  WorkbookStyleEdit,
+  WorkbookVisualEdit,
+} from '@genoffice/xlsx-gateway/shared/edit-schemas'
 import {
   echoStyleColor,
   fillDisplayColor,
@@ -47,7 +50,7 @@ import { xlsxSidecarPath } from '../resources'
 
 export type Scalar = string | number | boolean | null
 
-interface CellArea {
+export interface CellArea {
   startRow: number
   endRow: number
   startColumn: number
@@ -71,6 +74,7 @@ interface OpenedWorkbook {
     }[]
     freeze?: { frozenRows: number; frozenColumns: number } | null
     hidden?: boolean
+    cellImages?: { id: string; row: number; column: number }[]
     tables?: { range: CellArea; name?: string }[]
     comments?: { row: number; column: number }[]
     pivotTables?: { path: string; outputRef: string }[]
@@ -84,6 +88,8 @@ interface OpenedWorkbook {
     id: string
     sheetId: string
     kind: string
+    mediaPath?: string
+    fillMediaPath?: string
     anchor: { fromRow: number; fromColumn: number }
     chart?: { chartTypes: string[]; title: string; series: unknown[] }
   }[]
@@ -185,8 +191,10 @@ interface RecalcResult {
 }
 
 /** One short-lived sidecar process per call; the CLI has no session to keep alive. */
-async function withSidecar<T>(fn: (client: XlsxSidecarClient) => Promise<T>): Promise<T> {
-  const binary = xlsxSidecarPath()
+async function withSidecar<T>(
+  fn: (client: XlsxSidecarClient) => Promise<T>,
+  binary = xlsxSidecarPath(),
+): Promise<T> {
   if (!binary) {
     throw new CliError(EXIT.conversion, 'xlsx engine (xlsx-sidecar) not found', {
       hint: `set XLSX_SIDECAR_PATH or run a packaged ${PRODUCT_NAME}`,
@@ -203,6 +211,7 @@ async function withSidecar<T>(fn: (client: XlsxSidecarClient) => Promise<T>): Pr
 async function withOpenWorkbook<T>(
   path: string,
   fn: (client: XlsxSidecarClient, wb: OpenedWorkbook) => Promise<T>,
+  binary?: string,
 ): Promise<T> {
   return withSidecar(async (client) => {
     const wb = (await client.open(path, 'en')) as OpenedWorkbook
@@ -211,7 +220,7 @@ async function withOpenWorkbook<T>(
     } finally {
       await client.close(wb.sessionId)
     }
-  })
+  }, binary)
 }
 
 export interface SheetSummary {
@@ -872,12 +881,59 @@ export async function visitFormattedSheets(
   })
 }
 
+export interface SheetPicture {
+  row: number
+  column: number
+  mediaType: string
+  base64: string
+}
+
+/** Read editable cell text, merge rectangles and embedded pictures on the same workbook session.
+ * Every sheet is included, including hidden lookup sheets. Visuals stay in their owning cell.
+ */
+export async function visitWorkbookTables(
+  path: string,
+  visit: (sheet: SheetCsv, merges: CellArea[], pictures: SheetPicture[]) => Promise<void>,
+  binary?: string,
+): Promise<void> {
+  await withOpenWorkbook(
+    path,
+    async (client, wb) => {
+      for (const meta of wb.sheets) {
+        const merges = new Map<string, CellArea>()
+        const sheet = await formatSheetCsv(client, wb, path, meta, ',', merges)
+        const placements = [...(meta.cellImages ?? [])]
+        for (const visual of wb.visuals ?? []) {
+          if (visual.sheetId === meta.id && (visual.mediaPath || visual.fillMediaPath))
+            placements.push({
+              id: visual.id,
+              row: visual.anchor.fromRow,
+              column: visual.anchor.fromColumn,
+            })
+        }
+        const pictures: SheetPicture[] = []
+        for (const { id, row, column } of placements) {
+          const media = (await client.readMedia({ sessionId: wb.sessionId, visualId: id })) as {
+            mediaType: string
+            base64: string
+          }
+          if (/^image\/(png|jpeg|gif|bmp)$/.test(media.mediaType))
+            pictures.push({ ...media, row, column })
+        }
+        await visit(sheet, [...merges.values()], pictures)
+      }
+    },
+    binary,
+  )
+}
+
 async function formatSheetCsv(
   client: XlsxSidecarClient,
   wb: OpenedWorkbook,
   path: string,
   meta: SheetMeta,
   delimiter: ',' | '\t' = ',',
+  merges?: Map<string, CellArea>,
 ): Promise<SheetCsv> {
   const styles = wb.styles ?? []
   const date1904 = wb.date1904 === true
@@ -899,7 +955,11 @@ async function formatSheetCsv(
       endColumn: meta.columnCount - 1,
     }
     for (const band of recalcBands(whole, RANGE_CELL_CAP)) {
-      const r = await readRangeIndexed(client, wb.sessionId, meta.id, band)
+      // Merges follow sheetData in the XML and only appear when the native index is complete.
+      const r = await readRangeIndexed(client, wb.sessionId, meta.id, band, Boolean(merges))
+      if (merges) {
+        for (const area of r.merges ?? []) merges.set(`${area.startRow},${area.startColumn}`, area)
+      }
       const height = band.endRow - band.startRow + 1
       const grid: string[][] = Array.from({ length: height }, () =>
         Array<string>(meta.columnCount).fill(''),
@@ -1183,6 +1243,7 @@ export async function writeWorkbook(
   opts: {
     plan?: SheetEditPlan
     structuralOps?: readonly SheetStructuralOps[]
+    visualEdits?: readonly WorkbookVisualEdit[]
     /** original → new sheet names applied by `plan`; the written file carries the new ones */
     renames?: Record<string, string>
     /** the declarative save payloads of the DSL ops the in-memory workbook cannot hold */
@@ -1220,7 +1281,7 @@ export async function writeWorkbook(
       gateway.pivotAdditions,
       [],
       [],
-      [],
+      opts.visualEdits ?? [],
       gateway.sparklineAdditions,
       formulaValues,
     )

@@ -1103,7 +1103,42 @@ export function AiPanel({
 
   const loopRef = useRef<AgentLoop<DocSnapshot | undefined> | null>(null)
   if (!loopRef.current) {
+    const documentSkill = createDocumentSkill(
+      {
+        getText: () => depsRef.current.access.getText(),
+        getVersion: () => depsRef.current.access.getVersion(),
+        getMap: () => depsRef.current.access.getMap(),
+        getLastManualVersion: () => depsRef.current.access.getLastManualVersion(),
+        getFilePath: () => depsRef.current.access.getFilePath(),
+        getSelectedSid: () =>
+          queueRunRef.current ? null : depsRef.current.access.getSelectedSid(),
+        applyOps: (ops, label) => depsRef.current.access.applyOps(ops, label),
+        replaceAll: (html, label, version) =>
+          depsRef.current.access.replaceAll(html, label, version),
+        askClarification: (questions) =>
+          new Promise((resolve) => {
+            clarifyResolverRef.current = resolve
+            setActiveClarify(questions)
+          }),
+        confirmBrief: (brief) =>
+          new Promise((resolve) => {
+            briefResolverRef.current = resolve
+            setActiveBrief(brief)
+          }),
+        writePage: (spec, signal) => runPageWriterRef.current(spec, signal),
+        planBrief: (spec, signal) => runBriefWriterRef.current(spec, signal),
+        getInstruction: () => runInstructionRef.current,
+        resolveAttachmentSrc: (ref) => resolveAttachmentSrc(ref),
+        listAttachmentNames: () => availableAttachments().map((a) => a.name),
+        listImageAttachmentNames: () =>
+          availableAttachments()
+            .filter((a) => ATTACHMENT_IMAGE_EXTS.has(a.ext))
+            .map((a) => a.name),
+      },
+      () => imageGenAvailableRef.current,
+    )
     loopRef.current = new AgentLoop<DocSnapshot | undefined>({
+      documentSkill,
       documentTranslation: {
         documentKey: () => filePathRef.current,
         analyzingLabel: () => analyzingDocumentLabel[langRef.current],
@@ -1113,40 +1148,7 @@ export function AiPanel({
       toolsAllowed: () =>
         settingsRef.current ? localModelCapabilities(settingsRef.current).tools !== false : true,
       skill: composeWithDrive('html+search', '', () => loopRef.current?.messages ?? [], [
-        createDocumentSkill(
-          {
-            getText: () => depsRef.current.access.getText(),
-            getVersion: () => depsRef.current.access.getVersion(),
-            getMap: () => depsRef.current.access.getMap(),
-            getLastManualVersion: () => depsRef.current.access.getLastManualVersion(),
-            getFilePath: () => depsRef.current.access.getFilePath(),
-            getSelectedSid: () =>
-              queueRunRef.current ? null : depsRef.current.access.getSelectedSid(),
-            applyOps: (ops, label) => depsRef.current.access.applyOps(ops, label),
-            replaceAll: (html, label, version) =>
-              depsRef.current.access.replaceAll(html, label, version),
-            askClarification: (questions) =>
-              new Promise((resolve) => {
-                clarifyResolverRef.current = resolve
-                setActiveClarify(questions)
-              }),
-            confirmBrief: (brief) =>
-              new Promise((resolve) => {
-                briefResolverRef.current = resolve
-                setActiveBrief(brief)
-              }),
-            writePage: (spec, signal) => runPageWriterRef.current(spec, signal),
-            planBrief: (spec, signal) => runBriefWriterRef.current(spec, signal),
-            getInstruction: () => runInstructionRef.current,
-            resolveAttachmentSrc: (ref) => resolveAttachmentSrc(ref),
-            listAttachmentNames: () => availableAttachments().map((a) => a.name),
-            listImageAttachmentNames: () =>
-              availableAttachments()
-                .filter((a) => ATTACHMENT_IMAGE_EXTS.has(a.ext))
-                .map((a) => a.name),
-          },
-          () => imageGenAvailableRef.current,
-        ),
+        documentSkill,
         createSearchSkill(),
         createFilesSkill(availableAttachments),
         createIntentSkill(
@@ -2076,6 +2078,8 @@ export function AiPanel({
   }, [preset])
 
   useProjectEditorRun({
+    documentEditor: 'html',
+    documentLoop: () => loopRef.current,
     turn: runStatus.projectTurn,
     path: filePath,
     ready: !projectChat.available || projectChat.ready,

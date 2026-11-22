@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReactElement } from 'react'
 import type { SourceEntry } from '@genoffice/translate-project'
+import { checkOcrPopupResult } from '../../../shared/ocr-popup'
 import type { TranslateApi } from '../../../shared/translate-api'
 import { FirstConnectionDialog, useFirstConnectionNotice } from '../FirstConnectionNotice'
 import { useSubscriptionConnection } from '../subscription-client'
@@ -20,8 +21,14 @@ import './translate-global'
 export function OcrPopupScreen(props: {
   dir: string
   file: string
+  editorPlacement?: boolean
+  preset?: string | null
   api?: TranslateApi | undefined
 }): ReactElement | null {
+  const preset = useMemo(() => {
+    if (!props.editorPlacement || !props.preset) return undefined
+    return checkOcrPopupResult({ pages: [], placement: JSON.parse(props.preset) }).placement
+  }, [props.editorPlacement, props.preset])
   const api = props.api ?? window.translateApi
   const connection = useSubscriptionConnection()
   const notice = useFirstConnectionNotice(connection.statuses)
@@ -59,6 +66,8 @@ export function OcrPopupScreen(props: {
         connection={connection}
         api={api}
         selectOnly
+        editorPlacement={props.editorPlacement}
+        presetPlacement={preset}
         onNoticeNeeded={() => setNoticeAsked(true)}
         // Settings live in the home screen: end this popup rather than navigate there
         onOpenAiSettings={close}

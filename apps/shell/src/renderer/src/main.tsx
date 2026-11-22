@@ -1,3 +1,4 @@
+import { installBatchModelRelay } from './translate/batch-model-relay'
 import React from 'react'
 import { createRoot } from 'react-dom/client'
 import { htmlDir, htmlLang, productName } from '@genoffice/i18n'
@@ -11,6 +12,16 @@ import './home.css'
 import './tabbar.css'
 import { installScreenTips } from '@genoffice/ui'
 import { watchMcpOpenServer } from './mcp/mcp-open-request'
+
+// Provider requests for batch chat outlive any particular progress dialog.
+if (!new URLSearchParams(location.search).has('mode')) {
+  installBatchModelRelay(
+    window.aiOfficeBatchModel,
+    window.aiOffice,
+    window.aiOfficeSubscription,
+    (message) => window.confirm(message),
+  )
+}
 
 installScreenTips()
 // an AI window's "open in Settings" may name its server before the card is on screen
@@ -69,7 +80,12 @@ void Promise.all([
       <LocaleProvider initial={lang}>
         {ocrPopup ? (
           <React.Suspense fallback={null}>
-            <OcrPopupScreen dir={ocrPopup.dir} file={ocrPopup.file} />
+            <OcrPopupScreen
+              dir={ocrPopup.dir}
+              file={ocrPopup.file}
+              editorPlacement={query.get('purpose') === 'editor'}
+              preset={query.get('placement')}
+            />
           </React.Suspense>
         ) : isHelp ? (
           <React.Suspense fallback={<div className="boot" />}>

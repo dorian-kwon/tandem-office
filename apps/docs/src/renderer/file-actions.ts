@@ -6,6 +6,7 @@
  * so state never goes stale.
  */
 import { restoreNoteRuns } from './ai/note-run-save'
+import { clearTranslationProgress } from './ai/translate-runs'
 import type { Editor } from '@tiptap/core'
 import type { EditorState } from '@tiptap/pm/state'
 import { translationHistory as history } from './editor/translation-history'
@@ -532,7 +533,7 @@ export async function loadFile(
     )
     resetEditorHistory(ctx.editor)
     if (tier !== 'readOnly') focusDocumentStart(ctx.editor)
-    noteDocumentSwapped()
+    noteDocumentSwapped(ctx.editor)
     ctx.setDoc({
       parsed,
       // an untitled copy has no file: `path` only names it
@@ -697,7 +698,7 @@ export async function newFile(ctx: FileActionContext): Promise<boolean | undefin
     )
     resetEditorHistory(ctx.editor)
     focusDocumentStart(ctx.editor)
-    noteDocumentSwapped()
+    noteDocumentSwapped(ctx.editor)
     ctx.setDoc({
       parsed,
       filePath: null,
@@ -1081,7 +1082,8 @@ let pathlessDocSavedPath: string | null = null
 /** bumps on every document replacement: a save that awaited across it belongs to the old document */
 let docGeneration = 0
 
-export function noteDocumentSwapped(): void {
+export function noteDocumentSwapped(editor?: Editor): void {
+  if (editor) clearTranslationProgress(editor)
   pathlessDocSavedPath = null
   docGeneration++
   clearOcrHistory()
@@ -1841,9 +1843,13 @@ export async function exportPdf(ctx: FileActionContext, outPath?: string): Promi
     // print would show them on the last page only — force the preview-merge path too
     const mixedPaper = counts.size > 1
     // direct print pads every page by the odd-page margins: mirrored even pages need the per-page sheets
+    // Chromium prints an inline Word page-break <br> as a line break. The
+    // pagination preview already places its following content on the next sheet.
+    const hasManualPageBreak = ctx.editor?.view.dom.querySelector('br.doc-page-br')
     if (
       mixedPaper ||
       ctx.mirrorMargins ||
+      hasManualPageBreak ||
       hasPrintableHeaderFooter({
         edited: [
           ctx.header,

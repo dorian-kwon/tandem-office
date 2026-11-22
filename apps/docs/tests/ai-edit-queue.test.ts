@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { executeTool } from '../src/renderer/ai/tools'
 import { Editor } from '@tiptap/core'
 import { editorExtensions } from '../src/renderer/editor/extensions'
 import {
@@ -151,7 +152,7 @@ describe('batch instruction', () => {
     const a = blockTextRange(editor, 1)
     addQueueAnchor(editor, 'q1', a.from, a.to)
     const entries = liveItems(resolveQueue(editor, [item('q1', 'polish this')]))
-    const summary = buildQueueSummary('Batch of 1 edits:', entries)
+    const summary = buildQueueSummary('Batch of 1 edits:', entries, 'Picture')
     expect(summary).toContain('Batch of 1 edits:')
     expect(summary).toContain('polish this')
   })
@@ -173,7 +174,59 @@ describe('textless anchors (image/chart blocks)', () => {
     const resolved = resolveQueueItem(editor, item('img', 'replace this image'))
     expect(resolved.target).not.toBeNull()
     expect(resolved.target!.startIndex).toBe(1)
-    expect(resolved.target!.excerpt).toContain('image')
+    expect(resolved.target!.image).toBe(true)
+    const entries = liveItems([resolved])
+    expect(buildQueueInstruction(entries)).toContain('Block 1, selected embedded picture')
+    expect(buildQueueInstruction(entries)).toContain('ask ONLY where')
+    expect(buildQueueSummary('수정 1건', entries, '그림')).toContain('1. 그림 —')
+  })
+
+  it('reads only the chosen image and inserts the recognized cells after it', async () => {
+    const src = 'data:image/png;base64,YQ=='
+    const picture = image()
+    const editor = createEditor([
+      para('intro'),
+      { ...picture, attrs: { ...picture.attrs, imageDataUrl: src } },
+      para('outro'),
+    ])
+    const html = '<table><tr><td>A</td><td>B</td></tr><tr><td>1</td><td></td></tr></table>'
+    const analyzeMedia = vi.fn().mockResolvedValue({ text: html })
+    vi.stubGlobal('desktop', { analyzeMedia })
+    try {
+      const ids = { bullet: null, ordered: null }
+      const reading = await executeTool(
+        editor,
+        {
+          id: 'read',
+          name: 'analyze_media',
+          input: { blockIndex: 1, requirements: 'Read the table cells in order' },
+        },
+        ids,
+      )
+      expect(analyzeMedia).toHaveBeenCalledWith({
+        mediaUrls: [src],
+        requirements: 'Read the table cells in order',
+      })
+      expect(reading.mutated).toBe(false)
+      const placed = await executeTool(
+        editor,
+        {
+          id: 'place',
+          name: 'insert_content',
+          input: { afterBlockIndex: 1, html: reading.output },
+        },
+        ids,
+      )
+      expect(placed.mutated).toBe(true)
+      expect(editor.state.doc.child(1).attrs.imageDataUrl).toBe(src)
+      const table = editor.state.doc.child(2)
+      expect(table.type.name).toBe('docTable')
+      expect(table.child(1).childCount).toBe(2)
+      expect(table.child(1).child(0).textContent).toBe('1')
+      expect(editor.state.doc.child(3).textContent).toBe('outro')
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it('focusing an anchored image dispatches a node selection without throwing', async () => {

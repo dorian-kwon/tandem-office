@@ -11,7 +11,7 @@ import type { TranslateApi } from '../src/shared/translate-api'
 import type { SubscriptionConnection } from '../src/renderer/src/subscription-client'
 
 it.each([true, false])(
-  'asks once after the provider gate and sends the wiki choice (%s) to the document and batch',
+  'uses the project wiki setting (%s) for document and batch requests without another prompt',
   async (useWiki) => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
     const listeners = new Set<(chunk: AiStreamChunk) => void>()
@@ -49,6 +49,7 @@ it.each([true, false])(
       },
     })
     const project = defaultProjectFile('Tour', 'ko', 'en')
+    project.useWiki = useWiki
     project.wikiReferences = ['Tourism.md']
     project.references = ['Tourism.md']
     project.sources.push({ file: 'tour.hwp', kind: 'editable', sha256: 'hash' })
@@ -117,12 +118,7 @@ it.each([true, false])(
       settings.subscriptionNoticeVersion = 2
       await render()
       await send()
-      expect(aiStream).not.toHaveBeenCalled()
-      const choice = host.querySelector('[role="group"]')!
-      const button = [...choice.querySelectorAll('button')].find(
-        (el) => el.textContent === (useWiki ? 'Use wiki notes' : 'Continue without them'),
-      )
-      await act(async () => button!.click())
+      expect(host.textContent).not.toContain('Use wiki notes')
       expect(open).toHaveBeenCalledWith('tour.hwp')
       expect(runDocumentRequest).toHaveBeenCalledWith({
         dir: '/tours',

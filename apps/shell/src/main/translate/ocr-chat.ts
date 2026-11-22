@@ -4,8 +4,9 @@ import type {
   ChatOcrRequest,
 } from '@genoffice/project-store/folder-api'
 import type { OcrService } from './ocr'
+import type { OcrPopupTarget } from './ocr-popup-host'
 import type { OcrPageResult, OcrPlacement, OcrPrepared } from '../../shared/translate-ocr'
-import type { OcrPopupResult } from '../../shared/ocr-popup'
+import { textPayload, type OcrPicturePlacement, type OcrPopupResult } from '../../shared/ocr-popup'
 import { readAiPage } from '../../../../../packages/pdf-structure/src/ai-read/read-page'
 import type { AiReadRequest } from '../../../../../packages/pdf-structure/src/ai-read/instruction'
 import { resolveOcrSelection } from '../../shared/translate-ocr'
@@ -34,11 +35,7 @@ export type OcrChatPopupOutcome =
  * closes it when the run is cancelled.
  */
 export interface OcrChatPopup {
-  ask(
-    owner: number,
-    target: { dir: string; file: string },
-    signal: AbortSignal,
-  ): Promise<OcrChatPopupOutcome>
+  ask(owner: number, target: OcrPopupTarget, signal: AbortSignal): Promise<OcrChatPopupOutcome>
 }
 export interface OcrChatDeps {
   ocr: OcrService
@@ -68,6 +65,9 @@ interface Session {
   besideSourceDir?: string
   context: string
   prepared: OcrPrepared
+  confirmedDestination?: OcrPlacement | 'new-document' | 'reference-only'
+  confirmationTurn?: string
+  picturePlacement?: OcrPicturePlacement
   inspectTurn: string
   listTurn?: string
   route?: ChatOcrRoute
@@ -78,6 +78,7 @@ interface Session {
   busy: boolean
   /** `placement` is absent when the text goes into a new Word document */
   proposal?: {
+    preapproved?: true
     placement?: OcrPlacement
     /** the placements the person may choose between: the proposed one and the alternatives */
     offered: OcrPlacement[]
@@ -112,7 +113,14 @@ function plain(value: unknown): string {
   return Object.values(obj).map(plain).filter(Boolean).join('\n')
 }
 /** the Word placements that make sense in a document that may have changed since it was listed */
-const OPEN_DOCUMENT_PLACEMENTS: string[] = ['docx-image-boxes', 'docx-after-images', 'docx-end']
+const OPEN_DOCUMENT_PLACEMENTS: string[] = [
+  'docx-image-boxes',
+  'docx-after-images',
+  'docx-before-images',
+  'docx-next-page',
+  'docx-replace-images',
+  'docx-end',
+]
 
 /** a Word picture whose text can go back over it as boxes */
 const takesBoxes = (prepared: OcrPrepared, index: number): boolean =>
@@ -147,23 +155,7 @@ function canonical(value: unknown): string {
   return JSON.stringify(value) ?? 'null'
 }
 
-/** A reading made of plain text: one paragraph per blank-line separated block. */
-function textPayload(text: string) {
-  const blocks = text
-    .split(/\n{2,}/)
-    .map((block) => block.trim())
-    .filter(Boolean)
-  return {
-    version: 1,
-    blocks: blocks.map((block) => ({
-      kind: 'paragraph',
-      runs: [{ kind: 'text', text: block }],
-    })),
-    footnotes: [],
-    droppedRepetitions: 0,
-    reasked: false,
-  }
-}
+export { textPayload } from '../../shared/ocr-popup'
 const answer = (value: unknown, extra: Partial<ChatOcrAnswer> = {}): ChatOcrAnswer => ({
   output: JSON.stringify(value),
   summary: 'OCR',
@@ -387,6 +379,14 @@ export function createOcrChatService(deps: OcrChatDeps) {
           await deps.ocr.release(s.prepared.token).catch(() => undefined)
           s.prepared = await deps.ocr.prepare(s.dir, [s.file], owner)
           await deps.ocr.start(s.prepared.token, indices)
+          s.pages.clear()
+          s.confirmationTurn = input.turnId
+          s.confirmedDestination = outcome.result.referenceOnly
+            ? 'reference-only'
+            : outcome.result.newDocument && intoNewDocument(s.prepared)
+              ? 'new-document'
+              : outcome.result.placement
+          if (s.prepared.format === 'docx') s.picturePlacement = outcome.result.picturePlacement
           s.allowed = new Set(indices)
           for (const page of kept)
             s.pages.set(page.index, {
@@ -395,7 +395,7 @@ export function createOcrChatService(deps: OcrChatDeps) {
               payload:
                 page.boxes && page.boxes.length > 0 && takesBoxes(s.prepared, page.index)
                   ? { kind: 'boxes', boxes: page.boxes, text: page.text }
-                  : textPayload(page.text),
+                  : (page.form ?? textPayload(page.text)),
             })
           s.edits.clear()
           s.proposal = undefined
@@ -425,7 +425,14 @@ export function createOcrChatService(deps: OcrChatDeps) {
                 truncated: text.length > 2000,
               }
             }),
-            next: 'The person chose and confirmed these pictures in the popup, and they were read. Do not show, quote or summarize the text. Call propose now and ask only where it goes.',
+            next:
+              s.confirmedDestination === 'reference-only'
+                ? 'The person chose reference only. Keep the reading for reference and do not propose or apply a write.'
+                : s.confirmedDestination
+                  ? 'The person selected the destination and confirmed Start. Call propose, then apply immediately with that exact destination without asking again.'
+                  : s.picturePlacement
+                    ? 'The person already selected a placement in the popup. Call propose now to confirm that placement before writing. Keep the recognized text private.'
+                    : 'The person chose and confirmed these pictures in the popup, and they were read. Do not show, quote or summarize the text. Call propose now and ask only where it goes.',
           })
         } finally {
           s.busy = false
@@ -453,6 +460,7 @@ export function createOcrChatService(deps: OcrChatDeps) {
         })
       }
       if (input.action === 'read') {
+        s.confirmedDestination = undefined
         requireThat(
           input.turnId !== s.inspectTurn && input.turnId !== s.listTurn,
           'Ask for the scope or show the list, then wait for the person’s image selection on a later turn.',
@@ -496,7 +504,7 @@ export function createOcrChatService(deps: OcrChatDeps) {
                   signal,
                   owner,
                 )
-              if (takesBoxes(s.prepared, index)) {
+              if (!s.picturePlacement && takesBoxes(s.prepared, index)) {
                 // where each text stands, so the text can be put back over the picture
                 const boxes = await readOcrBoxes({
                   image: image.data,
@@ -569,6 +577,7 @@ export function createOcrChatService(deps: OcrChatDeps) {
               'Only recognised image text may be corrected or translated.',
             )
             seen.add(edit.index)
+            if (edit.text === plain(page.payload)) continue
             page.payload = {
               version: 1,
               blocks: [{ kind: 'paragraph', runs: [{ kind: 'text', text: edit.text }] }],
@@ -580,6 +589,56 @@ export function createOcrChatService(deps: OcrChatDeps) {
         }
         s.busy = true
         try {
+          if (s.confirmedDestination === 'reference-only') {
+            requireThat(
+              input.placement !== undefined && input.turnId !== s.confirmationTurn,
+              'The person chose reference only. Do not place the readings without a later request.',
+            )
+          }
+          const confirmed = s.confirmedDestination
+          const canStartNextPage =
+            s.prepared.kind === 'embedded' &&
+            s.prepared.format === 'docx' &&
+            pages.every((page) =>
+              /^document\.xml · ¶\d+$/.test(s.prepared.items[page.index - 1]?.location ?? ''),
+            )
+          const chosenKind =
+            input.placement?.kind ??
+            (typeof confirmed === 'object' ? confirmed.kind : s.picturePlacement)
+          requireThat(
+            chosenKind !== 'docx-next-page' || canStartNextPage,
+            'A next-page destination requires all selected pictures to be in the document body.',
+          )
+          const useConfirmed =
+            confirmed &&
+            confirmed !== 'reference-only' &&
+            pages.every((p) => p.payload === s.pages.get(p.index)?.payload) &&
+            (input.placement === undefined || canonical(input.placement) === canonical(confirmed))
+          requireThat(
+            !confirmed || s.confirmationTurn !== input.turnId || useConfirmed,
+            'Use the exact contents and destination confirmed in the picker.',
+          )
+          if (useConfirmed) {
+            const placement = confirmed === 'new-document' ? undefined : confirmed
+            s.proposal = {
+              preapproved: true,
+              placement,
+              offered: placement ? [placement] : [],
+              pages,
+              turn: input.turnId,
+            }
+            return answer({
+              session: s.id,
+              ...(placement
+                ? { placement, reason: 'user-requested' }
+                : {
+                    result: 'new-docx',
+                    destination: s.besideSourceDir ? 'beside-source' : 'project-output',
+                  }),
+              needsConfirmation: false,
+              next: 'Start confirmed this exact output and destination in the picker. Apply now without another placement question.',
+            })
+          }
           if (intoNewDocument(s.prepared)) {
             // no placement: a placement the model made up is ignored
             controller.signal.throwIfAborted()
@@ -610,9 +669,12 @@ export function createOcrChatService(deps: OcrChatDeps) {
               ? [{ index: p.index, boxes: payload.boxes }]
               : []
           })
-          const onPicture = !input.placement && s.prepared.format === 'docx' && boxed.length > 0
+          const preselected = s.picturePlacement ? { kind: s.picturePlacement } : undefined
+          const onPicture =
+            !input.placement && !preselected && s.prepared.format === 'docx' && boxed.length > 0
           const placement =
             input.placement ??
+            preselected ??
             (onPicture ? { kind: 'docx-image-boxes', images: boxed } : recommendation.placement)
           requireThat(
             placement && typeof placement === 'object' && JSON.stringify(placement).length < 262144,
@@ -624,8 +686,13 @@ export function createOcrChatService(deps: OcrChatDeps) {
           const alternatives =
             s.prepared.format === 'docx'
               ? [
+                  ...(preselected && boxed.length > 0
+                    ? [{ kind: 'docx-image-boxes', images: boxed }]
+                    : []),
                   recommendation.placement,
                   { kind: 'docx-after-images' },
+                  { kind: 'docx-before-images' },
+                  ...(canStartNextPage ? [{ kind: 'docx-next-page' }] : []),
                   { kind: 'docx-end' },
                 ].filter(
                   (candidate, at, all) =>
@@ -643,11 +710,12 @@ export function createOcrChatService(deps: OcrChatDeps) {
           return answer({
             session: s.id,
             placement,
-            reason: input.placement
-              ? 'user-requested'
-              : onPicture
-                ? 'on-picture'
-                : recommendation.reason,
+            reason:
+              input.placement || preselected
+                ? 'user-requested'
+                : onPicture
+                  ? 'on-picture'
+                  : recommendation.reason,
             // the ways that are not proposed first stay open to the person
             ...(alternatives.length > 0 ? { alternatives } : {}),
             texts: pages.slice(0, 20).map((p) => ({
@@ -657,7 +725,9 @@ export function createOcrChatService(deps: OcrChatDeps) {
               truncated: plain(p.payload).length > 2000,
             })),
             needsConfirmation: true,
-            next: 'Ask only where the text goes (ask_choice), without showing or summarizing the text. Do not apply on this turn.',
+            next: preselected
+              ? 'Confirm the chosen placement with ask_choice. Offer it first, along with other placements and reference only. Do not show the text or apply on this turn.'
+              : 'Ask only where the text goes (ask_choice), without showing or summarizing the text. Do not apply on this turn.',
           })
         } finally {
           s.busy = false
@@ -666,7 +736,7 @@ export function createOcrChatService(deps: OcrChatDeps) {
       if (input.action === 'apply') {
         requireThat(s.proposal, 'Propose and discuss a destination before applying OCR.')
         requireThat(
-          input.turnId !== s.proposal.turn,
+          s.proposal.preapproved === true || input.turnId !== s.proposal.turn,
           'Wait for explicit confirmation from the person on a later human turn.',
         )
         s.busy = true

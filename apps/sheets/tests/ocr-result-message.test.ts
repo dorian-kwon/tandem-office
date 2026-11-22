@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { parseAiPageResponse } from '../../../packages/pdf-structure/src/ai-read/parse'
 import {
   OCR_RESULT_MAX_PER_PICTURE,
   OCR_RESULT_MAX_TOTAL,
   formatOcrResultMessage,
+  readOcrResultPage,
 } from '../src/renderer/ai/ocr-result-message'
 
 const page = (index: number, row: number, text: string) => ({
@@ -12,6 +14,51 @@ const page = (index: number, row: number, text: string) => ({
 })
 
 describe('formatOcrResultMessage', () => {
+  it('uses the already confirmed cell destination immediately and honors reference only', () => {
+    const pages = [page(1, 7, 'City')]
+    const placed = formatOcrResultMessage({
+      pages,
+      placement: { kind: 'xlsx-cells', sheet: 'Data', cell: 'B4', overwrite: false },
+    })
+    expect(placed.text).toContain('"cell":"B4"')
+    expect(placed.text).toContain('without another placement question')
+    expect(placed.text).not.toContain('ask_choice')
+    expect(formatOcrResultMessage({ pages, referenceOnly: true }).text).toContain('do not write')
+  })
+
+  it('keeps editable table coordinates and merged cells at the selected location through paging', () => {
+    const long = 'a'.repeat(OCR_RESULT_MAX_TOTAL + 32)
+    const parsed = parseAiPageResponse(
+      '<page-content>\n<table><tr><td colspan="2">Head</td></tr><tr><td>A</td><td>' +
+        long +
+        '</td></tr></table>\n</page-content>',
+      { page: 1, pageFingerprint: '' },
+    )
+    if (!parsed.ok) throw new Error('invalid OCR table fixture')
+    const plain = page(1, 7, 'Head A ' + long)
+    const result = {
+      pages: [{ ...plain, form: parsed.reading.payload }],
+      placement: { kind: 'xlsx-cells' as const, sheet: 'Output', cell: 'D3', overwrite: false },
+    }
+    const preview = formatOcrResultMessage(result, 'read-me').text
+    expect(preview).toContain('[structured OCR layout]')
+    expect(preview).toContain('read-me')
+    expect(preview).toContain('"cell":"D3"')
+    const first = readOcrResultPage(result, 0, 0)!
+    expect(first.next).not.toBeNull()
+    expect(first.pages[0]?.format).toBe('structured-ocr')
+    const last = readOcrResultPage(result, first.next!.position, first.next!.offset)!
+    expect(last.next).toBeNull()
+    const layout = JSON.parse(first.pages[0]!.text + last.pages[0]!.text)
+    expect(layout.blocks[0].table.cells[0]).toMatchObject({ row: 0, col: 0, colSpan: 2 })
+    expect(layout.blocks[0].table.cells[2].paragraphs[0][0].text).toBe(long)
+    const textOnly = { ...result, pages: [plain] }
+    expect(formatOcrResultMessage(textOnly).text).not.toContain('[structured OCR layout]')
+    expect(readOcrResultPage(textOnly, 0, 0)!.pages[0]!.text).toBe(
+      plain.text.slice(0, OCR_RESULT_MAX_TOTAL),
+    )
+  })
+
   it('lists every picture with its anchor cell and text, as data, with the local recommendation first', () => {
     const message = formatOcrResultMessage({
       pages: [page(1, 7, '안녕'), page(2, 82, '툭')],

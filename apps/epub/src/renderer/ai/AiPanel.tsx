@@ -762,7 +762,9 @@ export function AiPanel({ host, filePath, onCollapse }: AiPanelProps): ReactElem
 
   const loopRef = useRef<AgentLoop | null>(null)
   if (!loopRef.current) {
+    const documentSkill = createEpubSkill({ host: () => hostRef.current })
     loopRef.current = new AgentLoop({
+      documentSkill,
       documentTranslation: {
         documentKey: () => filePathRef.current,
         analyzingLabel: () => analyzingDocumentLabel[langRef.current],
@@ -773,7 +775,7 @@ export function AiPanel({ host, filePath, onCollapse }: AiPanelProps): ReactElem
       toolsAllowed: () =>
         settingsRef.current ? localModelCapabilities(settingsRef.current).tools !== false : true,
       skill: composeWithDrive('epub+search', '', () => loopRef.current?.messages ?? [], [
-        createEpubSkill({ host: () => hostRef.current }),
+        documentSkill,
         createSearchSkill(),
         createFilesSkill(availableAttachments),
         // the person's skills: use_skill, read_skill_file, propose_skill (app-run tools)
@@ -1514,6 +1516,8 @@ export function AiPanel({ host, filePath, onCollapse }: AiPanelProps): ReactElem
   ) : null
 
   useProjectEditorRun({
+    documentEditor: 'epub',
+    documentLoop: () => loopRef.current,
     turn: runStatus.projectTurn,
     path: filePath,
     ready: !projectChat.available || projectChat.ready,

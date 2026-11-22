@@ -1194,4 +1194,15 @@ it('runs a project batch through the PDF writer and OCR editor while keeping the
     })
     expect(await docText(destination)).toContain('Translated OCR output')
   }
+  const outputs = readdirSync(join(dir, 'output')).sort()
+  runBatchEditor.mockImplementation(async ({ outputPath }) => {
+    expect(await docText(outputPath)).toContain('Translated OCR output')
+    writeFileSync(outputPath, await markdownToDocx('Translated OCR output — reviewed'))
+  })
+  await h.batchStart({ dir, files: ['scan.pdf', 'image.png'] }, 10)
+  await vi.waitFor(async () => expect((await h.batchStatus(dir))?.running).toBe(false))
+  expect((await h.batchStatus(dir))?.items.every((i) => i.state === 'saved')).toBe(true)
+  expect(confirm).toHaveBeenCalledTimes(2)
+  expect(readdirSync(join(dir, 'output')).sort()).toEqual(outputs)
+  expect(await docText(join(dir, 'output', 'scan (OCR).docx'))).toContain('reviewed')
 })

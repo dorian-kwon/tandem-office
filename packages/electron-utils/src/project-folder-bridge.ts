@@ -6,6 +6,10 @@
 /// Electron at runtime (sandboxed preloads load it bundled).
 import {
   EDITOR_REQUEST,
+  EDITOR_TOOL_REQUEST,
+  EDITOR_TOOL_REPLY,
+  type EditorToolRequest,
+  type ProjectEditorToolBridge,
   EDITOR_REPLY,
   type EditorRequest,
   type ProjectEditorBridge,
@@ -29,7 +33,7 @@ type RequestMethod = keyof typeof PROJECT_FOLDER_CHANNELS
 
 export function projectFolderBridge(
   ipc: ProjectFolderBridgeIpc,
-): ProjectFolderApi & ProjectEditorBridge {
+): ProjectFolderApi & ProjectEditorBridge & ProjectEditorToolBridge {
   // how many listeners each event has in this page; main hears about the first and the last
   const listeners = new Map<ProjectFolderEventMethod, number>()
 
@@ -65,6 +69,14 @@ export function projectFolderBridge(
 
   return {
     ...(requests as unknown as Omit<ProjectFolderApi, ProjectFolderEventMethod>),
+    onEditorToolRequest: (listener) => {
+      const handler = (_event: IpcRendererEvent, message: EditorToolRequest) => listener(message)
+      ipc.on(EDITOR_TOOL_REQUEST, handler)
+      return () => {
+        ipc.removeListener(EDITOR_TOOL_REQUEST, handler)
+      }
+    },
+    replyToEditorToolRequest: (reply) => ipc.send(EDITOR_TOOL_REPLY, reply),
     onEditorRequest: (listener) => {
       const handler = (_event: IpcRendererEvent, message: EditorRequest) => listener(message)
       ipc.on(EDITOR_REQUEST, handler)

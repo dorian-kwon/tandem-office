@@ -308,6 +308,122 @@ describe('findReplace', () => {
     expect(boldChild.marks.some((m) => m.type.name === 'bold')).toBe(true)
   })
 
+  const tableFixture = (): JsonNode[] => [
+    para([text('fee')]),
+    {
+      type: 'docTable',
+      content: [
+        {
+          type: 'docTableRow',
+          content: [
+            {
+              type: 'docTableCell',
+              content: [
+                para([text('fee fee', [{ type: 'italic' }])]),
+                {
+                  type: 'docNestedTable',
+                  attrs: {
+                    model: {
+                      colWidthsTwips: [1440],
+                      rows: [
+                        [
+                          {
+                            paras: ['fee'],
+                            richParas: [{ runs: [{ text: 'fee', bold: true }] }],
+                            nestedTables: [{ rows: [[{ paras: ['deep fee'] }]] }],
+                          },
+                        ],
+                      ],
+                    },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  ]
+
+  it('repairs matching runs inside a targeted table and its nested models in one undo', () => {
+    const editor = createEditor(tableFixture())
+    const before = editor.state.doc
+    const outcome = executeOps(editor, [
+      {
+        op: 'findReplace',
+        find: 'fee',
+        replace: 'price',
+        target: { nodeType: 'table', containsText: 'deep' },
+      },
+    ])
+    expect(outcome.results[0]?.detail).toBe('Replaced 4 occurrence(s)')
+    const after = editor.state.doc
+    expect(after.child(0).textContent).toBe('fee')
+    const cell = after.child(1).firstChild!.firstChild!
+    expect(cell.child(0).textContent).toBe('price price')
+    expect(cell.child(0).firstChild!.marks[0].type.name).toBe('italic')
+    const model = cell.child(1).attrs.model
+    expect(model.colWidthsTwips).toEqual([1440])
+    expect(model.rows[0][0].richParas[0].runs[0]).toMatchObject({ text: 'price', bold: true })
+    expect(model.rows[0][0].nestedTables[0].rows[0][0].paras).toEqual(['deep price'])
+    expect(editor.commands.undo()).toBe(true)
+    expect(editor.state.doc.eq(before)).toBe(true)
+    expect(editor.commands.redo()).toBe(true)
+    expect(editor.state.doc.eq(after)).toBe(true)
+  })
+
+  it('uses character-precise selection inside a cell and skips the unselected nested table', () => {
+    const editor = createEditor(tableFixture())
+    let from = 0
+    editor.state.doc.descendants((node, pos) => {
+      if (node.isText && node.text === 'fee fee') from = pos + 4
+    })
+    editor.commands.setTextSelection({ from, to: from + 3 })
+    const outcome = executeOps(editor, [
+      {
+        op: 'findReplace',
+        find: 'fee',
+        replace: 'price',
+        target: { scope: 'selection' },
+      },
+    ])
+    expect(outcome.results[0]?.detail).toBe('Replaced 1 occurrence(s)')
+    const cell = editor.state.doc.child(1).firstChild!.firstChild!
+    expect(cell.child(0).textContent).toBe('fee price')
+    expect(cell.child(1).attrs.model.rows[0][0].paras).toEqual(['fee'])
+  })
+
+  it('refuses a match on a withheld nested run atomically', () => {
+    const doc = tableFixture()
+    const inner = doc[1].content![0].content![0].content![1].attrs!.model as {
+      rows: Array<Array<{ richParas: Array<{ runs: Array<{ rawRPr?: string }> }> }>>
+    }
+    inner.rows[0][0].richParas[0].runs[0].rawRPr = '<w:rPr><go:redact w:label="client"/></w:rPr>'
+    const editor = createEditor(doc)
+    const before = editor.state.doc
+    const outcome = executeOps(editor, [{ op: 'findReplace', find: 'fee', replace: 'price' }])
+    expect(outcome.error).toMatch(/private placeholder/)
+    expect(editor.state.doc.eq(before)).toBe(true)
+  })
+
+  it('records replacements inside model-backed tables as native revision runs', () => {
+    const editor = createEditor(tableFixture())
+    const outcome = executeOps(editor, [{ op: 'findReplace', find: 'fee', replace: 'price' }], {
+      track: { author: 'Reviewer' },
+    })
+    expect(outcome.ok).toBe(true)
+    const model = editor.state.doc.child(1).firstChild!.firstChild!.child(1).attrs.model
+    const runs = model.rows[0][0].richParas[0].runs
+    expect(runs.find((r: { text: string }) => r.text === 'fee')).toMatchObject({
+      bold: true,
+      del: { author: 'Reviewer' },
+    })
+    expect(runs.find((r: { text: string }) => r.text === 'price')).toMatchObject({
+      bold: true,
+      ins: { author: 'Reviewer' },
+    })
+  })
+
   it('matchCase: sensitive by default, insensitive when false', () => {
     const editor = createEditor(fixtureDoc())
     const strict = executeOps(editor, [{ op: 'findReplace', find: 'sunspark', replace: 'X' }])

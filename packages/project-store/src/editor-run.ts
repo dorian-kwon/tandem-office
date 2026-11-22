@@ -39,3 +39,30 @@ export interface ProjectEditorBridge {
   onEditorRequest(listener: (message: EditorRequest) => void): () => void
   replyToEditorRequest(reply: EditorReply): void
 }
+
+/** Private main ↔ main-frame RPC. Tool calls have no provider credentials or transport. */
+export const EDITOR_TOOL_REQUEST = 'translation-project:editor-tool-request'
+export const EDITOR_TOOL_REPLY = 'translation-project:editor-tool-reply'
+
+import type { AgentToolCall, AgentToolDef, ToolExecution } from '@genoffice/agent-core'
+
+interface ToolRequestBase {
+  id: string
+  session: string
+  path: string
+}
+export type EditorToolRequest = ToolRequestBase &
+  (
+    | { kind: 'describe'; choices?: BatchTranslationChoices }
+    | { kind: 'execute'; call: AgentToolCall }
+    | { kind: 'cancel' | 'close' }
+  )
+export type EditorToolReply =
+  | { id: string; session: string; kind: 'described'; tools: AgentToolDef[]; systemPrompt: string }
+  | { id: string; session: string; kind: 'result'; execution: ToolExecution }
+  | { id: string; session: string; kind: 'error'; error: string }
+
+export interface ProjectEditorToolBridge {
+  onEditorToolRequest(listener: (request: EditorToolRequest) => void): () => void
+  replyToEditorToolRequest(reply: EditorToolReply): void
+}

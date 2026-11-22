@@ -128,8 +128,8 @@ describe('AI edit undo history in the Word editor', () => {
   it('wires the agent skill and the rollback button to the setting', () => {
     expect(src('../src/renderer/ai/docs-skill.ts')).toContain('withAiEdit(')
     const panel = src('../src/renderer/ai/AiPanel.tsx')
-    expect(panel).toContain(
-      'aiEditUndoHistoryEnabled() && snapshotBefore && !runSnapshotRef.current',
+    expect(panel).toMatch(
+      /call\.name !== UNDO_AI_TURN\s*&&\s*aiEditUndoHistoryEnabled\(\)\s*&&\s*snapshotBefore\s*&&\s*!runSnapshotRef\.current/,
     )
     expect(panel).toMatch(/captureSnapshot: \(\) =>\s*aiEditUndoHistoryEnabled\(\)/)
   })

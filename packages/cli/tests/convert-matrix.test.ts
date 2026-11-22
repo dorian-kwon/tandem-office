@@ -2,7 +2,13 @@ import { join } from 'node:path'
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { openEpub } from '@genoffice/epub-engine/core'
-import { openXmind, sheetsToOutline } from '@genoffice/xmind-engine'
+import {
+  createXmindDocumentFromSheets,
+  newSheet,
+  newTopic,
+  openXmind,
+  sheetsToOutline,
+} from '@genoffice/xmind-engine'
 import {
   CONVERSION_ROUTES,
   DIRECT_CONVERSION_ROUTES,
@@ -83,6 +89,28 @@ describe('editable document conversion routes', () => {
     if (opened.status !== 'ok') throw Error(opened.detail)
     expect(sheetsToOutline(opened.document.sheets)).toContain('Visit the sea.')
     expect(readdirSync(dir).some((name) => name.startsWith('.ieumoffice-convert-'))).toBe(false)
+  })
+
+  it('keeps a packaged XMind picture beside its topic in the editable HTML bridge', async () => {
+    const dir = tempDir()
+    const sheet = newSheet({ title: 'Field notes', rootTitle: 'Review' })
+    const pictured = newTopic('Scanned register')
+    pictured.image = { src: 'xap:resources/scan.png' }
+    sheet.rootTopic.children = { attached: [pictured, newTopic('Next topic')] }
+    const doc = await createXmindDocumentFromSheets([sheet])
+    const png = readFileSync(
+      new URL('../../pdf2docx/ocr-helper/fixtures/smoke-en.png', import.meta.url),
+    )
+    doc.addEntry('resources/scan.png', png)
+    const input = join(dir, 'notes.xmind')
+    const output = join(dir, 'notes.html')
+    writeFileSync(input, await doc.save())
+    const result = await run(['convert', input, '--to', 'html', '--out', output, '--json'])
+    expect(result.code, result.stdout).toBe(0)
+    const html = readFileSync(output, 'utf8')
+    expect(html).toContain('data:image/png;base64,' + png.toString('base64'))
+    expect(html.indexOf('Scanned register')).toBeLessThan(html.indexOf('<img'))
+    expect(html.indexOf('<img')).toBeLessThan(html.indexOf('Next topic'))
   })
 
   it('keeps leading zeros, delimiters and line breaks through CSV and TSV', async () => {

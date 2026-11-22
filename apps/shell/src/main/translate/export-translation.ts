@@ -66,9 +66,10 @@ async function outputNameOf(
   } else if (source.kind === 'editable') {
     // Legacy and tab-separated inputs are edited and saved as a separate XLSX.
     const workbookCopy = ['.xls', '.tsv'].includes(extname(source.file).toLowerCase())
-    name = workbookCopy
-      ? ((await latestResult(dir, source, targetLang)) ?? source.file)
-      : source.file
+    name =
+      workbookCopy || source.workingOutput?.targetLang === targetLang
+        ? ((await latestResult(dir, source, targetLang)) ?? source.file)
+        : source.file
   } else {
     name = await latestResult(dir, source, targetLang)
   }

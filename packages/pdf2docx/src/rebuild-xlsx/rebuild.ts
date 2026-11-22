@@ -294,7 +294,7 @@ function cellBorder(
 
 function emitTable(
   sheet: SheetBuilder,
-  styles: StylePool,
+  styles: Pick<StylePool, 'cellXf'>,
   block: TableBlock,
   dropHeaderRow = false,
   boundsOverride?: number[],
@@ -375,7 +375,7 @@ function emitTable(
 
 function emitCoveredCells(
   sheet: SheetBuilder,
-  styles: StylePool,
+  styles: Pick<StylePool, 'cellXf'>,
   row: number,
   colStart: number,
   count: number,
@@ -390,7 +390,11 @@ function emitCoveredCells(
   }
 }
 
-function emitTextRow(sheet: SheetBuilder, styles: StylePool, block: TextBlock): void {
+function emitTextRow(
+  sheet: SheetBuilder,
+  styles: Pick<StylePool, 'cellXf'>,
+  block: TextBlock,
+): void {
   const text = flattenBlockText(block)
   if (text.trim() === '') return
   const parsed = parseCellValue(text)
@@ -407,7 +411,7 @@ function emitTextRow(sheet: SheetBuilder, styles: StylePool, block: TextBlock): 
   sheet.row += 1
 }
 
-function emitGroup(groupPages: readonly IrPage[], styles: StylePool): SheetSpec {
+function emitGroup(groupPages: readonly IrPage[], styles: Pick<StylePool, 'cellXf'>): SheetSpec {
   const first = groupPages[0]!
   const last = groupPages[groupPages.length - 1]!
   const name =
@@ -560,6 +564,26 @@ function headerFooterOf(
   return {
     ...(oddHeader ? { oddHeader } : {}),
     ...(oddFooter ? { oddFooter } : {}),
+  }
+}
+
+/** One recognized scan as a spreadsheet grid, using the same slot, span and row logic as PDF export. */
+export function recognizedPageGrid(
+  page: IrPage,
+): SheetSpec & { styles: CellStyleSpec[]; hasArtwork: boolean } {
+  const pool = new StylePool()
+  const styles: CellStyleSpec[] = []
+  const sheet = emitGroup([page], {
+    cellXf(spec) {
+      const index = pool.cellXf(spec)
+      styles[index] = spec
+      return index
+    },
+  })
+  return {
+    ...normalizeSheetSpec(sheet).sheet,
+    styles,
+    hasArtwork: page.blocks.some((b) => b.kind === 'image'),
   }
 }
 

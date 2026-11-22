@@ -24,7 +24,7 @@ What to write:
 - One paragraph per bubble, box or text block, separated by one blank line, in reading order for the language (top to bottom; follow the language's direction inside a row). Join the lines of one bubble into one paragraph.
 - Lettering of sound effects only when it is clearly legible words; give it its own paragraph.
 - Do not write [FIGURE] lines. Do not write a placeholder for the artwork.
-- Emphasis: **bold** and *italic* only when clearly visible. Tables as an HTML table (<table>, <tr>, <th>, <td>) when the picture shows a real table.
+- Emphasis: **bold** and *italic* only when clearly visible. For a real table, use an HTML table (<table>, <tr>, <th>, <td>). Keep the cell order and empty cells, use rowspan and colspan for visibly merged cells and <br> for multiple lines in a cell. Keep surrounding captions and paragraphs in reading order.
 
 Answer format: a line ${AI_READ_OPEN_TAG}, then the transcription, then a line ${AI_READ_CLOSE_TAG}. Write nothing else.
 A picture with no legible text at all: write only ${AI_READ_EMPTY_PAGE} between the two lines.`

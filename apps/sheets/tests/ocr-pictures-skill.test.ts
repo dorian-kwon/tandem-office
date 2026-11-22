@@ -81,8 +81,8 @@ describe('ocr_pictures skill', () => {
     )
     expect(api).toHaveBeenCalledWith({ sessionId: 'session-1', action: 'open' })
     expect(result.isError).toBeFalsy()
-    expect(result.output).toMatch(/popup/i)
-    expect(result.output).toMatch(/confirm/i)
+    expect(result.output).toMatch(/pictures, formatting and destination/i)
+    expect(result.output).toMatch(/confirmed destination without asking again/i)
     expect(result.summary).toBe(zh.aiToolOcrPicturesOpened)
     // the status line shows "waiting for you" until the popup closes
     expect(result.awaitingUser).toBe(true)
@@ -198,9 +198,12 @@ describe('ocr_pictures prompt wording', () => {
 describe('ocr_pictures in-chat placement flow', () => {
   const prompt = String(createOcrPicturesSkill(() => 's').systemPrompt)
 
-  it('the popup is only for choosing pictures and the start confirmation, never for the destination', () => {
-    expect(prompt).toMatch(/do not ask where the text should go yet/i)
-    expect(prompt).not.toMatch(/the app will offer a destination/i)
+  it('separates formatting from destination in the picker and honors the confirmed cell', () => {
+    expect(prompt).toMatch(
+      /preserve layout or read plain text independently of the worksheet and cell destination/i,
+    )
+    expect(prompt).toMatch(/exact sheet and cell without asking again/i)
+    expect(prompt).toContain('merge_cells')
   })
 
   it('decides the placement in the chat with ask_choice, recommended first, reference-only last', () => {

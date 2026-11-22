@@ -107,6 +107,7 @@ async function render(
       ),
     )
   })
+  if (host.querySelector('[data-step="format"]')) await click(button('Preserve original layout'))
   if (!scopeOnly && host.querySelector('[data-step="scope"]')) await click(button('Choose items'))
 }
 
@@ -195,13 +196,16 @@ describe('OcrSelectDialog', () => {
   it('confirms all items before reading them and allows changing to a subset', async () => {
     await render({}, undefined, true)
     await click(button('Read all'))
+    await click(button('Next'))
     expect(host.textContent).toContain('Pages or files to read: 3')
     expect(ask).not.toHaveBeenCalled()
     expect(api.ocrStart).not.toHaveBeenCalled()
     await click(button('Back'))
+    await click(button('Back'))
     expect(host.querySelector('[data-step="scope"]')).not.toBeNull()
     await click(button('Choose items'))
     await click(boxes()[1]!)
+    await click(button('Next'))
     await click(button('Next'))
     await click(button('Start'))
     expect(api.ocrStart).toHaveBeenCalledWith({ token: 'tok', pages: [2] })
@@ -211,6 +215,7 @@ describe('OcrSelectDialog', () => {
   it('reads every listed item only after confirming the whole document', async () => {
     await render({}, undefined, true)
     await click(button('Read all'))
+    await click(button('Next'))
     await click(button('Start'))
     expect(api.ocrStart).toHaveBeenCalledWith({ token: 'tok', pages: [1, 2, 3] })
     expect(ask).toHaveBeenCalledTimes(3)
@@ -248,11 +253,14 @@ describe('OcrSelectDialog', () => {
     await click(boxes()[0]!)
     await click(boxes()[2]!)
     await click(button('Next'))
+    await click(button('Next'))
     expect(host.textContent).toContain('Pages or files to read: 2')
     expect(host.querySelector('[data-provider]')?.getAttribute('data-provider')).toBe('claude-code')
     expect(host.textContent).toContain('The chosen page images are sent to this AI.')
     await click(button('Back'))
+    await click(button('Back'))
     expect(boxes()).toHaveLength(3)
+    await click(button('Next'))
     await click(button('Next'))
     await click(button('Cancel'))
     expect(onClose).toHaveBeenCalled()
@@ -265,6 +273,7 @@ describe('OcrSelectDialog', () => {
     const onFinished = vi.fn()
     await render({ onFinished })
     await click(boxes()[1]!)
+    await click(button('Next'))
     await click(button('Next'))
     await click(button('Start'))
     await act(async () => {
@@ -281,6 +290,7 @@ describe('OcrSelectDialog', () => {
   it('Start stays disabled while the AI is not connected', async () => {
     await render({}, { 'claude-code': { state: 'signed-out' } as never })
     await click(button('Select all'))
+    await click(button('Next'))
     await click(button('Next'))
     expect(button('Start').disabled).toBe(true)
   })
@@ -300,6 +310,7 @@ describe('OcrSelectDialog', () => {
     )
     await click(button('Select all'))
     await click(button('Next'))
+    await click(button('Next'))
     expect(host.querySelector('[data-paid]')).not.toBeNull()
   })
 
@@ -310,6 +321,7 @@ describe('OcrSelectDialog', () => {
       aiSettings: { ...SETTINGS, subscriptionNoticeSeen: false, subscriptionNoticeVersion: 0 },
     })
     await click(button('Select all'))
+    await click(button('Next'))
     await click(button('Next'))
     expect(onNoticeNeeded).toHaveBeenCalled()
     expect(button('Start').disabled).toBe(true)
@@ -351,10 +363,10 @@ describe('OcrSelectDialog selectOnly (the popup overlay)', () => {
     }))
   })
 
-  it('says the destination is decided in the chat, not here', async () => {
+  it('introduces the destination choice before recognition', async () => {
     await render({ sources: [XLSX], selectOnly: true }, undefined, true)
     await click(button('Choose items'))
-    expect(host.textContent).toContain('decided with the AI in the chat')
+    expect(host.textContent).toContain('choose where to put the result before starting OCR')
   })
 
   it('hands the recognised text and the local recommendation back and never writes or places', async () => {
@@ -362,6 +374,7 @@ describe('OcrSelectDialog selectOnly (the popup overlay)', () => {
     const onFinished = vi.fn()
     await render({ sources: [XLSX], selectOnly: true, onRecognised, onFinished }, undefined, true)
     await click(button('Read all'))
+    await click(button('Next'))
     await click(button('Start'))
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0))
@@ -387,6 +400,7 @@ describe('OcrSelectDialog selectOnly (the popup overlay)', () => {
     const onClose = vi.fn()
     await render({ sources: [XLSX], selectOnly: true, onRecognised, onClose }, undefined, true)
     await click(button('Read all'))
+    await click(button('Next'))
     await click(button('Cancel'))
     expect(onClose).toHaveBeenCalled()
     expect(onRecognised).not.toHaveBeenCalled()

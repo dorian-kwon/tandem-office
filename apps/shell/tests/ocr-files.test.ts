@@ -46,6 +46,19 @@ function extracted(bytes: Uint8Array, pageIndex = 0) {
     }
   })
 }
+it('places the original scanned page before its editable text in below mode', async () => {
+  const out = join(dir, 'below.docx')
+  expect(
+    await convertOcrFile(sample, 'docx', out, m, recognize, undefined, false, 'below'),
+  ).toEqual([])
+  const xml = await (
+    await JSZip.loadAsync(await readFile(out))
+  )
+    .file('word/document.xml')!
+    .async('string')
+  expect(xml.indexOf('<w:drawing>')).toBeGreaterThan(0)
+  expect(xml.indexOf('Recognized office text')).toBeGreaterThan(xml.indexOf('<w:drawing>'))
+})
 it('keeps the scan image with a searchable text layer and emits editable Word text', async () => {
   const pdf = join(dir, 'scan.pdf'),
     word = join(dir, 'scan.docx')

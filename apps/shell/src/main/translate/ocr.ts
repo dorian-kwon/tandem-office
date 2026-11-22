@@ -251,6 +251,11 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
 
   /** what to place for each picture read: its text (or the text of its boxes) and where it stands */
   function placementItems(l: Lease, g: ReturnType<typeof gatherReadings>): OcrTextItem[] {
+    const forms = new Map(
+      g.readings
+        .filter((r) => r.payload.blocks.some((b) => b.kind === 'table'))
+        .map((r) => [r.page, r.payload]),
+    )
     const textOf = new Map(
       g.readings.map((r) => [
         r.page,
@@ -267,6 +272,7 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
       .map((index) => ({
         index,
         location: l.embedded![index - 1]!.location,
+        ...(forms.has(index) && { form: forms.get(index) }),
         part: l.embedded![index - 1]!.part,
         relId: l.embedded![index - 1]!.relId,
         text: g.boxReadings.get(index)?.text ?? (textOf.get(index) ?? '').trimEnd(),
@@ -501,9 +507,9 @@ export function createOcrService(deps: OcrServiceDeps, now: () => number, newTok
 
     async recommend(token: unknown, pages: unknown) {
       const l = lease(token)
-      if (l.kind !== 'embedded' || !l.selection) throw invalid('confirm the OCR selection first')
+      if (l.kind !== 'embedded') throw invalid('choose pictures from an editable document')
       const chosen = resolveOcrSelection({ kind: 'pages', pages }, l.count)
-      if (chosen.some((index) => !l.selection!.has(index)))
+      if (l.selection && chosen.some((index) => !l.selection!.has(index)))
         throw invalid('recommend only selected images')
       const path = await embeddedPath(l.dir, l.source!)
       if ((await verifySource(l.dir, l.source!)) !== 'ok')

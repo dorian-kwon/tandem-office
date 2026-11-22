@@ -7,10 +7,13 @@ import {
   newSheet,
   newTopic,
   openXmind,
-  sheetsToOutline,
+  sheetToOutline,
+  isRecord,
+  isResourceEntry,
 } from '@genoffice/xmind-engine'
 import { escapeText, xhtmlDocument, xmlClean } from '../../../pdf-structure/src/epub/xml'
 import { ensureDom } from '../dom'
+import { imageSize } from './image-size'
 import { bodyBlocks } from './conversion-html'
 import type { CommandContext } from '../registry'
 import { CliError, EXIT } from '../result'
@@ -132,14 +135,28 @@ export async function xmindOutlineHtml(bytes: Uint8Array) {
   const opened = await openXmind(bytes)
   if (opened.status !== 'ok')
     throw new CliError(EXIT.conversion, `XMind (${opened.status}): ${opened.detail}`)
-  return sheetsToOutline(opened.document.sheets)
-    .trimEnd()
-    .split('\n')
-    .map((line) => {
-      const indent = line.length - line.trimStart().length
-      return '<p>' + '&#160;'.repeat(indent) + escapeText(line.slice(indent)) + '</p>'
+  const parts: string[] = []
+  for (const sheet of opened.document.sheets) {
+    const pictures = new Map<number, string>()
+    const outline = sheetToOutline(sheet, {}, (line, topic) => {
+      if (!isRecord(topic.image) || typeof topic.image.src !== 'string') return
+      const src = topic.image.src
+      if (src.startsWith('xap:') && isResourceEntry(src.slice(4))) pictures.set(line, src.slice(4))
     })
-    .join('')
+    for (const [index, line] of outline.trimEnd().split('\n').entries()) {
+      const indent = line.length - line.trimStart().length
+      parts.push('<p>' + '&#160;'.repeat(indent) + escapeText(line.slice(indent)) + '</p>')
+      const entry = pictures.get(index)
+      if (!entry) continue
+      const bytes = await opened.document.readEntry(entry)
+      const info = bytes && imageSize(bytes)
+      if (bytes && info)
+        parts.push(
+          `<p><img alt="" src="data:${info.mime};base64,${Buffer.from(bytes).toString('base64')}"></p>`,
+        )
+    }
+  }
+  return parts.join('')
 }
 
 export async function bodyHtmlToXmind(html: string, title: string) {

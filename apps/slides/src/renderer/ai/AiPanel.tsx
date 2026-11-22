@@ -1732,7 +1732,9 @@ export function AiPanel({
           .map((a) => a.name),
     }
     accessRef.current = access
+    const documentSkill = createSlidesSkill(access)
     loopRef.current = new AgentLoop({
+      documentSkill,
       documentTranslation: {
         documentKey: () => savedPathRef.current,
         analyzingLabel: () => analyzingDocumentLabel[langRef.current],
@@ -1747,7 +1749,7 @@ export function AiPanel({
       // a local model that reported no tool support answers in text only
       toolsAllowed: () => localModelCapabilities(settingsRef.current).tools !== false,
       skill: composeWithDrive('slides+files', '', () => loopRef.current?.messages ?? [], [
-        createSlidesSkill(access),
+        documentSkill,
         createFilesSkill(availableAttachments, (path) => readAttachmentPathsRef.current.add(path)),
         // the person's skills: use_skill, read_skill_file, propose_skill (app-run tools)
         ...panelUserSkills({
@@ -2549,6 +2551,8 @@ export function AiPanel({
   }
 
   useProjectEditorRun({
+    documentEditor: 'slides',
+    documentLoop: () => loopRef.current,
     turn: runStatus.projectTurn,
     path: currentFilePath,
     ready: !projectPanel.chat.available || projectPanel.chat.ready,

@@ -1,6 +1,7 @@
 import { Extension, type Editor } from '@tiptap/core'
 import { closeHistory, isHistoryTransaction } from '@tiptap/pm/history'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
+import { SAVE_REBASE } from '../save-reload'
 import { aiEditUndoHistoryEnabled } from '@genoffice/ui'
 
 /** Only the synchronous dispatch of an AI command is scoped. Waiting for a tool must
@@ -65,38 +66,59 @@ export function aiEditor(editor: Editor, origin: AiOrigin = 'chat'): Editor {
   return facade
 }
 
-// A chat checkpoint can cross other edits from the chat, but never another writer or a reparse.
-const historyOrigin = new PluginKey<{ origin?: AiOrigin; checkpoint: object }>('aiHistoryOrigin')
+// Start the first mutation of a new chat turn in its own native event. Capturing
+// before a read must not insert an editor transaction or split ordinary typing.
+const pendingChatBoundary = new WeakSet<Editor>()
+export function markAiHistoryBoundary(editor: Editor): void {
+  pendingChatBoundary.add(originalAiEditor(editor))
+}
+
+// A chat checkpoint can cross other chat edits and save metadata, but never another writer.
+const historyOrigin = new PluginKey<{
+  origin?: AiOrigin
+  checkpoint: object
+  fileBaseline: object
+}>('aiHistoryOrigin')
 export const rollbackCheckpoint = (editor: Editor) =>
   historyOrigin.getState(editor.state)?.checkpoint
+
+export const rollbackFileBaseline = (editor: Editor) =>
+  historyOrigin.getState(editor.state)?.fileBaseline
 
 export const AiHistoryGateExtension = Extension.create({
   name: 'aiHistoryGate',
   addProseMirrorPlugins() {
+    const editor = this.editor
     return [
       new Plugin({
         key: historyOrigin,
         state: {
-          init: () => ({ checkpoint: {} }),
+          init: () => ({ checkpoint: {}, fileBaseline: {} }),
           apply(tr, previous) {
             if (!tr.docChanged) return previous
+            if (tr.getMeta(SAVE_REBASE)) return { ...previous, fileBaseline: {} }
             const origin: AiOrigin | undefined = tr.getMeta(historyOrigin)
             return {
               origin,
+              fileBaseline: previous.fileBaseline,
               checkpoint:
                 origin === 'chat' && aiEditUndoHistoryEnabled() ? previous.checkpoint : {},
             }
           },
         },
         filterTransaction(tr, state) {
-          if (!tr.docChanged) return true
+          if (!tr.docChanged || tr.getMeta(SAVE_REBASE)) return true
           const origin =
             tr.getMeta('uiEvent') === undefined && !isHistoryTransaction(tr)
               ? activeOrigin
               : undefined
           if (origin) tr.setMeta(historyOrigin, origin)
           // Otherwise adjacent AI and human insertions within the history delay undo together.
-          if (historyOrigin.getState(state)?.origin !== origin) closeHistory(tr)
+          if (
+            (origin === 'chat' && pendingChatBoundary.delete(editor)) ||
+            historyOrigin.getState(state)?.origin !== origin
+          )
+            closeHistory(tr)
           if (origin && !aiEditUndoHistoryEnabled() && tr.getMeta('addToHistory') === undefined) {
             tr.setMeta('addToHistory', false)
           }

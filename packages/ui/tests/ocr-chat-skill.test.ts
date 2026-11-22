@@ -108,7 +108,11 @@ describe('conversational document OCR', () => {
     await run.prepare()
     expect(skill.systemPrompt).toMatch(/inspect first.*then call choose in the same turn/is)
     expect(skill.systemPrompt).toMatch(/offers the whole document or a selection/i)
-    // after the popup only the placement is asked, as the numbered card
+    expect(skill.systemPrompt).toMatch(
+      /preserve formatting or read plain text independently of the output destination/i,
+    )
+    expect(skill.tools[0]!.description).toMatch(/only if a destination was not confirmed/i)
+    // Older results without a confirmed placement use the numbered card.
     expect(skill.systemPrompt).toMatch(/ask_choice.*ocrPlacement/s)
   })
 

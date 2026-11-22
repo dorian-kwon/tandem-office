@@ -12,6 +12,10 @@ export function allowAdHocDir(dir: string): void {
   dirs.add(key(dir))
 }
 
+export function forgetAdHocDir(dir: string): void {
+  dirs.delete(key(dir))
+}
+
 export function isAdHocDir(dir: unknown): boolean {
   return typeof dir === 'string' && dirs.has(key(dir))
 }

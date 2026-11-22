@@ -33,18 +33,16 @@ describe('batch conversation scope', () => {
     expect(batchChatTargets(text as string, files, current)).toEqual(expected)
   })
   it('preserves the previous target for a contextual follow-up and accepts localized target labels', () => {
-    expect(batchChatTargets('그렇게 해줘', files, current, undefined, [files[0]!])).toEqual([
-      files[0],
-    ])
-    expect(batchChatTargets('그렇게 해줘', files, current, undefined, ['old.docx'])).toBeNull()
+    expect(batchChatTargets('그렇게 해줘', files, current, [files[0]!])).toEqual([files[0]])
+    expect(batchChatTargets('그렇게 해줘', files, current, ['old.docx'])).toBeNull()
     expect(
-      batchChatTargets('Uprav všechny dokumenty', files, current, undefined, undefined, {
+      batchChatTargets('Uprav všechny dokumenty', files, current, undefined, {
         all: 'Všechny dokumenty',
         current: 'Aktuální dokument',
       }),
     ).toEqual(files)
     expect(
-      batchChatTargets('Tous les documents sauf le premier', files, current, undefined, undefined, {
+      batchChatTargets('Tous les documents sauf le premier', files, current, undefined, {
         all: 'Tous les documents',
         current: 'Document actuel',
       }),
@@ -56,11 +54,11 @@ describe('batch conversation scope', () => {
     expect(batchChatTargets('edit guide', names)).toBeNull()
     expect(batchChatTargets('edit north-guide.pdf', names)).toEqual(['north-guide.pdf'])
   })
-  it('routes a pinned conversation and an unambiguous one-file run, preserving specific overrides', () => {
-    expect(batchChatTargets('polish the title', files, current, files[0])).toEqual([files[0]])
-    expect(batchChatTargets('apply to all files', files, current, files[0])).toEqual(files)
+  it('asks for a target when several files match and routes an unambiguous one-file run', () => {
+    expect(batchChatTargets('polish the title', files, current)).toBeNull()
+    expect(batchChatTargets('apply to all files', files, current)).toEqual(files)
     expect(batchChatTargets('polish the title', [current])).toEqual([current])
     expect(batchChatTargets('just this file', files)).toBeNull()
-    expect(batchChatTargets('전체 문서 말고', files, current, files[0])).toBeNull()
+    expect(batchChatTargets('전체 문서 말고', files, current)).toBeNull()
   })
 })

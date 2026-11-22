@@ -1,3 +1,4 @@
+import type { AiReadPagePayload } from '../../../../../packages/pdf-structure/src/ai-read/content'
 import type JSZip from 'jszip'
 import { loadDocxZip } from '../../../../../packages/docx-engine/src/zip-load'
 import type { OcrPlacement } from '../../shared/translate-ocr'
@@ -5,6 +6,7 @@ import { TranslateIpcError } from '../../shared/translate-api'
 import { checkOcrBoxesPayload, type OcrBox } from '../../shared/ocr-boxes'
 import { buildImageBoxParagraphsXml, inspectBoxableImage, nextDocPrId } from './ocr-boxes-docx'
 import { placeInWordTable } from './ocr-word-tables'
+import { replaceWordPictures } from '../ocr-word-replace'
 import { wordPictureReferences } from './ocr-docx-pictures'
 
 /**
@@ -15,6 +17,7 @@ import { wordPictureReferences } from './ocr-docx-pictures'
 export interface OcrTextItem {
   index: number
   text: string
+  form?: AiReadPagePayload
   location?: string
   /** the package part and relationship id of an embedded picture */
   part?: string
@@ -41,7 +44,15 @@ export function locatePictures(xml: string): Map<string, number> {
   return found
 }
 
-const WORD_KINDS = ['docx-end', 'docx-after-images', 'docx-image-boxes', 'docx-table-cell']
+const WORD_KINDS = [
+  'docx-end',
+  'docx-after-images',
+  'docx-before-images',
+  'docx-next-page',
+  'docx-replace-images',
+  'docx-image-boxes',
+  'docx-table-cell',
+]
 
 /**
  * The Word placement the person chose, checked against the pictures that were read: a known kind,
@@ -71,6 +82,56 @@ export function checkWordPlacement(
   return { placement: p, boxesOf }
 }
 
+/** A page break belongs in the main page flow. For pictures in a text box or a
+ * nested table, move past its enclosing drawing paragraph/table before starting the page. */
+function insertAtPictureParagraphs(
+  xml: string,
+  positions: ReadonlyMap<number, string>,
+  kind: OcrPlacement['kind'],
+): string {
+  type Span = { start: number; end: number }
+  const stack: Span[] = []
+  const insertions: { span: Span; text: string }[] = []
+  let paragraph = 0
+  const tags =
+    /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<(\/?)w:(p|tbl)(?=[\s/>])(?:[^>"']|"[^"]*"|'[^']*')*>/g
+  for (const tag of xml.matchAll(tags)) {
+    if (!tag[2]) continue
+    const end = tag.index + tag[0].length
+    if (tag[1]) {
+      const span = stack.pop()
+      if (span) span.end = end
+      continue
+    }
+    const span = { start: tag.index, end }
+    if (tag[2] === 'p') {
+      const text = positions.get(++paragraph)
+      if (text !== undefined)
+        insertions.push({ text, span: kind === 'docx-next-page' ? (stack[0] ?? span) : span })
+    }
+    if (!tag[0].endsWith('/>')) stack.push(span)
+  }
+  if (insertions.length !== positions.size) invalid('the destination paragraph is missing')
+  const byOffset = new Map<number, string[]>()
+  for (const entry of insertions) {
+    const at = kind === 'docx-before-images' ? entry.span.start : entry.span.end
+    const group = byOffset.get(at) ?? []
+    group.push(entry.text)
+    byOffset.set(at, group)
+  }
+  const chunks: string[] = []
+  let cursor = 0
+  for (const [at, group] of [...byOffset].sort(([a], [b]) => a - b)) {
+    chunks.push(xml.slice(cursor, at))
+    if (kind === 'docx-next-page') chunks.push('<w:p><w:r><w:br w:type="page"/></w:r></w:p>')
+    chunks.push(...group)
+    if (group.at(-1)?.endsWith('</w:tbl>') && /^\s*<\/w:tc>/.test(xml.slice(at)))
+      chunks.push('<w:p/>')
+    cursor = at
+  }
+  return chunks.join('') + xml.slice(cursor)
+}
+
 /** Apply only the placement the person selected, preserving the source package and media. */
 async function placeInZip(zip: JSZip, items: OcrTextItem[], choice: unknown): Promise<void> {
   const { placement: p, boxesOf } = checkWordPlacement(items, choice)
@@ -82,8 +143,56 @@ async function placeInZip(zip: JSZip, items: OcrTextItem[], choice: unknown): Pr
           `<w:p>${pPr}<w:r>${rPr}<w:t xml:space="preserve">${escape(line)}</w:t></w:r></w:p>`,
       )
       .join('')
+  const content = async (item: OcrTextItem) => {
+    if (item.form) {
+      const { ocrWordFormXml } = await import('./ocr-word-form')
+      const blocks = ocrWordFormXml(item.form, paragraph)
+      if (blocks) return blocks
+    }
+    return paragraph(item.text)
+  }
+  if (p.kind === 'docx-replace-images') {
+    const byPart = new Map<string, Map<string, OcrTextItem>>()
+    for (const item of items) {
+      const at = item.location?.match(/ · ¶(\d+)$/)?.[1]
+      if (!item.part || !item.relId || !at) invalid('the destination picture is missing')
+      const entries = byPart.get(item.part) ?? new Map<string, OcrTextItem>()
+      entries.set(at + ':' + item.relId, item)
+      byPart.set(item.part, entries)
+    }
+    for (const [part, entries] of byPart) {
+      const xml = await zip.file(part)?.async('string')
+      if (!xml) invalid('the destination part is missing')
+      const targets = new Map<number, string>()
+      for (const ref of wordPictureReferences(xml)) {
+        const key = ref.paragraph + ':' + ref.relId
+        if (entries.has(key)) targets.set(ref.offset, key)
+      }
+      const replaced = new Set<string>()
+      const next = await replaceWordPictures(
+        xml,
+        targets,
+        async (key) => {
+          const item = entries.get(key)!
+          if (!item.text.trim()) return null
+          replaced.add(key)
+          return content(item)
+        },
+        () => false,
+      )
+      if (replaced.size !== entries.size)
+        invalid('One or more pictures could not be replaced. Choose a different placement.')
+      zip.file(part, next)
+    }
+    return
+  }
   const additions = new Map<string, Map<number, string>>()
-  if (p.kind === 'docx-after-images' || p.kind === 'docx-image-boxes') {
+  if (
+    p.kind === 'docx-after-images' ||
+    p.kind === 'docx-before-images' ||
+    p.kind === 'docx-next-page' ||
+    p.kind === 'docx-image-boxes'
+  ) {
     const documentPart = 'word/document.xml'
     const documentSource = await zip.file(documentPart)?.async('string')
     const stylesSource = await zip.file('word/styles.xml')?.async('string')
@@ -94,6 +203,10 @@ async function placeInZip(zip: JSZip, items: OcrTextItem[], choice: unknown): Pr
       )
       if (!at) invalid('the image paragraph is not available')
       const part = 'word/' + at![1]
+      if (item.part && item.part !== part)
+        invalid('the source picture and its destination part differ')
+      if (p.kind === 'docx-next-page' && part !== documentPart)
+        invalid('a next-page destination requires a picture in the document body')
       const positions = additions.get(part) ?? new Map<number, string>()
       const index = Number(at![2])
       // boxes only where this picture can take them; every other picture keeps its text paragraph
@@ -106,7 +219,7 @@ async function placeInZip(zip: JSZip, items: OcrTextItem[], choice: unknown): Pr
       if (boxes && info?.ok) {
         insertion = buildImageBoxParagraphsXml(boxes, info, docPrId)
         docPrId += boxes.length
-      } else insertion = paragraph(item.text)
+      } else insertion = p.kind === 'docx-image-boxes' ? paragraph(item.text) : await content(item)
       positions.set(index, (positions.get(index) ?? '') + insertion)
       additions.set(part, positions)
     }
@@ -114,30 +227,22 @@ async function placeInZip(zip: JSZip, items: OcrTextItem[], choice: unknown): Pr
       const file = zip.file(part)
       if (!file) invalid('the destination part is missing')
       const xml = await file!.async('string')
-      let count = 0
-      const stack: number[] = []
-      const insertions: { end: number; text: string }[] = []
-      for (const tag of xml.matchAll(/<\/?w:p\b[^>]*>/g)) {
-        if (tag[0].startsWith('</')) {
-          const number = stack.pop()
-          if (number && positions.has(number)) {
-            insertions.push({ end: tag.index! + tag[0].length, text: positions.get(number)! })
-            positions.delete(number)
-          }
-        } else {
-          const number = ++count
-          if (tag[0].endsWith('/>')) {
-            if (positions.has(number)) {
-              insertions.push({ end: tag.index! + tag[0].length, text: positions.get(number)! })
-              positions.delete(number)
-            }
-          } else stack.push(number)
+      if (p.kind === 'docx-before-images' || p.kind === 'docx-next-page') {
+        const refs = new Map<number, Set<string>>()
+        for (const { paragraph, relId } of wordPictureReferences(xml)) {
+          const relations = refs.get(paragraph) ?? new Set<string>()
+          relations.add(relId)
+          refs.set(paragraph, relations)
+        }
+        for (const item of items) {
+          const [sourcePart, ordinal] = item.location!.split(' · ¶')
+          if (part !== 'word/' + sourcePart) continue
+          const relations = refs.get(Number(ordinal))
+          if (!relations?.size || (item.relId && !relations.has(item.relId)))
+            invalid('the source picture is missing from its paragraph')
         }
       }
-      if (positions.size) invalid('the destination paragraph is missing')
-      let out = xml
-      for (const i of insertions.sort((a, b) => b.end - a.end))
-        out = out.slice(0, i.end) + i.text + out.slice(i.end)
+      const out = insertAtPictureParagraphs(xml, positions, p.kind)
       zip.file(part, out)
     }
   } else if (p.kind === 'docx-table-cell') {
@@ -211,7 +316,7 @@ export async function placeOcrIntoOpenDocx(
       skipped: [],
     }
   }
-  const located = new Map<string, Map<string, number>>()
+  const located = new Map<string, Map<string, Set<number>>>()
   const found: OcrTextItem[] = []
   const skipped: number[] = []
   for (const item of items) {
@@ -219,9 +324,19 @@ export async function placeOcrIntoOpenDocx(
     if (item.part && item.relId) {
       if (!located.has(item.part)) {
         const xml = await zip.file(item.part)?.async('string')
-        located.set(item.part, xml ? locatePictures(xml) : new Map())
+        const coordinates = new Map<string, Set<number>>()
+        if (xml)
+          for (const ref of wordPictureReferences(xml)) {
+            const positions = coordinates.get(ref.relId) ?? new Set<number>()
+            positions.add(ref.paragraph)
+            coordinates.set(ref.relId, positions)
+          }
+        located.set(item.part, coordinates)
       }
-      at = located.get(item.part)!.get(item.relId)
+      const candidates = located.get(item.part)!.get(item.relId)
+      const listed = Number(item.location?.match(/ · ¶(\d+)$/)?.[1])
+      if (candidates?.has(listed)) at = listed
+      else if (candidates?.size === 1) at = candidates.values().next().value
     }
     if (at === undefined) skipped.push(item.index)
     else found.push({ ...item, location: `${item.part!.replace(/^word\//, '')} · ¶${at}` })
