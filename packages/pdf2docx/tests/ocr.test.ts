@@ -160,6 +160,32 @@ describe('tryOcrScannedPage gates', () => {
     expect(tryOcrScannedPage(scannedExtractedPage(), engine)).toBeNull()
   })
 
+  it('keeps an existing searchable text layer once and restores the picture underneath it', () => {
+    const rgba = new Uint8Array(100 * 100 * 4).fill(255)
+    for (let y = 50; y < 70; y++)
+      for (let x = 40; x < 67; x++) rgba.set([80, 97, 167, 255], (y * 100 + x) * 4)
+    const raw = scannedExtractedPage({
+      widthPt: 100,
+      heightPt: 100,
+      scanned: false,
+      ocrTextRecovered: true,
+      chars: ocrLinesToChars([LATIN_LINE], 100, 100),
+    })
+    const result = tryOcrScannedPage(raw, () => ({ lines: [LATIN_LINE] }), {
+      rgba,
+      width: 100,
+      height: 100,
+      data: new Uint8Array([1]),
+    })
+    const blocks = result!.page.blocks
+    const text = blocks
+      .filter((b) => b.kind === 'text')
+      .flatMap((b) => b.lines.flatMap((l) => l.spans.map((s) => s.text)))
+      .join('')
+    expect(text).toBe(LATIN_LINE.text)
+    expect(blocks.filter((b) => b.kind === 'image')).toHaveLength(1)
+  })
+
   it('requires a page render', () => {
     const engine: OcrEngine = () => ({ lines: [CJK_LINE, LATIN_LINE], paperShare: 0.95 })
     expect(tryOcrScannedPage(scannedExtractedPage({ render: undefined }), engine)).toBeNull()

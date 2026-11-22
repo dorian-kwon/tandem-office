@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FileConversionInput, FileConversionResult } from '../../shared/file-conversion'
 import { translateText } from './i18n/strings-translate'
 import { fileConversionText } from './i18n/strings-file-conversion'
 import { useI18n } from './locale'
+import { OcrPageRange } from './OcrPageRange'
 import './file-conversion.css'
 
 function commonTargets(files: FileConversionInput[]): string[] {
@@ -11,10 +12,47 @@ function commonTargets(files: FileConversionInput[]): string[] {
   )
 }
 
-export function FileConversionPanel({ visible }: { visible: boolean }) {
+export function FileConversionPanel({
+  visible,
+  mode = 'convert',
+}: {
+  visible: boolean
+  mode?: 'ocr' | 'convert'
+}) {
   const { lang } = useI18n()
+  const ocr = mode === 'ocr'
+  const prefix = ocr ? 'ocr-files' : 'file-conversion'
+  const api = ocr ? window.ocrFilesApi : window.fileConversionApi
+  function errorDetail(message?: string) {
+    if (message === 'OCR_PAGE_RANGE') return fileConversionText(lang, 'ocrRangeInvalid')
+    if (message === 'OCR_NO_TEXT') return fileConversionText(lang, 'ocrNoText')
+    if (message === 'OCR_LANGUAGE_UNAVAILABLE')
+      return fileConversionText(lang, 'ocrLanguageUnavailable')
+    if (message === 'OCR_UNAVAILABLE') return fileConversionText(lang, 'ocrUnavailable')
+    if (message?.startsWith('OCR_')) return fileConversionText(lang, 'convertFailed')
+    return message
+  }
   const [files, setFiles] = useState<FileConversionInput[]>([])
   const [target, setTarget] = useState('')
+  const [language, setLanguage] = useState('')
+  const [installedLanguages, setInstalledLanguages] = useState<string[]>([])
+  const [pageRange, setPageRange] = useState('')
+  useEffect(() => {
+    if (!ocr || !visible) return
+    let active = true
+    window.ocrFilesApi
+      .languages()
+      .then((tags) => {
+        if (active) setInstalledLanguages(tags)
+      })
+      .catch(() => {
+        if (active) setInstalledLanguages([])
+      })
+    return () => {
+      active = false
+    }
+  }, [ocr, visible])
+  const languageNames = ocr && visible ? new Intl.DisplayNames(lang, { type: 'language' }) : null
   const [results, setResults] = useState<Record<string, FileConversionResult>>({})
   const [activity, setActivity] = useState<'pick' | 'run' | null>(null)
   const [error, setError] = useState<'chooseFailed' | 'convertFailed' | null>(null)
@@ -37,13 +75,12 @@ export function FileConversionPanel({ visible }: { visible: boolean }) {
     )
   }
 
-  async function pickFiles() {
-    const api = window.fileConversionApi
+  async function pickFiles(dropped?: File[]) {
     if (!api || busy) return
     setActivity('pick')
     setError(null)
     try {
-      const picked = await api.pick()
+      const picked = dropped ? await window.ocrFilesApi.drop(dropped) : await api.pick()
       if (picked.length > 0) {
         const knownIds = new Set(files.map((file) => file.id))
         changeFiles([...files, ...picked.filter((file) => !knownIds.has(file.id))])
@@ -56,7 +93,6 @@ export function FileConversionPanel({ visible }: { visible: boolean }) {
   }
 
   async function convert() {
-    const api = window.fileConversionApi
     if (!api || busy || !target || !pending.length) return
     const ids = pending.map((file) => file.id)
     setActivity('run')
@@ -65,7 +101,12 @@ export function FileConversionPanel({ visible }: { visible: boolean }) {
       setResults((previous) => ({ ...previous, [result.id]: result }))
     })
     try {
-      const completed = await api.run(ids, target)
+      const completed = ocr
+        ? await window.ocrFilesApi.run(ids, target, {
+            language: language || undefined,
+            pageRange: pageRange || undefined,
+          })
+        : await api.run(ids, target)
       setResults((previous) => ({
         ...previous,
         ...Object.fromEntries(completed.map((result) => [result.id, result])),
@@ -81,12 +122,31 @@ export function FileConversionPanel({ visible }: { visible: boolean }) {
   if (!visible) return null
 
   return (
-    <main className="content" data-testid="file-conversion-panel">
-      <section className="file-conversion-pane" aria-labelledby="file-conversion-title">
+    <main
+      className="content"
+      data-testid={`${prefix}-panel`}
+      onDragOver={
+        ocr
+          ? (event) => {
+              if (event.dataTransfer.types.includes('Files')) event.preventDefault()
+            }
+          : undefined
+      }
+      onDrop={
+        ocr
+          ? (event) => {
+              if (!event.dataTransfer.types.includes('Files')) return
+              event.preventDefault()
+              void pickFiles(Array.from(event.dataTransfer.files))
+            }
+          : undefined
+      }
+    >
+      <section className="file-conversion-pane" aria-labelledby={`${prefix}-title`}>
         <header className="translate-head">
           <div className="translate-head-text">
-            <h2 id="file-conversion-title" className="translate-title">
-              {fileConversionText(lang, 'title')}
+            <h2 id={`${prefix}-title`} className="translate-title">
+              {fileConversionText(lang, ocr ? 'ocrTitle' : 'title')}
             </h2>
             <p className="translate-lede">{fileConversionText(lang, 'destinationHint')}</p>
           </div>
@@ -96,8 +156,8 @@ export function FileConversionPanel({ visible }: { visible: boolean }) {
             type="button"
             className="projects-ghost"
             disabled={busy}
-            onClick={pickFiles}
-            data-testid="file-conversion-pick"
+            onClick={() => void pickFiles()}
+            data-testid={`${prefix}-pick`}
           >
             {files.length
               ? translateText(lang, 'addFiles')
@@ -109,7 +169,7 @@ export function FileConversionPanel({ visible }: { visible: boolean }) {
             {files.map((file) => {
               const result = results[file.id]
               return (
-                <li key={file.id} className="projects-row" data-testid="file-conversion-file">
+                <li key={file.id} className="projects-row" data-testid={`${prefix}-file`}>
                   <div className="file-conversion-file">
                     <span className="file-conversion-name" title={file.displayPath}>
                       {file.name}
@@ -121,7 +181,7 @@ export function FileConversionPanel({ visible }: { visible: boolean }) {
                       >
                         {result.outputPath
                           ? fileConversionText(lang, 'saved') + ' · ' + result.outputPath
-                          : [fileConversionText(lang, 'failed'), result.error]
+                          : [fileConversionText(lang, 'failed'), errorDetail(result.error)]
                               .filter(Boolean)
                               .join(' · ')}
                       </span>
@@ -162,13 +222,55 @@ export function FileConversionPanel({ visible }: { visible: boolean }) {
           </p>
         )}
         <div className="projects-buttons file-conversion-actions">
+          {ocr && (
+            <>
+              <label className="projects-field">
+                <span className="projects-field-label">
+                  {fileConversionText(lang, 'ocrLanguage')}
+                </span>
+                <select
+                  className="translate-select"
+                  disabled={busy}
+                  data-testid="ocr-files-language"
+                  value={language}
+                  onChange={(event) => {
+                    setLanguage(event.target.value)
+                    setResults({})
+                    setError(null)
+                  }}
+                >
+                  <option value="">{fileConversionText(lang, 'ocrLanguageDefault')}</option>
+                  {installedLanguages.map((tag) => (
+                    <option key={tag} value={tag}>
+                      {languageNames?.of(tag) ?? tag}
+                    </option>
+                  ))}
+                  {language && !installedLanguages.includes(language) && (
+                    <option value={language} disabled>
+                      {languageNames?.of(language) ?? language}
+                    </option>
+                  )}
+                </select>
+              </label>
+              <OcrPageRange
+                value={pageRange}
+                onChange={(value) => {
+                  setPageRange(value)
+                  setResults({})
+                  setError(null)
+                }}
+                disabled={busy}
+                lang={lang}
+              />
+            </>
+          )}
           <label className="projects-field">
             <span className="projects-field-label">{fileConversionText(lang, 'outputFormat')}</span>
             <select
               className="translate-select"
               value={target}
               disabled={busy || !targets.length}
-              data-testid="file-conversion-target"
+              data-testid={`${prefix}-target`}
               onChange={(event) => {
                 setTarget(event.target.value)
                 setResults({})
@@ -178,7 +280,9 @@ export function FileConversionPanel({ visible }: { visible: boolean }) {
               {targets.length ? (
                 targets.map((format) => (
                   <option key={format} value={format}>
-                    {format.toUpperCase()}
+                    {ocr
+                      ? fileConversionText(lang, format === 'pdf' ? 'ocrPdf' : 'ocrWord')
+                      : format.toUpperCase()}
                   </option>
                 ))
               ) : (
@@ -191,9 +295,18 @@ export function FileConversionPanel({ visible }: { visible: boolean }) {
             className="projects-primary"
             disabled={busy || !target || !pending.length}
             onClick={convert}
-            data-testid="file-conversion-run"
+            data-testid={`${prefix}-run`}
           >
-            {fileConversionText(lang, activity === 'run' ? 'converting' : 'convert')}
+            {fileConversionText(
+              lang,
+              activity === 'run'
+                ? ocr
+                  ? 'ocrRunning'
+                  : 'converting'
+                : ocr
+                  ? 'ocrBatch'
+                  : 'convert',
+            )}
           </button>
         </div>
       </section>

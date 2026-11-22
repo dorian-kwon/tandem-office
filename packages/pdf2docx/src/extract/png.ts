@@ -7,7 +7,7 @@
  * RGBA stream is a few KB; office containers store media parts as-is, so
  * the PNG has to be small on its own.
  */
-import { deflateSync } from 'node:zlib'
+import { deflateSync, inflateSync } from 'node:zlib'
 
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256)
@@ -208,4 +208,50 @@ export function encodeRgbaPng(rgba: Uint8Array, width: number, height: number): 
     pos += p.length
   }
   return out
+}
+
+/** Recompress the PNG's filtered scanlines without decoding or changing them.
+ * Color profiles, palettes, alpha, resolution and other ancillary chunks stay
+ * byte-for-byte intact. Unsupported or damaged PNGs are left untouched. */
+export function recompressPng(png: Buffer, maxInflatedBytes: number): Buffer | null {
+  if (png.length < 57 || !png.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])))
+    return null
+  const payloads: Buffer[] = []
+  let first = -1,
+    after = -1,
+    ended = false
+  for (let offset = 8; offset + 12 <= png.length;) {
+    const size = png.readUInt32BE(offset)
+    const end = offset + 12 + size
+    if (end > png.length) return null
+    const type = png.toString('latin1', offset + 4, offset + 8)
+    if (
+      (offset === 8 && (type !== 'IHDR' || size !== 13)) ||
+      type === 'acTL' ||
+      crc32(png, offset + 4, end - 4) !== png.readUInt32BE(end - 4)
+    )
+      return null
+    if (type === 'IDAT') {
+      if (first !== -1 && after !== offset) return null
+      if (first === -1) first = offset
+      after = end
+      payloads.push(png.subarray(offset + 8, end - 4))
+    }
+    if (type === 'IEND') {
+      ended = size === 0 && end === png.length
+      break
+    }
+    offset = end
+  }
+  if (!ended || first < 0) return null
+  try {
+    const raw = inflateSync(payloads.length === 1 ? payloads[0]! : Buffer.concat(payloads), {
+      maxOutputLength: maxInflatedBytes,
+    })
+    const packed = deflateSync(raw, { level: 9 })
+    if (packed.length + 12 >= after - first) return null
+    return Buffer.concat([png.subarray(0, first), chunk('IDAT', packed), png.subarray(after)])
+  } catch {
+    return null
+  }
 }

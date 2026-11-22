@@ -21,6 +21,7 @@ import {
 import { useI18n } from '../locale'
 import { kbAskProjectText } from '../kb-ask-project-strings'
 import type { SubscriptionConnection } from '../subscription-client'
+import { isWikiEditingRequest, wikiChatLabels } from '../../../shared/wiki-chat'
 import { makeText } from './shared'
 import { pdfJobRoute, pdfRouteRefusal, type PdfJobRoute } from './pdf-route'
 import { translationProjectSkill, type ProjectAssistantActions } from './project-assistant-skill'
@@ -43,6 +44,8 @@ export function ProjectAssistant(props: ProjectAssistantProps) {
   const [draft, setDraft] = useState('')
   const [messages, setMessages] = useState<Message[]>([])
   const [busy, setBusy] = useState(false)
+  const [askWiki, setAskWiki] = useState(false)
+  const wikiForTurn = useRef<boolean | undefined>(undefined)
   const [waiting, setWaiting] = useState(false)
   const [showConnection, setShowConnection] = useState(false)
   const loop = useRef<AgentLoop | null>(null)
@@ -59,6 +62,7 @@ export function ProjectAssistant(props: ProjectAssistantProps) {
     }
     function finish() {
       pinned.current = null
+      wikiForTurn.current = undefined
       if (mounted) setBusy(false)
     }
     const actions = () => latest.current.props.actions
@@ -66,6 +70,7 @@ export function ProjectAssistant(props: ProjectAssistantProps) {
       api: actions().api,
       dir: actions().dir,
       project: () => actions().project(),
+      useWiki: () => wikiForTurn.current,
       open: (file) => actions().open(file),
       refresh: () => actions().refresh(),
       wiki: () => actions().wiki(),
@@ -120,7 +125,7 @@ export function ProjectAssistant(props: ProjectAssistantProps) {
     if (expanded && thread.current) thread.current.scrollTop = thread.current.scrollHeight
   }, [expanded, messages])
 
-  async function send() {
+  async function send(useWiki?: boolean) {
     const instruction = draft.trim()
     const agent = loop.current
     if (!instruction || pinned.current || !agent) return
@@ -133,6 +138,14 @@ export function ProjectAssistant(props: ProjectAssistantProps) {
       }
       return
     }
+    const project = props.actions.project()
+    const canUse = project.useWiki !== false && isWikiEditingRequest(instruction)
+    if (canUse && useWiki === undefined) {
+      setAskWiki(true)
+      return
+    }
+    wikiForTurn.current = canUse && useWiki === true
+    setAskWiki(false)
     setWaiting(false)
     setShowConnection(false)
     setBusy(true)
@@ -148,6 +161,7 @@ export function ProjectAssistant(props: ProjectAssistantProps) {
     } catch (error) {
       if (loop.current === agent) {
         pinned.current = null
+        wikiForTurn.current = undefined
         setBusy(false)
         setMessages((prev) => [
           ...prev.slice(0, -1),
@@ -206,6 +220,17 @@ export function ProjectAssistant(props: ProjectAssistantProps) {
             </div>
           ))}
         </div>
+        {askWiki && (
+          <div className="projects-note" role="group" aria-label={wikiChatLabels[lang][0]}>
+            <span>{wikiChatLabels[lang][0]}</span>
+            <button type="button" className="projects-primary" onClick={() => void send(true)}>
+              {wikiChatLabels[lang][1]}
+            </button>
+            <button type="button" className="projects-ghost" onClick={() => void send(false)}>
+              {wikiChatLabels[lang][2]}
+            </button>
+          </div>
+        )}
         {waiting && (
           <p role="status" className="projects-hint">
             {makeText(lang)('trChecking')}
@@ -244,7 +269,10 @@ export function ProjectAssistant(props: ProjectAssistantProps) {
           sendIconEnabled={<img src={sendEnterOn} alt="" aria-hidden />}
           sendIconDisabled={<img src={sendEnterOff} alt="" aria-hidden />}
           stopIcon={<img src={sendStop} alt="" aria-hidden />}
-          onChange={setDraft}
+          onChange={(value) => {
+            setAskWiki(false)
+            setDraft(value)
+          }}
           onSend={() => void send()}
           onStop={() => loop.current?.cancel()}
         />

@@ -10,7 +10,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   addGlossary,
   addReference,
@@ -337,6 +337,63 @@ describe('reference chunks', () => {
     expect(built.referencesText.length).toBeLessThanOrEqual(DEFAULT_REFERENCE_CHARS + 200)
     expect(built.text).not.toContain('liability clause')
     expect(built.materialText).toContain('- law.md')
+  })
+
+  it('excludes both names and text of wiki notes when the project or this request opts out', async () => {
+    await addTextReference('sample.md', '# Example\n\nprivate example')
+    await addTextReference('guide.md', '# Style\n\nordinary reference')
+    await addGlossaryRows([
+      ['source', 'target'],
+      ['town', '도시'],
+    ])
+    const project = { ...(await loadProject(dir)), wikiReferences: ['sample.md'] }
+    await saveProject(dir, project)
+    const read = (useWiki?: boolean) =>
+      buildTranslationInstructions(dir, 'translate', { settingsPath, useWiki })
+    expect((await read()).referencesText).toContain('private example')
+    const declined = await read(false)
+    await saveProject(dir, { ...project, useWiki: false })
+    for (const result of [declined, await read(), await read(true)]) {
+      expect(result.referencesText).toContain('ordinary reference')
+      expect(result.referencesText).not.toContain('private example')
+      expect(result.materialText).not.toContain('sample.md')
+      expect(result.materialText).toContain('town → 도시')
+    }
+    expect((await loadProject(dir)).wikiReferences).toEqual(['sample.md'])
+  })
+
+  it('asks only when the current project has enabled wiki references and respects a one-turn refusal', async () => {
+    const confirmWiki = vi.fn().mockResolvedValue(false)
+    await addTextReference('example.md', '# Notes\n\nselected wiki content')
+    const project = await loadProject(dir)
+    const read = () => buildTranslationInstructions(dir, 'translate', { settingsPath, confirmWiki })
+    await read()
+    expect(confirmWiki).not.toHaveBeenCalled()
+    await saveProject(dir, { ...project, wikiReferences: ['example.md'], useWiki: false })
+    await read()
+    expect(confirmWiki).not.toHaveBeenCalled()
+    await saveProject(dir, { ...project, wikiReferences: ['example.md'] })
+    expect((await read()).referencesText).not.toContain('selected wiki content')
+    confirmWiki.mockResolvedValue(true)
+    expect((await read()).referencesText).toContain('selected wiki content')
+    expect(confirmWiki).toHaveBeenCalledTimes(2)
+  })
+
+  it('gates shared vault lookup even in projects with no individually selected notes', async () => {
+    const hasWikiCategories = vi.fn().mockResolvedValue(true)
+    const confirmWiki = vi.fn().mockResolvedValue(true)
+    const options = { settingsPath, hasWikiCategories, confirmWiki }
+    expect((await buildTranslationInstructions(dir, '', options)).wikiLookupAvailable).toBe(true)
+    confirmWiki.mockResolvedValue(false)
+    expect(
+      (await buildTranslationInstructions(dir, '', options)).wikiLookupAvailable,
+    ).toBeUndefined()
+    await saveProject(dir, { ...(await loadProject(dir)), useWiki: false })
+    expect(
+      (await buildTranslationInstructions(dir, '', options)).wikiLookupAvailable,
+    ).toBeUndefined()
+    expect(confirmWiki).toHaveBeenCalledTimes(2)
+    expect(hasWikiCategories).toHaveBeenCalledTimes(2)
   })
 
   it('sends a small corpus whole, whatever the request', async () => {

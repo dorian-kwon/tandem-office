@@ -307,6 +307,51 @@ describe('readContext request text', () => {
   })
 })
 
+it('uses the user instruction alone to decide wiki use when a selection accompanies the request', async () => {
+  const wikiForChat = vi.fn().mockResolvedValue(false)
+  const t = setup({ wikiForChat })
+  await t.call('readContext', DOCS, {
+    projectId: 'p1',
+    query: 'Open this file\ntranslate this',
+    instruction: 'Open this file',
+  })
+  const options = t.guide.readContext.mock.lastCall?.[1] as { confirmWiki: () => Promise<boolean> }
+  expect(await options.confirmWiki()).toBe(false)
+  expect(wikiForChat).toHaveBeenCalledWith(DOCS, 'Open this file')
+})
+
+it('allows shared wiki lookup and page reads only in the approved run', async () => {
+  const lookupWikiCategories = vi.fn(async () => ({ text: 'an example' }))
+  const t = setup({ lookupWikiCategories })
+  const args = { scope: 'scope-of-' + DOCS, categories: { industry: '관광' } }
+  await expect(t.call('lookupTranslationExamples', DOCS, args)).rejects.toThrow()
+  t.guide.readContext.mockResolvedValueOnce({
+    status: 'ok',
+    context: { translation: { wikiLookupAvailable: true } },
+  } as never)
+  const read = (await t.call('readContext', DOCS, { projectId: 'p1' })) as {
+    context: { translation: { wikiLookupTicket: string } }
+  }
+  await t.call('openScope', DOCS, {
+    projectId: 'p1',
+    wikiLookupTicket: read.context.translation.wikiLookupTicket,
+  })
+  await expect(t.call('lookupTranslationExamples', SHEETS, args)).rejects.toThrow()
+  await expect(
+    t.call('lookupTranslationExamples', DOCS, { ...args, categories: { other: 'bad' } }),
+  ).rejects.toThrow()
+  expect(await t.call('lookupTranslationExamples', DOCS, args)).toEqual({ text: 'an example' })
+  await t.call('lookupTranslationExamples', DOCS, { ...args, categories: {}, path: 'index.md' })
+  expect(lookupWikiCategories).toHaveBeenLastCalledWith(ROOT, {}, 'index.md')
+  await t.call('closeScope', DOCS, { scope: args.scope })
+  await t.call('openScope', DOCS, {
+    projectId: 'p1',
+    wikiLookupTicket: read.context.translation.wikiLookupTicket,
+  })
+  await expect(t.call('lookupTranslationExamples', DOCS, args)).rejects.toThrow()
+  expect(lookupWikiCategories).toHaveBeenCalledTimes(2)
+})
+
 describe('readContext conversation', () => {
   it('passes a well-formed conversation on, and drops anything else (the fixed part then goes)', async () => {
     const conversation = { id: 'chat-1', providerKeepsSystem: true }
@@ -1025,17 +1070,31 @@ describe('"the app wrote part of a project" (onProjectChanged)', () => {
 
 describe('conversational OCR routing', () => {
   it('binds OCR to the sender document and an owned project scope', async () => {
-    const ocr = vi.fn(async () => ({output:'inspected',summary:'OCR'}))
-    const test = setup({ocr})
-    await test.call('ocr',DOCS,{action:'inspect',turnId:'human',scope:`scope-of-${DOCS}`,docPath:'/untrusted.docx',projectRoot:'/untrusted'})
-    expect(ocr).toHaveBeenCalledWith(DOCS,expect.anything(),{docPath:DOC,projectRoot:ROOT})
-    await expect(test.call('ocr',STRANGER,{action:'inspect',turnId:'human'})).rejects.toThrow(PROJECT_IPC_UNKNOWN_WINDOW)
-    await expect(test.call('ocr',DOCS,{action:'inspect',turnId:'human',scope:'scope-of-another-window'})).rejects.toThrow()
+    const ocr = vi.fn(async () => ({ output: 'inspected', summary: 'OCR' }))
+    const test = setup({ ocr })
+    await test.call('ocr', DOCS, {
+      action: 'inspect',
+      turnId: 'human',
+      scope: `scope-of-${DOCS}`,
+      docPath: '/untrusted.docx',
+      projectRoot: '/untrusted',
+    })
+    expect(ocr).toHaveBeenCalledWith(DOCS, expect.anything(), { docPath: DOC, projectRoot: ROOT })
+    await expect(
+      test.call('ocr', STRANGER, { action: 'inspect', turnId: 'human' }),
+    ).rejects.toThrow(PROJECT_IPC_UNKNOWN_WINDOW)
+    await expect(
+      test.call('ocr', DOCS, {
+        action: 'inspect',
+        turnId: 'human',
+        scope: 'scope-of-another-window',
+      }),
+    ).rejects.toThrow()
     expect(ocr).toHaveBeenCalledTimes(1)
   })
   it('discards staged OCR when the page is reset or closed', () => {
-    const forgetOcr=vi.fn()
-    const test=setup({forgetOcr})
+    const forgetOcr = vi.fn()
+    const test = setup({ forgetOcr })
     test.controller.reset(DOCS)
     test.controller.forget(DOCS)
     expect(forgetOcr).toHaveBeenCalledTimes(2)

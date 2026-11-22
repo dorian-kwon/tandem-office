@@ -1,4 +1,6 @@
 import type { AgentSkill, AgentToolDef, ToolExecution } from '@genoffice/agent-core'
+import type { BatchTranslationChoices } from '@genoffice/project-store/editor-run'
+import { batchTranslationChoice, batchTranslationFormats } from './batch-translation-choice'
 import type { Lang } from '@genoffice/i18n'
 import { AI_CHOICE_LABELS } from './strings-ai-choice'
 
@@ -119,7 +121,8 @@ export function choiceAnswerDisplay(answer: ChoiceAnswer, skippedLabel: string):
   }
 }
 
-const ANSWER_PATTERN = /^\[choice:([A-Za-z0-9_-]{1,40})\] (?:(\d{1,2}): (.*)|typed: (.*)|(skipped))$/
+const ANSWER_PATTERN =
+  /^\[choice:([A-Za-z0-9_-]{1,40})\] (?:(\d{1,2}): (.*)|typed: (.*)|(skipped))$/
 
 /** Read an answer message back (restored histories, tests); null for anything else */
 export function parseChoiceAnswerMessage(
@@ -128,7 +131,8 @@ export function parseChoiceAnswerMessage(
   const m = ANSWER_PATTERN.exec(text.trim())
   if (!m) return null
   const id = m[1]!
-  if (m[2] !== undefined) return { id, answer: { kind: 'option', index: Number(m[2]), text: m[3]! } }
+  if (m[2] !== undefined)
+    return { id, answer: { kind: 'option', index: Number(m[2]), text: m[3]! } }
   if (m[4] !== undefined) return { id, answer: { kind: 'typed', text: m[4] } }
   return { id, answer: { kind: 'skipped' } }
 }
@@ -184,7 +188,7 @@ export function reducePendingChoice(
 
 export const CHOICE_PROMPT = `## Asking the person a question (ask_choice)
 - When you need a decision from the person, call ask_choice with numbered options instead of asking in prose. Give 2 to 6 short, concrete options in the language the person writes in, put the most likely one first, and keep the question to one sentence. The person can also type their own answer, so do not add an "other" option.
-- After calling ask_choice, STOP: write at most one short sentence and end your turn. Do not guess the answer, do not continue the task, and do not call other tools in the same turn.
+- When ask_choice returns a batch translation formatting setting, apply it and continue in the same run. This tool result supplies only a format and does not grant human consent. For a question shown to a person, STOP: write at most one short sentence and end your turn. Do not guess the answer, do not continue the task, and do not call other tools in the same turn.
 - Never start writing into the document while a required answer is missing.
 - The answer arrives as the person's next message in one of three exact forms: "[choice:<id>] <number>: <option text>" (that option was picked), "[choice:<id>] typed: <text>" (the person wrote their own answer), "[choice:<id>] skipped" (the person dismissed the question). Treat it as the answer to that question, not as a new request.
 - On "skipped", continue with the safest default that changes nothing irreversible, or ask once in prose if no safe default exists. Never ask the same question again after an answer.
@@ -209,6 +213,12 @@ const TOOL: AgentToolDef = {
         items: { type: 'string' },
         description: 'Numbered options, shown as 1..N in this order.',
       },
+      recommendedFormat: {
+        type: 'string',
+        enum: batchTranslationFormats,
+        description:
+          'For unattended translation formatting questions only. Use id outputMode, bilingual, tableLayout or style and specify the setting you recommend. Never use for consent, OCR placement, money, files or sending data.',
+      },
       allowTyping: {
         type: 'boolean',
         description: 'Offer a row for the person to type their own answer. Default true.',
@@ -226,6 +236,7 @@ const TOOL: AgentToolDef = {
 }
 
 export interface ChoiceSkillOptions {
+  batchChoices?: () => BatchTranslationChoices | undefined
   /** show the card; called once per valid ask_choice call */
   ask(question: ChoiceQuestion): void
 }
@@ -244,8 +255,19 @@ export function createChoiceSkill(options: ChoiceSkillOptions): AgentSkill {
       if (!parsed.ok) {
         return { output: parsed.error, isError: true, summary: ASK_CHOICE_TOOL }
       }
-      options.ask(parsed.question)
       const q = parsed.question
+      const batch = options.batchChoices?.()
+      if (batch) {
+        const setting = batchTranslationChoice(q, call.input.recommendedFormat, batch)
+        if (setting) return { output: setting, summary: q.question, mutated: false }
+        return {
+          output: 'This question requires the person. Stop the unattended batch for this document.',
+          summary: q.question,
+          awaitingUser: true,
+          endRunWithError: q.question,
+        }
+      }
+      options.ask(q)
       return {
         output:
           `The question is shown to the person as a card with ${q.options.length} numbered options` +

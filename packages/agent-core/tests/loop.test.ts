@@ -93,6 +93,30 @@ describe('AgentLoop', () => {
     expect(system.indexOf(MATERIAL_NOT_INSTRUCTIONS)).toBe(runtimePreamble().length)
   })
 
+  it('keeps a relayed user turn verbatim and only quotes separate document material for that run', async () => {
+    let relay = true
+    const transport = scriptedTransport([(cb) => cb.onDone(), (cb) => cb.onDone()])
+    const stream = vi.spyOn(transport, 'stream')
+    const loop = new AgentLoop({
+      transport,
+      skill: makeSkill(),
+      separateDocumentContext: () => relay,
+    })
+    const prompt = '  Keep both lines.\n  And these spaces.  '
+    loop.run(prompt)
+    await flush()
+    expect(stream.mock.calls[0]![0].messages.at(-1)).toEqual({ role: 'user', text: prompt })
+    expect(transport.requests[0]!.system).toContain('quoted reference material:\n"CTX"')
+    relay = false
+    loop.run('Ordinary message')
+    await flush()
+    expect(stream.mock.calls[1]![0].messages.at(-1)).toEqual({
+      role: 'user',
+      text: 'Ordinary message\n\nCTX',
+    })
+    expect(transport.requests[1]!.system).not.toContain('quoted reference material')
+  })
+
   it('runs a plain-text turn to completion', async () => {
     const transport = scriptedTransport([
       (cb) => {
@@ -494,6 +518,33 @@ describe('AgentLoop', () => {
     expect(onDone).toHaveBeenCalledWith({ text: 'partial', cancelled: true, turnLimit: false })
     // assistant message stored without toolCalls (no results would follow)
     expect(loop.messages[1]).toEqual({ role: 'assistant', text: 'partial' })
+  })
+
+  it('stops before a queued mutation when a tool requires a human decision', async () => {
+    const transport = scriptedTransport([
+      (cb) => {
+        cb.onToolCall({ id: 't1', name: 'edit', input: {} })
+        cb.onToolCall({ id: 't2', name: 'edit', input: {} })
+        cb.onDone()
+      },
+    ])
+    const executeTool = vi.fn(() => ({
+      output: 'Needs consent',
+      summary: 'Needs consent',
+      endRunWithError: 'Needs consent',
+    }))
+    const onError = vi.fn()
+    const loop = new AgentLoop({
+      transport,
+      skill: { ...makeSkill(), executeTool },
+      events: { onError },
+    })
+    loop.run('translate')
+    await flush()
+    expect(executeTool).toHaveBeenCalledTimes(1)
+    expect(onError).toHaveBeenCalledWith('Needs consent')
+    expect(loop.busy).toBe(false)
+    expect(transport.requests).toHaveLength(1)
   })
 
   it('cancel during tool execution aborts the signal, skips remaining tools and starts no new turn', async () => {

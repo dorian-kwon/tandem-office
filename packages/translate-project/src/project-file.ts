@@ -54,6 +54,8 @@ export type ProjectFile = {
   references: string[]
   /** Project reference copies explicitly chosen as wiki examples. */
   wikiReferences?: string[]
+  /** Selected notes are available by default in existing projects. */
+  useWiki?: boolean
   glossaryFiles: string[]
 }
 
@@ -228,6 +230,7 @@ export function parseProjectFile(json: string): ProjectFile {
     ...(choices ? { choices } : {}),
     sources: raw.sources.map(parseSource),
     references,
+    ...(typeof raw.useWiki === 'boolean' ? { useWiki: raw.useWiki } : {}),
     ...(wikiReferences.length ? { wikiReferences } : {}),
     glossaryFiles: strList(raw, 'glossaryFiles'),
   }

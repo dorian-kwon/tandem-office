@@ -185,6 +185,20 @@ describe('createUserSkillsSkill', () => {
     expect(prompt).toContain('builtin:meeting-notes')
   })
 
+  it('keeps manual-only builtins out of automatic selection and refuses a guessed tool ID', async () => {
+    const id = 'builtin:translation-wiki'
+    const { deps, reads } = makeDeps({
+      list: () => userSkillEntriesOf([entry({ id, manualOnly: true, invoke: 'manual' })]),
+      messages: () => [{ role: 'user', text: 'Translate the finished report.' }],
+    })
+    const skill = createUserSkillsSkill(deps)
+    expect(skill.systemPrompt).not.toContain(id)
+    for (const name of [USE_SKILL_TOOL, READ_SKILL_FILE_TOOL]) {
+      expect((await skill.executeTool(call(name, { id, path: 'SKILL.md' }))).isError).toBe(true)
+    }
+    expect(reads).toEqual([])
+  })
+
   it('use_skill returns the body, the file list and whether a template is there', async () => {
     const used: string[] = []
     const { deps, reads } = makeDeps({

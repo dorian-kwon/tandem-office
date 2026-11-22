@@ -72,7 +72,9 @@ beforeEach(() => {
   document.body.append(host)
   root = createRoot(host)
   api = {
+    maintainWiki: vi.fn().mockResolvedValue(undefined),
     learnFinals: vi.fn().mockResolvedValue([]),
+    learnProjectFinals: vi.fn().mockResolvedValue([]),
     addWikiReferences: vi.fn().mockResolvedValue(null),
     openWiki: vi.fn().mockResolvedValue({ status: 'opened', vaultPath: '/wiki' }),
     resumeWiki: vi.fn().mockResolvedValue({ status: 'idle', vaultPath: '' }),
@@ -210,6 +212,47 @@ describe('ProjectList', () => {
     expect(rows()).toEqual(report)
     await click(buttonByText('Close'))
     expect(rows()).toEqual([])
+  })
+
+  it('repairs the wiki from the learning dropdown without opening the file picker', async () => {
+    await render(ProjectList, { onOpen: vi.fn() })
+    const toggle = host.querySelector<HTMLButtonElement>('button[aria-label="Manage wiki"]')!
+    const learn = buttonByText('Learn from final documents')
+    let finish!: () => void
+    api.maintainWiki.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve
+        }),
+    )
+    await click(toggle)
+    await click(buttonByText('Repair'))
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(api.maintainWiki.mock.calls).toEqual([['repair']])
+    expect(api.learnFinals).not.toHaveBeenCalled()
+    expect(toggle.disabled && learn.disabled).toBe(true)
+    await act(async () => finish())
+    expect(toggle.disabled || learn.disabled).toBe(false)
+    expect(host.textContent).toContain('Wiki index and category links repaired.')
+  })
+
+  it('allows cancellation before resetting the shared wiki from a project', async () => {
+    await render(ProjectDetail, { dir: '/p/a', onBack: vi.fn() })
+    const toggle = host.querySelector<HTMLButtonElement>('button[aria-label="Manage wiki"]')!
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+    try {
+      await click(toggle)
+      await click(buttonByText('Reset'))
+      expect(api.maintainWiki).not.toHaveBeenCalled()
+      expect(confirm.mock.calls[0]?.[0]).toContain('all translation projects')
+      await click(toggle)
+      await click(buttonByText('Reset'))
+      expect(api.maintainWiki.mock.calls).toEqual([['initialize']])
+      expect(host.textContent).toContain('The new wiki is ready.')
+      expect(api.learnProjectFinals).not.toHaveBeenCalled()
+    } finally {
+      confirm.mockRestore()
+    }
   })
 
   it('restores the learn button and shows a localized error when the file picker fails', async () => {
@@ -411,6 +454,80 @@ describe('ProjectDetail', () => {
     expect(sections[0]?.textContent).not.toContain('ref.txt')
     expect(sections[1]?.textContent).toContain('ref.txt')
     expect(sections[2]?.textContent).toContain('terms.csv')
+  })
+
+  it('learns from saved project outputs only on request and reports each result', async () => {
+    type Results = Awaited<ReturnType<TranslateApi['learnProjectFinals']>>
+    let finish!: (results: Results) => void
+    api.learnProjectFinals.mockImplementationOnce(
+      () =>
+        new Promise<Results>((resolve) => {
+          finish = resolve
+        }),
+    )
+    await render(ProjectDetail, props())
+    expect(api.learnProjectFinals).not.toHaveBeenCalled()
+    const button = buttonByText('Learn from final documents')
+    await act(async () => {
+      button.click()
+      button.click()
+    })
+    expect(api.learnProjectFinals.mock.calls).toEqual([['/p/a']])
+    expect(api.learnFinals).not.toHaveBeenCalled()
+    expect(button.disabled).toBe(true)
+    expect(button.textContent).toBe('Processing saved documents…')
+    await act(async () =>
+      finish([
+        { name: 'a.docx', status: 'added' },
+        { name: 'b.hwpx', status: 'updated' },
+        { name: 'c.xlsx', status: 'duplicate' },
+        { name: 'scan.pdf', status: 'empty' },
+        { name: 'broken.pptx', status: 'failed' },
+      ]),
+    )
+    const rows = [...host.querySelectorAll('.translate-learn-results li')].map(
+      (el) => el.textContent,
+    )
+    expect(rows).toEqual([
+      'a.docx — Added to the wiki',
+      'b.hwpx — Updated in the wiki',
+      'c.xlsx — Already in the wiki',
+      'scan.pdf — No readable text',
+      'broken.pptx — Could not add to the wiki',
+    ])
+    expect(button.disabled).toBe(false)
+    await click(button)
+    expect(host.querySelector('.translate-learn-results')?.textContent).toContain(
+      'There are no saved translations with changes from the source.',
+    )
+    await click(within(host.querySelector('.translate-learn-results')!, 'Close'))
+    expect(host.querySelector('.translate-learn-results')).toBeNull()
+  })
+
+  it('keeps an in-flight project report out of the next project and localizes errors', async () => {
+    type Results = Awaited<ReturnType<TranslateApi['learnProjectFinals']>>
+    let finish!: (results: Results) => void
+    api.learnProjectFinals.mockImplementationOnce(
+      () =>
+        new Promise<Results>((resolve) => {
+          finish = resolve
+        }),
+    )
+    await render(ProjectDetail, props())
+    await click(buttonByText('Learn from final documents'))
+    await render(ProjectDetail, { ...props(), dir: '/p/b' })
+    const button = buttonByText('Learn from final documents')
+    expect(button.disabled).toBe(false)
+    expect(api.learnProjectFinals).toHaveBeenCalledTimes(1)
+    await act(async () => finish([{ name: 'previous.docx', status: 'added' }]))
+    expect(host.querySelector('.translate-learn-results')).toBeNull()
+    api.learnProjectFinals.mockRejectedValueOnce(new Error('private path'))
+    await click(button)
+    expect(api.learnProjectFinals).toHaveBeenLastCalledWith('/p/b')
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe(
+      'Something went wrong. Try again.',
+    )
+    expect(button.disabled).toBe(false)
   })
 
   it('selects multiple wiki notes for just the current project', async () => {
@@ -639,6 +756,7 @@ describe('project batch dialogs', () => {
   beforeEach(() => {
     api.getProject.mockResolvedValue(
       project({
+        useWiki: false,
         sources: ['a.docx', 'b.pdf', 'c.hwpx'].map((file) => ({
           file,
           sha256: 'hash',
@@ -653,6 +771,122 @@ describe('project batch dialogs', () => {
       publish = fn
       return () => undefined
     })
+  })
+
+  it('routes batch chat in place and restores per-document replies when progress is reopened', async () => {
+    const snap: ProjectBatchSnapshot = {
+      ...status(
+        [
+          { file: 'a.docx', state: 'saved' },
+          { file: 'b.pdf', state: 'running' },
+          { file: 'c.hwpx', state: 'waiting' },
+        ],
+        true,
+      ),
+      id: 'batch-1',
+    }
+    api.batchSend = vi.fn().mockResolvedValue(snap)
+    const p = props()
+    await render(ProjectDetail, p)
+    await act(async () => publish(snap))
+    const draft = () => element('chat-input') as unknown as HTMLTextAreaElement
+    const send = async (prompt: string) => {
+      await typeInto(draft(), prompt)
+      await click(element('chat-send')!)
+    }
+    const prompt = '  전체 문서에 적용해 줘.\n단위 표기는 그대로.  '
+    await send(prompt)
+    expect(api.batchSend).toHaveBeenLastCalledWith({
+      dir,
+      batchId: 'batch-1',
+      useWiki: false,
+      prompt,
+      files: ['a.docx', 'b.pdf', 'c.hwpx'],
+    })
+    expect(element('chat-choose')).toBeNull()
+    await send('지금 이 문서만 수정해')
+    expect(api.batchSend).toHaveBeenLastCalledWith(expect.objectContaining({ files: ['b.pdf'] }))
+    await send('전체 문서 말고 c.hwpx만 수정')
+    expect(api.batchSend).toHaveBeenLastCalledWith(expect.objectContaining({ files: ['c.hwpx'] }))
+    await send('제목을 다듬어')
+    expect(api.batchSend).toHaveBeenCalledTimes(3)
+    const choices = element('chat-choose')!.querySelectorAll('input')
+    await click(choices[1]!)
+    await click(element('chat-send')!)
+    expect(api.batchSend).toHaveBeenLastCalledWith(
+      expect.objectContaining({ prompt: '제목을 다듬어', files: ['a.docx'] }),
+    )
+    await click(element('progress')!.querySelector('[aria-label="Chat about c.hwpx"]')!)
+    expect(document.activeElement).toBe(draft())
+    await send('What did you change?')
+    expect(api.batchSend).toHaveBeenLastCalledWith(expect.objectContaining({ files: ['c.hwpx'] }))
+    await act(async () =>
+      publish({
+        ...snap,
+        messages: [
+          {
+            id: 'm1',
+            prompt,
+            targets: [
+              { file: 'a.docx', state: 'done', reply: 'Applied the requested terminology.' },
+              { file: 'c.hwpx', state: 'failed', error: 'Could not open file' },
+            ],
+          },
+        ],
+      }),
+    )
+    await click(element('close')!)
+    await click(element('show-progress')!)
+    expect(element('chat-history')!.textContent).toContain('Applied the requested terminology.')
+    expect(element('chat-history')!.textContent).toContain('Could not open file')
+    expect(p.onStartTranslation).not.toHaveBeenCalled()
+  })
+
+  it('asks about the local wiki even without selected notes, once per editing message, keeping the intended file if progress advances', async () => {
+    api.getProject.mockResolvedValue(
+      project({
+        sources: ['a.docx', 'b.pdf'].map((file) => ({ file, sha256: 'hash', kind: 'editable' })),
+      }),
+    )
+    const snap: ProjectBatchSnapshot = {
+      ...status(
+        [
+          { file: 'a.docx', state: 'running' },
+          { file: 'b.pdf', state: 'waiting' },
+        ],
+        true,
+      ),
+      id: 'run-wiki',
+    }
+    api.batchSend = vi.fn().mockResolvedValue(snap)
+    await render(ProjectDetail, props())
+    await act(async () => publish(snap))
+    await typeInto(
+      element('chat-input') as unknown as HTMLTextAreaElement,
+      '  Polish the current file.  ',
+    )
+    await click(element('chat-send')!)
+    expect(api.batchSend).not.toHaveBeenCalled()
+    const choice = element('chat-wiki')!.querySelector('button')!
+    await act(async () =>
+      publish({
+        ...snap,
+        items: [
+          { file: 'a.docx', state: 'saved' },
+          { file: 'b.pdf', state: 'running' },
+        ],
+      }),
+    )
+    await click(choice)
+    expect(api.batchSend).toHaveBeenCalledTimes(1)
+    expect(api.batchSend).toHaveBeenCalledWith({
+      dir,
+      batchId: 'run-wiki',
+      prompt: '  Polish the current file.  ',
+      files: ['a.docx'],
+      useWiki: true,
+    })
+    expect(element('chat-wiki')).toBeNull()
   })
 
   it('selects all by default and submits only checked documents in project order', async () => {

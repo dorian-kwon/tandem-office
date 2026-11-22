@@ -97,6 +97,8 @@ export interface ExtractedPage {
    * as a full-page behindDoc float. Absent on plain (white / flat-fill) pages.
    */
   bgRender?: PageRender
+  /** A page-covering raster was baked into the background (also in cell-data mode). */
+  rasterBackgroundCount?: number
   /**
    * print content box (P35): all ink sits inside uniform page margins
    * (browser/driver prints). Background rules measure page-covering fills
@@ -1883,6 +1885,18 @@ function renderPageBackground(
 
 /** Render the whole page to an opaque white-backed PNG (fallback fidelity path). */
 export function renderPagePng(m: PdfiumModule, page: number, scale: number): PageRender | null {
+  const px = renderPagePixels(m, page, scale)
+  return (
+    px && {
+      data: encodeRgbaPng(px.rgba, px.width, px.height),
+      mime: 'image/png',
+      pixelWidth: px.width,
+      pixelHeight: px.height,
+    }
+  )
+}
+
+export function renderPagePixels(m: PdfiumModule, page: number, scale: number) {
   const width = Math.max(1, Math.round(m._FPDF_GetPageWidthF(page) * scale))
   const height = Math.max(1, Math.round(m._FPDF_GetPageHeightF(page) * scale))
   const bitmap = m._FPDFBitmap_Create(width, height, 0)
@@ -1890,14 +1904,7 @@ export function renderPagePng(m: PdfiumModule, page: number, scale: number): Pag
   try {
     m._FPDFBitmap_FillRect(bitmap, 0, 0, width, height, 0xffffffff)
     m._FPDF_RenderPageBitmap(bitmap, page, 0, 0, width, height, 0, 0)
-    const px = bitmapToRgba(m, bitmap)
-    if (!px) return null
-    return {
-      data: encodeRgbaPng(px.rgba, px.width, px.height),
-      mime: 'image/png',
-      pixelWidth: px.width,
-      pixelHeight: px.height,
-    }
+    return bitmapToRgba(m, bitmap)
   } finally {
     m._FPDFBitmap_Destroy(bitmap)
   }
@@ -2078,6 +2085,51 @@ export function renderPageByIndexPng(
   if (!page) return null
   try {
     return renderPagePng(m, page, scale)
+  } finally {
+    m._FPDF_ClosePage(page)
+  }
+}
+
+/** OCR sees the raster layer only: native text, grid lines and vector drawings
+ * already survive through their own extraction paths. Keep previously baked
+ * background paint so replacing a raster background also preserves its art. */
+export function renderRasterLayerForOcr(
+  m: PdfiumModule,
+  doc: number,
+  index: number,
+  scale: number,
+  backgroundCount = 0,
+) {
+  const page = m._FPDF_LoadPage(doc, index)
+  if (!page) return null
+  try {
+    function keepRaster(obj: number, depth: number): boolean {
+      const type = m._FPDFPageObj_GetType(obj)
+      if (type === FPDF_PAGEOBJ_IMAGE) return true
+      if (type === FPDF_PAGEOBJ_FORM) {
+        if (depth >= 32 || !m._FPDFFormObj_GetObject || !m._FPDFFormObj_CountObjects) return false
+        for (let i = 0; i < m._FPDFFormObj_CountObjects(obj); i++) {
+          const child = m._FPDFFormObj_GetObject(obj, i)
+          if (child && !keepRaster(child, depth + 1)) return false
+        }
+        return true
+      }
+      return !!m._FPDFPageObj_SetIsActive?.(obj, 0)
+    }
+    for (let i = backgroundCount; i < m._FPDFPage_CountObjects(page); i++) {
+      const obj = m._FPDFPage_GetObject(page, i)
+      if (obj && !keepRaster(obj, 0)) return null
+    }
+    const w = m._FPDF_GetPageWidthF(page),
+      h = m._FPDF_GetPageHeightF(page)
+    if (w <= 0 || h <= 0) return null
+    // Bound the recognition bitmap on oversize posters and engineering drawings.
+    const pixels = renderPagePixels(
+      m,
+      page,
+      Math.min(scale, 4096 / Math.max(w, h), Math.sqrt(8_000_000 / (w * h))),
+    )
+    return pixels && { ...pixels, data: encodeRgbaPng(pixels.rgba, pixels.width, pixels.height) }
   } finally {
     m._FPDF_ClosePage(page)
   }
@@ -3161,6 +3213,7 @@ export function extractPage(
       ...(rotatedDropped > 0 ? { rotatedDropped } : {}),
       ...(options.cellData ? { cellData: true } : {}),
       ...(bgRender !== undefined ? { bgRender } : {}),
+      ...(bgActive ? { rasterBackgroundCount: bgStack.count } : {}),
       ...(contentBox !== null ? { contentBox } : {}),
       ...(decorImages.length > 0 ? { decorImages } : {}),
     }

@@ -135,6 +135,8 @@ interface PdfLease {
   /** a store write happened: the job runs, the project is busy */
   running: boolean
   touched: number
+  overview?: string
+  wikiExamples?: Promise<string>
 }
 
 const invalid = (text: string) => new TranslateIpcError('INVALID_ARGUMENT', text)
@@ -309,6 +311,19 @@ export function createNonEditableService(
       return { token, lang, docHash: read.docHash, tree: withoutImageData(read.tree) }
     },
 
+    /** Cache category matches only for this live job, including retries and batch resends. */
+    async pdfWikiExamples(
+      dir: string,
+      token: string,
+      lookup: (file: string, overview: string) => Promise<string>,
+    ): Promise<string> {
+      const l = lease(token)
+      if (l.dir !== dir) throw invalid('the PDF belongs to another project')
+      if (!l.overview) return ''
+      l.wikiExamples ??= lookup(basename(l.path), l.overview).catch(() => '')
+      return l.wikiExamples
+    },
+
     /** one result-store call of the job: always this token's document and language */
     async pdfStore(token: unknown, request: unknown): Promise<TranslatePdfStoreAnswer> {
       const l = lease(token)
@@ -376,6 +391,7 @@ export function createNonEditableService(
     switch (request.op) {
       case 'read': {
         const t = await store.readTranslation(l.docHash, l.lang)
+        if (t?.overview && !l.overview) l.overview = t.overview.text
         return {
           translation: t && {
             lang: t.lang,
@@ -397,6 +413,10 @@ export function createNonEditableService(
           model,
           ...(overview ? { overview } : {}),
         })
+        if (overview && l.overview !== overview.text) {
+          l.overview = overview.text
+          l.wikiExamples = undefined
+        }
         return {}
       }
       case 'blocks': {

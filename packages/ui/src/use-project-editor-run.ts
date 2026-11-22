@@ -1,8 +1,15 @@
+import { beginBatchConversation, endBatchConversation } from './project-batch-conversation'
 import { useEffect, useRef, type RefObject } from 'react'
 import type { AgentRunResult } from '@genoffice/agent-core'
-import type { EditorReply, ProjectEditorBridge } from '@genoffice/project-store/editor-run'
+import type {
+  BatchTranslationChoices,
+  EditorReply,
+  ProjectEditorBridge,
+} from '@genoffice/project-store/editor-run'
 
 export interface ProjectTurn {
+  batchFollowup?: boolean
+  batchChoices?: BatchTranslationChoices
   id: string
   mutated: boolean
   inspected: boolean
@@ -62,6 +69,8 @@ export function useProjectEditorRun(options: {
         return
       }
       turn.current = {
+        ...(message.batchConversation ? { batchFollowup: true } : {}),
+        ...(message.batchChoices ? { batchChoices: message.batchChoices } : {}),
         id: message.id,
         mutated: false,
         inspected: false,
@@ -69,10 +78,12 @@ export function useProjectEditorRun(options: {
         observedBusy: false,
         notifyProgress: (progress) => api.replyToEditorRequest(progress),
       }
+      beginBatchConversation(message.id, message.batchConversation)
       try {
         if (send(message.prompt) === false)
           throw new Error('The document editor could not start this request.')
       } catch (cause) {
+        endBatchConversation(message.id)
         turn.current = null
         error(String(cause))
       }
@@ -80,6 +91,7 @@ export function useProjectEditorRun(options: {
     return () => {
       off()
       const turn = ref.current.turn
+      if (turn.current) endBatchConversation(turn.current.id)
       if (turn.current)
         api.replyToEditorRequest({
           kind: 'error',
@@ -112,6 +124,7 @@ export function useProjectEditorRun(options: {
         error: 'The document AI did not finish the request.',
       },
     )
+    endBatchConversation(turn.id)
     options.turn.current = null
   })
 }

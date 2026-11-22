@@ -1,6 +1,17 @@
 import type { zh } from './zh'
 
 export const hi = {
+  ocrLanguage: 'पहचान की भाषा',
+  ocrLanguageDefault: 'सिस्टम डिफ़ॉल्ट',
+  ocrLanguageUnavailable:
+    'चुनी गई भाषा उपलब्ध नहीं है। कोई दूसरी भाषा चुनें या इस डिवाइस पर भाषा इंस्टॉल करें।',
+  ocrTitle: 'OCR चलाएँ',
+  ocrBatch: 'बैच OCR शुरू करें',
+  ocrPdf: 'खोज योग्य PDF',
+  ocrWord: 'संपादन योग्य Word',
+  ocrRunning: 'टेक्स्ट पहचाना जा रहा है…',
+  ocrNoText: 'पढ़ने योग्य टेक्स्ट नहीं मिला।',
+  ocrUnavailable: 'इस डिवाइस पर स्थानीय OCR उपलब्ध नहीं है।',
   title: 'फ़ाइल रूपांतरण',
   chooseFiles: 'फ़ाइलें चुनें',
   outputFormat: 'आउटपुट फ़ॉर्मैट',
@@ -15,4 +26,7 @@ export const hi = {
   saved: 'सहेजा गया',
   failed: 'रूपांतरण विफल',
   removeFile: '{name} को सूची से हटाएँ',
+  ocrRange: 'पहचान के लिए पृष्ठ',
+  ocrAllPages: 'सभी पृष्ठ',
+  ocrRangeInvalid: 'इस फ़ाइल की पृष्ठ सीमा जाँचें। उदाहरण: 1, 3–5',
 } satisfies Record<keyof typeof zh, string>

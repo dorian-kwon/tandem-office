@@ -15,7 +15,7 @@ PDF를 편집 가능한 문서로 되살린다. PDFium으로 글자·이미지·
 ## 항상 지켜야 하는 것
 
 - 망가진 텍스트보다 충실한 이미지가 낫다. 페이지 신뢰도가 0.5(`PAGE_CONFIDENCE_MIN`) 미만이거나, 텍스트 인코딩을 믿을 수 없거나, 그려진 내용 대부분을 IR이 잃은 페이지는 전체 페이지 이미지로 내보내고 `pageResults`에 `degraded`와 사유를 남긴다. 깨진 글자나 빈 페이지를 조용히 내보내지 않는다.
-- OCR은 덧붙이는 경로다. 쓸 만한 텍스트 레이어가 있는 페이지는 들어가지 않는다. 엔진 실패, 글자 8자 미만, 평균 신뢰도 0.55 미만, 종이 색 비율 0.45 미만 등 어느 관문에서든 걸리면 전체 페이지 이미지로 돌아간다.
+- 로컬 OCR 엔진을 전달하면 스캔과 디지털 문서의 이미지 영역에서 편집할 글자를 찾는다. 원래 PDF 문자는 우선 보존한다. 한 페이지의 이미지 레이어를 한 번 인식해 원래 문자와 겹치는 글자를 걸러 내고, 확인된 표 격자와 남은 그림을 복원한다. 엔진 실패·글자 8자 미만·평균 신뢰도 0.55 미만·종이 색 비율 0.45 미만이면 원래 이미지와 디지털 본문을 유지한다.
 - `OcrEngine`은 동기 함수여야 한다. 파이프라인이 동기 PDFium 문서 범위 안에서 돈다. 보조 프로그램은 `spawnSync`로 부르고 제한은 30초, 출력 64 MiB다.
 - `src/index.ts`에서 `ocr-vision.ts`를 내보내지 않는다. `node:child_process`를 끌어오기 때문이고, Node에서 도는 호출자가 직접 import해 `ConvertOptions.ocr`로 넘긴다.
 - OCR 보조 프로그램은 `windowsHide: true`로 띄운다. `win-ocr.exe`는 콘솔 프로그램이라, 콘솔이 없는 앱에서 숨기지 않고 띄우면 쪽마다 콘솔 창이 열렸다 닫힌다(의견 시트 250행). 원본에는 없는 옵션이므로 원본을 받아올 때 지키고, 시험 `tests/ocr-vision-spawn.test.ts`가 본다. 변환 결과에는 닿지 않는다.
@@ -32,7 +32,7 @@ PDF를 편집 가능한 문서로 되살린다. PDFium으로 글자·이미지·
 - 줄 맞춤은 조이기만 한다. 음수 자간은 0.05em까지, 글자 크기는 0.5pt씩 최대 3번, 6pt와 원래 크기의 85% 밑으로는 내리지 않는다. 설치되지 않은 글꼴에 대응표가 없으면 건드리지 않는다. 틀린 "호환" 글꼴이 렌더러의 자체 대체보다 나쁘다.
 - 그림 손실 감시가 따로 있다. 글자 수준 검사는 다 통과했는데 표지나 인포그래픽처럼 벡터 그림이 대부분인 페이지가 있다. 원본에 칠해진 면적이 페이지의 0.3 이상인데 IR이 그중 0.35 미만만 그리면 그 페이지는 이미지로 내보낸다.
 - 한 경로에 점이 10만 개 넘게 올 수 있다. 좌표 배열을 `Math.min(...points)`처럼 펼치지 않는다. 엔진의 인자 수 한도를 넘어 던진다.
-- `ocr-helper/`는 TypeScript 빌드 밖이다. `win-ocr.cs`는 `build-win.mjs`가 Windows에 기본으로 있는 .NET Framework 컴파일러로 `win-ocr.exe`로 만들고, Windows Kits 메타데이터가 있어야 한다. 설치본을 만들 때 `apps/shell/electron-builder.cjs`가 이 빌드를 부른다. macOS용과 규약이 같다. PNG를 stdin으로 받고 JSON 줄을 stdout으로 낸다.
+- `ocr-helper/`는 TypeScript 빌드 밖이다. `win-ocr.cs`는 `build-win.mjs`가 Windows에 기본으로 있는 .NET Framework 컴파일러로 `win-ocr.exe`로 만들고, Windows Kits 메타데이터가 있어야 한다. 설치본을 만들 때 `apps/shell/electron-builder.cjs`가 이 빌드를 부른다. macOS용과 규약이 같다. PNG를 stdin으로 받고 JSON 줄을 stdout으로 낸다. 홈의 일괄 OCR은 `--list-languages`로 기기의 인식 가능 언어를 조회하고, 사용자가 고른 언어에는 `<언어 태그> --exact`를 넘긴다. 시스템 기본값은 인수 없이 실행한다.
 
 ## 원본과 다른 점 (결정 0058)
 
@@ -44,6 +44,8 @@ PDF를 편집 가능한 문서로 되살린다. PDFium으로 글자·이미지·
 - **쪽의 단 틈을 가로지르는 나란한 표.** 산문 줄이 가로지르지 않는 x 틈을 단 틈으로 보고, 그 틈을 가로지르되 행 대부분이 한쪽에만 내용이 있는 테두리 없는 표는 틈 양쪽에서 따로 다시 찾는다. 전체 폭 표는 그대로다. `analyze/stream.ts`의 `splitSideBySide`. 시험 `tests/stream.test.ts`의 "side-by-side tables across a page gutter".
 - **JPEG 마커 앞 채움 바이트.** JPEG 머리를 읽을 때 마커 앞에 오는 0xFF 채움 바이트(ITU T.81 B.1.1.2)와 단독 마커(SOI, RSTn, TEM)를 건너뛴다. 채움 바이트가 있다고 성분 수를 0으로 읽어 원본 JPEG를 다시 인코딩하지 않는다. `extract/index.ts`의 `jpegSofComponents`. 시험 `tests/jpeg-sniff.test.ts`, `tests/alpha.test.ts`의 "0xFF fill bytes…".
 - **여백의 측정 행 보존.** 문자와 숫자가 섞인 줄을 반복 쪽 번호로 판정할 때는 모든 쪽에서 쪽 번호 자리만 바뀌는지 검사한다. 구역 번호가 쪽 번호와 같아도 측정값이 달라지는 행은 본문에 남는다. `analyze/furniture.ts`, `tests/furniture.test.ts`.
+
+- 홈의 일괄 OCR은 흐린 종이의 밝기 기준과 스캔 방향을 엔진에서 전달받는다. 검색용 PDF의 글자 좌표는 원본 방향을 따르고, 편집용 Word의 순수 스캔 쪽은 글자와 그림을 함께 바로 세운다. macOS 실제 인식과 좌표 회귀는 셸의 `tests/ocr-scan-preparation.test.ts`가 검사한다.
 
 ## 테스트
 

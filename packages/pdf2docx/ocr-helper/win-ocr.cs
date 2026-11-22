@@ -45,6 +45,12 @@ static class WinOcr
     {
         try
         {
+            if (args.Length == 1 && args[0] == "--list-languages")
+            {
+                foreach (Language language in OcrEngine.AvailableRecognizerLanguages)
+                    Console.WriteLine(language.LanguageTag);
+                return 0;
+            }
             byte[] png;
             using (var stdin = Console.OpenStandardInput())
             using (var mem = new MemoryStream())
@@ -69,7 +75,7 @@ static class WinOcr
                 return 2;
             }
 
-            var engine = CreateEngine(args.Length > 0 ? args[0] : null);
+            var engine = CreateEngine(args.Length > 0 ? args[0] : null, Array.IndexOf(args, "--exact") >= 0);
             if (engine == null)
             {
                 Console.Error.WriteLine("no OCR recognizer language available");
@@ -139,7 +145,7 @@ static class WinOcr
         }
     }
 
-    static OcrEngine CreateEngine(string hints)
+    static OcrEngine CreateEngine(string hints, bool exact)
     {
         if (hints != null && hints.Length > 0)
         {
@@ -156,7 +162,7 @@ static class WinOcr
                 }
             }
         }
-        return OcrEngine.TryCreateFromUserProfileLanguages();
+        return exact ? null : OcrEngine.TryCreateFromUserProfileLanguages();
     }
 
     static SoftwareBitmap Downscale(SoftwareBitmap source, int maxDim)

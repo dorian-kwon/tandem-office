@@ -500,6 +500,7 @@ function SkillRow({
                   type="button"
                   className={`skl-invoke-option${view.invoke === invoke ? ' active' : ''}`}
                   aria-pressed={view.invoke === invoke}
+                  disabled={view.manualOnly && invoke === 'auto'}
                   onClick={() => {
                     if (view.invoke !== invoke) onInvoke(invoke)
                   }}

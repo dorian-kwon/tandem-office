@@ -1345,6 +1345,7 @@ export function App({
   const aiRunStatus = useAiRunStatus(aiBusy)
   // the shared ask_choice question card: the answer starts the next run
   const choice = useAiChoice({
+    batchChoices: () => aiRunStatus.projectTurn.current?.batchChoices,
     lang: getLang(),
     busy: aiBusy,
     remember: projectChoiceRemember(() => project.chat.run),
@@ -1791,6 +1792,7 @@ export function App({
         analyzingLabel: () => analyzingDocumentLabel[getLang()],
       },
       transport: agentTransportRef.current,
+      separateDocumentContext: () => aiRunStatus.projectTurn.current?.batchFollowup === true,
       systemSuffix: aiLangDirective,
       // a local model that reported no tool support answers in text only
       toolsAllowed: () =>

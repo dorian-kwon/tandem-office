@@ -1,11 +1,14 @@
 ---
 name: translation-wiki
-description: 'Organize finished translations into a translation wiki with sourced term choices, parallel examples and writing conventions scoped by client, domain and document type. Use when the user wants to curate translation precedents from final deliverables.'
+disable-model-invocation: true
+description: 'Organize finished translations into a translation wiki with sourced term choices, parallel examples and writing conventions scoped by client, domain and document type. Use only when the user explicitly selects this skill to curate specific final deliverables.'
 ---
 
 # 번역 위키 정리
 
 사용자가 지정한 완성본에서 다음 번역에 쓸 만한 선택을 찾아, 사람이 읽고 AI가 검색할 수 있는 짧은 Markdown 항목으로 정리한다. 작업 중 대화, 타이핑 기록, Undo 기록을 뒤져 사용자 성향을 추측하지 않는다.
+
+사용자가 이번 요청에서 이 스킬과 자료를 직접 지정했을 때만 정리한다. 번역, 다듬기, 저장, 내보내기, 문서 닫기, 앱 재실행은 위키 학습을 요청한 동작으로 해석하지 않는다.
 
 ## 자료와 분류
 
@@ -21,6 +24,6 @@ description: 'Organize finished translations into a translation wiki with source
    문체 사례로 반복이나 변주를 기록할 때는 같은 절에서 비교할 수 있는 구절과 위치를 함께 인용한다. 기관명·용어·목록의 의도적 병렬과 홍보 문장의 반복 서두를 구분한다. 한 문장의 관찰을 영어 전체의 반복 금지 규칙으로 확대하지 않는다.
 
 4. 페이지 제목에는 검색할 표현이나 문체의 쓰임을 넣는다. 각 항목에 종류, 적용 범위, 짧은 인용문, 문서명과 판, 위치를 붙인다. 출처 ID와 링크는 실제 제공된 값만 사용한다. 범위가 애매하면 미분류 사유를, 자료가 부족해 대응을 보류하면 필요한 근거를 한 줄로 남긴다.
-5. 정리 결과를 사용자에게 보여 준다. 저장 도구와 대상 보관함을 확인한 경우에만 저장 결과를 보고한다. 채팅에서 정리한 경우 바로 옮겨 쓸 수 있는 Markdown을 반환한다. 원본을 수정하거나 기존 개인 노트를 덮어쓰지 않는다.
+5. 채팅에 옮겨 쓸 수 있는 Markdown 초안을 반환한다. 앱의 번역 위키에 완성본을 등록할 때는 사용자가 번역 홈이나 해당 프로젝트의 ‘완성본 학습시키기’를 누르도록 안내한다.
 
 예를 들어 한국어 일정표의 ‘팸투어’ 셀과 영문 최종본의 ‘FAM tour’ 셀이 연결되어 있으면 두 위치를 인용해 기관별 용어 사례로 기록한다. 영문 일정표만 있으면 ‘일정표에서 FAM tour 약칭 사용’이라는 표기 사례까지 기록한다. 다른 기관의 지침에 ‘familiarization tour’가 지정돼 있으면 그 기관의 번역에는 지정 표기를 우선한다.

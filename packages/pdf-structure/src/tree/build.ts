@@ -162,8 +162,9 @@ function pageDrafts(
       if (block.tocEntry) draft.tocLabel = block.tocEntry.pageNumber
       drafts.push(draft)
     } else if (block.kind === 'image') {
-      // pattern-fill rasters and behind-text wallpapers are decoration
-      if (block.synthetic || block.float?.wrap === 'behind') continue
+      // Word also pins real pictures behind text on slides and inside tables.
+      // Drop generated decoration, retaining those pictures in the reading flow.
+      if (block.synthetic || (block.float?.wrap === 'behind' && !block.placedPicture)) continue
       drafts.push({ kind: 'image', pageIndex, source, ir: block })
     } else {
       drafts.push({ kind: 'table', pageIndex, source, ir: block })

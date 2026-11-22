@@ -6,14 +6,14 @@
  * synthesis, so the recovered lines flow through the exact same layout
  * analysis (columns / tables / paragraphs) as a digital text layer.
  *
- * OCR is strictly additive: pages with a real text layer never enter this
- * path (digital extraction beats recognition), and any doubt — engine
- * failure, too little text, low confidence, empty analysis — falls back to
- * today's behavior, the full-page bitmap export.
+ * Native text always wins. Recover only the raster regions where the local
+ * recognizer finds document text; unrecognized images stay in the document.
  */
 import { analyzePage, type ListSeq } from './analyze'
-import type { ExtractedPage } from './extract'
-import type { Rect } from './geometry'
+import type { ExtractedImage, ExtractedPage } from './extract'
+import { overlapRatio, type Rect } from './geometry'
+import { turnLines, turnPixels, type ScanTurn } from './ocr-rotation'
+import { hasPaper, recoverRasterArt, type RasterPixels } from './ocr-raster'
 import type { IrPage, PdfChar } from './ir'
 import { isEastAsianScript, scriptOf } from './script'
 
@@ -37,6 +37,8 @@ export interface OcrLine {
 /** one page's recognition output */
 export interface OcrRecognition {
   lines: OcrLine[]
+  /** Required clockwise turn for editable flow; returned boxes always refer to the original scan. */
+  uprightTurn?: ScanTurn
   /**
    * near-white pixel share of the page render (0–1), when the engine can
    * measure it. Document scans are paper-dominated; photos are not — below
@@ -52,10 +54,15 @@ export interface OcrRecognition {
  * its bitmap. Must be sync: the pipeline runs inside a sync PDFium document
  * scope (a helper-binary engine should use spawnSync).
  */
-export type OcrEngine = (
-  png: Uint8Array,
-  page: { widthPt: number; heightPt: number },
-) => OcrRecognition | null
+export interface OcrEngine {
+  (
+    png: Uint8Array,
+    page: { widthPt: number; heightPt: number },
+    pixels?: RasterPixels,
+  ): OcrRecognition | null
+  /** Dedicated scan OCR can identify uniformly gray paper before the photo gate. */
+  paperThreshold?(pixels: RasterPixels): number
+}
 
 /** below this many recognized non-space chars the "scan" is likely a photo */
 const OCR_MIN_CHARS = 8
@@ -219,6 +226,24 @@ export interface OcrPageResult {
   confidence: number
 }
 
+function placedImages(page: ExtractedPage): ExtractedImage[] {
+  return page.images.filter(
+    (img) =>
+      !img.synthetic &&
+      !page.vectorRegions.includes(img.box) &&
+      img.box.x1 - img.box.x0 >= 20 &&
+      img.box.y1 - img.box.y0 >= 8,
+  )
+}
+
+export function hasOcrCandidate(page: ExtractedPage): boolean {
+  return (
+    page.scanned ||
+    (!page.degraded &&
+      (page.ocrTextRecovered || placedImages(page).length > 0 || !!page.rasterBackgroundCount))
+  )
+}
+
 /**
  * Try to recover a scanned page's text through the engine. Returns the
  * re-analyzed page, or null when any gate fails (caller keeps the bitmap
@@ -230,14 +255,36 @@ export interface OcrPageResult {
 export function tryOcrScannedPage(
   extracted: ExtractedPage,
   engine: OcrEngine,
-  hiRender?: { data: Uint8Array },
+  hiRender?: { data: Uint8Array } & Partial<RasterPixels>,
   listSeq?: ListSeq,
+  absoluteLayout = false,
 ): OcrPageResult | null {
   const render = hiRender ?? extracted.render
   if (!render) return null
+  const w = extracted.widthPt,
+    h = extracted.heightPt
+  const full = { x0: 0, y0: 0, x1: w, y1: h }
+  const pixels =
+    hiRender?.rgba && hiRender.width && hiRender.height
+      ? { rgba: hiRender.rgba, width: hiRender.width, height: hiRender.height }
+      : undefined
+  const candidates = placedImages(extracted)
+  // A scanned page is a single composite. For digital pages retain each
+  // unrelated image object (including its original encoding) unchanged.
+  const composite =
+    extracted.scanned || extracted.ocrTextRecovered || !!extracted.rasterBackgroundCount
+  const regions = composite ? [full] : candidates.map((img) => img.box)
+  const paperThreshold = pixels && engine.paperThreshold?.(pixels)
+  // Pure photo pages do not need a trip to the OS helper.
+  if (pixels && !regions.some((region) => hasPaper(pixels, region, w, h, paperThreshold)))
+    return null
   let recognition: OcrRecognition | null
   try {
-    recognition = engine(render.data, { widthPt: extracted.widthPt, heightPt: extracted.heightPt })
+    recognition = engine(
+      render.data,
+      { widthPt: extracted.widthPt, heightPt: extracted.heightPt },
+      pixels,
+    )
   } catch {
     return null
   }
@@ -245,36 +292,157 @@ export function tryOcrScannedPage(
   if (recognition.paperShare !== undefined && recognition.paperShare < OCR_MIN_PAPER_SHARE) {
     return null
   }
-  const kept = recognition.lines.filter(
-    (l) => l.confidence >= OCR_LINE_MIN_CONFIDENCE && l.text.trim() !== '',
-  )
-  if (kept.length === 0) return null
-  const coverage = kept.reduce(
-    (a, l) => a + Math.max(0, l.box.x1 - l.box.x0) * Math.max(0, l.box.y1 - l.box.y0),
-    0,
-  )
-  if (coverage < OCR_MIN_TEXT_COVERAGE) return null
-  const meanConfidence = kept.reduce((a, l) => a + l.confidence, 0) / kept.length
-  if (meanConfidence < OCR_MIN_MEAN_CONFIDENCE) return null
-  const chars = ocrLinesToChars(kept, extracted.widthPt, extracted.heightPt)
-  if (chars.filter((c) => c.text.trim() !== '').length < OCR_MIN_CHARS) return null
+  // A pure scan has no authored coordinates to preserve in Word. Rebuild it
+  // upright, including its table rulings and pictures, with this same OCR result.
+  if (
+    recognition.uprightTurn &&
+    pixels &&
+    extracted.scanned &&
+    !extracted.chars.length &&
+    !extracted.paths.length
+  ) {
+    const turn = recognition.uprightTurn
+    const upright = turnPixels(pixels, turn)
+    const prepared: OcrRecognition = {
+      ...recognition,
+      lines: turnLines(recognition.lines, turn),
+      uprightTurn: undefined,
+    }
+    const reuse: OcrEngine = () => prepared
+    reuse.paperThreshold = engine.paperThreshold
+    return tryOcrScannedPage(
+      {
+        ...extracted,
+        widthPt: turn === 180 ? w : h,
+        heightPt: turn === 180 ? h : w,
+        rotation: 0,
+        images: [],
+        vectorRegions: [],
+        contentBox: undefined,
+      },
+      reuse,
+      { ...upright, data: render.data },
+      listSeq,
+      absoluteLayout,
+    )
+  }
+  const linesByRegion = new Map<Rect, OcrLine[]>()
+  for (const line of recognition.lines) {
+    if (
+      !Number.isFinite(line.confidence) ||
+      line.confidence < OCR_LINE_MIN_CONFIDENCE ||
+      typeof line.text !== 'string' ||
+      !line.text.trim()
+    )
+      continue
+    const box = toPageRect(line.box, w, h)
+    if (box.x1 <= box.x0 || box.y1 <= box.y0 || !Object.values(box).every(Number.isFinite)) continue
+    const owners = regions.filter((region) => overlapRatio(box, region) >= 0.94)
+    if (owners.length !== 1) continue
+    const pad = (box.y1 - box.y0) * 0.3
+    if (
+      pixels &&
+      !hasPaper(
+        pixels,
+        { x0: box.x0 - pad, x1: box.x1 + pad, y0: box.y0 - pad, y1: box.y1 + pad },
+        w,
+        h,
+        paperThreshold,
+      )
+    )
+      continue
+    const region = owners[0]!
+    const group = linesByRegion.get(region)
+    if (group) group.push(line)
+    else linesByRegion.set(region, [line])
+  }
 
+  const native = extracted.chars.filter((c) => !c.isGenerated && !c.invisible && c.text.trim())
+  const chars: PdfChar[] = []
+  const images: ExtractedImage[] = []
+  const paths = [...extracted.paths]
+  const replaced = new Set<Rect>()
+  let sum = 0,
+    count = 0
+  for (const [region, lines] of linesByRegion) {
+    const area = Math.max(1, (region.x1 - region.x0) * (region.y1 - region.y0))
+    const coverage = lines.reduce(
+      (a, l) => a + ((l.box.x1 - l.box.x0) * (l.box.y1 - l.box.y0) * w * h) / area,
+      0,
+    )
+    const confidence = lines.reduce((a, l) => a + l.confidence, 0) / lines.length
+    if (
+      coverage < OCR_MIN_TEXT_COVERAGE ||
+      confidence < OCR_MIN_MEAN_CONFIDENCE ||
+      lines.reduce((n, l) => n + l.text.replace(/\s/g, '').length, 0) < OCR_MIN_CHARS
+    )
+      continue
+    // Ignore photographic regions with isolated signage even on a white page.
+    if (pixels && !hasPaper(pixels, region, w, h, paperThreshold)) continue
+    let freshCount = 0
+    for (const line of lines) {
+      const box = toPageRect(line.box, w, h)
+      const overlapping = native.filter((c) => overlapRatio(c.box, box) > 0.5)
+      const normalized = (text: string) => text.normalize('NFKC').replace(/\s/g, '').toLowerCase()
+      if (
+        overlapping.length &&
+        normalized(overlapping.map((c) => c.text).join('')).includes(normalized(line.text))
+      )
+        continue
+      const glyphs = ocrLinesToChars([line], w, h)
+      const fresh = overlapping.length
+        ? glyphs.filter(
+            (c) =>
+              !overlapping.some(
+                (n) => overlapRatio(c.box, n.box) > 0.3 || overlapRatio(n.box, c.box) > 0.5,
+              ),
+          )
+        : glyphs
+      if (!fresh.some((c) => c.text.trim())) continue
+      for (const glyph of fresh) chars.push(glyph)
+      sum += line.confidence
+      count++
+      freshCount++
+    }
+    if (!freshCount) {
+      // Searchable scans already have the recognized text. Preserve that layer
+      // and recover only the artwork around it instead of emitting the words twice.
+      if (!extracted.ocrTextRecovered || !native.length || !pixels) continue
+      count += lines.length
+      sum += confidence * lines.length
+    }
+    if (pixels) {
+      const art = recoverRasterArt(
+        pixels,
+        region,
+        lines.map((l) => toPageRect(l.box, w, h)),
+        w,
+        h,
+        paperThreshold !== undefined && paperThreshold < 210 ? paperThreshold : undefined,
+      )
+      images.push(...art.images)
+      paths.push(...art.paths)
+    }
+    replaced.add(region)
+  }
+  if (!count || (!chars.length && !native.length)) return null
+  const meanConfidence = sum / count
   const synthetic: ExtractedPage = {
     ...extracted,
-    chars,
-    // the page-covering scan bitmap is superseded by the recovered text; other
-    // artwork on a scanned page lives inside that bitmap, so nothing to keep
-    images: [],
-    paths: [],
+    chars: [...extracted.chars, ...chars],
+    images: composite
+      ? images
+      : [...extracted.images.filter((img) => !replaced.has(img.box)), ...images],
+    paths,
     scanned: false,
     degraded: false,
     degradedReason: undefined,
     render: undefined,
-    bgRender: undefined,
+    bgRender: composite ? undefined : extracted.bgRender,
     textLost: false,
     badUnicodeRatio: 0,
   }
-  const page = analyzePage(synthetic, { listSeq })
+  const page = analyzePage(synthetic, { listSeq, absoluteLayout })
   if (page.scanned || page.degraded) return null
   page.ocrRecovered = true
   return { page, confidence: meanConfidence }

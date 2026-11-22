@@ -365,12 +365,21 @@ folder and passes its start page to the Obsidian app on your PC. While setup
 is pending, Tandem stores the setup stage and its timestamp in your profile
 so you can continue after installation.
 
-**Learn from final documents** reads the files you select on this PC and saves
-up to eight excerpts per file in the vault with the filename and extracted line
-numbers. **Choose wiki references** copies the selected notes into that project's
-reference folder. During translation, the project can send excerpts from those
-copies to the AI provider within the same 6,000-character reference budget,
-including a style example when your request has no matching keywords.
+Wiki learning starts only when you choose **Learn from final documents**.
+On the translation home screen you select the files. In a translation project
+the command reads that project's saved outputs. Tandem processes the files on
+this PC and stores up to eight excerpts per file with the filename and extracted
+line numbers. Saving, closing or exporting a document and restarting the app do
+not start learning. **Choose wiki references** copies selected notes into the project's
+reference folder. **Use matching examples from the local translation wiki** also lets
+the translation look up examples across the local vault, including notes you have
+not copied into the project. The editor uses the source document's industry,
+genre, institution or style to query the wiki. It can read the wiki index and
+follow links to Markdown pages. Lookup results, including the matching text and
+source note names, go to the AI provider for that request. Translation and revision
+requests in chat ask before using the wiki. Turning the setting off excludes the
+wiki lookup and selected wiki material from new requests. The wiki index and
+category links are built on this PC.
 
 ## Whether your content is used for AI training
 

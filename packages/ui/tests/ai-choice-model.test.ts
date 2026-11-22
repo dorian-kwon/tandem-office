@@ -27,7 +27,10 @@ describe('parseChoiceInput', () => {
   })
 
   it('keeps a clean model id and replaces an unsafe one', () => {
-    const clean = parseChoiceInput({ id: 'out-mode_1', question: 'q', options: ['a', 'b'] }, () => 'g')
+    const clean = parseChoiceInput(
+      { id: 'out-mode_1', question: 'q', options: ['a', 'b'] },
+      () => 'g',
+    )
     expect(clean.ok && clean.question.id).toBe('out-mode_1')
     const unsafe = parseChoiceInput({ id: 'a] b', question: 'q', options: ['a', 'b'] }, () => 'g')
     expect(unsafe.ok && unsafe.question.id).toBe('g')
@@ -35,9 +38,9 @@ describe('parseChoiceInput', () => {
 
   it('rejects fewer than 2 or more than 6 options and blank options', () => {
     expect(parseChoiceInput({ question: 'q', options: ['only'] }).ok).toBe(false)
-    expect(parseChoiceInput({ question: 'q', options: ['1', '2', '3', '4', '5', '6', '7'] }).ok).toBe(
-      false,
-    )
+    expect(
+      parseChoiceInput({ question: 'q', options: ['1', '2', '3', '4', '5', '6', '7'] }).ok,
+    ).toBe(false)
     expect(parseChoiceInput({ question: 'q', options: ['a', '  '] }).ok).toBe(false)
     expect(parseChoiceInput({ question: '  ', options: ['a', 'b'] }).ok).toBe(false)
     expect(parseChoiceInput({ question: 'q', options: 'a,b' }).ok).toBe(false)
@@ -63,7 +66,12 @@ describe('parseChoiceInput', () => {
 })
 
 describe('answer messages', () => {
-  const q: ChoiceQuestion = { id: 'q1', question: 'q', options: ['Overwrite', 'Keep both'], allowTyping: true }
+  const q: ChoiceQuestion = {
+    id: 'q1',
+    question: 'q',
+    options: ['Overwrite', 'Keep both'],
+    allowTyping: true,
+  }
 
   it('formats the machine form for each kind of answer', () => {
     expect(formatChoiceAnswer('q1', { kind: 'option', index: 2, text: 'Keep both' })).toBe(
@@ -127,6 +135,44 @@ describe('createChoiceSkill', () => {
     expect(result.output).toMatch(/STOP/)
     expect(result.output).toContain('[choice:ocr1]')
   })
+
+  it('continues a batch with a scoped, recommended formatting setting; saved choices take precedence', async () => {
+    const ask = vi.fn()
+    const batch: { outputMode?: string } = {}
+    const skill = createChoiceSkill({ ask, batchChoices: () => batch })
+    const request = {
+      id: 'outputMode',
+      question: 'Output mode?',
+      options: ['Bilingual', 'Translation only'],
+    }
+    const automatic = await skill.executeTool(call(request))
+    expect(automatic.awaitingUser).toBeFalsy()
+    expect(automatic.output).toContain('Keep the original text alongside')
+    const recommended = await skill.executeTool(
+      call({ ...request, recommendedFormat: 'target-only' }),
+    )
+    expect(recommended.output).toContain('Translate the text in the output copy')
+    batch.outputMode = 'Place the original below the translation.'
+    expect((await skill.executeTool(call(request))).output).toContain(batch.outputMode)
+    expect(ask).not.toHaveBeenCalled()
+  })
+
+  it.each(['sendEmail', 'allowCharge', 'ocrPlacement'])(
+    'never answers an explicit confirmation in a batch (%s)',
+    async (id) => {
+      const skill = createChoiceSkill({ ask: vi.fn(), batchChoices: () => ({}) })
+      const result = await skill.executeTool(
+        call({
+          id,
+          question: 'Confirm this action?',
+          options: ['Yes', 'No'],
+          recommendedFormat: 'target-only',
+        }),
+      )
+      expect(result.awaitingUser).toBe(true)
+      expect(result.output).not.toContain('Yes')
+    },
+  )
 
   it('refuses a bad question without showing a card', async () => {
     const ask = vi.fn()

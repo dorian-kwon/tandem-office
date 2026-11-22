@@ -210,6 +210,7 @@ function viewOf(
     description: skill.description,
     enabled: skill.enabled,
     invoke: skill.invoke,
+    ...(skill.manualOnly ? { manualOnly: true as const } : {}),
     hidden: skill.hidden,
     hasScripts: skill.hasScripts,
     mcpServers: skill.mcpServers,
@@ -580,6 +581,7 @@ export function createUserSkillsService(deps: UserSkillsServiceDeps) {
     ): Promise<UserSkillsResult> {
       const skill = await find(id)
       if (!skill) return fail('not-found')
+      if (skill.manualOnly && patch.invoke === 'auto') return fail('invalid')
       if (patch.enabled === true && skill.hidden) return fail('hidden')
       if (patch.enabled === true && skill.unreadable) return fail('unreadable')
       changeSettings((settings) => setStateValue(settings, skill.id, skill.source, patch))

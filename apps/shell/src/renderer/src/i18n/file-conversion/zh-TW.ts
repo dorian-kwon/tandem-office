@@ -1,6 +1,16 @@
 import type { zh } from './zh'
 
 export const zhTW = {
+  ocrLanguage: '辨識語言',
+  ocrLanguageDefault: '系統預設',
+  ocrLanguageUnavailable: '無法使用所選的辨識語言。請選擇其他語言，或在裝置上安裝此語言。',
+  ocrTitle: 'OCR 文字辨識',
+  ocrBatch: '開始批次文字辨識',
+  ocrPdf: '可搜尋的 PDF',
+  ocrWord: '可編輯的 Word',
+  ocrRunning: '正在辨識文字…',
+  ocrNoText: '找不到可辨識的文字。',
+  ocrUnavailable: '此裝置無法使用本機 OCR。',
   title: '檔案轉換',
   chooseFiles: '選取檔案',
   outputFormat: '輸出格式',
@@ -13,4 +23,7 @@ export const zhTW = {
   saved: '已儲存',
   failed: '轉換失敗',
   removeFile: '從清單中移除 {name}',
+  ocrRange: '辨識頁碼',
+  ocrAllPages: '全部頁面',
+  ocrRangeInvalid: '請檢查此檔案的頁碼範圍。例如：1, 3–5',
 } satisfies Record<keyof typeof zh, string>

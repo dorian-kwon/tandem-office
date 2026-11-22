@@ -380,6 +380,7 @@ export function AiPanel({ host, filePath, onCollapse }: AiPanelProps): ReactElem
 
   // the shared ask_choice question card: the answer starts the next run
   const choice = useAiChoice({
+    batchChoices: () => runStatus.projectTurn.current?.batchChoices,
     lang,
     busy,
     remember: projectChoiceRemember(() => projectChat.run),
@@ -793,6 +794,7 @@ export function AiPanel({ host, filePath, onCollapse }: AiPanelProps): ReactElem
         choice.skill,
         ...panelProjectSkill({ run: projectChat.run, lang: () => langRef.current }),
       ]),
+      separateDocumentContext: () => runStatus.projectTurn.current?.batchFollowup === true,
       systemSuffix: () =>
         aiLangDirective(langRef.current) +
         (aiEditUndoHistoryEnabled()
@@ -1020,9 +1022,9 @@ export function AiPanel({ host, filePath, onCollapse }: AiPanelProps): ReactElem
     /** the chosen skills: their text goes to the model, their chips onto the bubble */
     skillUse: SkillUse = NO_SKILL_USE,
   ): boolean => {
-    const instruction = text.trim()
+    const instruction = runStatus.projectTurn.current?.batchFollowup ? text : text.trim()
     const loop = loopRef.current
-    if (!instruction || !loop || loop.busy) return false
+    if (!instruction.trim() || !loop || loop.busy) return false
     // the window's project is not known yet (the panel just opened): the request waits for it,
     // so it goes to the right chat with the right context (spec 5.2, 6)
     if (projectChatRef.current.available && !projectChatRef.current.ready) {
@@ -1517,7 +1519,7 @@ export function AiPanel({ host, filePath, onCollapse }: AiPanelProps): ReactElem
     ready: !projectChat.available || projectChat.ready,
     gate: sendGate.peek,
     busy: busy,
-    send: (prompt) => send(prompt),
+    send: (prompt) => send(prompt, []),
     stop: stop,
   })
 

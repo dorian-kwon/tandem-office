@@ -1123,10 +1123,11 @@ export function Home({
   const driveOffered = driveState !== null && driveState.state !== 'unavailable'
   // the project screen (decision 0088) takes over the content area the same way
   const [projectsMode, setProjectsMode] = useState(false)
-  const [homeTool, setHomeTool] = useState<'translate' | 'file-conversion' | null>(
+  const [homeTool, setHomeTool] = useState<'translate' | 'file-conversion' | 'ocr' | null>(
     TRANSLATION_ONLY ? 'translate' : null,
   )
   const translateMode = homeTool === 'translate'
+  const ocrOffered = Boolean(window.ocrFilesApi)
   const conversionOffered = Boolean(window.fileConversionApi)
   const [projectRequest, setProjectRequest] = useState<ProjectScreenRequest | null>(null)
   // the project screen asked for the first-connection notice ("[tidy up]" waits behind it)
@@ -3326,7 +3327,7 @@ export function Home({
       ? (homeTool ?? (projectsMode ? 'projects' : askMode ? 'ask' : view))
       : null
 
-  const openHomeTool = (tool: 'translate' | 'file-conversion') => {
+  const openHomeTool = (tool: 'translate' | 'file-conversion' | 'ocr') => {
     setHomeTool(tool)
     setProjectsMode(false)
     setAskMode(false)
@@ -3523,6 +3524,25 @@ export function Home({
               <span className="nav-label">{fileConversionText(lang, 'title')}</span>
             </button>
           )}
+          {ocrOffered && (
+            <button
+              type="button"
+              className={`nav-item${activeNav === 'ocr' ? ' active' : ''}`}
+              aria-current={activeNav === 'ocr' ? 'page' : undefined}
+              data-testid="home-ocr-nav"
+              onClick={() => openHomeTool('ocr')}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path
+                  d="M5 2H2v3m9-3h3v3M2 11v3h3m9-3v3h-3M5 6h6M8 6v5"
+                  stroke="currentColor"
+                  strokeWidth="1.3"
+                  strokeLinecap="round"
+                />
+              </svg>
+              <span className="nav-label">{fileConversionText(lang, 'ocrTitle')}</span>
+            </button>
+          )}
           {!TRANSLATION_ONLY && (
             <>
               {/* decision 0032: the agent opens a window of its own, hence the mark on the right */}
@@ -3589,6 +3609,7 @@ export function Home({
         />
       </aside>
       <div className="sidebar-resizer" onPointerDown={onSidebarResizeStart} />
+      {ocrOffered && <FileConversionPanel visible={activeNav === 'ocr'} mode="ocr" />}
       {conversionOffered && <FileConversionPanel visible={activeNav === 'file-conversion'} />}
       {selectedFolder && rootOf(selectedFolder, roots)?.readable ? (
         renderFolderContent()
@@ -3607,8 +3628,8 @@ export function Home({
             onOpenAiSettings={() => setSettingsRequest({ section: 'aiModel' })}
           />
         </div>
-      ) : homeTool === 'file-conversion' && conversionOffered ? null : projectsMode &&
-        projectsOffered ? (
+      ) : (homeTool === 'file-conversion' && conversionOffered) ||
+        (homeTool === 'ocr' && ocrOffered) ? null : projectsMode && projectsOffered ? (
         <ProjectsPanel
           request={projectRequest}
           aiSettings={aiSettings}
@@ -3831,7 +3852,7 @@ export function Home({
       {/* documents with unsaved content left in recovery copies, asked about
           once at launch; the main process keeps Home in front meanwhile */}
       <LaunchRecoveryList />
-      <DropToOpenOverlay />
+      {activeNav !== 'ocr' && <DropToOpenOverlay />}
     </div>
   )
 }

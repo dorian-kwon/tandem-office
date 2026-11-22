@@ -18,7 +18,13 @@ const here = dirname(fileURLToPath(import.meta.url))
 execFileSync(process.execPath, [join(here, 'build-win.mjs')], { stdio: 'inherit' })
 
 const png = readFileSync(join(here, 'fixtures', 'smoke-en.png'))
-const res = spawnSync(join(here, 'win-ocr.exe'), [], {
+const helper = join(here, 'win-ocr.exe')
+const installed = execFileSync(helper, ['--list-languages'], { encoding: 'utf8', timeout: 5000 })
+  .trim()
+  .split(/\s+/)
+  .filter(Boolean)
+const english = Intl.getCanonicalLocales(installed).find((tag) => /^en(?:-|$)/i.test(tag))
+const res = spawnSync(helper, english ? [english, '--exact'] : [], {
   input: png,
   maxBuffer: 64 * 1024 * 1024,
   timeout: 60_000,

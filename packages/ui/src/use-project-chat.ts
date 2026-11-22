@@ -290,6 +290,9 @@ function pickSkillBridge(bridge: ProjectSkillBridge): ProjectSkillBridge {
     read: (args) => bridge.read(args),
     remember: (args) => bridge.remember(args),
     // only when the bridge has them: the OCR tool and the kept answers are offered by what exists
+    ...(bridge.lookupTranslationExamples
+      ? { lookupTranslationExamples: (args) => bridge.lookupTranslationExamples!(args) }
+      : {}),
     ...(bridge.ocr ? { ocr: (args) => bridge.ocr!(args) } : {}),
     ...(bridge.rememberChoice ? { rememberChoice: (args) => bridge.rememberChoice!(args) } : {}),
   }
@@ -335,7 +338,7 @@ export function createProjectChatController(initial: ProjectChatOptions): Projec
   let state: ProjectChatState = { ...INITIAL_STATE, available: !!bridge }
   const listeners = new Set<() => void>()
   /** the last user message's text, read by the next `prepareSend` once (never stored) */
-  let pendingQuery: string | null = null
+  let pendingQuery: { text: string; instruction: string } | null = null
   const setState = (patch: Partial<ProjectChatState>) => {
     // another chat (new, switched, deleted, another project): a message recorded for
     // the old one is not this chat's request text. The first chat a panel opens is no
@@ -712,7 +715,10 @@ export function createProjectChatController(initial: ProjectChatOptions): Projec
     persist(record) {
       // the request text for the next context read (a translation glossary picks terms by it);
       // an answer (or an error reply) ends that exchange
-      pendingQuery = record.role === 'user' ? requestText(record) : null
+      pendingQuery =
+        record.role === 'user'
+          ? { text: requestText(record), instruction: record.text.trim() }
+          : null
       if (!state.ready) return false
       const chat = state.chat
       if (!chat) return false
@@ -753,10 +759,13 @@ export function createProjectChatController(initial: ProjectChatOptions): Projec
     settled: () => writes,
     async prepareSend(given) {
       flush()
-      const query = given !== undefined ? requestText({ role: 'user', text: given }) : pendingQuery
+      const query =
+        given !== undefined ? { text: given.trim(), instruction: given.trim() } : pendingQuery
       pendingQuery = null
       if (!run) return { status: 'none' }
-      return query ? run.prepare(query) : run.prepare()
+      return query?.text
+        ? run.prepare(query.text, query.text === query.instruction ? undefined : query.instruction)
+        : run.prepare()
     },
     async finishSend() {
       // a send that stopped before its context read leaves no text for a later one

@@ -73,6 +73,8 @@ export class CliError extends Error {
 /** Something a program should know about a result that still succeeded. */
 export interface Warning {
   code: string
+  /** Original 1-based PDF pages affected by this advisory, when applicable. */
+  pages?: number[]
   message: string
   suggestion?: string
 }

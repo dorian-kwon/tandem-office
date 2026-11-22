@@ -3,6 +3,12 @@ import type { zh } from './zh'
 export const de = {
   openProjectAi: 'Projekt-KI öffnen',
   closeProjectAi: 'Projekt-KI schließen',
+  batchChat: 'Stapelchat',
+  batchChatWhich: 'Für welche Dokumente gilt diese Anfrage?',
+  batchChatAll: 'Alle Dokumente',
+  batchChatFile: 'Über {file} chatten',
+  batchChatDone: 'Erledigt',
+  batchChatCurrent: 'Aktuelles Dokument',
   batchTranslate: 'Stapelübersetzung',
   batchRetry: 'Fehlgeschlagene Dokumente erneut versuchen',
   batchResume: 'Angehaltene Dokumente fortsetzen',
@@ -20,12 +26,25 @@ export const de = {
   batchFailed: 'Fehlgeschlagen',
   batchConsent:
     'Diese KI für die {n} ausgewählten Dokumente verwenden. Für diese Datei sind etwa {calls} Anfragen nötig.',
+  wikiManage: 'Wiki verwalten',
+  wikiInitialize: 'Zurücksetzen',
+  wikiRepair: 'Reparieren',
+  wikiInitializeConfirm:
+    'Das aktuelle Wiki sichern und mit einem leeren Wiki neu starten? Dies gilt für alle Übersetzungsprojekte.',
+  wikiMaintaining: 'Wiki wird aktualisiert…',
+  wikiInitialized: 'Das neue Wiki ist bereit.',
+  wikiRepaired: 'Wiki-Index und Kategorieverweise wurden repariert.',
   wikiLearn: 'Aus fertigen Dokumenten lernen',
   wikiLearning: 'Dateien werden ausgewählt und verarbeitet…',
+  wikiProjectLearning: 'Gespeicherte Dokumente werden verarbeitet…',
+  wikiProjectNoFinals:
+    'Es gibt keine gespeicherten Übersetzungen mit Änderungen gegenüber dem Original.',
+  wikiLearnUpdated: 'Im Wiki aktualisiert',
   wikiLearnAdded: 'Zum Wiki hinzugefügt',
   wikiLearnDuplicate: 'Bereits im Wiki',
   wikiLearnEmpty: 'Kein lesbarer Text',
   wikiLearnFailed: 'Hinzufügen zum Wiki fehlgeschlagen',
+  useWiki: 'Passende Beispiele aus dem lokalen Übersetzungswiki verwenden',
   selectWikiReferences: 'Referenzen aus dem Wiki auswählen',
   wikiView: 'Wiki anzeigen',
   wikiSetup:

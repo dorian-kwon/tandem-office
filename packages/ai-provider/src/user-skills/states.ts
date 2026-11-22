@@ -80,7 +80,7 @@ export function resolveUserSkillStates(
     return {
       ...skill,
       enabled: !isHidden && skill.unreadable === undefined && (saved.enabled ?? initial.enabled),
-      invoke: saved.invoke ?? initial.invoke,
+      invoke: skill.manualOnly ? 'manual' : (saved.invoke ?? initial.invoke),
       hidden: isHidden,
     }
   })

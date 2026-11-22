@@ -21,6 +21,22 @@ import AppKit
 import Foundation
 import Vision
 
+let request = VNRecognizeTextRequest()
+request.recognitionLevel = .accurate
+if CommandLine.arguments.dropFirst().first == "--list-languages" {
+    do {
+        let languages: [String]
+        if #available(macOS 12.0, *) {
+            languages = try request.supportedRecognitionLanguages()
+        } else {
+            languages = try VNRecognizeTextRequest.supportedRecognitionLanguages(for: .accurate, revision: request.revision)
+        }
+        print(languages.joined(separator: "\n"))
+        exit(0)
+    } catch {
+        exit(4)
+    }
+}
 let stdinData = FileHandle.standardInput.readDataToEndOfFile()
 guard let img = NSImage(data: stdinData),
       let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
@@ -28,11 +44,9 @@ guard let img = NSImage(data: stdinData),
     exit(2)
 }
 
-let request = VNRecognizeTextRequest()
-request.recognitionLevel = .accurate
 request.usesLanguageCorrection = true
 if #available(macOS 13.0, *) {
-    request.automaticallyDetectsLanguage = true
+    request.automaticallyDetectsLanguage = !CommandLine.arguments.contains("--exact")
 }
 if CommandLine.arguments.count > 1, !CommandLine.arguments[1].isEmpty {
     request.recognitionLanguages = CommandLine.arguments[1].split(separator: ",").map(String.init)

@@ -19,9 +19,12 @@ export async function convertWithBundledCli(
   output: string,
   lang: Lang,
 ) {
-  const result = await cli.run(['convert', input, '--to', format, '--out', output], {
-    timeoutMs: 600_000,
-  })
+  const result = await cli.run(
+    ['convert', input, '--to', format, '--out', output, '--optimize-images'],
+    {
+      timeoutMs: 600_000,
+    },
+  )
   if (!result.ok) throw new Error(cliErrorMessage(result))
   if (result.json?.status === 'ok')
     return result.json.warnings?.map((warning) => conversionWarning(lang, warning)).join(' ')

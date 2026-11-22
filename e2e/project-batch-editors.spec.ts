@@ -46,6 +46,20 @@ test('project batch saves only selected documents, shows live progress and retri
       {
         toolCalls: [
           {
+            id: 'format-md',
+            name: 'ask_choice',
+            input: {
+              id: 'outputMode',
+              question: 'How should the translated text be placed?',
+              options: ['Keep both languages', 'Translate the output copy'],
+              recommendedFormat: 'target-only',
+            },
+          },
+        ],
+      },
+      {
+        toolCalls: [
+          {
             id: 'change-md',
             name: 'apply_ops',
             input: {
@@ -123,6 +137,13 @@ test('project batch saves only selected documents, shows live progress and retri
     await expect(progress.getByTestId('project-batch-retry')).toBeEnabled()
     expect(await readdir(join(dir, 'output'))).not.toContain('excluded.md')
 
+    expect(
+      (await recorded(app)).streams.some((r) =>
+        r.includes(
+          'Batch translation formatting (outputMode): Translate the text in the output copy.',
+        ),
+      ),
+    ).toBe(true)
     const firstSave = await stat(join(dir, 'output', 'first.md'))
     const secondSave = await stat(join(dir, 'output', 'second.docx'))
     const requestsBeforeRetry = (await recorded(app)).streams.length

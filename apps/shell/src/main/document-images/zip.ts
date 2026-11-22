@@ -1,7 +1,15 @@
-import { constants } from 'node:fs'
+import { constants, createWriteStream } from 'node:fs'
+import { Readable, Transform } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 import { lstat, mkdtemp, open, rm, writeFile, type FileHandle } from 'node:fs/promises'
 import { dirname, join, posix } from 'node:path'
-import { crc32, deflateRawSync, inflateRawSync } from 'node:zlib'
+import {
+  crc32,
+  createDeflateRaw,
+  createInflateRaw,
+  deflateRawSync,
+  inflateRawSync,
+} from 'node:zlib'
 import { XMLValidator } from 'fast-xml-parser'
 import { readZipEntries, type ByteSource, type ZipEntry } from '@genoffice/docx-engine/zip-splice'
 
@@ -44,7 +52,7 @@ interface Source extends ByteSource {
 }
 
 /** Keep the source open throughout conversion; no whole-archive Buffer or extracted paths. */
-async function source(inputPath: string): Promise<Source> {
+async function source(inputPath: string, requirePlainHeaders = false): Promise<Source> {
   const handle = await open(inputPath, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))
   try {
     const stat = await handle.stat()
@@ -76,6 +84,7 @@ async function source(inputPath: string): Promise<Source> {
     while (end >= 0 && tail.readUInt32LE(end) !== 0x06054b50) end--
     if (
       end < 0 ||
+      (requirePlainHeaders && tail.readUInt16LE(end + 20) !== 0) ||
       tail.readUInt16LE(end + 4) !== 0 ||
       tail.readUInt16LE(end + 6) !== 0 ||
       tail.readUInt16LE(end + 8) !== tail.readUInt16LE(end + 10) ||
@@ -154,6 +163,8 @@ async function source(inputPath: string): Promise<Source> {
       const centralName = central.readUInt16LE(cursor + 28),
         centralExtra = central.readUInt16LE(cursor + 30),
         comment = central.readUInt16LE(cursor + 32)
+      // The splice writer emits plain headers. Preserve optional producer metadata by leaving this archive alone.
+      if (requirePlainHeaders && (extraLength || centralExtra || comment)) throw unsupported()
       for (let p = cursor + 46 + centralName, stop = p + centralExtra; p < stop;) {
         if (p + 4 > stop) throw unsupported()
         const id = central.readUInt16LE(p),
@@ -804,5 +815,107 @@ export async function optimizeZipBmp(
   } finally {
     await src.handle.close()
     if (temporary) await rm(temporary, { recursive: true, force: true })
+  }
+}
+
+/** Zip media may be stored verbatim even when a bitmap is tens of megabytes.
+ * Deflate BMP bytes as a stream to preserve palettes, alpha, metadata and every
+ * reference to the original filename without allocating a page-sized buffer. */
+async function packBitmap(src: Source, entry: ZipEntry, file: string): Promise<number | null> {
+  let size = 0,
+    crc = 0
+  const verify = new Transform({
+    transform(chunk: Buffer, _encoding, cb) {
+      size += chunk.length
+      if (size > entry.usize) {
+        cb(unsupported())
+        return
+      }
+      crc = crc32(chunk, crc)
+      cb(null, chunk)
+    },
+  })
+  const input = Readable.from(
+    (async function* () {
+      for (let pos = 0; pos < entry.csize; pos += CHUNK) {
+        yield await src.read(entry.dataOffset + pos, Math.min(CHUNK, entry.csize - pos))
+      }
+    })(),
+  )
+  const compressor = createDeflateRaw({ level: 6 })
+  const dest = createWriteStream(file, { flags: 'wx', mode: 0o600 })
+  if (entry.method === 8) await pipeline(input, createInflateRaw(), verify, compressor, dest)
+  else await pipeline(input, verify, compressor, dest)
+  if (size !== entry.usize || crc !== entry.crc) throw unsupported()
+  const packed = (await lstat(file)).size
+  return packed < entry.csize ? packed : null
+}
+
+export async function optimizeZipImageParts(
+  inputPath: string,
+  outputPath: string,
+  scratch: string,
+  optimizePng: (bytes: Buffer) => Buffer | null,
+): Promise<number> {
+  const src = await source(inputPath, true)
+  try {
+    if (
+      src.entries.some(({ name }) =>
+        /^META-INF\/(?:documentsignatures|macrosignatures)\.xml$/i.test(name),
+      )
+    )
+      return 0
+    const replacements = new Map<string, Replacement>()
+    for (const entry of src.entries) {
+      if (entry.csize < 4096 || entry.usize > MAX_BMP) continue
+      const file = join(scratch, String(replacements.size) + '.media')
+      if (/\.bmp$/i.test(entry.name)) {
+        const packed = await packBitmap(src, entry, file)
+        if (packed !== null) {
+          replacements.set(entry.name, {
+            name: entry.name,
+            file,
+            size: packed,
+            crc: entry.crc,
+            usize: entry.usize,
+            method: 8,
+          })
+          continue
+        }
+        await rm(file, { force: true })
+      } else if (/\.png$/i.test(entry.name) && entry.usize <= 32 * 1024 * 1024) {
+        const original = await part(src, entry, 32 * 1024 * 1024)
+        const optimized = optimizePng(original)
+        if (!optimized && entry.method === 8) continue
+        const media = optimized ?? original
+        const compressed = deflateRawSync(media, { level: 6 })
+        const store = media.length <= compressed.length
+        const bytes = store ? media : compressed
+        if (bytes.length >= entry.csize) continue
+        await writeFile(file, bytes, { flag: 'wx', mode: 0o600 })
+        replacements.set(entry.name, {
+          name: entry.name,
+          file,
+          size: bytes.length,
+          crc: crc32(media),
+          usize: media.length,
+          method: store ? 0 : 8,
+        })
+      }
+    }
+    if (!replacements.size) return 0
+    await unchanged(src)
+    const output = await open(outputPath, 'wx', 0o600)
+    try {
+      // EPUB/ODF require the first physical entry to stay the uncompressed mimetype.
+      src.entries.sort((a, b) => a.dataOffset - b.dataOffset)
+      await writeArchive(src, output, replacements)
+      await output.sync()
+    } finally {
+      await output.close()
+    }
+    return replacements.size
+  } finally {
+    await src.handle.close()
   }
 }

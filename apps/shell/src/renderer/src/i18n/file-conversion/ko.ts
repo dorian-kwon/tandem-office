@@ -1,6 +1,17 @@
 import type { zh } from './zh'
 
 export const ko = {
+  ocrLanguage: '인식 언어',
+  ocrLanguageDefault: '시스템 기본값',
+  ocrLanguageUnavailable:
+    '선택한 인식 언어를 사용할 수 없습니다. 다른 언어를 선택하거나 기기에 해당 언어를 설치하세요.',
+  ocrTitle: 'OCR 하기',
+  ocrBatch: '일괄 OCR 시작',
+  ocrPdf: '검색 가능한 PDF',
+  ocrWord: '편집용 Word',
+  ocrRunning: '문자 인식 중…',
+  ocrNoText: '인식할 글자를 찾지 못했습니다.',
+  ocrUnavailable: '이 기기에서 로컬 문자 인식을 사용할 수 없습니다.',
   title: '파일 변환',
   chooseFiles: '파일 선택',
   outputFormat: '변환할 형식',
@@ -15,4 +26,7 @@ export const ko = {
   saved: '저장됨',
   failed: '변환 실패',
   removeFile: '{name} 목록에서 제거',
+  ocrRange: '인식할 페이지',
+  ocrAllPages: '전체 페이지',
+  ocrRangeInvalid: '이 파일의 페이지 범위를 확인하세요. 예: 1, 3–5',
 } satisfies Record<keyof typeof zh, string>

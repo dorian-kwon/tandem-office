@@ -111,7 +111,9 @@ export function useAiRunStatus(busy: boolean): AiRunStatusController {
           turn.result = {
             kind: 'error',
             id: turn.id,
-            error: 'The document AI needs your input.',
+            error: turn.batchChoices
+              ? `This document needs a decision before it can be saved. ${event.execution.summary}`
+              : 'The document AI needs your input.',
           }
         }
         dispatchRef.current({
@@ -130,7 +132,7 @@ export function useAiRunStatus(busy: boolean): AiRunStatusController {
       onError: (error) => {
         dispatchRef.current({ type: 'error' })
         events.onError?.(error)
-        if (projectTurn.current)
+        if (projectTurn.current && !projectTurn.current.result)
           projectTurn.current.result = { kind: 'error', id: projectTurn.current.id, error }
       },
     }),

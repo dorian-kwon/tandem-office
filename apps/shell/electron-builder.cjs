@@ -8,7 +8,7 @@
  */
 
 const { execFileSync } = require('node:child_process')
-const { existsSync, readFileSync, readdirSync, rmSync } = require('node:fs')
+const { existsSync, readFileSync, readdirSync, rmSync, statSync } = require('node:fs')
 const { join } = require('node:path')
 
 // Product identity of the installed app. PRODUCT_MACHINE_NAME must equal
@@ -127,14 +127,19 @@ function compileVisionOcr({ universalOnly } = { universalOnly: false }) {
   }
 }
 
-const WIN_OCR_HELPER = '../../packages/pdf2docx/ocr-helper/win-ocr.exe'
 const WIN_QUICKLOOK_HELPER = 'src/main/quick-look/win-quicklook.exe'
 
 function ensurePlatformHelpers() {
-  if (process.platform === 'darwin' && !existsSync(join(__dirname, VISION_OCR_HELPER))) {
+  const visionHelper = join(__dirname, VISION_OCR_HELPER)
+  if (
+    process.platform === 'darwin' &&
+    (!existsSync(visionHelper) ||
+      statSync(visionHelper).mtimeMs < statSync(visionHelper + '.swift').mtimeMs)
+  ) {
     compileVisionOcr()
   }
-  if (process.platform === 'win32' && !existsSync(join(__dirname, WIN_OCR_HELPER))) {
+  // build-win.mjs skips compilation when its binary is current.
+  if (process.platform === 'win32') {
     try {
       execFileSync(
         process.execPath,

@@ -1,6 +1,17 @@
 import type { zh } from './zh'
 
 export const ru = {
+  ocrLanguage: 'Язык распознавания',
+  ocrLanguageDefault: 'По умолчанию в системе',
+  ocrLanguageUnavailable:
+    'Выбранный язык недоступен. Выберите другой язык или установите его на устройстве.',
+  ocrTitle: 'Распознать текст',
+  ocrBatch: 'Запустить пакетное распознавание',
+  ocrPdf: 'PDF с поиском',
+  ocrWord: 'Редактируемый Word',
+  ocrRunning: 'Распознавание текста…',
+  ocrNoText: 'Читаемый текст не найден.',
+  ocrUnavailable: 'Локальное распознавание недоступно на этом устройстве.',
   title: 'Преобразование файлов',
   chooseFiles: 'Выбрать файлы',
   outputFormat: 'Выходной формат',
@@ -15,4 +26,7 @@ export const ru = {
   saved: 'Сохранено',
   failed: 'Ошибка преобразования',
   removeFile: 'Убрать {name} из списка',
+  ocrRange: 'Страницы для распознавания',
+  ocrAllPages: 'Все страницы',
+  ocrRangeInvalid: 'Проверьте диапазон страниц этого файла. Пример: 1, 3–5',
 } satisfies Record<keyof typeof zh, string>

@@ -9,19 +9,35 @@ export interface WikiImportOptions {
   profileDir: string
   lang: Lang
   cliEntry: string
+  projectDir?: string
+  sourceHashes?: Record<string, string>
+  outputNames?: Record<string, string>
 }
+
+let workerQueue: Promise<void> = Promise.resolve()
 
 export function learnFinalPaths(
   paths: string[],
   options: WikiImportOptions,
 ): Promise<WikiFinalResult[]> {
+  const result = workerQueue.then(() => runWorker(paths, options))
+  workerQueue = result.then(
+    () => {},
+    () => {},
+  )
+  return result
+}
+
+function runWorker(paths: string[], options: WikiImportOptions): Promise<WikiFinalResult[]> {
   // Keep the document bytes, parsed text and the WASM engine out of the UI process.
   // Retain each completed result even if a later input exhausts the worker.
   const results: WikiFinalResult[] = paths.map((path) => ({
     name: basename(path),
     status: 'failed',
   }))
+  const unchanged = new Set<number>()
   return new Promise((resolve) => {
+    const finish = () => resolve(results.filter((_, i) => !unchanged.has(i)))
     const worker = new Worker(workerPath, {
       workerData: { ...options, paths },
       env: {
@@ -32,11 +48,19 @@ export function learnFinalPaths(
     })
     worker.on(
       'message',
-      ({ index, status }: { index: number; status: WikiFinalResult['status'] }) => {
-        results[index]!.status = status
+      ({
+        index,
+        status,
+      }: {
+        index: number
+        status: WikiFinalResult['status'] | 'unchanged-source'
+      }) => {
+        if (status === 'unchanged-source') unchanged.add(index)
+        else results[index]!.status = status
       },
     )
-    worker.once('error', () => resolve(results))
-    worker.once('exit', () => resolve(results))
+    // A failed thread still emits exit. Wait for it before starting the next import.
+    worker.once('error', () => {})
+    worker.once('exit', finish)
   })
 }

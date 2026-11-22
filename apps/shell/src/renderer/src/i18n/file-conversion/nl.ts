@@ -1,6 +1,17 @@
 import type { zh } from './zh'
 
 export const nl = {
+  ocrLanguage: 'Herkenningstaal',
+  ocrLanguageDefault: 'Systeemstandaard',
+  ocrLanguageUnavailable:
+    'De gekozen herkenningstaal is niet beschikbaar. Kies een andere taal of installeer deze op dit apparaat.',
+  ocrTitle: 'OCR uitvoeren',
+  ocrBatch: 'Batch-OCR starten',
+  ocrPdf: 'Doorzoekbare PDF',
+  ocrWord: 'Bewerkbaar Word-document',
+  ocrRunning: 'Tekst herkennen…',
+  ocrNoText: 'Geen leesbare tekst gevonden.',
+  ocrUnavailable: 'Lokale OCR is niet beschikbaar op dit apparaat.',
   title: 'Bestanden converteren',
   chooseFiles: 'Bestanden kiezen',
   outputFormat: 'Uitvoerformaat',
@@ -15,4 +26,7 @@ export const nl = {
   saved: 'Opgeslagen',
   failed: 'Conversie mislukt',
   removeFile: '{name} uit de lijst verwijderen',
+  ocrRange: 'Te herkennen pagina’s',
+  ocrAllPages: 'Alle pagina’s',
+  ocrRangeInvalid: 'Controleer het paginabereik voor dit bestand. Voorbeeld: 1, 3–5',
 } satisfies Record<keyof typeof zh, string>

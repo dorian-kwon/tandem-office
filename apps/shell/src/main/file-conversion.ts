@@ -35,9 +35,10 @@ export async function saveConvertedFile(
   target: string,
   convert: Convert,
   destination?: string,
+  nameSuffix = '',
 ): Promise<Pick<FileConversionResult, 'outputPath' | 'warning'>> {
   const dir = dirname(destination ?? input)
-  const stem = basename(input, extname(input))
+  const stem = basename(input, extname(input)) + nameSuffix
   // Keep relative resources valid: PDF -> Markdown writes pictures in assets/
   // beside its output. The temporary document has the real target extension.
   const staged = join(dir, `.convert-${randomUUID()}.${target}`)
@@ -80,6 +81,11 @@ export async function saveConvertedFile(
 export class FileConversionSession {
   private readonly paths = new Map<string, string>()
   private readonly ids = new Map<string, string>()
+  constructor(
+    private readonly formatsFor: (path: string) => readonly string[] = targetsFor,
+    private readonly nameSuffix = '',
+  ) {}
+
   private running = false
 
   pick(paths: string[]): FileConversionInput[] {
@@ -87,7 +93,7 @@ export class FileConversionSession {
       const id = this.ids.get(path) ?? randomUUID()
       this.ids.set(path, id)
       this.paths.set(id, path)
-      return { id, name: basename(path), displayPath: path, targets: [...targetsFor(path)] }
+      return { id, name: basename(path), displayPath: path, targets: [...this.formatsFor(path)] }
     })
   }
 
@@ -108,7 +114,7 @@ export class FileConversionSession {
       throw new Error('Invalid conversion request.')
     const inputs = [...new Set(ids)].map((id: unknown) => {
       const path = typeof id === 'string' && this.paths.get(id)
-      if (!path || typeof id !== 'string' || !targetsFor(path).includes(target))
+      if (!path || typeof id !== 'string' || !this.formatsFor(path).includes(target))
         throw new Error('Choose an available output format for the selected files.')
       return { id, path }
     })
@@ -120,7 +126,10 @@ export class FileConversionSession {
         if (!active()) break
         let result: FileConversionResult
         try {
-          result = { id, ...(await saveConvertedFile(path, target, convert)) }
+          result = {
+            id,
+            ...(await saveConvertedFile(path, target, convert, undefined, this.nameSuffix)),
+          }
         } catch (error) {
           result = { id, error: error instanceof Error ? error.message : String(error) }
         }

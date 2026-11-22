@@ -47,6 +47,34 @@ function setup(read = 'For the incoming volunteers. Welcome!\n팸투어') {
 }
 
 describe('whole document translation in editor chat', () => {
+  it('uses the grounded source categories for a local wiki lookup before editing and honors a later opt-out', async () => {
+    const { editor, begin, record, call, skill } = setup()
+    const name = 'project_lookup_translation_examples'
+    editor.tools.push({ name, inputSchema: {}, description: '' })
+    vi.mocked(editor.executeTool).mockImplementation((c) => ({
+      output: c.name === name ? '[[Guide]] Preferred wording' : 'Welcome!',
+      summary: c.name,
+    }))
+    await begin()
+    expect(skill.systemPrompt).toContain('index.md')
+    expect((await record({ categories: { industry: 'tourism' } })).isError).toBe(true)
+    expect(editor.executeTool).not.toHaveBeenCalled()
+    await call('read_blocks')
+    expect((await record()).isError).toBe(true)
+    const result = await record({ categories: { industry: 'tourism' } })
+    expect(editor.executeTool).toHaveBeenLastCalledWith(
+      { id: '1', name, input: { categories: { industry: 'tourism' } } },
+      undefined,
+    )
+    expect(result.output).toContain('[[Guide]] Preferred wording')
+    expect(result.historyOutput).not.toContain('Preferred wording')
+    skill.buildContext!()
+    expect((await begin()).output).toContain('Preferred wording')
+    editor.tools = editor.tools.filter((t) => t.name !== name)
+    skill.buildContext!()
+    expect((await begin()).output).not.toContain('Preferred wording')
+  })
+
   it('reads native source before writing and verifies optional reader and purpose quotes', async () => {
     const { begin, call, record, skill, editor } = setup()
     expect(skill.tools.map((t) => t.name)).toContain('apply_ops')
@@ -209,7 +237,11 @@ it('stages native editing in the real loop and sends the local restoration recor
     {
       id: 'outline',
       name: 'record_source_overview',
-      input: { overview: 'A welcome guide', evidence: 'Welcome!' },
+      input: {
+        overview: 'A welcome guide',
+        evidence: 'Welcome!',
+        categories: { documentType: 'guide' },
+      },
     },
     { id: 'apply', name: 'apply_ops', input: {} },
   ]
@@ -219,8 +251,21 @@ it('stages native editing in the real loop and sends the local restoration recor
     done = resolve
     fail = reject
   })
+  const editor = setup().editor
+  editor.tools.push({
+    name: 'project_lookup_translation_examples',
+    description: '',
+    inputSchema: {},
+  })
+  vi.mocked(editor.executeTool).mockImplementation((c) => ({
+    output:
+      c.name === 'project_lookup_translation_examples'
+        ? '[[Guide]] Sample for translation.'
+        : 'Welcome!',
+    summary: c.name,
+  }))
   const loop = new AgentLoop({
-    skill: setup().editor,
+    skill: editor,
     documentTranslation: { documentKey: () => '/test/guide', analyzingLabel: () => '원문 파악 중' },
     transport: {
       stream(request, callbacks) {
@@ -248,6 +293,9 @@ it('stages native editing in the real loop and sends the local restoration recor
   expect(available[1]).not.toContain('apply_ops')
   expect(available[2]).toContain('record_source_overview')
   expect(available[3]).toContain('apply_ops')
+  expect(requests).toHaveLength(5)
+  expect(JSON.stringify(requests[3])).toContain('[[Guide]] Sample for translation.')
+  expect(local[0]).not.toContain('Sample for translation.')
   const saved = JSON.parse(local[0]!)
   expect(saved.doc).toMatch(/^[0-9a-f]{64}$/)
   expect(JSON.stringify(requests)).not.toContain(saved.doc)

@@ -68,8 +68,10 @@ import type { ProjectBatchSnapshot } from '../shared/project-batch'
 import type { TranslateApi } from '../shared/translate-api'
 import {
   FILE_CONVERSION_CHANNELS,
+  OCR_CHANNELS,
   type FileConversionApi,
   type FileConversionResult,
+  type OcrFilesApi,
 } from '../shared/file-conversion'
 import type { TabsApi, TabSummary } from '../shared/tabs-api'
 import { TABS_CHANNELS } from '../shared/tabs-api'
@@ -709,6 +711,7 @@ contextBridge.exposeInMainWorld('aiOfficeResultStore', resultStoreApi)
 // Translation tool projects: the folder list, project files and materials.
 // Main only accepts folders from its registered list, so paths here are requests, not access.
 const translateApi: TranslateApi = {
+  batchSend: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.batchSend, args),
   batchStart: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.batchStart, args),
   batchStop: (dir) => ipcRenderer.invoke(TRANSLATE_CHANNELS.batchStop, dir),
   batchStatus: (dir) => ipcRenderer.invoke(TRANSLATE_CHANNELS.batchStatus, dir),
@@ -720,9 +723,11 @@ const translateApi: TranslateApi = {
     }
   },
   addWikiReferences: (dir) => ipcRenderer.invoke(TRANSLATE_CHANNELS.addWikiReferences, dir),
+  maintainWiki: (action) => ipcRenderer.invoke(TRANSLATE_CHANNELS.maintainWiki, action),
   openWiki: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.openWiki),
   resumeWiki: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.resumeWiki),
   learnFinals: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.learnFinals),
+  learnProjectFinals: (dir) => ipcRenderer.invoke(TRANSLATE_CHANNELS.learnProjectFinals, dir),
   list: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.list),
   recent: () => ipcRenderer.invoke(TRANSLATE_CHANNELS.recent),
   adoptOutputAsSource: (args) => ipcRenderer.invoke(TRANSLATE_CHANNELS.adoptOutputAsSource, args),
@@ -788,6 +793,24 @@ const fileConversionApi: FileConversionApi = {
   },
 }
 contextBridge.exposeInMainWorld('fileConversionApi', fileConversionApi)
+const ocrFilesApi: OcrFilesApi = {
+  pick: () => ipcRenderer.invoke(OCR_CHANNELS.pick),
+  drop: (files) =>
+    ipcRenderer.invoke(
+      OCR_CHANNELS.drop,
+      files.map((file) => webUtils.getPathForFile(file)).filter(Boolean),
+    ),
+  languages: () => ipcRenderer.invoke(OCR_CHANNELS.languages),
+  run: (ids, target, options) => ipcRenderer.invoke(OCR_CHANNELS.run, ids, target, options),
+  onProgress(listener) {
+    const handler = (_event: unknown, result: FileConversionResult) => listener(result)
+    ipcRenderer.on(OCR_CHANNELS.progress, handler)
+    return () => {
+      ipcRenderer.removeListener(OCR_CHANNELS.progress, handler)
+    }
+  },
+}
+contextBridge.exposeInMainWorld('ocrFilesApi', ocrFilesApi)
 
 // Google Drive (decisions 0033, 0085): state, picking, listing and opening.
 // Main keeps the tokens; this bridge only carries states, file lists and file ids.

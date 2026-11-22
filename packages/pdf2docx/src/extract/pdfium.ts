@@ -110,6 +110,7 @@ export interface PdfiumModule {
   _FPDFPage_RemoveObject(page: number, obj: number): number
   _FPDFPageObj_Destroy(obj: number): void
   _FPDFPageObj_GetType(obj: number): number
+  _FPDFPageObj_SetIsActive?(obj: number, active: number): number
   /** float* left, bottom, right, top */
   _FPDFPageObj_GetBounds(obj: number, l: number, b: number, r: number, t: number): number
   /** FS_MATRIX* (6 floats a,b,c,d,e,f) */

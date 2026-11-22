@@ -53,7 +53,7 @@ export interface BlockRegion {
   box: Rect
 }
 
-/** where a block's content came from */
+/** Extraction method for the source page. An OCR-assisted page may also contain native text and pictures. */
 export type BlockSource = 'pdf' | 'ocr' | 'ai'
 
 export interface BlockBase {

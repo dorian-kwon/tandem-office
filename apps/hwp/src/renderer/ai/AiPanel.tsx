@@ -248,6 +248,7 @@ export function AiPanel({
 
   // the shared ask_choice question card: the answer starts the next run
   const choice = useAiChoice({
+    batchChoices: () => runStatus.projectTurn.current?.batchChoices,
     lang,
     busy,
     remember: projectChoiceRemember(() => project.chat.run),
@@ -794,6 +795,7 @@ export function AiPanel({
         choice.skill,
         ...panelProjectSkill({ run: project.chat.run, lang: () => langRef.current }),
       ]),
+      separateDocumentContext: () => runStatus.projectTurn.current?.batchFollowup === true,
       systemSuffix: () =>
         aiLangDirective(langRef.current) +
         (aiEditUndoHistoryEnabled()
@@ -936,9 +938,9 @@ export function AiPanel({
     /** the chosen skills: their text goes to the model, their chips onto the bubble */
     skillUse: SkillUse = NO_SKILL_USE,
   ): boolean => {
-    const instruction = text.trim()
+    const instruction = runStatus.projectTurn.current?.batchFollowup ? text : text.trim()
     const loop = loopRef.current
-    if (!instruction || !loop || loop.busy || reverting) return false
+    if (!instruction.trim() || !loop || loop.busy || reverting) return false
     // A request made during a status check or in front of the first-connection notice is
     // held and starts by itself once the way is clear; in front of "not connected" nothing
     // is kept. Either way nothing is sent now and the text stays with the caller.
@@ -1014,8 +1016,8 @@ export function AiPanel({
         runForeignRef.current = foreign
         if (!mountedRef.current) return
         setAiSettings(settings)
-        const noted = revertedNoteDueRef.current
-        revertedNoteDueRef.current = false
+        const noted = !runStatus.projectTurn.current?.batchFollowup && revertedNoteDueRef.current
+        if (noted) revertedNoteDueRef.current = false
         // the skill text rides with this request only; the bubble and the record keep the chips
         const asked = instruction + skillUse.text
         // the chosen project's context, read now and fixed for this request (spec 5.4)

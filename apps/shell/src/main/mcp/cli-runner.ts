@@ -21,7 +21,7 @@ export interface CliJsonOk {
   command: string
   summary: string
   output_path?: string
-  warnings?: Array<{ code: string; message: string }>
+  warnings?: Array<{ code: string; message: string; pages?: number[] }>
   detail?: Record<string, unknown>
 }
 

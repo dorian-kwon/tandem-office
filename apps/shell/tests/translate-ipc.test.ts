@@ -4,15 +4,17 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   mkdtempSync,
   renameSync,
   rmSync,
   statSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { readAppSettings, writeAppSettings } from '../src/main/app-settings'
 import { translationContextForFolder } from '../src/main/translate/context-injection'
@@ -362,7 +364,7 @@ describe('translate IPC handlers', () => {
     await expect(h.getProject('relative/dir')).rejects.toThrow(/not a registered/)
   })
 
-  it('update-settings changes only the four settings fields and returns the project', async () => {
+  it('update-settings changes only the selected settings fields and returns the project', async () => {
     const h = handlers()
     const { dir } = await createIn(h, { name: 'S', sourceLang: 'en', targetLang: 'ko' })
     const updated = await h.updateSettings({
@@ -370,6 +372,7 @@ describe('translate IPC handlers', () => {
       patch: {
         targetLang: 'ja',
         sourceLang: 'fr',
+        useWiki: false,
         projectPrompt: 'formal',
         ocr: { kind: 'off' },
       },
@@ -377,6 +380,7 @@ describe('translate IPC handlers', () => {
     expect(updated).toMatchObject({
       targetLang: 'ja',
       sourceLang: 'fr',
+      useWiki: false,
       projectPrompt: 'formal',
       ocr: { kind: 'off' },
       name: 'S',
@@ -461,6 +465,7 @@ describe('translate IPC handlers', () => {
       })
     await bad({ ocr: { kind: 'ai', provider: 'bogus' } })
     await bad({ ocr: 'off' })
+    await bad({ useWiki: 'false' })
     await bad({ projectPrompt: 5 })
     await bad({ targetLang: '' })
     await bad({ sources: [{ file: 'x.docx', sha256: 'x', kind: 'editable' }] })
@@ -628,6 +633,35 @@ describe('registerTranslateIpc', () => {
       await call({ sender: 'shell' })
       expect(wiki[action]).toHaveBeenCalledExactlyOnceWith()
     }
+  })
+
+  it('restricts wiki maintenance to the shell and the two supported actions', async () => {
+    const answers = new Map<string, (event: { sender: string }, ...args: unknown[]) => unknown>()
+    const maintainWiki = vi.fn(async () => {})
+    registerTranslateIpc(
+      { handle: (channel: string, fn: never) => void answers.set(channel, fn) } as never,
+      {
+        settingsPath: () => settingsPath,
+        now: () => clock,
+        showOpenDialog: vi.fn(),
+        maintainWiki,
+      },
+      () => true,
+      (sender) => sender === 'shell',
+    )
+    const call = answers.get(TRANSLATE_CHANNELS.maintainWiki)!
+    for (const args of [[], ['erase'], ['repair', '/other-vault']]) {
+      await expect(call({ sender: 'shell' }, ...args)).rejects.toMatchObject({
+        code: 'INVALID_ARGUMENT',
+      })
+    }
+    await expect(call({ sender: 'editor' }, 'initialize')).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+    })
+    expect(maintainWiki).not.toHaveBeenCalled()
+    await call({ sender: 'shell' }, 'repair')
+    await call({ sender: 'shell' }, 'initialize')
+    expect(maintainWiki.mock.calls).toEqual([['repair'], ['initialize']])
   })
 
   it('coalesces finished-file pickers and only accepts files chosen by the shell', async () => {
@@ -836,6 +870,17 @@ describe('open an existing project folder', () => {
     expect(await h.pickExisting()).toBeNull()
   })
 
+  it('keeps the wiki switch independently for each project after reopening', async () => {
+    const h = handlers()
+    const first = await createIn(h, { name: 'Tourism', sourceLang: 'ko', targetLang: 'en' })
+    const second = await createIn(h, { name: 'Health', sourceLang: 'ko', targetLang: 'en' })
+    await h.updateSettings({ dir: first.dir, patch: { useWiki: false } })
+    await h.updateSettings({ dir: second.dir, patch: { useWiki: true } })
+    const reopened = handlers()
+    expect((await reopened.getProject(first.dir)).useWiki).toBe(false)
+    expect((await reopened.getProject(second.dir)).useWiki).toBe(true)
+  })
+
   it('picking an already listed folder keeps one entry', async () => {
     const h = handlers()
     const { dir } = await createIn(h, { name: 'Twice', sourceLang: 'en', targetLang: 'ko' })
@@ -1014,6 +1059,55 @@ describe('translation view handlers', () => {
   })
 })
 
+describe('manual project result learning', () => {
+  it('chooses supported saved results and passes just the newest numbered edition of a known output', async () => {
+    const learn = vi.fn(async () => [])
+    const h = handlers({ learnFinalPaths: learn })
+    const { dir } = await createIn(h, { name: 'Manual', sourceLang: 'ko', targetLang: 'en' })
+    const source = join(root, 'guide.pdf')
+    writeFileSync(source, 'project source fixture')
+    const project = await addPicked(h, dir, 'source', source)
+    const output = join(realpathSync(dir), 'output')
+    expect(await h.learnProjectFinals(dir)).toEqual([])
+    expect(learn).not.toHaveBeenCalled()
+    for (const file of [
+      'guide.en.pdf',
+      'guide.en (2).pdf',
+      'guide.en.bilingual.pdf',
+      'brief (2).md',
+      '.translate-temp.docx',
+      '~$brief.docx',
+      'skip.exe',
+    ])
+      writeFileSync(join(output, file), 'fixture')
+    utimesSync(join(output, 'guide.en.pdf'), new Date(0), new Date(0))
+    mkdirSync(join(output, 'nested.docx'))
+    await Promise.all([h.learnProjectFinals(dir), h.learnProjectFinals(dir)])
+    expect(learn).toHaveBeenCalledExactlyOnceWith(
+      ['brief (2).md', 'guide.en (2).pdf', 'guide.en.bilingual.pdf'].map((name) =>
+        join(output, name),
+      ),
+      {
+        projectDir: realpathSync(dir),
+        sourceHashes: { 'guide.pdf': project.sources[0]!.sha256 },
+        outputNames: { 'guide.en (2).pdf': 'guide.en.pdf' },
+      },
+    )
+  })
+
+  it('refuses an unregistered project or a linked output folder', async () => {
+    const learn = vi.fn(async () => [])
+    const h = handlers({ learnFinalPaths: learn })
+    await expect(h.learnProjectFinals(root)).rejects.toMatchObject({ code: 'NOT_REGISTERED' })
+    const { dir } = await createIn(h, { name: 'Links', sourceLang: 'ko', targetLang: 'en' })
+    const output = join(dir, 'output')
+    rmSync(output, { recursive: true })
+    symlinkSync(root, output, 'junction')
+    await expect(h.learnProjectFinals(dir)).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+    expect(learn).not.toHaveBeenCalled()
+  })
+})
+
 describe('selected wiki references', () => {
   it('copies only the selected notes into the requesting project and its translation context', async () => {
     const notes = join(root, 'final-documents')
@@ -1040,6 +1134,8 @@ describe('selected wiki references', () => {
         '',
         '    Keep this wording',
         '',
+        '<!-- /tandem:project-examples -->',
+        '',
       ].join('\n'),
     )
     const h = handlers({ wikiReferenceDirectory: async () => notes })
@@ -1061,6 +1157,7 @@ describe('selected wiki references', () => {
     const context = await translationContextForFolder(dir, { settingsPath }, '번역해줘')
     expect(context?.references).toContain('Keep this wording')
     expect(context?.references).toContain('Keep that wording')
+    expect(context?.references).not.toContain('tandem:project-examples')
     expect(context?.references).not.toContain('private-hash')
     expect(context?.references).not.toContain('Never share')
     expect(context?.references).not.toContain('background information')
@@ -1324,6 +1421,114 @@ describe('project batch translation', () => {
       { file: 'first.md', state: 'failed', error: expect.stringContaining('changed source') },
     ])
     expect(order).toEqual(['first.md', 'second.md', 'second.md'])
+  })
+
+  it('runs the exact follow-up after translation saves and can address all earlier outputs', async () => {
+    const files = ['first.md', 'second.md']
+    const original = '  이 문서만 제목을\n바꿔 줘.  '
+    const again = '선택한 문서 전체 그렇게 해 줘'
+    const order: string[] = []
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const h = handlers({
+      runBatchEditor: async ({ file, outputPath }) => {
+        order.push('translate ' + file)
+        if (file === files[0]) await gate
+        writeFileSync(outputPath, 'Translated')
+      },
+      runEditorRequest: async (path, prompt, _signal, useWiki, history) => {
+        const file = basename(path)
+        order.push('follow up ' + file)
+        expect(useWiki).toBe(false)
+        if (prompt === original) {
+          expect(file).toBe(files[0])
+          expect(history).toEqual([])
+        } else {
+          expect(prompt).toBe(again)
+          expect(history).toEqual([{ prompt: original, file: files[0], reply: 'Title changed' }])
+        }
+        expect(readFileSync(path, 'utf8')).toMatch(/^Translated/)
+        writeFileSync(path, readFileSync(path, 'utf8') + '\n' + prompt)
+        return 'Title changed'
+      },
+    })
+    const { dir } = await createIn(h, { name: 'Follow-ups', sourceLang: 'ko', targetLang: 'en' })
+    for (const file of files) {
+      const input = join(root, file)
+      writeFileSync(input, 'Original')
+      await addPicked(h, dir, 'source', input)
+    }
+    const { id: batchId } = await h.batchStart({ dir, files }, 1)
+    const request = { dir, batchId: batchId!, prompt: original, files: [files[0]!], useWiki: false }
+    await vi.waitFor(() => expect(order).toEqual(['translate first.md']))
+    await expect(h.batchSend({ ...request, batchId: 'stale' }, 1)).rejects.toMatchObject({
+      code: 'TRANSLATE_BUSY',
+    })
+    await expect(h.batchSend({ ...request, files: ['outside.md'] }, 1)).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+    })
+    const first = await h.batchSend(request, 1)
+    expect(first.messages?.[0]?.targets).toEqual([{ file: files[0], state: 'queued' }])
+    release()
+    await vi.waitFor(async () => expect((await h.batchStatus(dir))?.running).toBe(false))
+    expect(order).toEqual(['translate first.md', 'follow up first.md', 'translate second.md'])
+    await h.batchSend({ ...request, files, prompt: again }, 1)
+    await vi.waitFor(async () => expect((await h.batchStatus(dir))?.running).toBe(false))
+    const snapshot = await h.batchStatus(dir)
+    expect(snapshot?.messages?.map((m) => m.prompt)).toEqual([original, again])
+    expect(snapshot?.messages?.[1]?.targets).toEqual(
+      files.map((file) => ({ file, state: 'done', reply: 'Title changed' })),
+    )
+    expect(order.slice(3)).toEqual(['follow up first.md', 'follow up second.md'])
+    expect(readFileSync(join(dir, 'output', files[0]!), 'utf8')).toBe(
+      'Translated\n' + original + '\n' + again,
+    )
+    for (const file of files)
+      expect(readFileSync(join(dir, 'source', file), 'utf8')).toBe('Original')
+  })
+
+  it('records a failed follow-up per file and cancels outstanding follow-ups with the batch', async () => {
+    const files = ['a.md', 'b.md', 'c.md']
+    const opened: string[] = []
+    const h = handlers({
+      runBatchEditor: async () => {},
+      runEditorRequest: async (path, _prompt, signal) => {
+        opened.push(basename(path))
+        if (opened.length === 1) throw new Error('Read-only output')
+        await new Promise<void>((_resolve, reject) =>
+          signal.addEventListener('abort', () => reject(new Error('Stopped')), { once: true }),
+        )
+        return ''
+      },
+    })
+    const { dir } = await createIn(h, {
+      name: 'Stop follow-ups',
+      sourceLang: 'ko',
+      targetLang: 'en',
+    })
+    for (const file of files) {
+      const input = join(root, file)
+      writeFileSync(input, 'Original')
+      await addPicked(h, dir, 'source', input)
+    }
+    const { id } = await h.batchStart({ dir, files }, 1)
+    await vi.waitFor(async () => expect((await h.batchStatus(dir))?.running).toBe(false))
+    await h.batchSend({ dir, files, batchId: id!, prompt: 'Check every file' }, 1)
+    await vi.waitFor(() => expect(opened).toEqual(['a.md', 'b.md']))
+    await h.batchStop(dir)
+    await vi.waitFor(async () => expect((await h.batchStatus(dir))?.running).toBe(false))
+    expect((await h.batchStatus(dir))?.messages?.[0]?.targets).toEqual([
+      { file: 'a.md', state: 'failed', error: 'Read-only output' },
+      { file: 'b.md', state: 'stopped' },
+      { file: 'c.md', state: 'stopped' },
+    ])
+    expect((await h.batchStatus(dir))?.items.map((item) => item.state)).toEqual([
+      'saved',
+      'saved',
+      'saved',
+    ])
   })
 
   it('aborts the active editor and leaves other sources unstarted when the project stops', async () => {

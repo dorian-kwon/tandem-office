@@ -238,6 +238,8 @@ export interface ImageBlock {
    * wallpaper drawn first stays under card panels drawn later.
    */
   z?: number
+  /** A placed source picture or retained OCR artwork, including pictures pinned behind text for layout. */
+  placedPicture?: true
   /** rasterized pattern fill (P35) — authored as a path, not a placed picture */
   synthetic?: true
   /**

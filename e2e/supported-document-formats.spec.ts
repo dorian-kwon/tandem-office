@@ -221,6 +221,92 @@ test('learns finished documents from one native multi-selection across all suppo
   expect(await page.evaluate(() => window.translateApi.learnFinals())).toEqual([])
 })
 
+test('repairs the wiki graph from the learning menu without uploading documents', async () => {
+  const { app, page, userDataDir } = launched
+  const vault = join(userDataDir, 'translation-wiki', 'vault')
+  const names = ['부산 팸투어 가이드북', '서울 관광 안내서']
+  const paths = names.map((name) => test.info().outputPath(name + '.txt'))
+  for (const path of paths) await writeFile(path, '의뢰 기관: 관광공사\n방문객을 위한 안내입니다.')
+  await queuePicks(app, [paths])
+  await page.getByRole('button', { name: 'Learn from final documents' }).click()
+  await expect(
+    page.locator('.translate-learn-results li').filter({ hasText: 'Added to the wiki' }),
+  ).toHaveCount(2)
+  await writeFile(join(vault, 'my-note.md'), '# My own note')
+  await rm(join(vault, 'index.md'))
+  await rm(join(vault, 'categories'), { recursive: true })
+  await page.getByRole('button', { name: 'Manage wiki' }).click()
+  await page.getByRole('menuitem', { name: 'Repair' }).click()
+  await expect(page.getByText('Wiki index and category links repaired.')).toBeVisible()
+  expect(await readFile(join(vault, 'index.md'), 'utf8')).toContain('industries.md')
+  for (const category of ['Tourism', 'Guide']) {
+    const body = await readFile(join(vault, 'categories', category + '.md'), 'utf8')
+    for (const name of names) expect(body).toContain(name)
+  }
+  expect(await readFile(join(vault, 'my-note.md'), 'utf8')).toBe('# My own note')
+})
+
+test('project learning explicitly records saved results in every supported format and updates in place', async () => {
+  const { app, page, userDataDir } = launched
+  const base = test.info().outputPath('projects')
+  await mkdir(base, { recursive: true })
+  const { dir } = await createProject(base, 'Manual learning', 'ko', 'en')
+  const output = join(dir, 'output')
+  const notesDir = join(userDataDir, 'translation-wiki', 'vault', 'final-documents')
+  const previous = new Set(
+    await readdir(notesDir).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') return []
+      throw error
+    }),
+  )
+  const extensions = Object.values(ROUTED_EXTENSIONS).flat()
+  for (const ext of extensions)
+    await writeFile(join(output, 'deliverable.' + ext), await cases[ext].content())
+  const untouched = join(base, 'untouched.txt')
+  await writeFile(untouched, 'An untouched source copy.')
+  await addSource(dir, untouched)
+  await writeFile(join(output, 'untouched.txt'), await readFile(untouched))
+  await queuePicks(app, [dir])
+  await page.getByRole('button', { name: 'Open existing project folder' }).click()
+  const wiki = page.getByRole('checkbox', {
+    name: 'Use matching examples from the local translation wiki',
+  })
+  await expect(wiki).toBeChecked()
+  await wiki.uncheck()
+  await expect
+    .poll(() => page.evaluate(async (p) => (await window.translateApi.getProject(p)).useWiki, dir))
+    .toBe(false)
+  const button = page.getByTestId('project-learn-finals')
+  await button.click()
+  const statuses = page.locator('.translate-learn-results li')
+  await expect(statuses.filter({ hasText: 'Added to the wiki' })).toHaveCount(extensions.length)
+  const files = (await readdir(notesDir)).filter((file) => !previous.has(file))
+  expect(files).toHaveLength(extensions.length)
+  const notes = await Promise.all(
+    files.map(async (file) => ({ file, body: await readFile(join(notesDir, file), 'utf8') })),
+  )
+  const txt = notes.find(({ body }) => body.includes('source: "deliverable.txt"'))!
+  expect(txt.body).toContain('Plain text line.')
+  await writeFile(join(output, 'deliverable.txt'), 'The approved revised translation.')
+  await page.locator('.translate-back').click()
+  await queuePicks(app, [dir])
+  await page.getByRole('button', { name: 'Open existing project folder' }).click()
+  await expect(button).toBeVisible()
+  await expect(wiki).not.toBeChecked()
+  await wiki.check()
+  await expect(wiki).toBeChecked()
+  expect(await readFile(join(notesDir, txt.file), 'utf8')).toEqual(txt.body)
+  await button.click()
+  await expect(statuses.filter({ hasText: 'Already in the wiki' })).toHaveCount(
+    extensions.length - 1,
+  )
+  expect(await readFile(join(notesDir, txt.file), 'utf8')).toContain(
+    'The approved revised translation.',
+  )
+  expect(await readdir(notesDir)).toHaveLength(previous.size + extensions.length)
+  await page.locator('.translate-back').click()
+})
+
 // Default Playwright mode keeps a single shell in the passing path and runs
 // the remaining extensions in a fresh worker if any one of them fails.
 for (const ext of Object.values(ROUTED_EXTENSIONS).flat()) {

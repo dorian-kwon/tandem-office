@@ -297,6 +297,7 @@ export function AiPanel({
 
   // the shared ask_choice question card: the answer starts the next run
   const choice = useAiChoice({
+    batchChoices: () => runStatus.projectTurn.current?.batchChoices,
     lang,
     busy,
     remember: projectChoiceRemember(() => projectPanel.chat.run),
@@ -744,6 +745,7 @@ export function AiPanel({
         if (!aiEditUndoHistoryEnabled() || depsRef.current.getSource?.()) return undefined
         return depsRef.current.getSnapshot((snapshotBodyRef.current ??= new SnapshotBody()))
       },
+      separateDocumentContext: () => runStatus.projectTurn.current?.batchFollowup === true,
       systemSuffix: () =>
         aiLangDirective(langRef.current) +
         (aiEditUndoHistoryEnabled()
@@ -1046,9 +1048,9 @@ export function AiPanel({
     /** the chosen skills: their text goes to the model, their chips onto the bubble */
     skillUse: SkillUse = NO_SKILL_USE,
   ): boolean => {
-    const instruction = text.trim()
+    const instruction = runStatus.projectTurn.current?.batchFollowup ? text : text.trim()
     const loop = loopRef.current
-    if (!instruction || !loop || loop.busy) return false
+    if (!instruction.trim() || !loop || loop.busy) return false
     // A request made during a status check or in front of the first-connection notice is
     // held and starts by itself once the way is clear; in front of "not connected" nothing
     // is kept. Either way nothing is sent now and the text stays with the caller.
@@ -1274,7 +1276,7 @@ export function AiPanel({
     ready: !projectPanel.chat.available || projectPanel.chat.ready,
     gate: sendGate.peek,
     busy: busy,
-    send: (prompt) => send(prompt),
+    send: (prompt) => send(prompt, prompt, null),
     stop: stop,
   })
 

@@ -238,6 +238,7 @@ export function AiPanel({
 
   // the shared ask_choice question card: the answer starts the next run
   const choice = useAiChoice({
+    batchChoices: () => runStatus.projectTurn.current?.batchChoices,
     lang,
     busy,
     remember: projectChoiceRemember(() => projectPanel.chat.run),
@@ -787,6 +788,7 @@ export function AiPanel({
         choice.skill,
         ...panelProjectSkill({ run: projectPanel.chat.run, lang: () => langRef.current }),
       ]),
+      separateDocumentContext: () => runStatus.projectTurn.current?.batchFollowup === true,
       systemSuffix: () =>
         aiLangDirective(langRef.current) +
         (aiEditUndoHistoryEnabled()
@@ -921,9 +923,9 @@ export function AiPanel({
     /** the chosen skills: their text goes to the model, their chips onto the bubble */
     skillUse: SkillUse = NO_SKILL_USE,
   ): void => {
-    const instruction = text.trim()
+    const instruction = runStatus.projectTurn.current?.batchFollowup ? text : text.trim()
     const loop = loopRef.current
-    if (!instruction || !loop || loop.busy) return
+    if (!instruction.trim() || !loop || loop.busy) return
     stickToBottomRef.current = true
     if (!sendGate.admit({ text: instruction, scope: retryScope, skillUse })) {
       // nothing is sent: the request stays in the composer while the panel shows what

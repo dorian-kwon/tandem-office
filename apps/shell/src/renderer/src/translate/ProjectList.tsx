@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { LANGS } from '@genoffice/i18n'
 import type {
   TranslateAdoptedProject,
-  TranslateApi,
   TranslatePickedParentDir,
   TranslateProjectListEntry,
   TranslateRecentDocument,
 } from '../../../shared/translate-api'
 import { useI18n } from '../locale'
+import { useWikiFinalLearning } from './useWikiFinalLearning'
 import { TranslationWikiButton } from './TranslationWiki'
 import { normalizeProjectName } from '../../../shared/project-name'
 import { InlineName } from './InlineName'
@@ -55,13 +55,6 @@ function relativeTime(lang: string, at: number, now: number): string {
   }
 }
 
-const finalStatusLabel = {
-  added: 'wikiLearnAdded',
-  duplicate: 'wikiLearnDuplicate',
-  empty: 'wikiLearnEmpty',
-  failed: 'wikiLearnFailed',
-} as const
-
 type Deleting = { entry: TranslateProjectListEntry; step: 'choose' | 'confirm-folder' }
 
 /** The translation tool's home: global system prompt, create dialog and the project list. */
@@ -84,11 +77,7 @@ export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
   const [newFolderOpen, setNewFolderOpen] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
   const [busy, setBusy] = useState(false)
-  const learnPending = useRef(false)
-  const [learning, setLearning] = useState(false)
-  const [learnResults, setLearnResults] = useState<
-    Awaited<ReturnType<TranslateApi['learnFinals']>>
-  >([])
+  const learning = useWikiFinalLearning()
   const [deleting, setDeleting] = useState<Deleting | null>(null)
   /** the project whose name is being edited in its row */
   const [renaming, setRenaming] = useState<string | null>(null)
@@ -124,22 +113,6 @@ export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
   }, [])
 
   if (!api) return <main className="content projects-panel" />
-
-  const learnFinals = async () => {
-    if (learnPending.current) return
-    learnPending.current = true
-    setLearning(true)
-    setError(null)
-    try {
-      const results = await api.learnFinals()
-      if (results.length) setLearnResults(results)
-    } catch (err) {
-      fail(err)
-    } finally {
-      learnPending.current = false
-      setLearning(false)
-    }
-  }
 
   const saveSystemPrompt = () => {
     // never write the empty initial value over a stored prompt that failed to load
@@ -446,35 +419,12 @@ export function ProjectList({ onOpen, onOpenRecent }: ProjectListProps) {
             >
               {s('openExisting')}
             </button>
-            <button
-              type="button"
-              className="projects-ghost"
-              disabled={learning}
-              aria-busy={learning}
-              onClick={() => void learnFinals()}
-            >
-              {s(learning ? 'wikiLearning' : 'wikiLearn')}
-            </button>
+            {learning.button}
             <TranslationWikiButton />
           </div>
         </header>
 
-        <div aria-live="polite">
-          {learnResults.length > 0 && (
-            <div className="projects-note translate-learn-results">
-              <ul>
-                {learnResults.map(({ name, status }, index) => (
-                  <li key={index}>
-                    <bdi>{name}</bdi> — {s(finalStatusLabel[status])}
-                  </li>
-                ))}
-              </ul>
-              <button type="button" className="projects-ghost" onClick={() => setLearnResults([])}>
-                {s('trClose')}
-              </button>
-            </div>
-          )}
-        </div>
+        {learning.report}
 
         {error && (
           <div className="projects-note is-warning translate-error" role="alert">

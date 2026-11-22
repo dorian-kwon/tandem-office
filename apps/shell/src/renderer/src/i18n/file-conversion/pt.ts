@@ -1,6 +1,17 @@
 import type { zh } from './zh'
 
 export const pt = {
+  ocrLanguage: 'Idioma de reconhecimento',
+  ocrLanguageDefault: 'Padrão do sistema',
+  ocrLanguageUnavailable:
+    'O idioma selecionado não está disponível. Escolha outro ou instale o idioma neste dispositivo.',
+  ocrTitle: 'Executar OCR',
+  ocrBatch: 'Iniciar OCR em lote',
+  ocrPdf: 'PDF pesquisável',
+  ocrWord: 'Word editável',
+  ocrRunning: 'Reconhecendo texto…',
+  ocrNoText: 'Nenhum texto legível encontrado.',
+  ocrUnavailable: 'O OCR local não está disponível neste dispositivo.',
   title: 'Conversão de arquivos',
   chooseFiles: 'Escolher arquivos',
   outputFormat: 'Formato de saída',
@@ -15,4 +26,7 @@ export const pt = {
   saved: 'Salvo',
   failed: 'Falha na conversão',
   removeFile: 'Remover {name} da lista',
+  ocrRange: 'Páginas a reconhecer',
+  ocrAllPages: 'Todas as páginas',
+  ocrRangeInvalid: 'Verifique o intervalo de páginas deste arquivo. Exemplo: 1, 3–5',
 } satisfies Record<keyof typeof zh, string>

@@ -393,6 +393,8 @@ export interface ProjectContextBundle {
    * reference file names apart, as material), together within the limit.
    */
   translation?: {
+    wikiLookupAvailable?: boolean
+    wikiLookupTicket?: string
     /** the translation prompts (app-wide, then the project's) and the language pair */
     prompts: string
     /** glossary entries and reference file names ('' when there are none) */
@@ -735,6 +737,8 @@ export interface ReadContextArgs extends ProjectIdArgs {
    * never stored. Main cuts it at `READ_CONTEXT_QUERY_MAX_CHARS`.
    */
   query?: string
+  /** The person’s instruction alone when query also contains selected document text. */
+  instruction?: string
   /**
    * The panel's conversation, for the translation context's fixed part. Absent (or
    * malformed) sends the fixed part whole, which is always safe.
@@ -870,7 +874,16 @@ export type RememberChoiceResult =
  * What the preload exposes to renderers. The calling window is identified by main
  * from the IPC sender; nothing here carries the window's own document path.
  */
+export type TranslationWikiCategories = Partial<
+  Record<'industry' | 'documentType' | 'institution' | 'style', string>
+>
+
 export interface ProjectFolderApi {
+  lookupTranslationExamples?(args: {
+    scope: string
+    categories: TranslationWikiCategories
+    path?: string
+  }): Promise<{ text: string }>
   /** App-owned OCR stages; all user choices and agreement happen in the AI chat. */
   ocr?(args: ChatOcrRequest): Promise<ChatOcrAnswer>
   /**
@@ -913,7 +926,7 @@ export interface ProjectFolderApi {
   /** Name, instructions, memory and file names for the next request; records changed hashes */
   readContext(args: ReadContextArgs): Promise<ProjectContextResult>
   /** Mints the run scope the tools carry; rejects for an unknown or missing project */
-  openScope(args: ProjectIdArgs): Promise<string>
+  openScope(args: ProjectIdArgs & { wikiLookupTicket?: string }): Promise<string>
   /** Ends a run; only the window that opened a scope can close it */
   closeScope(args: ProjectToolScope): Promise<void>
 
@@ -991,6 +1004,7 @@ export const PROJECT_FOLDER_EVENTS = {
 /** Request channels (`ipcRenderer.invoke`), one per bridge method */
 export const PROJECT_FOLDER_CHANNELS = {
   ocr: 'projectFolder:ocr',
+  lookupTranslationExamples: 'projectFolder:lookupTranslationExamples',
   rememberChoice: 'projectFolder:rememberChoice',
   listProjects: 'projectFolder:listProjects',
   addFolder: 'projectFolder:addFolder',

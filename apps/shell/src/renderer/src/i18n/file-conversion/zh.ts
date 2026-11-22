@@ -1,4 +1,14 @@
 export const zh = {
+  ocrLanguage: '识别语言',
+  ocrLanguageDefault: '系统默认',
+  ocrLanguageUnavailable: '所选识别语言不可用。请选择其他语言或在设备上安装此语言。',
+  ocrTitle: 'OCR 文字识别',
+  ocrBatch: '开始批量文字识别',
+  ocrPdf: '可搜索的 PDF',
+  ocrWord: '可编辑的 Word',
+  ocrRunning: '正在识别文字…',
+  ocrNoText: '未找到可识别的文字。',
+  ocrUnavailable: '此设备无法使用本地 OCR。',
   title: '文件转换',
   chooseFiles: '选择文件',
   outputFormat: '输出格式',
@@ -11,4 +21,7 @@ export const zh = {
   saved: '已保存',
   failed: '转换失败',
   removeFile: '从列表中移除 {name}',
+  ocrRange: '识别页码',
+  ocrAllPages: '全部页面',
+  ocrRangeInvalid: '请检查此文件的页码范围。例如：1, 3–5',
 }

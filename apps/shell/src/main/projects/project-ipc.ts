@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { isAbsolute, join } from 'node:path'
 import {
   isValidProjectId,
@@ -28,6 +29,7 @@ import {
   type ProjectSelection,
   type ProjectSettings,
   type ProjectTrustPrompt,
+  type TranslationWikiCategories,
 } from '@genoffice/project-store'
 import type { KbRunScopes } from '../knowledge-base'
 import type { ProjectChatStore } from './chat-store'
@@ -132,6 +134,12 @@ export interface ProjectIpcDeps {
   /** sends one event; false when the window is gone */
   send: (target: number, channel: string, payload: unknown) => boolean
   dialogs: ProjectDialogs
+  lookupWikiCategories?: (
+    root: string,
+    categories: TranslationWikiCategories,
+    path?: string,
+  ) => Promise<{ text: string }>
+  wikiForChat?: (sender: number, query: string | undefined) => Promise<boolean>
   /** this document's earlier per-document chat (project-store), found without creating one */
   legacyChatFor: (docPath: string) => LegacyDocumentChat | null
   /** opens a folder in Explorer / Finder */
@@ -278,6 +286,9 @@ export function registerProjectFolderIpc(deps: ProjectIpcDeps): ProjectIpcContro
   const untitled = new Map<number, ProjectId | null>()
   /** window → the selection its panel was last given (getSelection / setSelection) */
   const chosen = new Map<number, ProjectId | null>()
+  // A permit is issued by a trusted context read and redeemed once, for that window's next run.
+  type WikiRun = { projectId: ProjectId; ticket?: string; scope?: string }
+  const wikiRuns = new Map<number, WikiRun>()
 
   let services: ProjectFolderServices | null = null
   const svc = (): ProjectFolderServices => {
@@ -314,6 +325,7 @@ export function registerProjectFolderIpc(deps: ProjectIpcDeps): ProjectIpcContro
     listening.delete(sender)
     untitled.delete(sender)
     chosen.delete(sender)
+    wikiRuns.delete(sender)
   }
 
   const forget = (sender: number): void => {
@@ -580,17 +592,83 @@ export function registerProjectFolderIpc(deps: ProjectIpcDeps): ProjectIpcContro
     },
 
     // ---- one send ----
-    readContext: (_sender, raw) => {
+    readContext: async (sender, raw) => {
       const id = projectIdOf(raw)
       const query = queryOf(raw)
       const conversation = conversationOf(raw)
-      return svc().guide.readContext(id, {
+      const instruction = record(raw).instruction
+      const chatText =
+        typeof instruction === 'string' ? instruction.slice(0, READ_CONTEXT_QUERY_MAX_CHARS) : query
+      const decideWiki = deps.wikiForChat
+      const grant: WikiRun = { projectId: id }
+      wikiRuns.set(sender, grant)
+      const result = await svc().guide.readContext(id, {
+        ...(decideWiki ? { confirmWiki: () => decideWiki(sender, chatText) } : {}),
         ...(query === undefined ? {} : { query }),
         ...(conversation === undefined ? {} : { conversation }),
       })
+      if (
+        result.status === 'ok' &&
+        result.context.translation?.wikiLookupAvailable &&
+        wikiRuns.get(sender) === grant
+      ) {
+        grant.ticket = randomUUID()
+        result.context.translation.wikiLookupTicket = grant.ticket
+      }
+      return result
     },
-    openScope: (sender, raw) => svc().tools.openScope(sender, raw),
-    closeScope: (sender, raw) => svc().tools.closeScope(sender, raw),
+    openScope: async (sender, raw) => {
+      const scope = await svc().tools.openScope(sender, raw)
+      const grant = wikiRuns.get(sender)
+      const args = record(raw)
+      if (
+        grant?.ticket &&
+        grant.ticket === args.wikiLookupTicket &&
+        grant.projectId === args.projectId
+      ) {
+        delete grant.ticket
+        grant.scope = scope
+      }
+      return scope
+    },
+    closeScope: (sender, raw) => {
+      if (wikiRuns.get(sender)?.scope === record(raw).scope) wikiRuns.delete(sender)
+      return svc().tools.closeScope(sender, raw)
+    },
+    lookupTranslationExamples: async (sender, raw) => {
+      const args = record(raw)
+      const grant = wikiRuns.get(sender)
+      if (
+        !grant?.scope ||
+        args.scope !== grant.scope ||
+        svc().scopes.projectOf(sender, raw) !== grant.projectId
+      )
+        throw new Error(PROJECT_SCOPE_UNKNOWN)
+      const root = svc().guide.projectRoot(grant.projectId)
+      if (!root || !deps.lookupWikiCategories) return { text: '' }
+      if (!args.categories || typeof args.categories !== 'object' || Array.isArray(args.categories))
+        throw new Error(PROJECT_IPC_BAD_REQUEST)
+      const categories: TranslationWikiCategories = {}
+      for (const [key, value] of Object.entries(args.categories)) {
+        if (
+          !['industry', 'documentType', 'institution', 'style'].includes(key) ||
+          typeof value !== 'string' ||
+          !value.trim() ||
+          value.length > 120 ||
+          /[\r\n]/.test(value)
+        )
+          throw new Error(PROJECT_IPC_BAD_REQUEST)
+        categories[key as keyof TranslationWikiCategories] = value.trim()
+      }
+      const path = args.path
+      if (
+        path !== undefined &&
+        (typeof path !== 'string' || !path || path.length > 1024 || Object.keys(categories).length)
+      )
+        throw new Error(PROJECT_IPC_BAD_REQUEST)
+      const result = await deps.lookupWikiCategories(root, categories, path)
+      return wikiRuns.get(sender) === grant ? result : { text: '' }
+    },
 
     // ---- tools ----
     listFiles: (sender, raw) => svc().tools.listFiles(sender, raw),
@@ -751,6 +829,9 @@ export function registerProjectFolderIpc(deps: ProjectIpcDeps): ProjectIpcContro
       const decision = record(raw).decision
       if (decision !== 'use' && decision !== 'without') throw new Error(PROJECT_IPC_BAD_REQUEST)
       const projectId = projectIdOf(raw)
+      if (decision === 'without') {
+        for (const [owner, run] of wikiRuns) if (run.projectId === projectId) wikiRuns.delete(owner)
+      }
       return announced(
         projectId,
         'settings',

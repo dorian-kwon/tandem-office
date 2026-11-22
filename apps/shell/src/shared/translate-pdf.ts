@@ -256,7 +256,7 @@ export interface PdfTranslateBridge {
   store(token: string, request: TranslatePdfStoreRequest): Promise<TranslatePdfStoreAnswer>
   write(token: string, bilingual: boolean): Promise<TranslatePdfWritten>
   release(token: string): Promise<void>
-  instructions(dir: string, text: string): Promise<TranslationContextParts>
+  instructions(dir: string, text: string, pdfToken: string): Promise<TranslationContextParts>
 }
 
 /** what the person confirmed: where the requests go, the output kind and the mode */
@@ -345,7 +345,9 @@ export async function runPdfTranslation(
     const go = await o.confirm(estimates, prepared)
     if (!go || o.signal?.aborted) throw new PdfTranslateCancelledError()
     const restart = go.restart ? { restart: true, keepEdited: true } : {}
-    const send = withTranslationContext(go.send, (text) => o.bridge.instructions(o.dir, text))
+    const send = withTranslationContext(go.send, (text) =>
+      o.bridge.instructions(o.dir, text, token),
+    )
     const parts = translationJobParts(tree, { lang, send })
     const handle = startTranslationJob<TextUnit>({
       docHash,

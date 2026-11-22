@@ -35,10 +35,14 @@ export const convertCommand: CommandDef = {
   name: 'convert',
   summary: 'Convert a document to another format using the GenOffice engines.',
   usage:
-    'convert <file> --to <format> [--out <path>] [--force] [--password <pw>] [--sheet <name>] [--pages <list>] [--title <text>] [--author <text>] [--no-cover] [--page-breaks]',
+    'convert <file> --to <format> [--out <path>] [--force] [--password <pw>] [--sheet <name>] [--pages <list>] [--title <text>] [--author <text>] [--no-cover] [--page-breaks] [--optimize-images]',
   options: [
     { name: 'to', value: 'format', description: 'target format: ' + describeRoutes() },
     { name: 'out', value: 'path', description: 'output file (default: same name, new extension)' },
+    {
+      name: 'optimize-images',
+      description: 'Losslessly compress supported embedded images when the output becomes smaller.',
+    },
     { name: 'force', description: 'overwrite an existing output file' },
     { name: 'password', value: 'pw', description: 'password for an encrypted PDF' },
     {
@@ -104,6 +108,11 @@ export const convertCommand: CommandDef = {
       )
     const result = await runPath(input, conversionPath(from, to)!, output, args, ctx)
     if (result.bytes) writeOutput(output, result.bytes)
+    if (flagBool(args, 'optimize-images')) {
+      const { optimizeConvertedImages } = await import('../formats/optimize-converted-images')
+      const optimized = await optimizeConvertedImages(output, to)
+      if (optimized.images) result.detail.image_optimization = optimized
+    }
     return {
       summary: `converted ${basename(input)} → ${basename(output)}`,
       outputPath: output,
@@ -454,7 +463,7 @@ async function runHangul(
       }
     })
   }
-  const detail = { via: 'editable HTML body' }
+  const detail: Record<string, unknown> = { via: 'editable HTML body' }
   warnBodyConversion(from, to, ctx)
   if (fromHangul) {
     const html = await hangulToHtml(readInput(input))
@@ -552,6 +561,8 @@ async function runHangul(
               await exportViaApp(input, 'pdf', pdf, appOptions)
               return reconstruct(pdf)
             })
+      detail.pages = reconstructed.pages
+      detail.warnings = reconstructed.warnings
       if (from !== 'pdf') {
         ctx.warn({
           code: 'printed_content',
@@ -637,14 +648,7 @@ async function pdfReflow(
     resultStore(ctx.env),
     documentHash(bytes),
   )
-  if (onlyPageImages(tree)) {
-    ctx.warn({
-      code: 'pages_as_images',
-      message:
-        'every page is a picture without readable text, so the result holds page images only',
-      suggestion: `read the pages with \`ieumoffice pdf ai-read ${basename(input)} --pages <list>\` first, then convert again`,
-    })
-  }
+  reportPdfPages(tree.pages, to, ctx, onlyPageImages(tree) ? input : undefined)
   const source = {
     pdfPath: input,
     ...(password !== undefined ? { password } : {}),
@@ -716,6 +720,47 @@ async function convertPdfViaDocx(
   }
 }
 
+function reportPdfPages(
+  results: ReadonlyArray<{ page: number; status: string }>,
+  target: PdfTarget | 'md' | 'epub',
+  ctx: CommandContext,
+  imageOnlySource?: string,
+) {
+  const recovered = results.filter((p) => p.status === 'ocr').map((p) => p.page)
+  if (recovered.length) {
+    ctx.warn({
+      code: 'pdf_ocr_pages',
+      pages: recovered,
+      message: `Local OCR recovered editable text on pages ${recovered.join(', ')}.`,
+    })
+  }
+  const fallback = results
+    .filter((p) => p.status === 'scanned' || p.status === 'degraded')
+    .map((p) => p.page)
+  if (!fallback.length) return
+  if (imageOnlySource) {
+    ctx.warn({
+      code: 'pages_as_images',
+      pages: fallback,
+      message:
+        'every page is a picture without readable text, so the result holds page images only',
+      suggestion: `read the pages with \`ieumoffice pdf ai-read ${basename(imageOnlySource)} --pages <list>\` first, then convert again`,
+    })
+  } else if (target === 'xlsx') {
+    ctx.warn({
+      code: 'pdf_skipped_pages',
+      pages: fallback,
+      message: `Pages ${fallback.join(', ')} could not be converted to spreadsheet cells.`,
+    })
+  } else {
+    ctx.warn({
+      code: 'pdf_image_pages',
+      pages: fallback,
+      message: `Pages ${fallback.join(', ')} were kept as page images.`,
+    })
+  }
+}
+
 async function convertPdfOrThrow(
   input: string,
   target: PdfTarget,
@@ -723,10 +768,12 @@ async function convertPdfOrThrow(
   ctx: CommandContext,
 ) {
   try {
-    return await convertPdf(readInput(input), target, {
+    const result = await convertPdf(readInput(input), target, {
       password,
       onProgress: (page, total) => ctx.log(`page ${page}/${total}`),
     })
+    reportPdfPages(result.pageResults, target, ctx)
+    return result
   } catch (err) {
     if (err instanceof PdfLoadError) {
       const code = err.code === 'password-required' ? EXIT.file : EXIT.conversion

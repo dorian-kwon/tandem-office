@@ -172,3 +172,9 @@ export type {
   UserMcpSkill,
 } from './user-mcp-skill'
 export * from './skill-mcp-refs'
+
+export {
+  TRANSLATION_EXAMPLE_LOOKUP,
+  translationExampleLookupTool,
+  translationWikiCategories,
+} from './translation-wiki-lookup'

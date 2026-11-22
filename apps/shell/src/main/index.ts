@@ -140,12 +140,20 @@ import { installCliLinkBestEffort } from './cli-link'
 import { createDefaultAppService, execFileRunner } from './default-app'
 import { registerIntegrationsIpc } from './integrations-ipc'
 import { registerResultStoreIpc } from './result-store-ipc'
+import { registerOcrIpc } from './ocr-file-ipc'
 import { registerFileConversionIpc, convertWithBundledCli } from './file-conversion-ipc'
 import { projectEditorTurn } from './translate/project-editor-turn'
-import type { ProjectBatchEditorRequest } from './translate/project-batch'
+import type { BatchConversation, ProjectBatchEditorRequest } from './translate/project-batch'
 import { registerTranslateIpc } from './translate/translate-ipc'
 import { createOpenWikiService } from './translate/open-wiki'
 import { learnFinalPaths } from './translate/wiki-import'
+import { maintainTranslationWiki, withWikiAccess } from './translate/wiki-maintenance'
+import {
+  findWikiCategoryExamples,
+  hasWikiCategoryExamples,
+  readTranslationWikiPage,
+} from './translate/wiki-category-lookup'
+import { migrateWikiGraph } from './translate/wiki-graph-migrate'
 import { ensureWikiDirectory, prepareTranslationVault } from './translate/wiki-vault'
 import { FINAL_NOTES_FOLDER } from './translate/wiki-final-notes'
 import { createOcrService, type OcrServiceDeps } from './translate/ocr'
@@ -155,7 +163,8 @@ import { createBatchTextModel } from './translate/project-batch-media'
 import { translateText as batchText } from '../renderer/src/i18n/strings-translate'
 import { createChatOcrModel } from './translate/ocr-chat-model'
 import { chatOcrSourceResolver, pruneOcrWorkDir } from './translate/ocr-chat-source'
-import type { OcrMode } from '@genoffice/translate-project'
+import { loadProject as loadTranslationProject, type OcrMode } from '@genoffice/translate-project'
+import type { TranslationWikiCategories } from '@genoffice/project-store'
 import { createOcrPicturesHost } from './translate/ocr-pictures'
 import { createOcrPopupHost } from './translate/ocr-popup-host'
 import { createOcrChatPopup } from './translate/ocr-chat-popup'
@@ -172,6 +181,7 @@ import type {
 } from './pdf-structure/protocol'
 import { ResultStore } from '../../../../packages/pdf-structure/src/store'
 import type { TranslationViewDeps } from './translate/open-translation'
+import { isWikiEditingRequest, wikiChatLabels } from '../shared/wiki-chat'
 import { translationContextForFolder } from './translate/context-injection'
 import { translationLanguagesOfFile } from './translate/language-of-file'
 import { FixedContextLedger } from './translate/fixed-context'
@@ -315,6 +325,7 @@ import {
   setPdfSaveAsInFlight,
 } from '../../../pdf/src/main/pdf-main'
 import { PDF_CHANNELS } from '../../../pdf/src/shared/ipc'
+import { pdfExportNotice } from './pdf-export-notice'
 import { convertPdfFileToDocxLocalWithPrompt, PdfLoadError } from './pdf2docx-local'
 import { insertIntoNoteTab, openNoteTab, type NoteTabHost } from './pdf-note-tabs'
 import { convertPdfFileToPptxLocalWithPrompt } from './pdf2pptx-local'
@@ -1288,9 +1299,7 @@ const tMain = createI18n({
     pdfDocxLocalScannedDetail: '本地转换已按图片保真导出各页，未能识别出可编辑的文本。',
     pdfDocxLocalDegradedMsg: '部分页面已按图片导出',
     pdfDocxLocalDegradedDetail: '第 {pages} 页版面无法可靠重建，已按整页图片保真导出。',
-    pdfDocxLocalOcrMsg: '扫描页已转换为可编辑文本',
-    pdfDocxLocalOcrDetail:
-      '第 {pages} 页为扫描件，已通过本地 OCR 识别为可编辑文字，建议校对识别结果。',
+    pdfDocxLocalOcrMsg: '已识别图像中的文字',
     pdfDocxLocalEncryptedDetail: '此 PDF 已加密，未提供正确的密码，无法转换。',
     pdfDocxLocalUnsupportedEncDetail: '该文件使用证书加密或不支持的加密方式，无法转换。',
     pdfPwdTitle: '输入密码',
@@ -1444,9 +1453,7 @@ const tMain = createI18n({
     pdfDocxLocalDegradedMsg: 'Some pages were exported as images',
     pdfDocxLocalDegradedDetail:
       'Page(s) {pages} could not be reliably reconstructed and were exported as full-page images.',
-    pdfDocxLocalOcrMsg: 'Scanned pages converted to editable text',
-    pdfDocxLocalOcrDetail:
-      'Page(s) {pages} were scans; their text was recovered with on-device OCR. Please proofread the result.',
+    pdfDocxLocalOcrMsg: 'Text recognized in images',
     pdfDocxLocalEncryptedDetail:
       'This PDF is encrypted and could not be opened without the correct password.',
     pdfDocxLocalUnsupportedEncDetail:
@@ -1603,9 +1610,7 @@ const tMain = createI18n({
     pdfDocxLocalDegradedMsg: 'Một số trang được xuất dưới dạng hình ảnh',
     pdfDocxLocalDegradedDetail:
       '(Các) trang {pages} không thể tái cấu trúc đáng tin cậy và đã được xuất dưới dạng hình ảnh toàn trang.',
-    pdfDocxLocalOcrMsg: 'Các trang quét đã được chuyển đổi thành văn bản có thể chỉnh sửa',
-    pdfDocxLocalOcrDetail:
-      '(Các) trang {pages} là bản quét; văn bản của chúng đã được phục hồi bằng OCR trên thiết bị. Vui lòng kiểm tra lại kết quả.',
+    pdfDocxLocalOcrMsg: 'Đã nhận dạng văn bản trong ảnh',
     pdfDocxLocalEncryptedDetail:
       'Tệp PDF này đã được mã hóa và không thể mở nếu không có mật khẩu chính xác.',
     pdfDocxLocalUnsupportedEncDetail:
@@ -1763,9 +1768,7 @@ const tMain = createI18n({
     pdfDocxLocalDegradedMsg: '一部のページを画像として書き出しました',
     pdfDocxLocalDegradedDetail:
       'ページ {pages} はレイアウトを正確に再構築できなかったため、ページ全体を画像として書き出しました。',
-    pdfDocxLocalOcrMsg: 'スキャンページを編集可能なテキストに変換しました',
-    pdfDocxLocalOcrDetail:
-      'ページ {pages} はスキャン画像のため、ローカル OCR でテキストを復元しました。内容の確認をおすすめします。',
+    pdfDocxLocalOcrMsg: '画像内の文字を認識しました',
     pdfDocxLocalEncryptedDetail:
       'このPDFは暗号化されており、正しいパスワードがないため変換できませんでした。',
     pdfDocxLocalUnsupportedEncDetail:
@@ -1924,9 +1927,7 @@ const tMain = createI18n({
     pdfDocxLocalDegradedMsg: '일부 페이지가 이미지로 내보내졌습니다',
     pdfDocxLocalDegradedDetail:
       '{pages}쪽은 레이아웃을 안정적으로 재구성할 수 없어 전체 페이지 이미지로 내보냈습니다.',
-    pdfDocxLocalOcrMsg: '스캔 페이지를 편집 가능한 텍스트로 변환했습니다',
-    pdfDocxLocalOcrDetail:
-      '{pages}페이지는 스캔 이미지로, 로컬 OCR로 텍스트를 복원했습니다. 결과를 검토해 주세요.',
+    pdfDocxLocalOcrMsg: '이미지 속 글자를 인식했습니다',
     pdfDocxLocalEncryptedDetail:
       '이 PDF는 암호화되어 있으며 올바른 비밀번호가 없어 변환할 수 없습니다.',
     pdfDocxLocalUnsupportedEncDetail:
@@ -2083,9 +2084,7 @@ const tMain = createI18n({
     pdfDocxLocalDegradedMsg: 'Certaines pages ont été exportées en images',
     pdfDocxLocalDegradedDetail:
       "Les pages {pages} n'ont pas pu être reconstruites de manière fiable et ont été exportées en images pleine page.",
-    pdfDocxLocalOcrMsg: 'Pages numérisées converties en texte modifiable',
-    pdfDocxLocalOcrDetail:
-      'Les pages {pages} étaient des numérisations ; leur texte a été restitué par OCR local. Veuillez relire le résultat.',
+    pdfDocxLocalOcrMsg: 'Texte reconnu dans les images',
     pdfDocxLocalEncryptedDetail:
       "Ce PDF est chiffré et n'a pas pu être ouvert sans le mot de passe correct.",
     pdfDocxLocalUnsupportedEncDetail:
@@ -2246,9 +2245,7 @@ const tMain = createI18n({
     pdfDocxLocalDegradedMsg: 'Einige Seiten wurden als Bilder exportiert',
     pdfDocxLocalDegradedDetail:
       'Seite(n) {pages} konnten nicht zuverlässig rekonstruiert werden und wurden als ganzseitige Bilder exportiert.',
-    pdfDocxLocalOcrMsg: 'Gescannte Seiten in bearbeitbaren Text umgewandelt',
-    pdfDocxLocalOcrDetail:
-      'Seite(n) {pages} waren Scans; der Text wurde per lokaler OCR wiederhergestellt. Bitte prüfen Sie das Ergebnis.',
+    pdfDocxLocalOcrMsg: 'Text in Bildern erkannt',
     pdfDocxLocalEncryptedDetail:
       'Diese PDF ist verschlüsselt und konnte ohne das richtige Passwort nicht geöffnet werden.',
     pdfDocxLocalUnsupportedEncDetail:
@@ -2407,9 +2404,7 @@ const tMain = createI18n({
     pdfDocxLocalDegradedMsg: 'Algunas páginas se exportaron como imágenes',
     pdfDocxLocalDegradedDetail:
       'Las páginas {pages} no se pudieron reconstruir de forma fiable y se exportaron como imágenes de página completa.',
-    pdfDocxLocalOcrMsg: 'Páginas escaneadas convertidas en texto editable',
-    pdfDocxLocalOcrDetail:
-      'Las páginas {pages} eran escaneos; su texto se recuperó con OCR local. Revise el resultado.',
+    pdfDocxLocalOcrMsg: 'Texto reconocido en imágenes',
     pdfDocxLocalEncryptedDetail:
       'Este PDF está cifrado y no se pudo abrir sin la contraseña correcta.',
     pdfDocxLocalUnsupportedEncDetail:
@@ -2567,9 +2562,7 @@ const tMain = createI18n({
     pdfDocxLocalDegradedMsg: 'บางหน้าถูกส่งออกเป็นรูปภาพ',
     pdfDocxLocalDegradedDetail:
       'หน้า {pages} ไม่สามารถสร้างเลย์เอาต์ใหม่ได้อย่างน่าเชื่อถือ จึงส่งออกเป็นรูปภาพทั้งหน้า',
-    pdfDocxLocalOcrMsg: 'แปลงหน้าสแกนเป็นข้อความที่แก้ไขได้แล้ว',
-    pdfDocxLocalOcrDetail:
-      'หน้า {pages} เป็นภาพสแกน ระบบกู้คืนข้อความด้วย OCR ในเครื่องแล้ว โปรดตรวจทานผลลัพธ์',
+    pdfDocxLocalOcrMsg: 'รู้จำข้อความในภาพแล้ว',
     pdfDocxLocalEncryptedDetail: 'PDF นี้ถูกเข้ารหัสและไม่สามารถเปิดได้โดยไม่มีรหัสผ่านที่ถูกต้อง',
     pdfDocxLocalUnsupportedEncDetail:
       'PDF นี้ใช้การเข้ารหัสแบบใบรับรองหรือการเข้ารหัสที่ไม่รองรับ จึงไม่สามารถแปลงได้',
@@ -2725,9 +2718,7 @@ const tMain = createI18n({
     pdfDocxLocalDegradedMsg: 'Beberapa halaman diekspor sebagai gambar',
     pdfDocxLocalDegradedDetail:
       'Halaman {pages} tidak dapat direkonstruksi dengan andal dan diekspor sebagai gambar satu halaman penuh.',
-    pdfDocxLocalOcrMsg: 'Halaman pindaian diubah menjadi teks yang dapat diedit',
-    pdfDocxLocalOcrDetail:
-      'Halaman {pages} adalah hasil pindaian; teksnya dipulihkan dengan OCR lokal. Harap periksa hasilnya.',
+    pdfDocxLocalOcrMsg: 'Teks dalam gambar dikenali',
     pdfDocxLocalEncryptedDetail:
       'PDF ini terenkripsi dan tidak dapat dibuka tanpa kata sandi yang benar.',
     pdfDocxLocalUnsupportedEncDetail:
@@ -2886,9 +2877,7 @@ const tMain = createI18n({
     pdfDocxLocalDegradedMsg: 'Некоторые страницы экспортированы как изображения',
     pdfDocxLocalDegradedDetail:
       'Страницы {pages} не удалось надёжно реконструировать; они экспортированы как полностраничные изображения.',
-    pdfDocxLocalOcrMsg: 'Отсканированные страницы преобразованы в редактируемый текст',
-    pdfDocxLocalOcrDetail:
-      'Страницы {pages} были сканами; текст восстановлен локальным OCR. Проверьте результат.',
+    pdfDocxLocalOcrMsg: 'Распознан текст на изображениях',
     pdfDocxLocalEncryptedDetail:
       'Этот PDF зашифрован, и его не удалось открыть без правильного пароля.',
     pdfDocxLocalUnsupportedEncDetail:
@@ -3045,9 +3034,7 @@ const tMain = createI18n({
     pdfDocxLocalDegradedMsg: 'تم تصدير بعض الصفحات كصور',
     pdfDocxLocalDegradedDetail:
       'تعذّرت إعادة بناء الصفحات {pages} بشكل موثوق، وتم تصديرها كصور لكامل الصفحة.',
-    pdfDocxLocalOcrMsg: 'تم تحويل الصفحات الممسوحة ضوئيًا إلى نص قابل للتحرير',
-    pdfDocxLocalOcrDetail:
-      'الصفحات {pages} كانت صورًا ممسوحة؛ تم استرداد النص عبر OCR المحلي. يُرجى مراجعة النتيجة.',
+    pdfDocxLocalOcrMsg: 'تم التعرف على نص في الصور',
     pdfDocxLocalEncryptedDetail: 'هذا الملف PDF مشفّر وتعذّر فتحه دون كلمة المرور الصحيحة.',
     pdfDocxLocalUnsupportedEncDetail:
       'يستخدم ملف PDF هذا تشفيرًا قائمًا على الشهادات أو تشفيرًا غير مدعوم ولا يمكن تحويله.',
@@ -3203,9 +3190,7 @@ const tMain = createI18n({
     pdfDocxLocalDegradedMsg: 'Algumas páginas foram exportadas como imagens',
     pdfDocxLocalDegradedDetail:
       'As páginas {pages} não puderam ser reconstruídas de forma confiável e foram exportadas como imagens de página inteira.',
-    pdfDocxLocalOcrMsg: 'Páginas digitalizadas convertidas em texto editável',
-    pdfDocxLocalOcrDetail:
-      'As páginas {pages} eram digitalizações; o texto foi recuperado com OCR local. Revise o resultado.',
+    pdfDocxLocalOcrMsg: 'Texto reconhecido nas imagens',
     pdfDocxLocalEncryptedDetail:
       'Este PDF está criptografado e não pôde ser aberto sem a senha correta.',
     pdfDocxLocalUnsupportedEncDetail:
@@ -3364,9 +3349,7 @@ const tMain = createI18n({
     pdfDocxLocalDegradedMsg: 'Alcune pagine sono state esportate come immagini',
     pdfDocxLocalDegradedDetail:
       'Non è stato possibile ricostruire in modo affidabile le pagine {pages}; sono state esportate come immagini a pagina intera.',
-    pdfDocxLocalOcrMsg: 'Pagine scansionate convertite in testo modificabile',
-    pdfDocxLocalOcrDetail:
-      'Le pagine {pages} erano scansioni; il testo è stato recuperato con OCR locale. Si consiglia di rileggere il risultato.',
+    pdfDocxLocalOcrMsg: 'Testo riconosciuto nelle immagini',
     pdfDocxLocalEncryptedDetail:
       'Questo PDF è crittografato e non è stato possibile aprirlo senza la password corretta.',
     pdfDocxLocalUnsupportedEncDetail:
@@ -3525,9 +3508,7 @@ const tMain = createI18n({
     pdfDocxLocalDegradedMsg: 'Niektóre strony wyeksportowano jako obrazy',
     pdfDocxLocalDegradedDetail:
       'Stron {pages} nie udało się wiarygodnie odtworzyć; wyeksportowano je jako obrazy całych stron.',
-    pdfDocxLocalOcrMsg: 'Zeskanowane strony przekonwertowano na edytowalny tekst',
-    pdfDocxLocalOcrDetail:
-      'Strony {pages} były skanami; tekst odzyskano lokalnym OCR. Sprawdź wynik.',
+    pdfDocxLocalOcrMsg: 'Rozpoznano tekst na obrazach',
     pdfDocxLocalEncryptedDetail:
       'Ten PDF jest zaszyfrowany i nie można go otworzyć bez prawidłowego hasła.',
     pdfDocxLocalUnsupportedEncDetail:
@@ -3685,9 +3666,7 @@ const tMain = createI18n({
     pdfDocxLocalDegradedMsg: 'Některé stránky byly exportovány jako obrázky',
     pdfDocxLocalDegradedDetail:
       'Stránky {pages} nebylo možné spolehlivě rekonstruovat a byly exportovány jako celostránkové obrázky.',
-    pdfDocxLocalOcrMsg: 'Naskenované stránky převedeny na upravitelný text',
-    pdfDocxLocalOcrDetail:
-      'Stránky {pages} byly skeny; jejich text byl obnoven pomocí OCR v zařízení. Výsledek si prosím zkontrolujte.',
+    pdfDocxLocalOcrMsg: 'Rozpoznán text v obrázcích',
     pdfDocxLocalEncryptedDetail: 'Toto PDF je šifrované a bez správného hesla ho nelze otevřít.',
     pdfDocxLocalUnsupportedEncDetail:
       'Toto PDF používá šifrování založené na certifikátu nebo jiné nepodporované šifrování a nelze ho převést.',
@@ -3844,9 +3823,7 @@ const tMain = createI18n({
     pdfDocxLocalDegradedMsg: "Sommige pagina's zijn als afbeeldingen geëxporteerd",
     pdfDocxLocalDegradedDetail:
       "Pagina's {pages} konden niet betrouwbaar worden gereconstrueerd en zijn als paginagrote afbeeldingen geëxporteerd.",
-    pdfDocxLocalOcrMsg: 'Gescande pagina’s omgezet naar bewerkbare tekst',
-    pdfDocxLocalOcrDetail:
-      'Pagina(’s) {pages} waren scans; de tekst is hersteld met lokale OCR. Controleer het resultaat.',
+    pdfDocxLocalOcrMsg: 'Tekst in afbeeldingen herkend',
     pdfDocxLocalEncryptedDetail:
       'Deze PDF is versleuteld en kon niet worden geopend zonder het juiste wachtwoord.',
     pdfDocxLocalUnsupportedEncDetail:
@@ -4006,9 +3983,7 @@ const tMain = createI18n({
     pdfDocxLocalDegradedMsg: 'Sesetengah halaman dieksport sebagai imej',
     pdfDocxLocalDegradedDetail:
       'Halaman {pages} tidak dapat dibina semula dengan pasti dan telah dieksport sebagai imej halaman penuh.',
-    pdfDocxLocalOcrMsg: 'Halaman imbasan ditukar kepada teks boleh edit',
-    pdfDocxLocalOcrDetail:
-      'Halaman {pages} ialah imbasan; teksnya dipulihkan dengan OCR setempat. Sila semak hasilnya.',
+    pdfDocxLocalOcrMsg: 'Teks dalam imej telah dikenal pasti',
     pdfDocxLocalEncryptedDetail:
       'PDF ini disulitkan dan tidak dapat dibuka tanpa kata laluan yang betul.',
     pdfDocxLocalUnsupportedEncDetail:
@@ -4164,9 +4139,7 @@ const tMain = createI18n({
     pdfDocxLocalDegradedMsg: 'חלק מהעמודים יוצאו כתמונות',
     pdfDocxLocalDegradedDetail:
       'לא ניתן היה לשחזר באופן אמין את עמודים {pages}, והם יוצאו כתמונות של עמוד מלא.',
-    pdfDocxLocalOcrMsg: 'עמודים סרוקים הומרו לטקסט הניתן לעריכה',
-    pdfDocxLocalOcrDetail:
-      'עמודים {pages} היו סריקות; הטקסט שוחזר באמצעות OCR מקומי. מומלץ להגיה את התוצאה.',
+    pdfDocxLocalOcrMsg: 'זוהה טקסט בתמונות',
     pdfDocxLocalEncryptedDetail: 'קובץ PDF זה מוצפן ולא ניתן היה לפתוח אותו ללא הסיסמה הנכונה.',
     pdfDocxLocalUnsupportedEncDetail:
       'קובץ PDF זה משתמש בהצפנה מבוססת אישורים או בהצפנה שאינה נתמכת ולא ניתן להמירו.',
@@ -4323,9 +4296,7 @@ const tMain = createI18n({
     pdfDocxLocalDegradedMsg: 'कुछ पृष्ठ छवियों के रूप में निर्यात किए गए',
     pdfDocxLocalDegradedDetail:
       'पृष्ठ {pages} का लेआउट विश्वसनीय रूप से पुनर्निर्मित नहीं हो सका, इसलिए उन्हें पूर्ण-पृष्ठ छवियों के रूप में निर्यात किया गया।',
-    pdfDocxLocalOcrMsg: 'स्कैन किए गए पृष्ठ संपादन योग्य टेक्स्ट में बदले गए',
-    pdfDocxLocalOcrDetail:
-      'पृष्ठ {pages} स्कैन थे; स्थानीय OCR से टेक्स्ट पुनर्प्राप्त किया गया। कृपया परिणाम जाँचें।',
+    pdfDocxLocalOcrMsg: 'चित्रों में पाठ पहचाना गया',
     pdfDocxLocalEncryptedDetail:
       'यह PDF एन्क्रिप्टेड है और सही पासवर्ड के बिना इसे खोला नहीं जा सका।',
     pdfDocxLocalUnsupportedEncDetail:
@@ -4477,9 +4448,7 @@ const tMain = createI18n({
     pdfDocxLocalScannedDetail: '本機轉換已將各頁以圖片方式保真匯出，未能辨識出可編輯的文字。',
     pdfDocxLocalDegradedMsg: '部分頁面已以圖片匯出',
     pdfDocxLocalDegradedDetail: '第 {pages} 頁的版面無法可靠重建，已以整頁圖片保真匯出。',
-    pdfDocxLocalOcrMsg: '掃描頁已轉換為可編輯文字',
-    pdfDocxLocalOcrDetail:
-      '第 {pages} 頁為掃描件，已透過本機 OCR 辨識為可編輯文字，建議校對辨識結果。',
+    pdfDocxLocalOcrMsg: '已辨識圖片中的文字',
     pdfDocxLocalEncryptedDetail: '此 PDF 已加密，未提供正確的密碼，無法轉換。',
     pdfDocxLocalUnsupportedEncDetail: '該檔案使用憑證加密或不支援的加密方式，無法轉換。',
     pdfPwdTitle: '輸入密碼',
@@ -5973,10 +5942,16 @@ function projectFolderServices(): ProjectFolderRuntime {
     }),
     // a translation project folder also carries the translation tool's context
     // the ledger lives in memory only; it is per process, so a restart sends the fixed part again
-    translationContext: (root, query, conversation) =>
+    translationContext: (root, query, conversation, confirmWiki) =>
       translationContextForFolder(
         root,
-        { settingsPath: APP_SETTINGS_PATH(), fixedContext: translationFixedContext },
+        {
+          settingsPath: APP_SETTINGS_PATH(),
+          fixedContext: translationFixedContext,
+          hasWikiCategories: () =>
+            hasWikiCategoryExamples(app.getPath('userData')).catch(() => false),
+          ...(confirmWiki ? { confirmWiki } : {}),
+        },
         query,
         conversation,
       ),
@@ -6110,6 +6085,11 @@ function trackProjectContents(contents: WebContents): void {
   })
 }
 
+function lookupWikiCategories(categories: TranslationWikiCategories) {
+  const profile = app.getPath('userData')
+  return withWikiAccess(profile, () => findWikiCategoryExamples(profile, currentLang(), categories))
+}
+
 let chatOcrService: OcrChatService | null = null
 
 function registerProjectFolderChannels(): void {
@@ -6121,6 +6101,30 @@ function registerProjectFolderChannels(): void {
         return handler(event.sender.id, args)
       }),
     windowOf: projectWindowOf,
+    lookupWikiCategories: async (root, categories, path) => {
+      if ((await loadTranslationProject(root)).useWiki === false) return { text: '' }
+      if (path !== undefined) {
+        const profile = app.getPath('userData')
+        return withWikiAccess(profile, () => readTranslationWikiPage(profile, path))
+      }
+      return lookupWikiCategories(categories)
+    },
+    wikiForChat: async (sender, query) => {
+      // A delegated editor turn already has its caller's decision (or the batch button default).
+      const delegated = editorTurnWiki.get(sender)
+      if (delegated !== undefined) return delegated
+      if (!isWikiEditingRequest(query)) return false
+      const [message, yes, no] = wikiChatLabels[currentLang()]
+      return (
+        (await projectMessageBox(sender, {
+          type: 'question',
+          message,
+          buttons: [yes, no],
+          defaultId: 0,
+          cancelId: 1,
+        })) === 0
+      )
+    },
     ocr: (sender, args, context) =>
       chatOcrService
         ? chatOcrService.execute(sender, args, context)
@@ -8815,44 +8819,8 @@ async function exportPdfAsDocxLocal(): Promise<void> {
     if (result === null) return
     await atomicWriteFile(picked.filePath, result.docx)
 
-    // degrade transparency (plan §7.6 dual-track split): whole scan → say so
-    // once; individual image-fallback pages → name them;
-    // OCR-recovered scans ('ocr') are SUCCESSES — announce the recovery (the
-    // user should proofread machine-read text), never the image-export notice
-    const ocrPages = result.pageResults.filter((r) => r.status === 'ocr').map((r) => r.page)
-    const imagePages = result.pageResults
-      .filter((r) => r.status !== 'ok' && r.status !== 'ocr')
-      .map((r) => r.page)
-    if (result.scannedDocument) {
-      await dialog.showMessageBox(host, {
-        type: 'info',
-        message: tm('pdfDocxLocalScannedMsg'),
-        detail: tm('pdfDocxLocalScannedDetail'),
-      })
-    } else if (imagePages.length > 0 && ocrPages.length > 0) {
-      // mixed documents surface BOTH facts in one dialog: which pages shipped
-      // as images and which carry machine-read text the user should proofread
-      await dialog.showMessageBox(host, {
-        type: 'info',
-        message: tm('pdfDocxLocalDegradedMsg'),
-        detail:
-          tm('pdfDocxLocalDegradedDetail', { pages: imagePages.join(', ') }) +
-          '\n\n' +
-          tm('pdfDocxLocalOcrDetail', { pages: ocrPages.join(', ') }),
-      })
-    } else if (imagePages.length > 0) {
-      await dialog.showMessageBox(host, {
-        type: 'info',
-        message: tm('pdfDocxLocalDegradedMsg'),
-        detail: tm('pdfDocxLocalDegradedDetail', { pages: imagePages.join(', ') }),
-      })
-    } else if (ocrPages.length > 0) {
-      await dialog.showMessageBox(host, {
-        type: 'info',
-        message: tm('pdfDocxLocalOcrMsg'),
-        detail: tm('pdfDocxLocalOcrDetail', { pages: ocrPages.join(', ') }),
-      })
-    }
+    const notice = pdfExportNotice('docx', result.pageResults, currentLang(), tm)
+    if (notice) await dialog.showMessageBox(host, { type: 'info', ...notice })
     openDocumentPath(picked.filePath)
   } catch (err) {
     if (host && !host.isDestroyed()) {
@@ -8954,22 +8922,8 @@ async function exportPdfAsPptxLocal(): Promise<void> {
     if (result === null) return
     await atomicWriteFile(picked.filePath, result.pptx)
 
-    // degrade transparency (same split as the Word export): whole scan vs
-    // individual image-fallback pages
-    const imagePages = result.pageResults.filter((r) => r.status !== 'ok').map((r) => r.page)
-    if (result.scannedDocument) {
-      await dialog.showMessageBox(host, {
-        type: 'info',
-        message: tm('pdfDocxLocalScannedMsg'),
-        detail: tm('pdfPptxLocalScannedDetail'),
-      })
-    } else if (imagePages.length > 0) {
-      await dialog.showMessageBox(host, {
-        type: 'info',
-        message: tm('pdfDocxLocalDegradedMsg'),
-        detail: tm('pdfDocxLocalDegradedDetail', { pages: imagePages.join(', ') }),
-      })
-    }
+    const notice = pdfExportNotice('pptx', result.pageResults, currentLang(), tm)
+    if (notice) await dialog.showMessageBox(host, { type: 'info', ...notice })
     openDocumentPath(picked.filePath)
   } catch (err) {
     if (host && !host.isDestroyed()) {
@@ -9065,22 +9019,8 @@ async function exportPdfAsXlsxLocal(): Promise<void> {
     if (result === null) return
     await atomicWriteFile(picked.filePath, result.xlsx)
 
-    // degrade transparency: pages that could not become cells got a notice
-    // row on their worksheet instead of an image (a spreadsheet has none)
-    const noticePages = result.pageResults.filter((r) => r.status !== 'ok').map((r) => r.page)
-    if (result.scannedDocument) {
-      await dialog.showMessageBox(host, {
-        type: 'info',
-        message: tm('pdfDocxLocalScannedMsg'),
-        detail: tm('pdfXlsxLocalScannedDetail'),
-      })
-    } else if (noticePages.length > 0) {
-      await dialog.showMessageBox(host, {
-        type: 'info',
-        message: tm('pdfXlsxLocalSkippedMsg'),
-        detail: tm('pdfXlsxLocalSkippedDetail', { pages: noticePages.join(', ') }),
-      })
-    }
+    const notice = pdfExportNotice('xlsx', result.pageResults, currentLang(), tm)
+    if (notice) await dialog.showMessageBox(host, { type: 'info', ...notice })
     openDocumentPath(picked.filePath)
   } catch (err) {
     if (host && !host.isDestroyed()) {
@@ -9276,6 +9216,7 @@ registerIntegrationsIpc({
     : join(APPS_ROOT, '..', 'packages', 'cli', 'package.json'),
 })
 registerResultStoreIpc(ipcMain, () => app.getPath('userData'))
+registerOcrIpc(() => shellWindow, currentLang)
 registerFileConversionIpc(
   () => shellWindow,
   bundledCliRunner,
@@ -9415,6 +9356,7 @@ chatOcrService = createOcrChatService({
 })
 
 const projectEditorJobs = new Set<string>()
+const editorTurnWiki = new Map<number, boolean>()
 // A failed background job can resume its own dirty tab until the user takes it over.
 const backgroundProjectEditors = new WeakSet<WebContents>()
 
@@ -9423,6 +9365,9 @@ async function runProjectEditorRequest(
   prompt: string,
   signal: AbortSignal,
   report?: ProjectBatchEditorRequest['report'],
+  useWiki = true,
+  batchChoices?: ProjectBatchEditorRequest['choices'],
+  batchConversation?: BatchConversation,
 ): Promise<string> {
   signal.throwIfAborted()
   const key = canonicalPath(outputPath)
@@ -9469,6 +9414,8 @@ async function runProjectEditorRequest(
         wc.once('focus', () => backgroundProjectEditors.delete(wc))
       }
       report?.({ phase: 'translating' })
+      const editorId = wc.id
+      editorTurnWiki.set(editorId, useWiki)
       const result = await projectEditorTurn(
         wc,
         outputPath,
@@ -9479,7 +9426,9 @@ async function runProjectEditorRequest(
             operations,
             ...(done !== undefined && total !== undefined ? { done, total } : {}),
           }),
-      )
+        batchChoices,
+        batchConversation,
+      ).finally(() => editorTurnWiki.delete(editorId))
       signal.throwIfAborted()
       if (result.incomplete)
         throw new Error('The document AI stopped before finishing its request.')
@@ -9537,11 +9486,19 @@ async function runProjectEditorRequest(
 async function runProjectBatchDocument(request: ProjectBatchEditorRequest): Promise<void> {
   const prompt = [
     `Translate the entire document from ${request.sourceLang} into ${request.targetLang}. Work in this document only.`,
+    'This is an unattended project batch. Use saved project choices first. For translation output mode, bilingual layout, table placement or wording style, select and apply the recommended local formatting, then continue editing. If using ask_choice, set id to outputMode, bilingual, tableLayout or style and recommendedFormat to the supported setting you recommend. An automatic formatting result is not permission for another action. Operations requiring human consent must stop.',
     'Use the project glossary and style instructions. First inspect the document, then use the editor tools to translate all remaining editable text in batches. Preserve formatting and structure, including nested content. Leave numbers, formulas, code and identifiers intact.',
     'If no changes are needed because the document is already in the target language, inspect its contents using the editor tools, then put PROJECT_ALREADY_TRANSLATED on its own line before the completion marker.',
     'Check the document again for remaining source-language text. Only after verifying that every translation unit is complete, end your response with PROJECT_TRANSLATION_COMPLETE. If anything remains or you need input, describe it without the completion marker.',
   ].join('\n')
-  await runProjectEditorRequest(request.outputPath, prompt, request.signal, request.report)
+  await runProjectEditorRequest(
+    request.outputPath,
+    prompt,
+    request.signal,
+    request.report,
+    request.useWiki,
+    request.choices ?? {},
+  )
 }
 registerTranslateIpc(
   ipcMain,
@@ -9588,27 +9545,59 @@ registerTranslateIpc(
         return result.response === 1
       },
     },
-    wikiReferenceDirectory: async () => {
-      const { vaultPath } = await prepareTranslationVault(app.getPath('userData'), currentLang())
-      const folder = join(vaultPath, FINAL_NOTES_FOLDER)
-      await ensureWikiDirectory(folder)
-      return folder
+    lookupWikiCategories,
+    maintainWiki: (action) =>
+      maintainTranslationWiki(app.getPath('userData'), currentLang(), action),
+    wikiReferenceDirectory: () => {
+      const profileDir = app.getPath('userData')
+      return withWikiAccess(profileDir, async () => {
+        const { vaultPath } = await prepareTranslationVault(profileDir, currentLang())
+        const folder = join(vaultPath, FINAL_NOTES_FOLDER)
+        await ensureWikiDirectory(folder)
+        return folder
+      })
     },
     wiki: createOpenWikiService({
       userDataPath: app.getPath('userData'),
       appDataPath: app.getPath('appData'),
-      prepareVault: () => prepareTranslationVault(app.getPath('userData'), currentLang()),
+      prepareVault: async () => {
+        const lang = currentLang()
+        const profileDir = app.getPath('userData')
+        return withWikiAccess(profileDir, async () => {
+          const wiki = await prepareTranslationVault(profileDir, lang)
+          await migrateWikiGraph(wiki.vaultPath, lang)
+          return wiki
+        })
+      },
       handlerName: () => app.getApplicationNameForProtocol('obsidian://'),
       handlerExecutable: async () => (await app.getApplicationInfoForProtocol('obsidian://')).path,
       openExternal: (url) => shell.openExternal(url),
     }),
-    learnFinalPaths: (paths) =>
-      learnFinalPaths(paths, {
-        profileDir: app.getPath('userData'),
-        lang: currentLang(),
-        cliEntry: bundledCliEntry(),
-      }),
-    runEditorRequest: runProjectEditorRequest,
+    learnFinalPaths: async (paths, project) => {
+      const profileDir = app.getPath('userData')
+      const lang = currentLang()
+      return withWikiAccess(profileDir, async () => {
+        const { vaultPath } = await prepareTranslationVault(profileDir, lang)
+        const results = await learnFinalPaths(paths, {
+          ...project,
+          profileDir,
+          lang,
+          cliEntry: bundledCliEntry(),
+        })
+        await migrateWikiGraph(vaultPath, lang)
+        return results
+      })
+    },
+    runEditorRequest: (path, prompt, signal, useWiki, conversation) =>
+      runProjectEditorRequest(
+        path,
+        prompt,
+        signal,
+        undefined,
+        useWiki,
+        conversation ? {} : undefined,
+        conversation,
+      ),
     settingsPath: APP_SETTINGS_PATH,
     now: () => Date.now(),
     showOpenDialog: (options) => {

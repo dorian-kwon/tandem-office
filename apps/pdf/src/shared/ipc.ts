@@ -672,6 +672,8 @@ export interface TextInsertInput {
       The OCR bake layer's inserts: white glyphs would still show on grey paper,
       photos and dark headers, and light up under selection. */
   invisible?: boolean
+  /** Width of a recognized line, in page points, for positioning its invisible search layer. */
+  ocrWidth?: number
 }
 
 /** Dry-run match result for one pending text edit */

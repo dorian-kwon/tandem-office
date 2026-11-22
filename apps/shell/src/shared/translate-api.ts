@@ -1,4 +1,4 @@
-import type { ProjectBatchSnapshot, ProjectBatchStart } from './project-batch'
+import type { ProjectBatchSend, ProjectBatchSnapshot, ProjectBatchStart } from './project-batch'
 import type { OcrPopupResult } from './ocr-popup'
 import type {
   OcrMode,
@@ -30,13 +30,16 @@ import type {
  */
 export const TRANSLATE_CHANNELS = {
   batchStart: 'translate:batch-start',
+  batchSend: 'translate:batch-send',
   batchStatus: 'translate:batch-status',
   batchStop: 'translate:batch-stop',
   list: 'translate:list',
   addWikiReferences: 'translate:add-wiki-references',
+  maintainWiki: 'translate:maintain-wiki',
   openWiki: 'translate:open-wiki',
   resumeWiki: 'translate:resume-wiki',
   learnFinals: 'translate:learn-finals',
+  learnProjectFinals: 'translate:learn-project-finals',
   create: 'translate:create',
   remove: 'translate:remove',
   getSystemPrompt: 'translate:get-system-prompt',
@@ -206,6 +209,7 @@ export interface TranslatePickedParentDir {
 
 /** The only project fields the renderer may change; material lists are never in it. */
 export interface TranslateSettingsPatch {
+  useWiki?: boolean
   projectPrompt?: string
   ocr?: OcrMode
   writingStyle?: WritingStyle
@@ -275,6 +279,8 @@ export type TranslateOpenTranslationResult =
     }
 
 export interface TranslateInstructionsForArgs {
+  /** The running text PDF, after the transfer confirmation. */
+  pdfToken?: string
   dir: string
   /** the request text the glossary entries are picked by */
   text: string
@@ -387,7 +393,7 @@ export interface TranslateOcrWriteArgs {
 
 export interface WikiFinalResult {
   name: string
-  status: 'added' | 'duplicate' | 'empty' | 'failed'
+  status: 'added' | 'updated' | 'duplicate' | 'empty' | 'failed'
 }
 
 export interface TranslationWikiOpenResult {
@@ -398,14 +404,17 @@ export interface TranslationWikiOpenResult {
 }
 
 export interface TranslateApi {
+  batchSend(args: ProjectBatchSend): Promise<ProjectBatchSnapshot>
   batchStart(args: ProjectBatchStart): Promise<ProjectBatchSnapshot>
   batchStop(dir: string): Promise<void>
   batchStatus(dir: string): Promise<ProjectBatchSnapshot | null>
   onBatchChanged(listener: (snapshot: ProjectBatchSnapshot) => void): () => void
   addWikiReferences(dir: string): Promise<ProjectFile | null>
+  maintainWiki(action: 'initialize' | 'repair'): Promise<void>
   openWiki(): Promise<TranslationWikiOpenResult>
   resumeWiki(): Promise<TranslationWikiOpenResult>
   learnFinals(): Promise<WikiFinalResult[]>
+  learnProjectFinals(dir: string): Promise<WikiFinalResult[]>
   list(): Promise<TranslateProjectListEntry[]>
   /** documents opened lately, newest first, at most 10 */
   recent(): Promise<TranslateRecentDocument[]>
@@ -625,6 +634,7 @@ export type TranslateExportArgs =
   { dir: string; file: string; output?: string } | { outputPath: string }
 
 export interface ProjectDocumentRequest {
+  useWiki?: boolean
   dir: string
   file: string
   prompt: string

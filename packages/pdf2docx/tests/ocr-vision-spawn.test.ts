@@ -16,6 +16,23 @@ afterEach(() => {
 })
 
 describe('createWindowsOcrEngine', () => {
+  it('requests the exact language for an explicit selection and preserves the system default', () => {
+    Object.defineProperty(process, 'platform', { value: 'win32' })
+    for (const [languages, exact, args] of [
+      [['en-US'], true, ['en-US', '--exact']],
+      [undefined, false, []],
+    ] as const) {
+      createWindowsOcrEngine(process.execPath, languages ? [...languages] : undefined, exact)!(
+        new Uint8Array([1]),
+        { widthPt: 100, heightPt: 100 },
+      )
+      expect(spawnSync).toHaveBeenLastCalledWith(
+        process.execPath,
+        args,
+        expect.objectContaining({ windowsHide: true }),
+      )
+    }
+  })
   it('starts win-ocr.exe with its console hidden', () => {
     Object.defineProperty(process, 'platform', { value: 'win32' })
     // any existing file stands in for the helper

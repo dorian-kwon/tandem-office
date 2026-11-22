@@ -48,6 +48,8 @@ export interface UserSkill {
   mcpServers: string[]
   /** an app skill installed from GitHub (it has a source record) */
   github: boolean
+  /** A bundled skill that always requires an explicit choice for the request. */
+  manualOnly?: true
   /** a builtin skill only the agent window uses */
   agentOnly: boolean
   files: number

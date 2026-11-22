@@ -133,6 +133,68 @@ describe('convert pdf to md and epub', () => {
     expect(forced.json().detail).toMatchObject({ assets_written: 0, assets_reused: 1 })
   })
 
+  it('keeps the placed pictures of a landscape page in Markdown and EPUB', async () => {
+    const dir = tempDir()
+    const pdf = await PDFDocument.create()
+    const page = pdf.addPage([400, 240])
+    page.drawText('A landscape page', { x: 12, y: 200, size: 14 })
+    const image = await pdf.embedPng(encodeRgbaPng(gradient(120, 80), 120, 80))
+    page.drawImage(image, { x: 50, y: 35, width: 120, height: 80 })
+    const source = join(dir, 'landscape.pdf')
+    writeFileSync(source, await pdf.save())
+    const md = await run(['convert', source, '--to', 'md', '--json'], { env: env(dir) })
+    expect(md.json().detail.assets_written).toBe(1)
+    expect(readFileSync(join(dir, 'landscape.md'), 'utf8')).toContain('A landscape page')
+    const epub = await run(['convert', source, '--to', 'epub', '--no-cover', '--json'], {
+      env: env(dir),
+    })
+    expect(epub.code, epub.stdout).toBe(0)
+    const zip = await JSZip.loadAsync(readFileSync(join(dir, 'landscape.epub')))
+    expect(
+      Object.keys(zip.files).filter(
+        (path) => path.startsWith('OEBPS/images/') && path.endsWith('.png'),
+      ),
+    ).toHaveLength(1)
+  })
+
+  it('reports the original page numbers when only some pages can be edited', async () => {
+    const dir = tempDir()
+    const pdf = await PDFDocument.create()
+    pdf.addPage([144, 144]).drawText('Native text', { x: 12, y: 60, size: 12 })
+    const scan = pdf.addPage([144, 144])
+    const image = await pdf.embedPng(encodeRgbaPng(gradient(128, 128), 128, 128))
+    scan.drawImage(image, { x: 0, y: 0, width: 144, height: 144 })
+    const source = join(dir, 'mixed.pdf')
+    writeFileSync(source, await pdf.save())
+    for (const [target, code] of [
+      ['docx', 'pdf_image_pages'],
+      ['xlsx', 'pdf_skipped_pages'],
+      ['md', 'pdf_image_pages'],
+      ['epub', 'pdf_image_pages'],
+    ] as const) {
+      const result = await run(['convert', source, '--to', target, '--json'], { env: env(dir) })
+      expect(result.code, result.stdout).toBe(0)
+      expect(result.json().warnings).toContainEqual(expect.objectContaining({ code, pages: [2] }))
+    }
+    const onlyScan = await run(
+      [
+        'convert',
+        source,
+        '--to',
+        'epub',
+        '--pages',
+        '2',
+        '--out',
+        join(dir, 'scan.epub'),
+        '--json',
+      ],
+      { env: env(dir) },
+    )
+    expect(onlyScan.json().warnings).toContainEqual(
+      expect.objectContaining({ code: 'pages_as_images', pages: [2] }),
+    )
+  })
+
   it('converts only --pages', async () => {
     const dir = tempDir()
     const pdf = writeMinimalPdf(join(dir, 'three.pdf'), ['First', 'Second', 'Third'])

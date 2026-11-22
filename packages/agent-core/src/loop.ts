@@ -82,6 +82,8 @@ export interface AgentLoopOptions<TSnapshot = unknown> {
   captureSnapshot?(): TSnapshot
   /** wrap instruction + skill context into the user message text */
   formatUserMessage?(instruction: string, context: string): string
+  /** Keep a relayed human message verbatim and send live document context as separately quoted material. */
+  separateDocumentContext?(): boolean
   /** appended to the system prompt each turn (e.g. reply-language directive following the UI language) */
   systemSuffix?(): string
   /**
@@ -552,6 +554,7 @@ export class AgentLoop<TSnapshot = unknown> {
   private abortController: AbortController | null = null
   /** one id per run: the context gate asks at most once for a whole tool loop */
   private runId: string | undefined
+  private runDocumentContext = ''
 
   private readonly skill: AgentSkill
   private readonly translation?: ReturnType<typeof documentTranslationSkill>
@@ -720,12 +723,18 @@ export class AgentLoop<TSnapshot = unknown> {
     // pushed, so the rollback in failRun() is a no-op and only the report matters.
     try {
       const context = this.skill.buildContext?.() ?? ''
+      const separate = this.options.separateDocumentContext?.() === true
+      this.runDocumentContext =
+        separate && context
+          ? '\n\nDocument context supplied by the editor as quoted reference material:\n' +
+            JSON.stringify(sanitizeAgentPayload(context))
+          : ''
       const format =
         this.options.formatUserMessage ??
         ((instr: string, ctx: string) => (ctx ? `${instr}\n\n${ctx}` : instr))
       const userMsg: AgentMessage = {
         role: 'user',
-        text: format(instruction, context),
+        text: separate ? instruction : format(instruction, context),
         ...(images?.length ? { images } : {}),
       }
       void this.beginRun(userMsg)
@@ -970,6 +979,7 @@ export class AgentLoop<TSnapshot = unknown> {
     this.lastRunStopped = false
     this.runUserMsg = null
     this.runId = undefined
+    this.runDocumentContext = ''
   }
 
   private dropTurnLimitNote(): void {
@@ -1107,7 +1117,8 @@ export class AgentLoop<TSnapshot = unknown> {
             this.skill.systemPrompt +
             (this.resumingAfterStop && toolsAllowed ? RESUME_AFTER_STOP : '') +
             (toolsAllowed ? '' : TOOLS_UNAVAILABLE_NOTE) +
-            (this.options.systemSuffix?.() ?? ''),
+            (this.options.systemSuffix?.() ?? '') +
+            this.runDocumentContext,
           messages: this.requestMessages(),
           tools: this.finalizing || !toolsAllowed ? [] : this.skill.tools,
           // one id for every turn of this run, so the context gate asks once
@@ -1397,6 +1408,10 @@ export class AgentLoop<TSnapshot = unknown> {
           : execution,
         snapshotBefore: firstMutation ? snapshot : undefined,
       })
+      if (execution.endRunWithError) {
+        this.failRun(execution.endRunWithError)
+        return
+      }
     }
     this.history.push({ role: 'tool', results })
     if (executedInTurn) this.inputParseFails = 0

@@ -2139,7 +2139,9 @@ export function applyTextInserts(
           skipped.push({ editIndex, pageIndex: input.pageIndex, reason: 'page does not exist' })
           return
         }
-        byPage.set(input.pageIndex, [...(byPage.get(input.pageIndex) ?? []), { input, editIndex }])
+        const page = byPage.get(input.pageIndex)
+        if (page) page.push({ input, editIndex })
+        else byPage.set(input.pageIndex, [{ input, editIndex }])
       })
       // One resolved face per (font, bold, italic) across the request: the OCR
       // bake sends hundreds of same-face lines, and resolving per insert
@@ -2152,7 +2154,9 @@ export function applyTextInserts(
       for (const pageInserts of byPage.values())
         for (const entry of pageInserts) {
           const key = faceKeyOf(entry.input)
-          faces.set(key, [...(faces.get(key) ?? []), entry])
+          const group = faces.get(key)
+          if (group) group.push(entry)
+          else faces.set(key, [entry])
         }
       const faceCache = new Map<
         string,
@@ -2231,10 +2235,28 @@ export function applyTextInserts(
                   }
                   const offset = input.lineXOffsets?.[lineIndex] ?? 0
                   const drop = lineIndex * leading
+                  // Match the invisible glyphs to the recognized line for accurate
+                  // highlights even when the source used a different font or spacing.
+                  let horizontalScale = 1
+                  if (
+                    input.invisible &&
+                    input.ocrWidth &&
+                    input.ocrWidth > 0 &&
+                    m._FPDFPageObj_GetBounds(
+                      obj,
+                      matrixPtr,
+                      matrixPtr + 4,
+                      matrixPtr + 8,
+                      matrixPtr + 12,
+                    )
+                  ) {
+                    const width = m.HEAPF32[(matrixPtr + 8) >> 2]! - m.HEAPF32[matrixPtr >> 2]!
+                    if (width > 0) horizontalScale = input.ocrWidth / width
+                  }
                   m.HEAPF32.set(
                     [
-                      a,
-                      b,
+                      a * horizontalScale,
+                      b * horizontalScale,
                       c,
                       d,
                       input.origin[0] + a * offset - c * drop,

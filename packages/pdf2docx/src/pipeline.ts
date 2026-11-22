@@ -14,12 +14,13 @@ import {
   readDocMetadata,
   renderPageByIndexPng,
   renderPageWithoutTextPng,
+  renderRasterLayerForOcr,
   withPdfDocument,
 } from './extract'
 import type { ExtractedPage, PdfiumModule } from './extract'
 import type { IrPage, PageBlock, PageRender, TextBlock } from './ir'
 import { coverageRatio, type Rect } from './geometry'
-import { tryOcrScannedPage, type OcrEngine } from './ocr'
+import { hasOcrCandidate, tryOcrScannedPage, type OcrEngine } from './ocr'
 
 export interface ConvertOptions {
   /** initialized @embedpdf/pdfium module (see package header comment) */
@@ -31,10 +32,11 @@ export interface ConvertOptions {
   password?: string
   /**
    * local OCR engine for scanned pages (platform-supplied; see src/ocr.ts).
-   * Only pages with NO usable text layer enter the OCR path; every gate
-   * failure keeps today's full-page-image fallback.
+   * Also recovers text-bearing images on digital pages, preserving native text.
    */
   ocr?: OcrEngine
+  /** Restrict OCR to these one-based pages, while keeping every page in the output. */
+  ocrPages?: ReadonlySet<number>
   /**
    * cell-data mode (xlsx exporter): the output carries data rows, not a page
    * facsimile, so bitmap fallbacks are pure loss. Keeps text covered by
@@ -355,26 +357,31 @@ export function extractIrDocument(pdf: Uint8Array, opts: ConvertOptions): IrDocu
         const extracted = extractedPages[i]!
         const dropSet = furniture.drop[i]!
         if (dropSet.size > 0) extracted.chars = extracted.chars.filter((c) => !dropSet.has(c))
-        let page = analyzePage(extracted, {
-          absoluteLayout: opts.absoluteLayout === true,
-          listSeq,
-        })
-        let graphicsUnderlay = false
-
-        // scanned page + an OCR engine: try to recover editable text; every
-        // gate failure keeps the full-page-image fallback below unchanged.
-        // Recognition reads a dedicated >=3 px/pt render (~216 dpi) — the
-        // scale-2 fallback render costs measurable accuracy on small print.
-        let ocrConfidence: number | undefined
-        if (page.scanned && opts.ocr) {
-          const hiRender =
-            renderPageByIndexPng(m, doc, i, Math.max(opts.renderScale ?? 2, 3)) ?? undefined
-          const recovered = tryOcrScannedPage(extracted, opts.ocr, hiRender, listSeq)
-          if (recovered) {
-            page = recovered.page
-            ocrConfidence = recovered.confidence
+        let recovered = null
+        if (
+          opts.ocr &&
+          (!opts.ocrPages || opts.ocrPages.has(i + 1)) &&
+          hasOcrCandidate(extracted)
+        ) {
+          const raster = renderRasterLayerForOcr(
+            m,
+            doc,
+            i,
+            Math.max(opts.renderScale ?? 2, 3),
+            extracted.rasterBackgroundCount,
+          )
+          if (raster) {
+            recovered = tryOcrScannedPage(extracted, opts.ocr, raster, listSeq, opts.absoluteLayout)
           }
         }
+        const page =
+          recovered?.page ??
+          analyzePage(extracted, {
+            absoluteLayout: opts.absoluteLayout === true,
+            listSeq,
+          })
+        const ocrConfidence = recovered?.confidence
+        let graphicsUnderlay = false
 
         const keepForCellData = (): boolean =>
           opts.cellData === true && irTextCharCount(page) >= CELL_DATA_KEEP_MIN_CHARS
@@ -468,7 +475,7 @@ export function extractIrDocument(pdf: Uint8Array, opts: ConvertOptions): IrDocu
 
         if (page.ocrRecovered) {
           warnings.push(
-            `page ${i + 1}: scanned page, text recovered via local OCR (confidence ${(
+            `page ${i + 1}: image text recovered via local OCR (confidence ${(
               ocrConfidence ?? 0
             ).toFixed(2)})`,
           )

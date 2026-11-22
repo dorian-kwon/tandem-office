@@ -747,7 +747,7 @@ export function analyzePage(extracted: ExtractedPage, opts: AnalyzeOptions = {})
       pixelWidth: img.pixelWidth,
       pixelHeight: img.pixelHeight,
       ...(img.z !== undefined ? { z: img.z } : {}),
-      ...(img.synthetic ? { synthetic: true as const } : {}),
+      ...(img.synthetic ? { synthetic: true as const } : { placedPicture: true as const }),
     }))
   const { floats, inline } = classifyFloatImages(
     suppressTextShadowImages(imageBlocks, remainingUnits),

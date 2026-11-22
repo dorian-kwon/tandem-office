@@ -18,6 +18,7 @@ import {
   windowProjectFolderBridge,
   type ProjectMemoryLine,
 } from '../src/project-skill'
+import { beginBatchConversation, endBatchConversation } from '../src/project-batch-conversation'
 import { contextBundle, fakeProjectBridge, flush } from './project-fake-bridge'
 
 afterEach(() => {
@@ -70,6 +71,23 @@ describe('panelProjectSkill without a project', () => {
     expect(skill.tools).toEqual([])
     expect(fake.bridge.readContext).not.toHaveBeenCalled()
     expect(fake.bridge.openScope).not.toHaveBeenCalled()
+  })
+
+  it('supplies prior batch exchanges as temporary context even without a folder and clears only its own turn', () => {
+    const { skill } = setup({ projectId: null })
+    const previous = [
+      { prompt: 'Use plain English', file: 'first.docx', reply: 'Simplified the heading.' },
+    ]
+    beginBatchConversation('followup', previous)
+    try {
+      endBatchConversation('stale')
+      expect(skill.systemPrompt).toContain(JSON.stringify(previous))
+      expect(skill.systemPrompt).toContain('Only the current user message')
+      expect(skill.tools).toEqual([])
+    } finally {
+      endBatchConversation('followup')
+    }
+    expect(skill.systemPrompt).toBe('')
   })
 
   it('adds nothing before the first prepare even when a project is chosen', () => {
@@ -371,6 +389,63 @@ describe('the snapshot of one request', () => {
 })
 
 describe('tool list conditions (spec 5.5)', () => {
+  it('queries the local index and example notes only for a trusted, wiki-enabled send', async () => {
+    const translation = {
+      prompts: 'Translate',
+      material: '',
+      wikiLookupAvailable: true,
+      wikiLookupTicket: 'grant',
+    }
+    const { skill, run, fake } = setup({ context: contextBundle({ translation }) })
+    await run.prepare()
+    const name = 'project_lookup_translation_examples'
+    expect(fake.bridge.openScope).toHaveBeenCalledWith({
+      projectId: 'p1',
+      wikiLookupTicket: 'grant',
+    })
+    expect(toolNames(skill)).toContain(name)
+    expect(skill.systemPrompt).toContain('index.md')
+    for (const categories of [{}, { industry: 'tourism', documentType: 'guide' }]) {
+      const result = await skill.executeTool({ id: 'lookup', name, input: { categories } })
+      expect(fake.bridge.lookupTranslationExamples).toHaveBeenLastCalledWith({
+        scope: 'scope-p1-1',
+        categories,
+      })
+      expect(result.output).toContain('[[final-documents/Guide]]')
+    }
+    await skill.executeTool({
+      id: 'follow',
+      name,
+      input: { categories: {}, path: 'categories/Guide.md' },
+    })
+    expect(fake.bridge.lookupTranslationExamples).toHaveBeenLastCalledWith({
+      scope: 'scope-p1-1',
+      categories: {},
+      path: 'categories/Guide.md',
+    })
+    expect(
+      (
+        await skill.executeTool({
+          id: 'bad',
+          name,
+          input: { categories: { path: '/specific/path' } },
+        })
+      ).isError,
+    ).toBe(true)
+    for (const ctx of [
+      contextBundle({ trust: 'without', translation }),
+      contextBundle({ translation: { prompts: '', material: '' } }),
+    ]) {
+      fake.state.context = ctx
+      await run.prepare()
+      expect(toolNames(skill)).not.toContain(name)
+      expect(
+        (await skill.executeTool({ id: 'declined', name, input: { categories: {} } })).isError,
+      ).toBe(true)
+    }
+    expect(fake.bridge.lookupTranslationExamples).toHaveBeenCalledTimes(3)
+  })
+
   it('offers the three read tools and project_remember when memory can be written', async () => {
     const { skill, run } = setup()
     await run.prepare()

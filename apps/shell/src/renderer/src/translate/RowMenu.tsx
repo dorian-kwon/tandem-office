@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { MoreIcon } from './icons'
+import { MoreIcon, SortChevron } from './icons'
 
 export interface RowMenuItem {
   key: string
@@ -17,10 +17,12 @@ export function RowMenu({
   label,
   items,
   disabled,
+  split = false,
 }: {
   /** accessible name of the button, e.g. "More actions: Contracts" */
   label: string
   items: RowMenuItem[]
+  split?: boolean
   disabled?: boolean
 }) {
   const [open, setOpen] = useState(false)
@@ -73,7 +75,7 @@ export function RowMenu({
       <button
         ref={button}
         type="button"
-        className="tt-icon-btn"
+        className={split ? 'projects-ghost translate-split-toggle' : 'tt-icon-btn'}
         aria-label={label}
         title={label}
         aria-haspopup="menu"
@@ -81,7 +83,7 @@ export function RowMenu({
         disabled={disabled}
         onClick={() => setOpen((v) => !v)}
       >
-        <MoreIcon />
+        {split ? <SortChevron dir="desc" /> : <MoreIcon />}
       </button>
       {open && (
         <div className="tt-menu" role="menu" onKeyDown={onMenuKey}>
@@ -93,7 +95,7 @@ export function RowMenu({
               className={item.danger ? 'is-danger' : undefined}
               disabled={item.disabled}
               onClick={() => {
-                close(false)
+                close(split)
                 item.onSelect()
               }}
             >

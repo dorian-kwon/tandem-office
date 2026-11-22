@@ -95,6 +95,16 @@ describe('the translation wiki in a fresh app profile', () => {
       trash,
       fetch: () => Promise.reject(new Error('offline')),
     })
+    const id = 'builtin:translation-wiki'
+    writeAppSetting(join(root, 'clean-settings.json'), 'skills', {
+      states: { [id]: { enabled: true, invoke: 'auto' } },
+    })
+    expect((await service.list()).find((skill) => skill.id === id)).toMatchObject({
+      enabled: true,
+      invoke: 'manual',
+      manualOnly: true,
+    })
+    expect(await service.setState(id, { invoke: 'auto' })).toEqual({ ok: false, reason: 'invalid' })
     const enabled = (await service.enabledForAgent()).filter(
       (skill) => skill.name === 'translation-wiki',
     )
@@ -109,6 +119,8 @@ describe('the translation wiki in a fresh app profile', () => {
       text: `Use this skill: read ${wiki.skillMd} and follow it.\n\n${prompt}`,
     })
     const body = readFileSync(wiki.skillMd, 'utf8')
+    expect(wiki.invoke).toBe('manual')
+    expect(parseSkillMd(body)?.fields['disable-model-invocation']).toBe('true')
     expect(body).toContain('FAM tour')
     const panel = await service.aiRead(wiki.id)
     expect(panel.ok && panel.skill.body).toMatch(/FAM tour/)

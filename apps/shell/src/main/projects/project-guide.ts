@@ -180,11 +180,13 @@ export interface ProjectGuideDeps {
     root: string,
     query?: string,
     conversation?: ReadContextConversation,
+    confirmWiki?: () => Promise<boolean>,
   ) => Promise<ProjectTranslationContext | null>
 }
 
 /** What the translation hook adds to one request's context */
 export interface ProjectTranslationContext {
+  wikiLookupAvailable?: boolean
   prompts: string
   material: string
   /** reference chunks picked for this request ('' when none) */
@@ -878,7 +880,11 @@ export class ProjectGuide {
    */
   async readContext(
     id: ProjectId,
-    options: { query?: string; conversation?: ReadContextConversation } = {},
+    options: {
+      query?: string
+      conversation?: ReadContextConversation
+      confirmWiki?: () => Promise<boolean>
+    } = {},
   ): Promise<ProjectContextResult> {
     const settings = this.read()
     const entry = this.entry(id, settings)
@@ -908,9 +914,16 @@ export class ProjectGuide {
     let translation: ProjectTranslationContext | null = null
     if (trust === 'use' && record && this.deps.translationContext) {
       try {
-        translation = options.conversation
-          ? await this.deps.translationContext(root, options.query, options.conversation)
-          : await this.deps.translationContext(root, options.query)
+        translation = options.confirmWiki
+          ? await this.deps.translationContext(
+              root,
+              options.query,
+              options.conversation,
+              options.confirmWiki,
+            )
+          : options.conversation
+            ? await this.deps.translationContext(root, options.query, options.conversation)
+            : await this.deps.translationContext(root, options.query)
       } catch {
         // an unreadable translation project sends nothing of the translation tool
         translation = null
@@ -949,6 +962,7 @@ export class ProjectGuide {
                 prompts: translation.prompts,
                 material: translation.material,
                 references: translation.references,
+                ...(translation.wikiLookupAvailable ? { wikiLookupAvailable: true } : {}),
                 ...(translation.fixedOmitted === true ? { fixedOmitted: true as const } : {}),
               },
             }

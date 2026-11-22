@@ -124,7 +124,7 @@ export function tokenize(text: string): string[] {
 }
 
 function termCounts(text: string): Record<string, number> {
-  const counts: Record<string, number> = {}
+  const counts: Record<string, number> = Object.create(null)
   for (const term of tokenize(text)) counts[term] = (counts[term] ?? 0) + 1
   return counts
 }
@@ -527,6 +527,8 @@ async function indexLags(dir: string, files: readonly string[]): Promise<boolean
 }
 
 export interface QueryReferencesOptions {
+  /** Only include these files in this request, including when a stale index is in use. */
+  allowedFiles?: readonly string[]
   /** Person-selected examples to consult even for a request without topical keywords. */
   wikiExamples?: readonly string[]
   /**
@@ -540,6 +542,46 @@ export interface QueryReferencesOptions {
 interface LiveChunk extends ReferenceChunk {
   terms: Record<string, number>
   size: number
+}
+
+/** Labels from the selected note's generated Obsidian links, carried as reference data. */
+function wikiScopeLine(md: string): string {
+  const graph = /^<!-- tandem:wiki-links -->\r?\n([\s\S]*?)^<!-- \/tandem:wiki-links -->\r?$/m.exec(
+    md,
+  )
+  if (!graph) return ''
+  const markers = [
+    ...graph[1]!.matchAll(/^<!-- tandem:wiki-scope ([A-Za-z0-9+/=]{1,4096}) -->\r?$/gm),
+  ]
+  if (markers.length !== 1) return ''
+  try {
+    const values: unknown = JSON.parse(Buffer.from(markers[0]![1]!, 'base64').toString('utf8'))
+    if (!values || typeof values !== 'object' || Array.isArray(values)) return ''
+    const fields = [
+      ['documentType', 'Document type'],
+      ['industry', 'Industry'],
+      ['institution', 'Institution'],
+      ['style', 'Style'],
+    ] as const
+    const scope: string[] = []
+    for (const [key, label] of fields) {
+      const value: unknown = (values as Record<string, unknown>)[key]
+      // One short, printable label per dimension. Never include Markdown links,
+      // HTML tags, other metadata or instructions on extra lines.
+      if (
+        typeof value !== 'string' ||
+        value.length > 180 ||
+        !/^[\p{L}\p{M}\p{N} ,.'’()&·/–—-]+$/u.test(value) ||
+        !value.trim()
+      )
+        continue
+      const clean = value.trim()
+      scope.push(label + ': ' + clean.slice(0, safeEnd(clean, Math.min(64, clean.length))))
+    }
+    return scope.join(' · ')
+  } catch {
+    return ''
+  }
 }
 
 /**
@@ -579,19 +621,33 @@ export async function queryReferences(
   }
   const index = await loadIndex(dir)
   const chunks: LiveChunk[] = []
+  const allowed = options.allowedFiles ? new Set(options.allowedFiles) : undefined
   const wikiExamples = new Set(options.wikiExamples)
   for (const entry of index.files) {
     if (entry.status !== 'converted' || (listed && !listed.has(entry.file))) continue
+    if (allowed && !allowed.has(entry.file)) continue
     const md = await convertedText(dir, entry)
     if (md === null) continue
-    const generatedExample =
-      wikiExamples.has(entry.file) && md.startsWith('---\nkind: final-style-example\n')
+    const header = wikiExamples.has(entry.file)
+      ? /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(md)
+      : null
+    const generatedExample = !!header && /^kind: final-style-example\r?$/m.test(header[1]!)
+    const scope = generatedExample ? wikiScopeLine(md) : ''
     for (const c of entry.chunks) {
-      const text = md.slice(c.offset, c.offset + c.length)
+      let text = md.slice(c.offset, c.offset + c.length)
       // Generated notes put the source excerpts under level-three headings. The
       // front matter and catalog links only help navigation inside Obsidian.
-      if (generatedExample && !text.startsWith('### ')) continue
-      const terms = c.terms && typeof c.terms === 'object' ? c.terms : {}
+      if (generatedExample) {
+        const sample = /^### [^\r\n]+\r?\n\r?\n {4}[^\r\n]+/.exec(text)
+        if (!sample) continue
+        text = scope ? scope + '\n' + sample[0] : sample[0]
+      }
+      // Rank only the labels and excerpts that can actually appear in the prompt.
+      const terms = generatedExample
+        ? termCounts(text)
+        : c.terms && typeof c.terms === 'object'
+          ? c.terms
+          : {}
       let size = 0
       for (const v of Object.values(terms)) size += v
       chunks.push({

@@ -1,6 +1,16 @@
 import type { zh } from './zh'
 
 export const he = {
+  ocrLanguage: 'שפת זיהוי',
+  ocrLanguageDefault: 'ברירת המחדל של המערכת',
+  ocrLanguageUnavailable: 'שפת הזיהוי שנבחרה אינה זמינה. יש לבחור שפה אחרת או להתקין אותה במכשיר.',
+  ocrTitle: 'הפעלת זיהוי תווים',
+  ocrBatch: 'הפעלת OCR לכל הקבצים',
+  ocrPdf: 'PDF הניתן לחיפוש',
+  ocrWord: 'Word הניתן לעריכה',
+  ocrRunning: 'מתבצע זיהוי טקסט…',
+  ocrNoText: 'לא נמצא טקסט קריא.',
+  ocrUnavailable: 'זיהוי טקסט מקומי אינו זמין במכשיר זה.',
   title: 'המרת קבצים',
   chooseFiles: 'בחירת קבצים',
   outputFormat: 'פורמט פלט',
@@ -15,4 +25,7 @@ export const he = {
   saved: 'נשמר',
   failed: 'ההמרה נכשלה',
   removeFile: 'הסרת {name} מהרשימה',
+  ocrRange: 'עמודים לזיהוי',
+  ocrAllPages: 'כל העמודים',
+  ocrRangeInvalid: 'יש לבדוק את טווח העמודים בקובץ. לדוגמה: 1, 3–5',
 } satisfies Record<keyof typeof zh, string>

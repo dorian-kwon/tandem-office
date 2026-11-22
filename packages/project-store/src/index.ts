@@ -84,6 +84,7 @@ export type {
   ProjectHashedFile,
   ProjectId,
   ProjectIdArgs,
+  TranslationWikiCategories,
   ReadContextArgs,
   ReadContextConversation,
   ProjectInstructionsSource,

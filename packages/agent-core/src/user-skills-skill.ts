@@ -84,6 +84,7 @@ export interface UserSkillEntry {
   description: string
   enabled: boolean
   invoke: 'auto' | 'manual'
+  manualOnly?: true
   agentOnly: boolean
   hidden: boolean
   unreadable: boolean
@@ -191,6 +192,7 @@ function isAutoSkill(skill: UserSkillEntry): boolean {
     !skill.unreadable &&
     !skill.agentOnly &&
     skill.invoke === 'auto' &&
+    !skill.manualOnly &&
     !skill.shadowedBy &&
     !RESERVED_USER_SKILL_NAMES.has(skill.name.toLowerCase())
   )
@@ -428,11 +430,16 @@ export function createUserSkillsSkill(deps: UserSkillsDeps): AgentSkill {
   const titleOf = (skill: { id: string; source: string; name: string; title: string }) =>
     deps.displayTitle?.(skill) || skill.title || skill.name
   const attached = () => attachedSkillIdsOf(lastUserText(deps.messages?.() ?? []))
+  const refusalForRequest = (entry: UserSkillEntry | undefined, id: string) =>
+    entryRefusal(entry, id) ??
+    (entry?.manualOnly && !attached().includes(id)
+      ? 'The person must select this skill for the current request.'
+      : undefined)
 
   const useSkill = async (call: AgentToolCall): Promise<ToolExecution> => {
     const id = str(call.input.id).trim()
     const entry = await findFresh(id)
-    const refusal = entryRefusal(entry, id)
+    const refusal = refusalForRequest(entry, id)
     if (refusal || !entry) return fail(refusal ?? refusalText('not-found', id), USE_SKILL_TOOL)
     const title = titleOf(entry)
     if (attached().includes(id)) {
@@ -467,7 +474,7 @@ export function createUserSkillsSkill(deps: UserSkillsDeps): AgentSkill {
     const id = str(call.input.id).trim()
     const path = str(call.input.path).trim()
     const entry = await findFresh(id)
-    const refusal = entryRefusal(entry, id)
+    const refusal = refusalForRequest(entry, id)
     if (refusal || !entry)
       return fail(refusal ?? refusalText('not-found', id), READ_SKILL_FILE_TOOL)
     if (pathLeavesFolder(path)) return fail(fileRefusalText('outside', id, path), path)
@@ -573,6 +580,7 @@ export function userSkillEntriesOf(raw: unknown): UserSkillEntry[] {
       description: str(view.description),
       enabled: view.enabled === true,
       invoke: view.invoke === 'manual' ? 'manual' : 'auto',
+      ...(view.manualOnly === true ? { manualOnly: true as const } : {}),
       agentOnly: view.agentOnly === true,
       hidden: view.hidden === true,
       unreadable: !!view.unreadable,

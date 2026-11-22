@@ -90,7 +90,7 @@ function bridgeOf(api: TranslateApi): PdfTranslateBridge {
     store: (token, request) => api.pdfStore({ token, request }),
     write: (token, bilingual) => api.pdfWrite({ token, bilingual }),
     release: (token) => api.pdfRelease(token),
-    instructions: (dir, text) => api.instructionsFor({ dir, text }),
+    instructions: (dir, text, pdfToken) => api.instructionsFor({ dir, text, pdfToken }),
   }
 }
 

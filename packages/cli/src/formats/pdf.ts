@@ -6,6 +6,7 @@ import {
   extract,
   PdfLoadError,
   type OcrEngine,
+  type PageResult,
   type PdfiumModule,
 } from '@genoffice/pdf2docx'
 import { createVisionOcrEngine, createWindowsOcrEngine } from '../../../pdf2docx/src/ocr-vision'
@@ -228,6 +229,7 @@ export interface PdfConvertOutcome {
   bytes: Uint8Array
   pages: number
   warnings: string[]
+  pageResults: PageResult[]
 }
 
 export async function convertPdf(
@@ -246,15 +248,15 @@ export async function convertPdf(
   switch (target) {
     case 'docx': {
       const r = await convertPdfToDocx(bytes, convertOpts)
-      return { bytes: r.docx, pages: r.pages, warnings: r.warnings }
+      return { bytes: r.docx, pages: r.pages, warnings: r.warnings, pageResults: r.pageResults }
     }
     case 'pptx': {
       const r = await convertPdfToPptx(bytes, convertOpts)
-      return { bytes: r.pptx, pages: r.pages, warnings: r.warnings }
+      return { bytes: r.pptx, pages: r.pages, warnings: r.warnings, pageResults: r.pageResults }
     }
     case 'xlsx': {
       const r = await convertPdfToXlsx(bytes, convertOpts)
-      return { bytes: r.xlsx, pages: r.pages, warnings: r.warnings }
+      return { bytes: r.xlsx, pages: r.pages, warnings: r.warnings, pageResults: r.pageResults }
     }
   }
 }

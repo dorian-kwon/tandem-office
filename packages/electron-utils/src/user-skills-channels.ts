@@ -75,6 +75,8 @@ export interface UserSkillView {
   description: string
   enabled: boolean
   invoke: UserSkillInvokeValue
+  /** Builtin only usable when explicitly chosen for this request. */
+  manualOnly?: true
   /** a builtin the person hid; it is off */
   hidden: boolean
   hasScripts: boolean

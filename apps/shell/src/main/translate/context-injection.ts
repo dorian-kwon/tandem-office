@@ -35,6 +35,10 @@ import {
  */
 
 export interface TranslationContextOptions {
+  /** A single request may decline the selected wiki notes. */
+  useWiki?: boolean
+  confirmWiki?: () => Promise<boolean>
+  hasWikiCategories?: () => Promise<boolean>
   /** `<userData>/app-settings.json`: the global system prompt and the registered list */
   settingsPath: string
   /**
@@ -63,6 +67,7 @@ export interface TranslationContextOptions {
 export const REFERENCE_FENCE_CHARS = 400
 
 export interface TranslationInstructions extends ComposedContext {
+  wikiLookupAvailable?: boolean
   /** the prompts (app-wide, project) and the language pair: the start of `text` */
   promptText: string
   /** glossary entries and reference file names: the rest of `text` ('' when none) */
@@ -118,7 +123,22 @@ export async function buildTranslationInstructions(
   paragraph: string,
   options: TranslationContextOptions,
 ): Promise<TranslationInstructions> {
-  const project = await loadProject(dir)
+  const stored = await loadProject(dir)
+  const canReadVault =
+    stored.useWiki !== false && options.useWiki !== false && (await options.hasWikiCategories?.())
+  const hasWiki = canReadVault || (stored.wikiReferences?.length ?? 0) > 0
+  const omitWiki =
+    stored.useWiki === false ||
+    options.useWiki === false ||
+    (hasWiki && options.confirmWiki !== undefined && !(await options.confirmWiki()))
+  const excluded = omitWiki ? new Set(stored.wikiReferences) : undefined
+  const project = excluded?.size
+    ? {
+        ...stored,
+        references: stored.references.filter((name) => !excluded.has(name)),
+        wikiReferences: [],
+      }
+    : stored
   const glossary = await loadGlossary(dir)
   const systemPrompt = readTranslationSystemPrompt(options.settingsPath)
   const limit = options.limitChars ?? INSTRUCTIONS_LIMIT_CHARS
@@ -134,6 +154,7 @@ export async function buildTranslationInstructions(
     selection = matching.length > 0 ? 'matching' : 'first'
   }
   const built = fitted(systemPrompt, project, candidates, glossary.length, selection, limit)
+  if (canReadVault && !omitWiki) built.wikiLookupAvailable = true
   const convert = options.convertReference ?? convertReference
   return withReferences(dir, built, systemPrompt, project, paragraph, limit, convert)
 }
@@ -162,6 +183,7 @@ async function withReferences(
     chunks = await queryReferences(dir, paragraph, Math.min(DEFAULT_REFERENCE_CHARS, room), {
       convert,
       wikiExamples: project.wikiReferences,
+      allowedFiles: project.references,
     })
   } catch {
     return none
@@ -233,6 +255,7 @@ function fitted(
 
 /** What the project guide adds to a translation project's context */
 export interface TranslationFolderContext {
+  wikiLookupAvailable?: boolean
   /**
    * the fixed part: the prompts, the language pair and the editing rules; or,
    * when `fixedOmitted`, the one-line marker `fixed-context: <hash8>` in its place
@@ -330,6 +353,7 @@ export async function translationContextForFolder(
     )
   return {
     prompts: send ? fixed : fixedContextMarker(hash),
+    ...(built.wikiLookupAvailable ? { wikiLookupAvailable: true } : {}),
     fixedHash: hash.slice(0, 8),
     fixedOmitted: !send,
     material: built.materialText,

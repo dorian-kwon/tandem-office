@@ -187,6 +187,9 @@ export async function readUserSkillFolder(
     hasScripts: files.some((file) => isSkillScriptPath(file.rel)),
     mcpServers: parsed ? mcpServersOfSkillMd(parsed) : [],
     github: options.source === 'app' && files.some((file) => file.rel === IEUM_SOURCE_FILE),
+    ...(options.source === 'builtin' && parsed?.fields['disable-model-invocation'] === 'true'
+      ? { manualOnly: true as const }
+      : {}),
     agentOnly:
       options.source === 'builtin' &&
       (options.agentOnlyNames?.has(name) === true ||

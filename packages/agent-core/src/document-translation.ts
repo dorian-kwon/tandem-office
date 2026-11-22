@@ -5,6 +5,12 @@ import {
   translationBodyReads as bodyReads,
   type Quotation,
 } from './translation-evidence'
+import {
+  TRANSLATION_EXAMPLE_LOOKUP,
+  translationCategorySchema,
+  translationWikiCategories,
+  type TranslationWikiCategories,
+} from './translation-wiki-lookup'
 import type { AgentSkill } from './skill'
 import type { AgentToolDef, ToolExecution } from './types'
 
@@ -69,6 +75,17 @@ const overview = tool(
   },
   ['overview', 'evidence'],
 )
+const overviewWithWiki: AgentToolDef = {
+  ...overview,
+  inputSchema: {
+    ...overview.inputSchema,
+    properties: {
+      ...(overview.inputSchema.properties as object),
+      categories: translationCategorySchema,
+    },
+    required: ['overview', 'evidence', 'categories'],
+  },
+}
 const batch = tool(
   BATCH,
   'Before each translation batch, retrieve the previous batch and earlier repeated wording. Supply new pairs only for translations actually applied. Project instructions, the current source and the person’s corrections take precedence.',
@@ -116,6 +133,7 @@ export function documentTranslationSkill(editor: AgentSkill, host: DocumentTrans
   let key = host.documentKey()
   let phase: 'idle' | 'reading' | 'translating' = 'idle'
   let notes = ''
+  let categories: TranslationWikiCategories | null = null
   let targetLanguage = ''
   let previous: Quotation | null = null
   let anchors: Quotation[] = []
@@ -128,6 +146,7 @@ export function documentTranslationSkill(editor: AgentSkill, host: DocumentTrans
   function reset() {
     phase = 'idle'
     notes = ''
+    categories = null
     anchors = []
     targetLanguage = ''
     previous = null
@@ -167,6 +186,7 @@ export function documentTranslationSkill(editor: AgentSkill, host: DocumentTrans
           if (!digest || record?.doc !== digest) continue
           if (entry.name === OVERVIEW) {
             notes = short(record.notes, 1700)
+            categories = translationWikiCategories(record.categories)
             anchors = (Array.isArray(record.anchors) ? record.anchors : [])
               .map(asQuotation)
               .filter((q: Quotation | null): q is Quotation => !!q)
@@ -191,6 +211,21 @@ export function documentTranslationSkill(editor: AgentSkill, host: DocumentTrans
     }
     restored = []
   }
+  const wikiAvailable = () => editor.tools.some((t) => t.name === TRANSLATION_EXAMPLE_LOOKUP)
+  async function lookupWiki(id: string, signal?: AbortSignal): Promise<string> {
+    if (!wikiAvailable()) return ''
+    if (!categories)
+      return 'Use project_lookup_translation_examples with categories grounded in the verified source overview before editing.'
+    try {
+      const found = await editor.executeTool(
+        { id, name: TRANSLATION_EXAMPLE_LOOKUP, input: { categories } },
+        signal,
+      )
+      return found.output
+    } catch {
+      return 'Wiki lookup unavailable. Continue with the source and project instructions.'
+    }
+  }
   const sourcePrompt =
     'Survey the structure, then use the native body-reading tools on representative passages across the beginning, middle and end, including tables and captions where relevant. In workbooks pass the explicit sheetId on each read so the location survives a change of active sheet. Read further until the overview is grounded. Record it before writing translations.'
   const translatingPrompt =
@@ -200,7 +235,14 @@ export function documentTranslationSkill(editor: AgentSkill, host: DocumentTrans
     get systemPrompt() {
       checkDocument()
       const stage =
-        phase === 'reading' ? sourcePrompt : phase === 'translating' ? translatingPrompt : ''
+        phase === 'reading'
+          ? sourcePrompt +
+            (wikiAvailable()
+              ? ' If you need to see the wiki category names, consult index.md via project_lookup_translation_examples with categories {} and path index.md, and follow relevant wiki-relative Markdown links. Pass categories grounded in the source to record_source_overview; it performs the example lookup for you.'
+              : '')
+          : phase === 'translating'
+            ? translatingPrompt
+            : ''
       const route = host.inPlaceOnly
         ? 'Use the dedicated translation job for a translated copy of the book or PDF. Only when the person explicitly requests in-place translation of the whole current file, or resumption of that same edit, call prepare_document_translation first.'
         : 'When the person asks to translate the entire open document, workbook, deck or map, or to resume that work, call prepare_document_translation first.'
@@ -211,8 +253,13 @@ export function documentTranslationSkill(editor: AgentSkill, host: DocumentTrans
       if (interrupted) return []
       if (phase === 'reading')
         return [
-          ...editor.tools.filter((t) => navigation.has(t.name) || bodyReads.has(t.name)),
-          overview,
+          ...editor.tools.filter(
+            (t) =>
+              navigation.has(t.name) ||
+              bodyReads.has(t.name) ||
+              t.name === TRANSLATION_EXAMPLE_LOOKUP,
+          ),
+          wikiAvailable() ? overviewWithWiki : overview,
         ]
       return phase === 'translating' ? [...editor.tools, batch] : [...editor.tools, start]
     },
@@ -282,15 +329,23 @@ export function documentTranslationSkill(editor: AgentSkill, host: DocumentTrans
             notes += '\nEvidence: ' + JSON.stringify([...stillPresent][0])
         } else {
           anchors = []
+          categories = null
           notes = ''
           pairs.clear()
           previous = null
         }
         phase = notes ? 'translating' : 'reading'
-        return answer(
-          notes ? 'Existing source overview (reference material):\n' + notes : sourcePrompt,
+        const wiki = notes ? await lookupWiki(call.id, signal) : ''
+        if (!current()) return answer('The document changed or the request stopped.', label, true)
+        const result = answer(
+          notes
+            ? ['Existing source overview (reference material):\n' + notes, wiki]
+                .filter(Boolean)
+                .join('\n\n')
+            : sourcePrompt,
           notes || label,
         )
+        return wiki ? { ...result, historyOutput: notes } : result
       }
       if (phase === 'reading') {
         if (call.name === OVERVIEW) {
@@ -312,6 +367,15 @@ export function documentTranslationSkill(editor: AgentSkill, host: DocumentTrans
               label,
               true,
             )
+          categories = wikiAvailable() ? translationWikiCategories(input.categories) : null
+          if (wikiAvailable() && !categories)
+            return answer(
+              'Identify the source categories supported by the passages read. Omit uncertain axes; use {} when none are supported.',
+              label,
+              true,
+            )
+          const wiki = await lookupWiki(call.id, signal)
+          if (!current()) return answer('The document changed or the request stopped.', label, true)
           notes = [
             summary,
             'Evidence: ' + JSON.stringify(quote),
@@ -325,11 +389,23 @@ export function documentTranslationSkill(editor: AgentSkill, host: DocumentTrans
           const savedAnchors = [...anchors]
           while (
             savedAnchors.length > 1 &&
-            JSON.stringify({ doc: digest, notes, anchors: savedAnchors }).length >= 1900
+            JSON.stringify({ doc: digest, notes, anchors: savedAnchors, categories }).length >= 1900
           )
             savedAnchors.pop()
-          return cacheOutput(answer(translatingPrompt, summary), { notes, anchors: savedAnchors })
+          return cacheOutput(
+            {
+              ...answer([translatingPrompt, wiki].filter(Boolean).join('\n\n'), summary),
+              historyOutput: summary,
+            },
+            {
+              notes,
+              anchors: savedAnchors,
+              ...(categories && { categories }),
+            },
+          )
         }
+        if (call.name === TRANSLATION_EXAMPLE_LOOKUP && wikiAvailable())
+          return editor.executeTool(call, signal)
         if (!navigation.has(call.name) && !bodyReads.has(call.name))
           return answer('Complete the source overview before editing.', label, true)
       }

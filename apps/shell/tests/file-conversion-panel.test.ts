@@ -53,3 +53,54 @@ it('adds unique files across dialogs and only reuses successes for the current f
     vi.unstubAllGlobals()
   }
 })
+
+it('OCR uses its own picker, PDF/Word selection and the OCR result list', async () => {
+  const input = {
+    id: 'picked',
+    name: 'scan.png',
+    displayPath: '/scan.png',
+    targets: ['pdf', 'docx'],
+  }
+  const run = vi.fn(async () => [{ id: 'picked', outputPath: '/scan OCR.docx' }])
+  vi.stubGlobal('ocrFilesApi', {
+    languages: async () => ['en-US', 'ko-KR'],
+    pick: async () => [input],
+    run,
+    onProgress: () => () => {},
+  })
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+  const content = document.createElement('div'),
+    root = createRoot(content)
+  const node = (id: string) =>
+    content.querySelector<HTMLElement>(`[data-testid="ocr-files-${id}"]`)!
+  try {
+    await act(async () =>
+      root.render(createElement(FileConversionPanel, { visible: true, mode: 'ocr' })),
+    )
+    await act(async () => node('pick').click())
+    await act(async () => {
+      const select = node('target') as HTMLSelectElement
+      select.value = 'docx'
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await act(async () => node('run').click())
+    expect(run).toHaveBeenCalledWith(['picked'], 'docx', {
+      language: undefined,
+      pageRange: undefined,
+    })
+    await act(async () => {
+      const select = node('language') as HTMLSelectElement
+      select.value = 'ko-KR'
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await act(async () => node('run').click())
+    expect(run).toHaveBeenLastCalledWith(['picked'], 'docx', {
+      language: 'ko-KR',
+      pageRange: undefined,
+    })
+    expect(node('file').textContent).toContain('/scan OCR.docx')
+  } finally {
+    await act(async () => root.unmount())
+    vi.unstubAllGlobals()
+  }
+})

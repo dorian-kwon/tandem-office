@@ -605,6 +605,7 @@ export function AiPanel({
   const runStatus = useAiRunStatus(busy)
   // the shared ask_choice question card: the answer starts the next run
   const choice = useAiChoice({
+    batchChoices: () => runStatus.projectTurn.current?.batchChoices,
     lang,
     busy,
     remember: projectChoiceRemember(() => project.chat.run),
@@ -1255,6 +1256,7 @@ export function AiPanel({
         analyzingLabel: () => analyzingDocumentLabel[langRef.current],
       },
       transport: transportRef.current,
+      separateDocumentContext: () => runStatus.projectTurn.current?.batchFollowup === true,
       systemSuffix: () =>
         aiLangDirective() +
         (aiEditUndoHistoryEnabled()

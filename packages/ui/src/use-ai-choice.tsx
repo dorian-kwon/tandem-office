@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
 import type { AgentSkill } from '@genoffice/agent-core'
+import type { BatchTranslationChoices } from '@genoffice/project-store/editor-run'
 import type { Lang } from '@genoffice/i18n'
 import { AiChoiceCard } from './AiChoiceCard'
 import {
@@ -18,10 +19,15 @@ export interface ChoiceRememberHost {
   /** whether this key can be stored here now (the checkbox shows only then) */
   can(key: string): boolean
   /** store the picked option or typed text; never called for a skip */
-  store(key: string, answer: Exclude<ChoiceAnswer, { kind: 'skipped' }>, question: ChoiceQuestion): void
+  store(
+    key: string,
+    answer: Exclude<ChoiceAnswer, { kind: 'skipped' }>,
+    question: ChoiceQuestion,
+  ): void
 }
 
 export interface UseAiChoiceOptions {
+  batchChoices?: () => BatchTranslationChoices | undefined
   lang: Lang
   /** the panel's busy flag: the card waits for the asking run to end */
   busy: boolean
@@ -55,7 +61,11 @@ export function useAiChoice(options: UseAiChoiceOptions): AiChoiceController {
 
   // the loop outlives one render: the skill reaches the latest state through stable callbacks
   const skill = useMemo(
-    () => createChoiceSkill({ ask: (question) => dispatch({ type: 'ask', question }) }),
+    () =>
+      createChoiceSkill({
+        ask: (question) => dispatch({ type: 'ask', question }),
+        batchChoices: () => optionsRef.current.batchChoices?.(),
+      }),
     [],
   )
   const dismiss = useCallback(() => dispatch({ type: 'clear' }), [])

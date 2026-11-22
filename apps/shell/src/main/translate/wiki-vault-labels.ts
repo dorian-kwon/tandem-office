@@ -169,3 +169,27 @@ export const wikiLabels: Record<Lang, WikiLabels> = {
     'Ví dụ song ngữ',
   ],
 }
+
+export const finalNoteLabels: Record<Lang, readonly [catalog: string, extractedLine: string]> = {
+  ko: ['완성본', '추출 본문 행'],
+  en: ['Final documents', 'Extracted text line'],
+  zh: ['定稿文件', '提取文本行'],
+  'zh-TW': ['定稿文件', '擷取文字行'],
+  ja: ['完成文書', '抽出テキストの行'],
+  fr: ['Documents définitifs', 'Ligne du texte extrait'],
+  de: ['Endfassungen', 'Zeile im extrahierten Text'],
+  es: ['Documentos finales', 'Línea del texto extraído'],
+  th: ['เอกสารฉบับสมบูรณ์', 'บรรทัดของข้อความที่แยกมา'],
+  id: ['Dokumen akhir', 'Baris teks hasil ekstraksi'],
+  ru: ['Готовые документы', 'Строка извлечённого текста'],
+  ar: ['المستندات النهائية', 'سطر النص المستخرج'],
+  pt: ['Documentos finais', 'Linha do texto extraído'],
+  it: ['Documenti finali', 'Riga del testo estratto'],
+  pl: ['Dokumenty końcowe', 'Wiersz wyodrębnionego tekstu'],
+  cs: ['Konečné dokumenty', 'Řádek extrahovaného textu'],
+  nl: ['Definitieve documenten', 'Regel in de uitgelezen tekst'],
+  ms: ['Dokumen akhir', 'Baris teks yang diekstrak'],
+  he: ['מסמכים סופיים', 'שורה בטקסט שחולץ'],
+  hi: ['अंतिम दस्तावेज़', 'निकाले गए पाठ की पंक्ति'],
+  vi: ['Tài liệu hoàn thiện', 'Dòng văn bản đã trích xuất'],
+}

@@ -8,7 +8,7 @@
 import { readFileSync } from 'node:fs'
 import { convertPdfToXlsx } from '../../../../packages/pdf2docx/src'
 import type { ConvertXlsxResult } from '../../../../packages/pdf2docx/src'
-import { convertWithPasswordRetry, ensurePdfium } from './pdf2docx-local'
+import { convertWithPasswordRetry, ensureOcrEngine, ensurePdfium } from './pdf2docx-local'
 
 export type { ConvertXlsxResult } from '../../../../packages/pdf2docx/src'
 
@@ -21,8 +21,10 @@ export async function convertPdfFileToXlsxLocal(
   const pdfium = await ensurePdfium()
   const bytes = readFileSync(pdfPath)
   const pdf = new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const ocr = ensureOcrEngine()
   return convertPdfToXlsx(pdf, {
     pdfium,
+    ...(ocr ? { ocr } : {}),
     ...(onProgress !== undefined ? { onProgress } : {}),
     ...(password !== undefined ? { password } : {}),
   })

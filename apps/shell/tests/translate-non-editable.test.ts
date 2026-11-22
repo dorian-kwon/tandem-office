@@ -161,7 +161,7 @@ function bridgeOf(h: ReturnType<typeof handlers>): PdfTranslateBridge {
     store: (token, request) => h.pdfStore({ token, request }),
     write: (token, bilingual) => h.pdfWrite({ token, bilingual }),
     release: (token) => h.pdfRelease(token),
-    instructions: (d, text) => h.instructionsFor({ dir: d, text }),
+    instructions: (d, text, pdfToken) => h.instructionsFor({ dir: d, text, pdfToken }),
   }
 }
 
@@ -351,6 +351,44 @@ describe('text PDF translation', () => {
     expect(pageText(m, out).trim().startsWith(`DE ${HEADING}`)).toBe(true)
     expect(pageText(m, out)).not.toContain(`${HEADING} ${BODY}`)
     expect(pageCount(m, out)).toBe(1)
+  })
+
+  it('uses source overview categories once per PDF job, including when no wiki notes were selected', async () => {
+    await addOriginal('report.pdf', textPdf)
+    const lookupWikiCategories = vi.fn(async () => ({
+      text: '[Category example]\nCity terminology.',
+    }))
+    const h = handlers(view(), {}, { lookupWikiCategories })
+    const requests: Array<{ system: string; prompt: string }> = []
+    const result = await translate(h, { requests })
+    expect(result.summary.state).toBe('complete')
+    expect(lookupWikiCategories).toHaveBeenCalledExactlyOnceWith({ documentType: 'report' })
+    expect(requests.every((request) => request.system.includes('City terminology.'))).toBe(true)
+
+    const pdf = await h.pdfPrepare({ dir, file: 'report.pdf' })
+    await h.pdfStore({ token: pdf.token, request: { op: 'read' } })
+    const instructions = () => h.instructionsFor({ dir, text: 'next batch', pdfToken: pdf.token })
+    expect((await instructions()).references).toContain('City terminology.')
+    expect((await instructions()).references).toContain('City terminology.')
+    expect(lookupWikiCategories).toHaveBeenCalledTimes(2)
+    await h.updateSettings({ dir, patch: { useWiki: false } })
+    expect((await instructions()).references).not.toContain('City terminology.')
+    expect(lookupWikiCategories).toHaveBeenCalledTimes(2)
+    await h.pdfRelease(pdf.token)
+  })
+
+  it('omits local wiki matches when the project opts out during PDF lookup', async () => {
+    await addOriginal('report.pdf', textPdf)
+    const lookupWikiCategories = vi.fn(async () => {
+      await saveProject(dir, { ...(await loadProject(dir)), useWiki: false })
+      return { text: 'Private wording' }
+    })
+    const h = handlers(view(), {}, { lookupWikiCategories })
+    const requests: Array<{ system: string; prompt: string }> = []
+    await translate(h, { requests })
+    expect(lookupWikiCategories).toHaveBeenCalledTimes(1)
+    expect(requests.length).toBeGreaterThan(0)
+    for (const request of requests) expect(request.system).not.toContain('Private wording')
   })
 
   it('bilingual option selects the bilingual output', async () => {
@@ -1039,6 +1077,29 @@ describe('a detection in flight', () => {
   })
 })
 
+it('omits category lookup from an opted-out batch PDF job', async () => {
+  await addOriginal('report.pdf', textPdf)
+  const sent: Array<{ system: string; prompt: string }> = []
+  const lookupWikiCategories = vi.fn(async () => ({ text: 'Private wording' }))
+  const h = handlers(
+    view(),
+    {},
+    {
+      lookupWikiCategories,
+      batchMedia: {
+        text: () => ({ route: { ...model, paid: false }, send: fakeSend(sent) }),
+        confirm: async () => true,
+        ocr: { route: () => ({ ...model, paid: false }), ask: async () => '' },
+      },
+    },
+  )
+  await h.batchStart({ dir, useWiki: false }, 10)
+  await vi.waitFor(async () => expect((await h.batchStatus(dir))?.items[0]?.state).toBe('saved'))
+  expect(sent.length).toBeGreaterThan(0)
+  expect(lookupWikiCategories).not.toHaveBeenCalled()
+  for (const request of sent) expect(request.system).not.toContain('Private wording')
+})
+
 it('runs a project batch through the PDF writer and OCR editor while keeping the project visible', async () => {
   await addOriginal('report.pdf', textPdf)
   await addOriginal('scan.pdf', scanPdf)
@@ -1060,10 +1121,12 @@ it('runs a project batch through the PDF writer and OCR editor while keeping the
   const wikiNote = join(wikiNotes, 'final-report.md')
   writeFileSync(wikiNote, '# Sample\n\nPreferred annual report wording')
 
+  const lookupWikiCategories = vi.fn(async () => ({ text: 'Category-based report example' }))
   const h = handlers(
     v,
     {},
     {
+      lookupWikiCategories,
       wikiReferenceDirectory: async () => wikiNotes,
       showOpenDialog: async () => ({ canceled: false, filePaths: [wikiNote] }),
       batchMedia: {
@@ -1102,9 +1165,11 @@ it('runs a project batch through the PDF writer and OCR editor while keeping the
     expect.objectContaining({ state: 'saved', output: 'image (OCR).docx' }),
   ])
   expect(confirm.mock.calls).toHaveLength(2)
+  expect(lookupWikiCategories).toHaveBeenCalledExactlyOnceWith({ documentType: 'report' })
   expect(sent.length).toBeGreaterThan(0)
   for (const request of sent) {
     expect(request.system).toContain('Preferred annual report wording')
+    expect(request.system).toContain('Category-based report example')
     expect(request.system).toContain('glossary and writing style take priority')
   }
   expect(runBatchEditor).toHaveBeenCalledTimes(2)

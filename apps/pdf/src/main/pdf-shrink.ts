@@ -200,3 +200,40 @@ export function shrinkDocument(
   }
   return { streamsRecompressed, imagesDownsampled }
 }
+
+/** Conversion-menu optimization preserves the complete sample stream, including
+ * predictor bytes and soft masks. No pixels or dictionary entries are discarded. */
+export function recompressPdfImages(doc: PDFDocument, maxImageBytes: number): number {
+  const objects = doc.context.enumerateIndirectObjects()
+  if (objects.some(([, obj]) => obj instanceof PDFDict && obj.has(PDFName.of('ByteRange'))))
+    return 0
+  let changed = 0
+  for (const [ref, obj] of objects) {
+    if (
+      !(obj instanceof PDFRawStream) ||
+      String(obj.dict.get(PDFName.of('Subtype'))) !== '/Image' ||
+      obj.contents.length < 4096 ||
+      obj.contents.length > maxImageBytes
+    )
+      continue
+    const filter = obj.dict.get(PDFName.of('Filter'))
+    if (filter && String(filter) !== '/FlateDecode') continue
+    if (!filter && obj.dict.has(PDFName.of('DecodeParms'))) continue
+    // External streams get their bytes from /F, not this embedded payload.
+    if (obj.dict.has(PDFName.of('F'))) continue
+    let raw: Uint8Array
+    try {
+      raw = filter ? inflateSync(obj.contents, { maxOutputLength: maxImageBytes }) : obj.contents
+    } catch {
+      continue
+    }
+    const packed = deflateSync(raw, { level: 9 })
+    if (packed.length >= obj.contents.length) continue
+    const dict = obj.dict.clone()
+    dict.set(PDFName.of('Filter'), PDFName.of('FlateDecode'))
+    dict.set(PDFName.of('Length'), PDFNumber.of(packed.length))
+    doc.context.assign(ref, PDFRawStream.of(dict, packed))
+    changed++
+  }
+  return changed
+}

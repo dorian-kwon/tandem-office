@@ -416,7 +416,14 @@ export async function buildScannedPdf(): Promise<Uint8Array> {
   const { PDFDocument } = await import('pdf-lib')
   const doc = await PDFDocument.create()
   const page = doc.addPage([612, 792])
-  const image = await doc.embedPng(tinyPng())
+  // White paper with a few dark strokes near the first recognized line.
+  // A solid red tile is a photograph/illustration under the OCR paper gate.
+  const paper = new Uint8Array(120 * 160 * 4).fill(255)
+  for (let col = 13; col < 60; col += 3) {
+    const offset = (21 * 120 + col) * 4
+    paper.fill(25, offset, offset + 3)
+  }
+  const image = await doc.embedPng(encodeRgbaPng(paper, 120, 160))
   page.drawImage(image, { x: 0, y: 0, width: 612, height: 792 })
   return doc.save()
 }

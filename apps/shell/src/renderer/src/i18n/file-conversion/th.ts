@@ -1,6 +1,16 @@
 import type { zh } from './zh'
 
 export const th = {
+  ocrLanguage: 'ภาษาที่ใช้รู้จำ',
+  ocrLanguageDefault: 'ค่าเริ่มต้นของระบบ',
+  ocrLanguageUnavailable: 'ภาษาที่เลือกไม่พร้อมใช้งาน โปรดเลือกภาษาอื่นหรือติดตั้งภาษานี้บนอุปกรณ์',
+  ocrTitle: 'รู้จำข้อความ (OCR)',
+  ocrBatch: 'เริ่ม OCR แบบกลุ่ม',
+  ocrPdf: 'PDF ที่ค้นหาได้',
+  ocrWord: 'Word ที่แก้ไขได้',
+  ocrRunning: 'กำลังรู้จำข้อความ…',
+  ocrNoText: 'ไม่พบข้อความที่อ่านได้',
+  ocrUnavailable: 'อุปกรณ์นี้ไม่มี OCR ในเครื่อง',
   title: 'แปลงไฟล์',
   chooseFiles: 'เลือกไฟล์',
   outputFormat: 'รูปแบบไฟล์ปลายทาง',
@@ -15,4 +25,7 @@ export const th = {
   saved: 'บันทึกแล้ว',
   failed: 'แปลงไม่สำเร็จ',
   removeFile: 'นำ {name} ออกจากรายการ',
+  ocrRange: 'หน้าที่ต้องการรู้จำ',
+  ocrAllPages: 'ทุกหน้า',
+  ocrRangeInvalid: 'ตรวจสอบช่วงหน้าของไฟล์นี้ ตัวอย่าง: 1, 3–5',
 } satisfies Record<keyof typeof zh, string>

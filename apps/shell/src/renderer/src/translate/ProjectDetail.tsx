@@ -9,6 +9,7 @@ import type {
   TranslateSettingsPatch,
 } from '../../../shared/translate-api'
 import { useI18n } from '../locale'
+import { useWikiFinalLearning } from './useWikiFinalLearning'
 import { TranslationWikiButton, useTranslationWiki } from './TranslationWiki'
 import { ProjectAssistant, type ProjectAssistantProps } from './ProjectAssistant'
 import type { TranslateStringKey } from '../i18n/strings-translate'
@@ -93,7 +94,11 @@ function filesOf(project: ProjectFile, kind: TranslateMaterialKind): string[] {
 /** the sources whose pictures OCR can read: embedded in Word and Excel, taken out of Hangul documents */
 const OCR_PICTURE_FILE = /\.(docx|xlsx|hwpx|hwp)$/i
 
-export function ProjectDetail({
+export function ProjectDetail(props: ProjectDetailProps) {
+  return <ProjectContent key={props.dir} {...props} />
+}
+
+function ProjectContent({
   assistant,
   dir,
   onBack,
@@ -105,11 +110,13 @@ export function ProjectDetail({
   const { lang } = useI18n()
   const s = makeText(lang)
   const wiki = useTranslationWiki()
+  const learning = useWikiFinalLearning(dir)
   const api = window.translateApi
   const [project, setProject] = useState<ProjectFile | null>(null)
   const [prompt, setPrompt] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [pendingWikiSetting, setPendingWikiSetting] = useState<boolean | null>(null)
   const [exportMessage, setExportMessage] = useState<SaveAsNotice | null>(null)
   const [promptFailed, setPromptFailed] = useState(false)
   const [promptSaved, setPromptSaved] = useState(false)
@@ -206,6 +213,7 @@ export function ProjectDetail({
     const merged: ProjectFile = {
       ...base,
       projectPrompt: next.projectPrompt,
+      useWiki: next.useWiki,
       ocr: next.ocr,
       writingStyle: next.writingStyle,
       sourceLang: next.sourceLang,
@@ -224,6 +232,7 @@ export function ProjectDetail({
       ...base,
       sources: next.sources,
       references: next.references,
+      wikiReferences: next.wikiReferences,
       glossaryFiles: next.glossaryFiles,
     })
   }
@@ -605,12 +614,15 @@ export function ProjectDetail({
                   dir={dir}
                   files={project.sources.map((source) => source.file)}
                   primary={hasManySources}
+                  wikiAvailable={project.useWiki !== false}
                 />
               )}
+              {learning.button}
               <TranslationWikiButton />
             </div>
           )}
         </header>
+        {learning.report}
         {project && !onlySource && (!offersBatch || !hasManySources) && (
           <p className="translate-start-hint">
             {hasManySources ? s('startPickHint') : s('startDisabledHint')}
@@ -680,6 +692,23 @@ export function ProjectDetail({
                       <span className="translate-count">{files.length}</span>
                     </h3>
                     <div className="translate-material-actions">
+                      {kind === 'reference' && (
+                        <label className="translate-wiki-option">
+                          <input
+                            type="checkbox"
+                            checked={pendingWikiSetting ?? project.useWiki !== false}
+                            disabled={busy || pendingWikiSetting !== null}
+                            onChange={(event) => {
+                              const checked = event.target.checked
+                              setPendingWikiSetting(checked)
+                              void save({ useWiki: checked }).finally(() =>
+                                setPendingWikiSetting(null),
+                              )
+                            }}
+                          />
+                          {s('useWiki')}
+                        </label>
+                      )}
                       {kind === 'reference' && (
                         <button
                           type="button"

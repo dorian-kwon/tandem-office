@@ -1,6 +1,17 @@
 import type { zh } from './zh'
 
 export const ar = {
+  ocrLanguage: 'لغة التعرّف',
+  ocrLanguageDefault: 'إعداد النظام الافتراضي',
+  ocrLanguageUnavailable:
+    'لغة التعرّف المحددة غير متاحة. اختر لغة أخرى أو ثبّت هذه اللغة على جهازك.',
+  ocrTitle: 'تشغيل التعرف الضوئي',
+  ocrBatch: 'بدء التعرّف الدفعي على النصوص',
+  ocrPdf: 'PDF قابل للبحث',
+  ocrWord: 'Word قابل للتحرير',
+  ocrRunning: 'جارٍ التعرف على النص…',
+  ocrNoText: 'لم يُعثر على نص مقروء.',
+  ocrUnavailable: 'التعرف الضوئي المحلي غير متاح على هذا الجهاز.',
   title: 'تحويل الملفات',
   chooseFiles: 'اختيار الملفات',
   outputFormat: 'صيغة الإخراج',
@@ -15,4 +26,7 @@ export const ar = {
   saved: 'تم الحفظ',
   failed: 'تعذّر التحويل',
   removeFile: 'إزالة {name} من القائمة',
+  ocrRange: 'الصفحات المراد التعرّف عليها',
+  ocrAllPages: 'كل الصفحات',
+  ocrRangeInvalid: 'تحقق من نطاق الصفحات لهذا الملف. مثال: 1, 3–5',
 } satisfies Record<keyof typeof zh, string>

@@ -1,6 +1,17 @@
 import type { zh } from './zh'
 
 export const pl = {
+  ocrLanguage: 'Język rozpoznawania',
+  ocrLanguageDefault: 'Domyślny język systemu',
+  ocrLanguageUnavailable:
+    'Wybrany język jest niedostępny. Wybierz inny lub zainstaluj ten język na urządzeniu.',
+  ocrTitle: 'Uruchom OCR',
+  ocrBatch: 'Uruchom wsadowe OCR',
+  ocrPdf: 'PDF z możliwością wyszukiwania',
+  ocrWord: 'Edytowalny dokument Word',
+  ocrRunning: 'Rozpoznawanie tekstu…',
+  ocrNoText: 'Nie znaleziono czytelnego tekstu.',
+  ocrUnavailable: 'Lokalne OCR jest niedostępne na tym urządzeniu.',
   title: 'Konwersja plików',
   chooseFiles: 'Wybierz pliki',
   outputFormat: 'Format wyjściowy',
@@ -15,4 +26,7 @@ export const pl = {
   saved: 'Zapisano',
   failed: 'Błąd konwersji',
   removeFile: 'Usuń {name} z listy',
+  ocrRange: 'Strony do rozpoznania',
+  ocrAllPages: 'Wszystkie strony',
+  ocrRangeInvalid: 'Sprawdź zakres stron tego pliku. Przykład: 1, 3–5',
 } satisfies Record<keyof typeof zh, string>

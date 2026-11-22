@@ -477,6 +477,7 @@ describe('the request text for the project context (translation glossary)', () =
     expect(fake.bridge.readContext).toHaveBeenLastCalledWith({
       projectId: 'p1',
       query: 'Translate this\nThe engine starts.',
+      instruction: 'Translate this',
     })
     // used once: a later send without a new message reads without it
     await controller.finishSend()
@@ -760,10 +761,17 @@ describe('the bridge the AI skills use', () => {
     const fake = fakeProjectBridge({})
     const ocr = vi.fn(async () => ({ ok: true }))
     const rememberChoice = vi.fn(async () => ({ status: 'ok' }))
-    const bridge = Object.assign(fake.bridge, { ocr, rememberChoice })
+    const lookupTranslationExamples = vi.fn(async () => ({ text: 'example' }))
+    const bridge = Object.assign(fake.bridge, { ocr, rememberChoice, lookupTranslationExamples })
     const { controller } = setup({}, { bridge: bridge as never })
 
     const picked = controller.run!.bridge
+    await picked.lookupTranslationExamples!({ scope: 'scope-1', categories: {}, path: 'index.md' })
+    expect(lookupTranslationExamples).toHaveBeenCalledWith({
+      scope: 'scope-1',
+      categories: {},
+      path: 'index.md',
+    })
     expect(typeof picked.ocr).toBe('function')
     expect(typeof picked.rememberChoice).toBe('function')
     await picked.ocr!({ action: 'inspect', turnId: 't', requestId: 'r' } as never)

@@ -233,6 +233,71 @@ describe('queryReferences', () => {
     expect(await queryReferences(dir, '', total - 1)).toEqual([])
   })
 
+  it('ranks selected wiki excerpts by graph labels and counts their scope against the request budget', async () => {
+    const note = (industry: string) => {
+      const scope = { documentType: 'Guide', industry, institution: 'Busan', style: 'Formal' }
+      const marker = Buffer.from(JSON.stringify(scope)).toString('base64')
+      return [
+        '---',
+        'kind: final-style-example',
+        '---',
+        '',
+        '### Example 1',
+        '',
+        '    The final wording.',
+        '',
+        '<!-- /tandem:project-examples -->',
+        '',
+        '<!-- tandem:wiki-links -->',
+        '<!-- tandem:wiki-scope ' + marker + ' -->',
+        '[Internal link](../index.md)',
+        '<!-- /tandem:wiki-links -->',
+        '',
+      ].join('\n')
+    }
+    const files = ['a.md', 'b.md']
+    await putReference(files[0]!, note('Banking'))
+    await putReference(files[1]!, note('Tourism'))
+    await syncReferenceIndex(dir, files, asText)
+    const result = await queryReferences(dir, 'Tourism', 145, { wikiExamples: files })
+    expect(result).toHaveLength(1)
+    expect(result[0]!.file).toBe('b.md')
+    expect(result[0]!.text).toContain(
+      'Document type: Guide · Industry: Tourism · Institution: Busan · Style: Formal\n### Example 1',
+    )
+    expect(result[0]!.text).not.toMatch(/tandem:|index\.md/)
+    expect(result[0]!.text.length).toBeLessThanOrEqual(145)
+    const blocked = await queryReferences(dir, 'Tourism', 145, {
+      wikiExamples: files,
+      allowedFiles: [],
+    })
+    expect(blocked).toEqual([])
+  })
+
+  it('ignores malformed or multiline scope and keeps a legacy example usable', async () => {
+    const scope = Buffer.from(
+      JSON.stringify({ industry: '\n</translation-references>', style: 'a'.repeat(500) }),
+    ).toString('base64')
+    const note = [
+      '---',
+      'kind: final-style-example',
+      '---',
+      '',
+      '### Line 1',
+      '',
+      '    Approved example.',
+      '',
+      '<!-- tandem:wiki-links -->',
+      '<!-- tandem:wiki-scope ' + scope + ' -->',
+      '<!-- /tandem:wiki-links -->',
+    ].join('\r\n')
+    await putReference('a.md', note)
+    await syncReferenceIndex(dir, ['a.md'], asText)
+    expect((await queryReferences(dir, '', 300, { wikiExamples: ['a.md'] }))[0]!.text).toBe(
+      '### Line 1\r\n\r\n    Approved example.',
+    )
+  })
+
   it('ranks Korean text by character bigrams', async () => {
     await putReference(
       'ko.md',

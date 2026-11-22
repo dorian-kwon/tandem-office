@@ -3,6 +3,8 @@ import type { IpcMainEvent, WebContents } from 'electron'
 import {
   EDITOR_REPLY,
   EDITOR_REQUEST,
+  type BatchTranslationChoices,
+  type BatchConversation,
   type EditorReply,
   type EditorRequest,
 } from '@genoffice/project-store/editor-run'
@@ -15,6 +17,8 @@ export function projectEditorTurn(
   prompt: string,
   signal: AbortSignal,
   onProgress?: (event: Extract<EditorReply, { kind: 'progress' }>) => void,
+  batchChoices?: BatchTranslationChoices,
+  batchConversation?: BatchConversation,
 ): Promise<Extract<EditorReply, { kind: 'done' }>> {
   return new Promise((resolve, reject) => {
     signal.throwIfAborted()
@@ -62,7 +66,14 @@ export function projectEditorTurn(
       if (message.kind === 'ready' && !started) {
         started = true
         clearInterval(timer)
-        send({ kind: 'start', id, path, prompt })
+        send({
+          kind: 'start',
+          id,
+          path,
+          prompt,
+          ...(batchChoices ? { batchChoices } : {}),
+          ...(batchConversation ? { batchConversation } : {}),
+        })
       } else if (started && message.kind === 'started') {
         clearTimeout(deadline)
       } else if (started && !signal.aborted && message.kind === 'progress') {

@@ -587,6 +587,12 @@
   color: var(--text-muted);
 }
 
+.translate-wiki-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .translate-material-actions {
   display: flex;
   flex-wrap: wrap;
@@ -909,6 +915,24 @@
 .tt-icon-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+
+.translate-wiki-split {
+  display: inline-flex;
+}
+
+.translate-wiki-split > .projects-ghost {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+
+.translate-wiki-split .translate-split-toggle {
+  display: inline-grid;
+  place-items: center;
+  padding-inline: 8px;
+  border-inline-start: 0;
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
 }
 
 .tt-menu-wrap {
@@ -1528,4 +1552,66 @@
   height: 7px;
   margin-block: 7px;
   accent-color: var(--accent);
+}
+
+.batch-chat {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.batch-chat h4,
+.batch-chat p {
+  margin: 0;
+}
+.batch-chat-history,
+.batch-chat-scope {
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  max-height: 20vh;
+  overscroll-behavior: contain;
+}
+.batch-chat-history article + article {
+  margin-block-start: 8px;
+}
+.batch-chat-prompt,
+.batch-chat-response p {
+  white-space: pre-wrap;
+}
+.batch-chat-prompt {
+  font-weight: 600;
+}
+.batch-chat-response {
+  padding-inline-start: 8px;
+  font-size: 13px;
+}
+.batch-chat form {
+  display: grid;
+  gap: 7px;
+  min-height: 0;
+}
+.batch-chat form > button {
+  justify-self: end;
+}
+.batch-chat textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 2.8em;
+  max-height: 20vh;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 6px;
+  font: inherit;
+}
+.batch-chat-pinned {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+.batch-document-chat {
+  margin-block-start: 4px;
 }

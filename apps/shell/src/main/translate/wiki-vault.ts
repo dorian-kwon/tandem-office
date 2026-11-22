@@ -1,9 +1,12 @@
 import type { Lang } from '@genoffice/i18n'
 import { randomUUID } from 'node:crypto'
 import { constants } from 'node:fs'
-import { copyFile, link, lstat, mkdir, unlink, writeFile } from 'node:fs/promises'
+import { copyFile, link, lstat, mkdir, open, unlink, writeFile } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
-import { wikiLabels } from './wiki-vault-labels'
+import { finalNoteLabels, wikiLabels } from './wiki-vault-labels'
+
+export const FINAL_NOTES_FOLDER = 'final-documents'
+export const FINAL_CATALOG = 'final-documents.md'
 
 const categoryFiles = [
   'institutions.md',
@@ -61,9 +64,43 @@ export async function seedNote(
   return true
 }
 
+// An existing vault may predate the catalog or have an edited home page.
+let linking = Promise.resolve()
+function restoreIndexLinks(indexPath: string, links: [string, string][]): Promise<void> {
+  const task = linking.then(async () => {
+    const before = await lstat(indexPath, { bigint: true })
+    if (!before.isFile()) throw new Error('Expected a regular wiki index')
+    const index = await open(
+      indexPath,
+      constants.O_RDWR | constants.O_APPEND | (constants.O_NOFOLLOW ?? 0),
+    )
+    try {
+      const st = await index.stat({ bigint: true })
+      if (!st.isFile() || st.dev !== before.dev || st.ino !== before.ino)
+        throw new Error('Wiki index changed while opening')
+      const current = await index.readFile('utf8')
+      const missing = links.filter(
+        ([name]) =>
+          !current.includes('](' + name + ')') &&
+          !current.includes('[[' + name.slice(0, -3) + ']]'),
+      )
+      if (!missing.length) return
+      if (st.nlink !== 1n) throw new Error('Expected a private wiki index')
+      await index.appendFile(
+        '\n' + missing.map(([name, title]) => '- [' + title + '](' + name + ')').join('\n') + '\n',
+      )
+    } finally {
+      await index.close()
+    }
+  })
+  linking = task.catch(() => {})
+  return task
+}
+
 export async function prepareTranslationVault(
   profileDir: string,
   lang: Lang,
+  repairLinks = false,
 ): Promise<{ vaultPath: string; indexPath: string }> {
   if (!isAbsolute(profileDir)) throw new Error('Expected an absolute profile directory')
   const wikiDir = join(profileDir, 'translation-wiki')
@@ -77,6 +114,24 @@ export async function prepareTranslationVault(
   for (const [index, file] of categoryFiles.entries()) {
     await seedNote(wikiDir, join(vaultPath, file), `# ${labels[index]}\n\n[${title}](index.md)\n`)
   }
-  await seedNote(wikiDir, indexPath, `# ${title}\n\n${links.join('\n')}\n`)
+  const catalog = finalNoteLabels[lang][0]
+  await seedNote(
+    wikiDir,
+    join(vaultPath, FINAL_CATALOG),
+    '# ' + catalog + '\n\n[' + title + '](index.md)\n',
+  )
+  links.push('- [' + catalog + '](' + FINAL_CATALOG + ')')
+  if (!(await seedNote(wikiDir, indexPath, `# ${title}\n\n${links.join('\n')}\n`))) {
+    const required: [string, string][] = repairLinks
+      ? categoryFiles.map((file, i) => [file, labels[i]!])
+      : [['style.md', labels[4]]]
+    required.push([FINAL_CATALOG, catalog])
+    await restoreIndexLinks(indexPath, required)
+  }
+  if (repairLinks) {
+    for (const file of [...categoryFiles, FINAL_CATALOG]) {
+      await restoreIndexLinks(join(vaultPath, file), [['index.md', title]])
+    }
+  }
   return { vaultPath, indexPath }
 }

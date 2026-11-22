@@ -3,9 +3,23 @@
 export const EDITOR_REQUEST = 'translation-project:editor-request'
 export const EDITOR_REPLY = 'translation-project:editor-reply'
 
+export type BatchConversation = { prompt: string; reply?: string; file?: string }[]
+
+export interface BatchTranslationChoices {
+  outputMode?: string
+  bilingual?: string
+}
+
 export type EditorRequest =
   | { kind: 'probe'; id: string; path: string }
-  | { kind: 'start'; id: string; path: string; prompt: string }
+  | {
+      kind: 'start'
+      id: string
+      path: string
+      prompt: string
+      batchChoices?: BatchTranslationChoices
+      batchConversation?: BatchConversation
+    }
   | { kind: 'stop'; id: string }
 
 export type EditorReply =

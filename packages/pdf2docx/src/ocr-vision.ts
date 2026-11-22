@@ -38,9 +38,10 @@ const toRect = (b: [number, number, number, number]): Rect => ({
 })
 
 /** spawn wrapper shared by the platform engines (protocol is identical) */
-function createHelperOcrEngine(helperPath: string, languages?: string[]): OcrEngine {
+function createHelperOcrEngine(helperPath: string, languages?: string[], exact = false): OcrEngine {
   return (png: Uint8Array): OcrRecognition | null => {
     const args = languages && languages.length > 0 ? [languages.join(',')] : []
+    if (exact && args.length) args.push('--exact')
     const res = spawnSync(helperPath, args, {
       input: png,
       maxBuffer: HELPER_MAX_BUFFER,
@@ -79,10 +80,14 @@ function createHelperOcrEngine(helperPath: string, languages?: string[]): OcrEng
  * @param languages  optional recognition hints, e.g. ['zh-Hans', 'en-US'];
  *                   omit to let Vision auto-detect
  */
-export function createVisionOcrEngine(helperPath: string, languages?: string[]): OcrEngine | null {
+export function createVisionOcrEngine(
+  helperPath: string,
+  languages?: string[],
+  exact = false,
+): OcrEngine | null {
   if (process.platform !== 'darwin') return null
   if (!existsSync(helperPath)) return null
-  return createHelperOcrEngine(helperPath, languages)
+  return createHelperOcrEngine(helperPath, languages, exact)
 }
 
 /**
@@ -95,8 +100,12 @@ export function createVisionOcrEngine(helperPath: string, languages?: string[]):
  * @param languages  optional BCP-47 hints tried in order, e.g. ['zh-Hans-CN'];
  *                   omit to use the user-profile languages
  */
-export function createWindowsOcrEngine(helperPath: string, languages?: string[]): OcrEngine | null {
+export function createWindowsOcrEngine(
+  helperPath: string,
+  languages?: string[],
+  exact = false,
+): OcrEngine | null {
   if (process.platform !== 'win32') return null
   if (!existsSync(helperPath)) return null
-  return createHelperOcrEngine(helperPath, languages)
+  return createHelperOcrEngine(helperPath, languages, exact)
 }

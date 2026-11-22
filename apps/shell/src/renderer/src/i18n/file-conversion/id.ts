@@ -1,6 +1,17 @@
 import type { zh } from './zh'
 
 export const id = {
+  ocrLanguage: 'Bahasa pengenalan',
+  ocrLanguageDefault: 'Bawaan sistem',
+  ocrLanguageUnavailable:
+    'Bahasa yang dipilih tidak tersedia. Pilih bahasa lain atau instal bahasa ini di perangkat.',
+  ocrTitle: 'Jalankan OCR',
+  ocrBatch: 'Jalankan OCR massal',
+  ocrPdf: 'PDF yang dapat dicari',
+  ocrWord: 'Word yang dapat diedit',
+  ocrRunning: 'Mengenali teks…',
+  ocrNoText: 'Tidak ditemukan teks yang terbaca.',
+  ocrUnavailable: 'OCR lokal tidak tersedia pada perangkat ini.',
   title: 'Konversi berkas',
   chooseFiles: 'Pilih berkas',
   outputFormat: 'Format keluaran',
@@ -15,4 +26,7 @@ export const id = {
   saved: 'Tersimpan',
   failed: 'Konversi gagal',
   removeFile: 'Hapus {name} dari daftar',
+  ocrRange: 'Halaman yang dikenali',
+  ocrAllPages: 'Semua halaman',
+  ocrRangeInvalid: 'Periksa rentang halaman berkas ini. Contoh: 1, 3–5',
 } satisfies Record<keyof typeof zh, string>

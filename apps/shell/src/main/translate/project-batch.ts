@@ -1,11 +1,20 @@
+import { randomUUID } from 'node:crypto'
+import type {
+  BatchConversation,
+  BatchTranslationChoices,
+} from '@genoffice/project-store/editor-run'
 import type {
   ProjectBatchActivity,
   ProjectBatchItem,
+  ProjectBatchMessage,
+  ProjectBatchSend,
   ProjectBatchSnapshot,
 } from '../../shared/project-batch'
 import { TranslateIpcError } from '../../shared/translate-api'
 
 export interface ProjectBatchEditorRequest {
+  choices?: BatchTranslationChoices
+  useWiki?: boolean
   dir: string
   file: string
   outputPath: string
@@ -15,10 +24,47 @@ export interface ProjectBatchEditorRequest {
   report: (update: ProjectBatchActivity) => void
 }
 
+type Translate = (
+  file: string,
+  signal: AbortSignal,
+  progress: ProjectBatchEditorRequest['report'],
+) => Promise<string | void>
+
+export type { BatchConversation } from '@genoffice/project-store/editor-run'
+type Deliver = (
+  item: ProjectBatchItem,
+  prompt: string,
+  conversation: BatchConversation,
+  signal: AbortSignal,
+) => Promise<string>
+
+/** Keep the last few exchanges as separately labeled background for references like
+ * "do that here too". The current user turn never gets abbreviated or rewritten. */
+function conversationBefore(
+  messages: ProjectBatchMessage[],
+  current: ProjectBatchMessage,
+  file: string,
+): BatchConversation {
+  return messages
+    .slice(0, messages.indexOf(current))
+    .slice(-4)
+    .map((message) => {
+      const answered =
+        message.targets.find((t) => t.file === file && t.state === 'done' && t.reply) ??
+        message.targets.find((t) => t.state === 'done' && t.reply)
+      return {
+        prompt: message.prompt.slice(0, 2000),
+        ...(answered ? { file: answered.file, reply: answered.reply!.slice(0, 2000) } : {}),
+      }
+    })
+}
+
 /** A single editor works at a time, including its save and teardown. */
 export class ProjectBatchQueue {
   private active?: { dir: string; controller: AbortController; owner: number }
   private readonly projects = new Map<string, ProjectBatchSnapshot>()
+
+  private readonly deliveries = new WeakMap<ProjectBatchMessage, Deliver>()
 
   constructor(private readonly changed: (value: ProjectBatchSnapshot) => void) {}
 
@@ -47,6 +93,44 @@ export class ProjectBatchQueue {
     this.emit(state)
   }
 
+  send(args: ProjectBatchSend, owner: number, deliver: Deliver): ProjectBatchSnapshot {
+    const state = this.projects.get(args.dir)
+    if (
+      !state ||
+      state.id !== args.batchId ||
+      !state.id ||
+      state.stopping ||
+      (this.active && this.active.dir !== args.dir)
+    )
+      throw new TranslateIpcError('TRANSLATE_BUSY', 'This batch is no longer available.')
+    if (
+      typeof args.prompt !== 'string' ||
+      !args.prompt.trim() ||
+      !Array.isArray(args.files) ||
+      !args.files.length ||
+      args.files.length > state.items.length
+    )
+      throw new TranslateIpcError('INVALID_ARGUMENT', 'Choose documents and enter a message.')
+    const included = new Set(state.items.map((item) => item.file))
+    if (args.files.some((file) => !included.has(file)))
+      throw new TranslateIpcError('INVALID_ARGUMENT', 'Unknown batch document.')
+    const message: ProjectBatchMessage = {
+      id: randomUUID(),
+      prompt: args.prompt,
+      targets: [...new Set(args.files)].map((file) => ({ file, state: 'queued' })),
+    }
+    ;(state.messages ??= []).push(message)
+    this.deliveries.set(message, deliver)
+    if (!this.active) {
+      const controller = new AbortController()
+      this.active = { dir: args.dir, controller, owner }
+      state.running = true
+      void this.run(state, controller.signal, new Set())
+    }
+    this.emit(state)
+    return this.status(args.dir)!
+  }
+
   start(
     dir: string,
     files: string[],
@@ -61,7 +145,8 @@ export class ProjectBatchQueue {
     if (this.active)
       throw new TranslateIpcError('TRANSLATE_BUSY', 'A project translation is already running.')
     const wanted = new Set(files)
-    const previous = retry ? this.projects.get(dir)?.items : undefined
+    const prior = retry ? this.projects.get(dir) : undefined
+    const previous = prior?.items
     if (retry) {
       const unfinished = new Set(
         previous
@@ -82,7 +167,14 @@ export class ProjectBatchQueue {
       : []
     const kept = new Set(items.map((item) => item.file))
     for (const file of wanted) if (!kept.has(file)) items.push({ file, state: 'waiting' })
-    const state: ProjectBatchSnapshot = { dir, running: true, stopping: false, items }
+    const state: ProjectBatchSnapshot = {
+      id: randomUUID(),
+      dir,
+      running: true,
+      stopping: false,
+      items,
+      ...(prior?.messages ? { messages: prior.messages } : {}),
+    }
     const controller = new AbortController()
     this.active = { dir, controller, owner }
     this.projects.set(dir, state)
@@ -98,19 +190,45 @@ export class ProjectBatchQueue {
     state: ProjectBatchSnapshot,
     signal: AbortSignal,
     wanted: Set<string>,
-    run: (
-      file: string,
-      signal: AbortSignal,
-      progress: ProjectBatchEditorRequest['report'],
-    ) => Promise<string | void>,
+    run?: Translate,
   ): Promise<void> {
     try {
-      for (const item of state.items) {
-        if (!wanted.has(item.file)) continue
-        if (signal.aborted) {
-          item.state = 'stopped'
+      // One scheduler owns editing, saving and closing. Take a queued human turn
+      // as soon as its selected output is available, including already saved files.
+      const itemsByFile = new Map(state.items.map((item) => [item.file, item]))
+      const ready = (t: ProjectBatchMessage['targets'][number]) => {
+        const item = itemsByFile.get(t.file)
+        return t.state === 'queued' && item && item.state !== 'waiting' && item.state !== 'running'
+      }
+      while (!signal.aborted) {
+        const messages = state.messages ?? []
+        const message = messages.find((m) => m.targets.some(ready))
+        if (message) {
+          const target = message.targets.find(ready)!
+          const item = itemsByFile.get(target.file)!
+          const deliver = this.deliveries.get(message)!
+          target.state = 'running'
+          this.emit(state)
+          try {
+            const reply = await deliver(
+              item,
+              message.prompt,
+              conversationBefore(messages, message, item.file),
+              signal,
+            )
+            signal.throwIfAborted()
+            target.reply = reply
+            target.state = 'done'
+          } catch (error) {
+            target.state = signal.aborted ? 'stopped' : 'failed'
+            if (!signal.aborted)
+              target.error = String(error instanceof Error ? error.message : error).slice(0, 320)
+          }
+          this.emit(state)
           continue
         }
+        const item = state.items.find((i) => i.state === 'waiting' && wanted.has(i.file))
+        if (!item || !run) break
         item.state = 'running'
         item.phase = 'opening'
         this.emit(state)
@@ -168,6 +286,10 @@ export class ProjectBatchQueue {
         }
       }
     } finally {
+      for (const item of state.items) if (item.state === 'waiting') item.state = 'stopped'
+      for (const message of state.messages ?? [])
+        for (const target of message.targets)
+          if (target.state === 'queued') target.state = 'stopped'
       this.active = undefined
       state.running = false
       state.stopping = false

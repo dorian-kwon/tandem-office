@@ -1,6 +1,17 @@
 import type { zh } from './zh'
 
 export const cs = {
+  ocrLanguage: 'Jazyk rozpoznávání',
+  ocrLanguageDefault: 'Výchozí nastavení systému',
+  ocrLanguageUnavailable:
+    'Vybraný jazyk není dostupný. Vyberte jiný nebo jej nainstalujte do zařízení.',
+  ocrTitle: 'Spustit OCR',
+  ocrBatch: 'Spustit dávkové OCR',
+  ocrPdf: 'Prohledávatelné PDF',
+  ocrWord: 'Upravitelný Word',
+  ocrRunning: 'Rozpoznávání textu…',
+  ocrNoText: 'Nebyl nalezen čitelný text.',
+  ocrUnavailable: 'Místní OCR není na tomto zařízení dostupné.',
   title: 'Převod souborů',
   chooseFiles: 'Vybrat soubory',
   outputFormat: 'Výstupní formát',
@@ -15,4 +26,7 @@ export const cs = {
   saved: 'Uloženo',
   failed: 'Převod se nezdařil',
   removeFile: 'Odebrat {name} ze seznamu',
+  ocrRange: 'Stránky k rozpoznání',
+  ocrAllPages: 'Všechny stránky',
+  ocrRangeInvalid: 'Zkontrolujte rozsah stránek tohoto souboru. Příklad: 1, 3–5',
 } satisfies Record<keyof typeof zh, string>

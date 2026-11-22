@@ -121,6 +121,7 @@ export function fakeProjectBridge(
       async ({ projectId }: { projectId: string }) => `scope-${projectId}-${++scopes}`,
     ),
     closeScope: vi.fn(async () => undefined),
+    lookupTranslationExamples: vi.fn(async () => ({ text: '[[final-documents/Guide]] example' })),
     listFiles: vi.fn(async () => ({
       files: state.context.files,
       total: state.context.files.length,
