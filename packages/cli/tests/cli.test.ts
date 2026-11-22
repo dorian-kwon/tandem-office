@@ -79,7 +79,7 @@ describe('genoffice cli', () => {
   })
 
   it('rejects unsupported routes as a usage error', async () => {
-    const r = await run(['convert', DOCX, '--to', 'pptx', '--json'])
+    const r = await run(['convert', DOCX, '--to', 'json', '--json'])
     expect(r.code).toBe(1)
     expect(r.json().detail.supported).toContain('pdf→docx/pptx/xlsx')
   })

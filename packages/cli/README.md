@@ -14,7 +14,7 @@ installed GenOffice registered under its own names.
 
 ```
 ieumoffice info report.docx
-ieumoffice convert scan.pdf --to docx
+ieumoffice convert scan.pdf --to docx --optimize-images  # losslessly compress embedded images when smaller
 ieumoffice convert data.csv --to xlsx --out out/data.xlsx
 ieumoffice open report.docx
 ieumoffice convert scan.pdf --to pptx --json

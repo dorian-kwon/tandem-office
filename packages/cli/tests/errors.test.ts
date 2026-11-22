@@ -31,7 +31,7 @@ describe('structured errors', () => {
 
     expect((await run(['info', '--json'])).json().error).toBe('missing_argument')
     expect((await run(['convert', DOCX, '--json'])).json().error).toBe('missing_argument')
-    expect((await run(['convert', DOCX, '--to', 'pptx', '--json'])).json()).toMatchObject({
+    expect((await run(['convert', DOCX, '--to', 'json', '--json'])).json()).toMatchObject({
       error: 'unsupported',
     })
     expect((await run(['guide', '--json'])).json().error).toBe('missing_argument')
