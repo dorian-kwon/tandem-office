@@ -990,21 +990,31 @@ describe('project batch dialogs', () => {
       { file: 'draft.docx', state: 'running', phase: 'translating', done: 2, total: 3 },
       { file: 'still.xlsx', state: 'waiting' },
       { file: 'broken.pptx', state: 'failed' },
+      { file: 'partial.docx', state: 'failed', output: 'partial EN.docx' },
+      {
+        file: 'review.docx',
+        state: 'saved',
+        output: 'review EN.docx',
+        done: 0,
+        total: 9,
+        reviewSamples: [{ location: '197 · box 2', text: 'fragment' }],
+      },
     ]
     api.batchOpenResult = vi.fn().mockResolvedValue(undefined)
     await render(ProjectDetail, props())
     act(() => publish({ ...status(items, true), id: 'verified-run' }))
     const row = (file: string) =>
       host.querySelector<HTMLElement>('[data-batch-file="' + file + '"]')!
-    expect(element('progress')!.textContent).toContain('Documents saved 2 / 5')
+    expect(element('progress')!.textContent).toContain('Documents saved 3 / 7')
     expect(row('source.pdf').textContent).toContain(
       'Processed 3 of 3 translation units · Checked for remaining source text',
     )
     expect(row('input.hwp').textContent).toContain('Remaining source text not checked')
     expect(row('draft.docx').textContent).toContain('Processed 2 of 3 translation units')
     expect(row('draft.docx').querySelector('[data-batch-coverage="verified"]')).toBeNull()
-    expect(host.querySelectorAll('[data-testid="project-batch-open-result"]')).toHaveLength(2)
-    for (const file of ['source.pdf', 'input.hwp']) {
+    expect(row('review.docx').textContent).toContain('Source needs review 9')
+    expect(host.querySelectorAll('[data-testid="project-batch-open-result"]')).toHaveLength(4)
+    for (const file of ['source.pdf', 'input.hwp', 'partial.docx', 'review.docx']) {
       const button = row(file).querySelector('button[data-testid="project-batch-open-result"]')!
       expect(button.textContent).toBe('Open')
       await click(button)

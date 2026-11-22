@@ -14,7 +14,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { readAppSettings, writeAppSettings } from '../src/main/app-settings'
 import { translationContextForFolder } from '../src/main/translate/context-injection'
@@ -1358,39 +1358,51 @@ describe('exportTranslation handler', () => {
 })
 
 describe('project batch translation', () => {
-  it('opens a completed source and its saved output together without recreating a missing result', async () => {
-    const opened: string[] = []
-    const view = {
-      openTab: (path: string) => {
-        opened.push(path)
-        return { tabId: path, created: true }
-      },
-      setTabReadOnly: vi.fn(() => true),
-      closeTab: vi.fn(),
-      showSplit: vi.fn(),
-      setPaneHidden: vi.fn(() => true),
-    }
-    const h = handlers({ view, runBatchEditor: async () => {} })
-    const { dir } = await createIn(h, { name: 'OpenPair', sourceLang: 'ko', targetLang: 'en' })
-    const file = 'test.md'
-    const input = join(root, file)
-    writeFileSync(input, 'Original')
-    await addPicked(h, dir, 'source', input)
-    const { id } = await h.batchStart({ dir, files: [file] }, 4)
-    await vi.waitFor(async () => expect((await h.batchStatus(dir))?.running).toBe(false))
-    const args = { dir, file, batchId: id! }
-    await h.batchOpenResult(args)
-    const source = join(dir, 'source', file),
-      output = join(dir, 'output', file)
-    expect(opened).toEqual([source, output])
-    expect(view.setTabReadOnly).toHaveBeenCalledWith(source)
-    expect(view.showSplit).toHaveBeenCalledWith(source, output)
-    await expect(h.batchOpenResult({ ...args, batchId: 'stale' })).rejects.toThrow()
-    rmSync(output)
-    await expect(h.batchOpenResult(args)).rejects.toThrow()
-    expect(existsSync(output)).toBe(false)
-    expect(opened).toHaveLength(2)
-  })
+  it.each([true, false])(
+    'opens an on-disk batch result without recreating a missing file (completed: %s)',
+    async (completed) => {
+      const opened: string[] = []
+      const view = {
+        openTab: (path: string) => {
+          opened.push(path)
+          return { tabId: path, created: true }
+        },
+        setTabReadOnly: vi.fn(() => true),
+        closeTab: vi.fn(),
+        showSplit: vi.fn(),
+        setPaneHidden: vi.fn(() => true),
+      }
+      const h = handlers({
+        view,
+        runBatchEditor: async ({ outputPath, report }) => {
+          if (!completed) {
+            writeFileSync(outputPath, 'Partial translation')
+            report({ savedOutput: basename(outputPath) })
+            throw new Error('Connection lost')
+          }
+        },
+      })
+      const { dir } = await createIn(h, { name: 'OpenPair', sourceLang: 'ko', targetLang: 'en' })
+      const file = 'test.md'
+      const input = join(root, file)
+      writeFileSync(input, 'Original')
+      await addPicked(h, dir, 'source', input)
+      const { id } = await h.batchStart({ dir, files: [file] }, 4)
+      await vi.waitFor(async () => expect((await h.batchStatus(dir))?.running).toBe(false))
+      const args = { dir, file, batchId: id! }
+      await h.batchOpenResult(args)
+      const source = join(dir, 'source', file),
+        output = join(dir, 'output', file)
+      expect(opened).toEqual([source, output])
+      expect(view.setTabReadOnly).toHaveBeenCalledWith(source)
+      expect(view.showSplit).toHaveBeenCalledWith(source, output)
+      await expect(h.batchOpenResult({ ...args, batchId: 'stale' })).rejects.toThrow()
+      rmSync(output)
+      await expect(h.batchOpenResult(args)).rejects.toThrow()
+      expect(existsSync(output)).toBe(false)
+      expect(opened).toHaveLength(2)
+    },
+  )
 
   it('waits for a saved output before the next editor, and retries only unfinished documents', async () => {
     const order: string[] = []

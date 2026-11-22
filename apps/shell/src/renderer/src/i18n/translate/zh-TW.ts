@@ -33,6 +33,7 @@ export const zhTW = {
   batchWaiting: '等候中',
   batchRunning: '翻譯中',
   batchStopped: '已停止',
+  batchReview: '需要檢查原文 {n}',
   batchFailed: '失敗',
   batchConsent: '針對本批選取的 {n} 份文件使用同一 AI。目前檔案預計呼叫 {calls} 次。',
   wikiManage: '管理維基',

@@ -33,6 +33,7 @@ export const pl = {
   batchWaiting: 'W kolejce',
   batchRunning: 'Tłumaczenie',
   batchStopped: 'Zatrzymano',
+  batchReview: 'Sprawdź tekst źródłowy {n}',
   batchFailed: 'Błąd',
   batchConsent:
     'Użyj tego AI dla wybranych dokumentów ({n}). Ten plik wymaga około {calls} wywołań.',

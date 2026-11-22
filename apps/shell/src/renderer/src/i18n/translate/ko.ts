@@ -33,6 +33,7 @@ export const ko = {
   batchWaiting: '대기 중',
   batchRunning: '번역 중',
   batchStopped: '중지됨',
+  batchReview: '원문 확인 필요 {n}개',
   batchFailed: '실패',
   batchConsent:
     '선택한 문서 {n}개에 같은 AI를 계속 사용합니다. 현재 파일의 예상 호출 수는 {calls}회입니다.',

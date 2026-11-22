@@ -10,6 +10,7 @@ import type {
   ProjectBatchSend,
   ProjectBatchSnapshot,
 } from '../../shared/project-batch'
+import { BatchTranslationNeedsReview } from './batch-completion'
 import { TranslateIpcError } from '../../shared/translate-api'
 
 export interface ProjectBatchEditorRequest {
@@ -241,6 +242,10 @@ export class ProjectBatchQueue {
                   )
                     return
                   if (item.done === undefined && item.total === undefined && !item.verified) return
+                  if (item.reviewSamples) {
+                    delete item.reviewSamples
+                    delete item.error
+                  }
                   delete item.verified
                   delete item.done
                   delete item.total
@@ -279,8 +284,9 @@ export class ProjectBatchQueue {
           const output = await run(
             item.file,
             signal,
-            ({ phase, operations, done, total, verified }) => {
+            ({ phase, operations, done, total, verified, savedOutput }) => {
               if (item.state !== 'running' || signal.aborted) return
+              if (savedOutput) item.output = savedOutput
               const changedPhase = phase !== undefined && phase !== item.phase
               if (changedPhase) {
                 // Page recognition and text translation use different units.
@@ -326,8 +332,15 @@ export class ProjectBatchQueue {
           if (output) item.output = output
           item.state = 'saved'
         } catch (err) {
-          item.state = signal.aborted ? 'stopped' : 'failed'
-          if (!signal.aborted)
+          item.state = signal.aborted
+            ? 'stopped'
+            : item.output && err instanceof BatchTranslationNeedsReview
+              ? 'saved'
+              : 'failed'
+          if (!signal.aborted && err instanceof BatchTranslationNeedsReview) {
+            item.reviewSamples = err.samples
+            if (err.message) item.error = err.message
+          } else if (!signal.aborted)
             item.error = String(err instanceof Error ? err.message : err).slice(0, 320)
         } finally {
           clearTimeout(pending)

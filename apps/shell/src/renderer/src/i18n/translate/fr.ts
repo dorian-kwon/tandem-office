@@ -33,6 +33,7 @@ export const fr = {
   batchWaiting: 'En attente',
   batchRunning: 'Traduction en cours',
   batchStopped: 'Arrêté',
+  batchReview: 'Original à vérifier {n}',
   batchFailed: 'Échec',
   batchConsent:
     'Utiliser cette IA pour les {n} documents sélectionnés. Ce fichier nécessite environ {calls} appels.',

@@ -180,6 +180,7 @@ test('project batch saves only selected documents, shows live progress and retri
     await expect(first).toHaveAttribute('data-batch-state', 'saved', { timeout: 80_000 })
     await expect(second).toHaveAttribute('data-batch-state', 'saved', { timeout: 80_000 })
     await expect(third).toHaveAttribute('data-batch-state', 'failed', { timeout: 80_000 })
+    await expect(third.getByTestId('project-batch-open-result')).toBeVisible()
     await expect(third).toContainText(
       'The editor has not confirmed that the entire document is translated.',
     )

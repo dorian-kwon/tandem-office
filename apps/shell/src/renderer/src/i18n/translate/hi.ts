@@ -33,6 +33,7 @@ export const hi = {
   batchWaiting: 'कतार में',
   batchRunning: 'अनुवाद हो रहा है',
   batchStopped: 'रुका हुआ',
+  batchReview: 'मूल पाठ की जाँच आवश्यक {n}',
   batchFailed: 'विफल',
   batchConsent:
     'चुने हुए {n} दस्तावेज़ों के लिए इस AI का उपयोग करें। इस फ़ाइल के लिए लगभग {calls} अनुरोध चाहिए।',

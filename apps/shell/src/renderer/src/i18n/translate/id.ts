@@ -33,6 +33,7 @@ export const id = {
   batchWaiting: 'Dalam antrean',
   batchRunning: 'Menerjemahkan',
   batchStopped: 'Dihentikan',
+  batchReview: 'Periksa teks sumber {n}',
   batchFailed: 'Gagal',
   batchConsent:
     'Gunakan AI ini untuk {n} dokumen yang dipilih. Berkas ini memerlukan sekitar {calls} permintaan.',

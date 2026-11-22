@@ -33,6 +33,7 @@ export const th = {
   batchWaiting: 'อยู่ในคิว',
   batchRunning: 'กำลังแปล',
   batchStopped: 'หยุดแล้ว',
+  batchReview: 'โปรดตรวจสอบต้นฉบับ {n}',
   batchFailed: 'ล้มเหลว',
   batchConsent:
     'ใช้ AI นี้กับเอกสารที่เลือกทั้ง {n} รายการ ไฟล์ปัจจุบันต้องส่งคำขอประมาณ {calls} ครั้ง',

@@ -33,6 +33,7 @@ export const vi = {
   batchWaiting: 'Đang chờ',
   batchRunning: 'Đang dịch',
   batchStopped: 'Đã dừng',
+  batchReview: 'Cần kiểm tra bản gốc {n}',
   batchFailed: 'Thất bại',
   batchConsent: 'Dùng AI này cho {n} tài liệu đã chọn. Tệp hiện tại cần khoảng {calls} lượt gọi.',
   wikiManage: 'Quản lý wiki',

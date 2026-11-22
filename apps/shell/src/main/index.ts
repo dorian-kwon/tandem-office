@@ -9640,6 +9640,7 @@ async function batchDocumentTools(
           editor.close()
           report?.({ phase: 'saving' })
           await tab.save(mutated)
+          report?.({ savedOutput: basename(output) })
         } finally {
           editorTurnWiki.delete(id)
           await tab.close()

@@ -33,6 +33,7 @@ export const ja = {
   batchWaiting: '待機中',
   batchRunning: '翻訳中',
   batchStopped: '停止',
+  batchReview: '原文の確認が必要 {n}',
   batchFailed: '失敗',
   batchConsent:
     '選択した {n} 件の文書にこの AI を使用します。このファイルの呼び出し回数は約 {calls} 回です。',

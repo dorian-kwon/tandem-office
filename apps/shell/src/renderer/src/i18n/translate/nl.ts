@@ -33,6 +33,7 @@ export const nl = {
   batchWaiting: 'In wachtrij',
   batchRunning: 'Bezig met vertalen',
   batchStopped: 'Gestopt',
+  batchReview: 'Brontekst controleren {n}',
   batchFailed: 'Mislukt',
   batchConsent:
     'Gebruik deze AI voor de {n} gekozen documenten. Dit bestand vereist ongeveer {calls} aanvragen.',

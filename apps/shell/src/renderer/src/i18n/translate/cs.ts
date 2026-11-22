@@ -33,6 +33,7 @@ export const cs = {
   batchWaiting: 'Ve frontě',
   batchRunning: 'Překládá se',
   batchStopped: 'Zastaveno',
+  batchReview: 'Zkontrolujte zdroj {n}',
   batchFailed: 'Selhalo',
   batchConsent:
     'Použít tuto AI pro vybrané dokumenty ({n}). Aktuální soubor vyžaduje přibližně {calls} požadavků.',

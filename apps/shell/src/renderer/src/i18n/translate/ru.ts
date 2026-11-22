@@ -33,6 +33,7 @@ export const ru = {
   batchWaiting: 'В очереди',
   batchRunning: 'Переводится',
   batchStopped: 'Остановлено',
+  batchReview: 'Проверьте исходный текст {n}',
   batchFailed: 'Ошибка',
   batchConsent:
     'Использовать этот ИИ для выбранных документов ({n}). Для текущего файла потребуется около {calls} запросов.',

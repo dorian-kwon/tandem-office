@@ -659,7 +659,13 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       const dir = registeredDir(args?.dir)
       const snapshot = batch.status(dir)
       const item = snapshot?.items.find(({ file }) => file === args.file)
-      if (!snapshot?.id || snapshot.id !== args.batchId || item?.state !== 'saved' || !item.output)
+      if (
+        !snapshot?.id ||
+        snapshot.id !== args.batchId ||
+        !item ||
+        (item.state !== 'saved' && item.state !== 'failed') ||
+        !item.output
+      )
         throw new TranslateIpcError('INVALID_ARGUMENT', 'Choose a saved result from this batch.')
       const project = await loadProject(dir)
       const entry = project.sources.find((source) => source.file === item.file)

@@ -33,6 +33,7 @@ export const he = {
   batchWaiting: 'בתור',
   batchRunning: 'בתרגום',
   batchStopped: 'נעצר',
+  batchReview: 'נדרשת בדיקת המקור {n}',
   batchFailed: 'נכשל',
   batchConsent:
     'השתמשו בבינה המלאכותית הזו עבור {n} המסמכים שנבחרו. לקובץ הנוכחי נדרשות בערך {calls} בקשות.',

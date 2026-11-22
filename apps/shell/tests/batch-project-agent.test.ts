@@ -114,7 +114,7 @@ it.each([true, false])(
         expect(call.input).toEqual({
           checkRemaining: true,
           sourceLanguage: 'ko',
-          ...(checks > 0 ? { includePendingRuns: true } : {}),
+          includePendingRuns: true,
         })
         const done = [0, 249, canFinish ? 252 : 249][checks++]!
         return {
@@ -206,3 +206,59 @@ it('passes remaining textbox paragraphs from the editor to the next model turn a
   for (const unit of locations) expect(continuation).toContain(JSON.stringify(unit))
   expect(finish).toHaveBeenCalledExactlyOnceWith(true)
 })
+
+it.each([true, false])(
+  'reads nearby text once for stalled source fragments (recoverable: %s)',
+  async (recoverable) => {
+    const rows = Array.from({ length: 9 }, (_, i) => ({
+      block: 197,
+      location: '197 · box ' + i,
+      text: 'sample ' + i,
+    }))
+    const finish = vi.fn(async () => {})
+    const request = task(
+      [
+        'Done',
+        'Done',
+        ...(recoverable ? [edit, 'Done'] : ['Unclear scan\nPROJECT_TRANSLATION_INCOMPLETE']),
+      ],
+      finish,
+    )
+    request.sourceLanguage = 'ko'
+    let resolved = false
+    let contextReads = 0
+    request.open = async () => ({
+      tools: ['read_runs', 'read_blocks', edit.name].map((name) => ({
+        name,
+        description: '',
+        inputSchema: {},
+      })),
+      systemPrompt: '',
+      executeTool: async (call) => {
+        if (call.name === 'read_blocks') {
+          contextReads++
+          expect(call.input).toEqual({ startBlockIndex: 196, endBlockIndex: 197 })
+          return { output: 'Nearby caption', summary: '' }
+        }
+        if (call.name === edit.name) {
+          resolved = true
+          return { output: 'ok', summary: '', mutated: true }
+        }
+        return {
+          output: 'Remaining checks',
+          summary: '',
+          translationProgress: { done: resolved ? 9 : 0, total: 9 },
+          pendingTranslationSamples: resolved ? [] : rows,
+        }
+      },
+      finish,
+    })
+    const stream = vi.spyOn(request.transport, 'stream')
+    const run = new BatchProjectAgent().run(request, 'Translate', 'one')
+    if (recoverable) await expect(run).resolves.toBe('Done')
+    else await expect(run).rejects.toMatchObject({ samples: rows, message: 'Unclear scan' })
+    expect(contextReads).toBe(1)
+    expect(stream.mock.calls[2]![0].messages.at(-1)!.text).toContain('Nearby caption')
+    expect(finish).toHaveBeenCalledExactlyOnceWith(recoverable)
+  },
+)

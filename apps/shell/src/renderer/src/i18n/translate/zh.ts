@@ -32,6 +32,7 @@ export const zh = {
   batchWaiting: '等待中',
   batchRunning: '翻译中',
   batchStopped: '已停止',
+  batchReview: '需要检查原文 {n}',
   batchFailed: '失败',
   batchConsent: '对本批选定的 {n} 个文档使用同一 AI。当前文件预计调用 {calls} 次。',
   wikiManage: '管理维基',

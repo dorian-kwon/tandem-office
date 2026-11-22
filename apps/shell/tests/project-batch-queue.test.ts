@@ -1,4 +1,5 @@
 import { expect, it, vi } from 'vitest'
+import { BatchTranslationNeedsReview } from '../src/main/translate/batch-completion'
 import { ProjectBatchQueue } from '../src/main/translate/project-batch'
 
 const dir = '/project'
@@ -237,4 +238,37 @@ it('tracks a failed project reply and stops every waiting or running target on c
     expect(message.reply).toBeUndefined()
     expect(message.targets.map((t) => t.state)).toEqual(['stopped', 'stopped'])
   }
+})
+
+it('keeps unresolved source excerpts available for review and retries only unfinished files', async () => {
+  const { queue, done } = harness()
+  const samples = Array.from({ length: 9 }, (_, i) => ({
+    location: '197 · box ' + i,
+    text: 'fragment ' + i,
+  }))
+  const first = done()
+  queue.start(
+    dir,
+    ['one', 'two'],
+    owner,
+    async (file, _signal, report) => {
+      if (file === 'one') {
+        report({ done: 0, total: 9 })
+        report({ savedOutput: 'partial.docx' })
+        throw new BatchTranslationNeedsReview('Read the scan', samples)
+      }
+      return file
+    },
+    false,
+  )
+  await first
+  expect(queue.status(dir)?.items[0]).toMatchObject({
+    state: 'saved',
+    output: 'partial.docx',
+    done: 0,
+    total: 9,
+    reviewSamples: samples,
+    error: 'Read the scan',
+  })
+  expect(() => queue.start(dir, ['one'], owner, vi.fn(), true)).toThrow('no unfinished')
 })

@@ -33,6 +33,7 @@ export const en = {
   batchWaiting: 'Queued',
   batchRunning: 'Translating',
   batchStopped: 'Stopped',
+  batchReview: 'Source needs review {n}',
   batchFailed: 'Failed',
   batchConsent:
     'Use this AI for the selected batch of {n} documents. This file needs about {calls} calls.',

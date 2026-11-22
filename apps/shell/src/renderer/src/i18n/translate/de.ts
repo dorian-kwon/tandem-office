@@ -33,6 +33,7 @@ export const de = {
   batchWaiting: 'In Warteschlange',
   batchRunning: 'Wird übersetzt',
   batchStopped: 'Gestoppt',
+  batchReview: 'Quelltext prüfen {n}',
   batchFailed: 'Fehlgeschlagen',
   batchConsent:
     'Diese KI für die {n} ausgewählten Dokumente verwenden. Für diese Datei sind etwa {calls} Anfragen nötig.',

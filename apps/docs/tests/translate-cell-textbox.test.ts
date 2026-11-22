@@ -132,6 +132,11 @@ describe('translating text boxes inside table cells', () => {
         .filter((l) => l.startsWith('{'))
         .map((l) => JSON.parse(l))
     const before = await check()
+    expect(before.pendingTranslationSamples).toEqual([
+      { block: 1, location: '1 · ¶0', text: '본문' },
+      { block: 1, location: '1 · box 0 · ¶0', text: '같은 글' },
+      { block: 1, location: '1 · box 1 · ¶0', text: '같은 글' },
+    ])
     const entries = rows(before.output)
     expect(before.translationProgress).toEqual({ done: 0, total: 3 })
     expect(entries).toEqual([

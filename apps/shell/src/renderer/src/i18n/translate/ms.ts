@@ -33,6 +33,7 @@ export const ms = {
   batchWaiting: 'Dalam giliran',
   batchRunning: 'Sedang menterjemah',
   batchStopped: 'Dihentikan',
+  batchReview: 'Semak teks sumber {n}',
   batchFailed: 'Gagal',
   batchConsent:
     'Gunakan AI ini untuk {n} dokumen yang dipilih. Fail ini memerlukan kira-kira {calls} permintaan.',

@@ -33,6 +33,7 @@ export const es = {
   batchWaiting: 'En cola',
   batchRunning: 'Traduciendo',
   batchStopped: 'Detenido',
+  batchReview: 'Revisar el original {n}',
   batchFailed: 'Error',
   batchConsent:
     'Usar esta IA para los {n} documentos seleccionados. Este archivo requiere unas {calls} solicitudes.',

@@ -3,6 +3,8 @@ export interface ProjectBatchActivity {
   phase?: 'opening' | 'ocr' | 'translating' | 'saving'
   /** The editor checked this output for remaining source text after the last edit. */
   verified?: boolean
+  /** File confirmed on disk by the editor after saving its edits. */
+  savedOutput?: string
   operations?: number
   done?: number
   total?: number
@@ -11,6 +13,7 @@ export interface ProjectBatchItem extends ProjectBatchActivity {
   file: string
   state: ProjectBatchItemState
   output?: string
+  reviewSamples?: { location: string; text: string }[]
   error?: string
 }
 export interface ProjectBatchSnapshot {

@@ -150,6 +150,7 @@ const DocumentProgress = memo(function DocumentProgress({
   phase,
   operations,
   verified,
+  reviewSamples,
   openPair,
   output,
   error,
@@ -184,7 +185,7 @@ const DocumentProgress = memo(function DocumentProgress({
       <div className="translate-batch-file">
         <strong dir="auto">{file}</strong>
         <span>{label}</span>
-        {state === 'saved' && openPair && output && (
+        {(state === 'saved' || state === 'failed') && openPair && output && (
           <button
             type="button"
             className="btn btn-secondary batch-open-pair"
@@ -245,7 +246,7 @@ const DocumentProgress = memo(function DocumentProgress({
       {state === 'running' && phase === 'translating' && !known && (
         <small>{s('batchUnknownCount')}</small>
       )}
-      {state === 'saved' && !confirmed && (
+      {state === 'saved' && !confirmed && !reviewSamples?.length && (
         <small data-batch-coverage="unverified">{s('batchUnverified')}</small>
       )}
       {openError && (
@@ -255,6 +256,18 @@ const DocumentProgress = memo(function DocumentProgress({
       )}
       {operations !== undefined && operations > 0 && (
         <small data-batch-operations={operations}>{s('batchOperations', { n: operations })}</small>
+      )}
+      {reviewSamples && reviewSamples.length > 0 && (
+        <details>
+          <summary>{s('batchReview', { n: known ? total - done : reviewSamples.length })}</summary>
+          <ul>
+            {reviewSamples.map((sample, i) => (
+              <li key={i}>
+                <code>{sample.location}</code> · <span dir="auto">{sample.text}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
       {output && output !== file && <small dir="auto">{output}</small>}
       {error && (

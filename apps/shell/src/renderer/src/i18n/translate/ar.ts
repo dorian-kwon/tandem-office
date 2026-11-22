@@ -33,6 +33,7 @@ export const ar = {
   batchWaiting: 'قيد الانتظار',
   batchRunning: 'جارٍ الترجمة',
   batchStopped: 'متوقف',
+  batchReview: 'يحتاج المصدر إلى مراجعة {n}',
   batchFailed: 'فشل',
   batchConsent:
     'استخدم هذا الذكاء الاصطناعي للمستندات المحددة وعددها {n}. يحتاج هذا الملف إلى نحو {calls} طلبات.',

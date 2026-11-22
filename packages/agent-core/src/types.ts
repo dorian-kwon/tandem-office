@@ -86,6 +86,8 @@ export interface ToolExecution {
   /** The host cannot continue this run. Stop before executing any queued tool or starting another model turn. */
   endRunWithError?: string
   /** Count of currently handled translation units in the whole document, computed by the editor. UI only. */
+  /** Bounded source excerpts from an explicit remaining-runs check. */
+  pendingTranslationSamples?: { block?: number; location: string; text: string }[]
   translationProgress?: { done: number; total: number }
   /** Local navigation metadata, excluded from model messages. */
   changeLocations?: readonly AiChangeLocation[]

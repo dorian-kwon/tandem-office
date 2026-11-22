@@ -1989,6 +1989,7 @@ function executeSyncTool(
         setTranslationSourceLanguage(editor, call.input.sourceLanguage)
       if (call.input.checkRemaining === true) {
         const pendingLines: string[] = []
+        const samples: { block?: number; location: string; text: string }[] = []
         let pendingChars = 0
         const report = remainingUntranslated(
           editor,
@@ -2000,6 +2001,26 @@ function executeSyncTool(
             onPendingRun:
               call.input.includePendingRuns === true
                 ? (entry) => {
+                    if (samples.length < 32) {
+                      const location =
+                        'index' in entry
+                          ? [
+                              entry.index,
+                              entry.nestedTable !== undefined && 'table ' + entry.nestedTable,
+                              entry.box !== undefined && 'box ' + entry.box,
+                              entry.paragraph !== undefined && '¶' + entry.paragraph,
+                            ]
+                              .filter((v) => v !== false)
+                              .join(' · ')
+                          : 'story' in entry
+                            ? entry.story + ' · ¶' + entry.paragraph
+                            : entry.note + ' ' + entry.id + ' · ¶' + (entry.paragraph ?? 0)
+                      samples.push({
+                        ...('index' in entry ? { block: entry.index } : {}),
+                        location,
+                        text: (entry.segments ?? []).join('').slice(0, 180),
+                      })
+                    }
                     if (pendingLines.length >= 32 || pendingChars >= READ_MAX_CHARS) return
                     const line = JSON.stringify(entry)
                     if (pendingChars + line.length + 1 > READ_MAX_CHARS) return
@@ -2016,6 +2037,7 @@ function executeSyncTool(
             : `\n${label}: ${items.slice(0, 150).join(', ')}${items.length > 150 ? ` …(+${items.length - 150})` : ''}`
         return {
           translationProgress: report.progress,
+          ...(samples.length ? { pendingTranslationSamples: samples } : {}),
           output:
             total === 0
               ? 'Nothing left to translate among the source-language units checked.'

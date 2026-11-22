@@ -2,6 +2,15 @@ import type { EditorReply } from '@genoffice/project-store/editor-run'
 
 type EditorResult = Extract<EditorReply, { kind: 'done' }>
 
+export class BatchTranslationNeedsReview extends Error {
+  constructor(
+    message: string,
+    readonly samples: { location: string; text: string }[],
+  ) {
+    super(message)
+  }
+}
+
 const complete = 'PROJECT_TRANSLATION_COMPLETE'
 const already = 'PROJECT_ALREADY_TRANSLATED'
 const pending = 'PROJECT_TRANSLATION_INCOMPLETE'
