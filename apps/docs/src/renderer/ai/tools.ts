@@ -244,6 +244,11 @@ export const AGENT_TOOLS: AgentToolDef[] = [
           type: 'boolean',
           description: 'a translation review read: also list the original side of a bilingual pair',
         },
+        includePendingRuns: {
+          type: 'boolean',
+          description:
+            'with checkRemaining:true, read the next batch of editable pending units, with fingerprints, addresses and source segments',
+        },
         checkRemaining: {
           type: 'boolean',
           description: 'report what is still untranslated, in the body and in the notes',
@@ -1983,11 +1988,26 @@ function executeSyncTool(
       if (typeof call.input.sourceLanguage === 'string')
         setTranslationSourceLanguage(editor, call.input.sourceLanguage)
       if (call.input.checkRemaining === true) {
+        const pendingLines: string[] = []
+        let pendingChars = 0
         const report = remainingUntranslated(
           editor,
           notes,
           typeof call.input.sourceLanguage === 'string' ? call.input.sourceLanguage : undefined,
-          { tracking: track !== undefined, stories: hf?.stories },
+          {
+            tracking: track !== undefined,
+            stories: hf?.stories,
+            onPendingRun:
+              call.input.includePendingRuns === true
+                ? (entry) => {
+                    if (pendingLines.length >= 32 || pendingChars >= READ_MAX_CHARS) return
+                    const line = JSON.stringify(entry)
+                    if (pendingChars + line.length + 1 > READ_MAX_CHARS) return
+                    pendingLines.push(line)
+                    pendingChars += line.length + 1
+                  }
+                : undefined,
+          },
         )
         const total = report.progress.total - report.progress.done
         const list = (label: string, items: string[]) =>
@@ -2004,6 +2024,10 @@ function executeSyncTool(
                 list('Notes', report.notes) +
                 list('Headers and footers (read_runs headerFooters:true)', report.stories ?? []) +
                 list('Untranslated areas unavailable to the current editor', report.blocked ?? []) +
+                (pendingLines.length
+                  ? '\nPending editable runs (apply these in one batch, then check again):\n' +
+                    pendingLines.join('\n')
+                  : '') +
                 (hasTwins(editor) && report.notes.length > 0 ? `\n${BILINGUAL_NOTES_NOTE}` : ''),
           mutated: false,
           summary: t('aiSumReadRuns', {

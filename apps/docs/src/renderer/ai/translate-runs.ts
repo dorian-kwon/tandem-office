@@ -1896,7 +1896,15 @@ export function remainingUntranslated(
   access: AiNotesAccess | undefined,
   language?: string,
   /** `tracking`: revision tracking prevents writing to text boxes, so source text in them is reported as blocked */
-  options: { tracking?: boolean; notesOnly?: boolean; stories?: AiHfStoryAccess } = {},
+  options: {
+    tracking?: boolean
+    notesOnly?: boolean
+    stories?: AiHfStoryAccess
+    /** Called for editable pending entries only, using the same scan as the completeness check. */
+    onPendingRun?: (
+      run: RunParagraph | NoteRunParagraph | ReturnType<typeof readHfStoryRuns>[number],
+    ) => void
+  } = {},
 ): RemainingReport {
   const rule = sourceRule(language ?? getTranslationSourceLanguage(editor))
   const handled = handledUnits.get(originalAiEditor(editor))
@@ -1940,8 +1948,11 @@ export function remainingUntranslated(
     if (!entry.segments || !entry.fp || !pending(entry.segments, entry.fp, entry)) continue
     if (entry.box !== undefined) {
       const location = `${entry.index} (box ${entry.box} paragraph ${entry.paragraph})`
-      if (options.tracking) blocked.push(location + ' (tracked changes enabled)')
-      else body.push(location)
+      if (options.tracking) {
+        blocked.push(location + ' (tracked changes enabled)')
+        continue
+      }
+      body.push(location)
     } else if (entry.nestedTable !== undefined)
       body.push(`${entry.index} (nested table ${entry.nestedTable} paragraph ${entry.paragraph})`)
     else
@@ -1950,14 +1961,17 @@ export function remainingUntranslated(
           ? `${entry.index}`
           : `${entry.index} (paragraph ${entry.paragraph})`,
       )
+    options.onPendingRun?.(entry)
   }
   const notes: string[] = []
   if (access) {
     for (const entry of readNoteRuns(access)) {
-      if (pending(entry.segments, entry.fp, entry))
+      if (pending(entry.segments, entry.fp, entry)) {
+        options.onPendingRun?.(entry)
         notes.push(
           `${entry.note} ${entry.id}${entry.paragraph === undefined ? '' : ` paragraph ${entry.paragraph}`}`,
         )
+      }
     }
   }
   const report: RemainingReport = { body, notes, progress }
@@ -1968,7 +1982,10 @@ export function remainingUntranslated(
       const location = `${unit.story} paragraph ${unit.paragraph}`
       if (options.tracking) blocked.push(location + ' (tracked changes enabled)')
       else if (unit.readOnly || !options.stories.writable()) blocked.push(location + ' (read-only)')
-      else stories.push(location)
+      else {
+        stories.push(location)
+        options.onPendingRun?.(unit)
+      }
     }
     report.stories = stories
   }

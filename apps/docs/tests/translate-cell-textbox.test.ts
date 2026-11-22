@@ -4,6 +4,7 @@ import JSZip from 'jszip'
 import { buildAnchoredTextboxParagraphXml, parseDocx, saveDocx } from '@genoffice/docx-engine'
 import { buildDocx } from '../../../packages/docx-engine/tests/helpers/build-docx'
 import { placeOcrText } from '../../shell/src/main/translate/ocr-placement'
+import { executeTool } from '../src/renderer/ai/tools'
 import { assignTableSegments } from '../src/renderer/editor/cell-box-segments'
 import { blocksToPmDoc, pmDocToSavePlan, type PmNode } from '../src/renderer/editor/convert'
 import { editorExtensions } from '../src/renderer/editor/extensions'
@@ -107,6 +108,52 @@ describe('translating text boxes inside table cells', () => {
     expect(report.progress).toEqual({ done: 0, total: 1 })
     expect(report.blocked).toHaveLength(1)
     expect(report.blocked![0]).toContain('nested table 0')
+  })
+
+  it('supplies exact addresses and fingerprints for only the pending editable runs in a retry', async () => {
+    const { editor } = await open(
+      cell('본문', box(9, '같은 글'), box(10, '같은 글')),
+      cell('Already English'),
+    )
+    const ids = { bullet: null, ordered: null }
+    const check = () =>
+      executeTool(
+        editor,
+        {
+          id: 'r',
+          name: 'read_runs',
+          input: { checkRemaining: true, sourceLanguage: 'ko', includePendingRuns: true },
+        },
+        ids,
+      )
+    const rows = (text: string) =>
+      text
+        .split('\n')
+        .filter((l) => l.startsWith('{'))
+        .map((l) => JSON.parse(l))
+    const before = await check()
+    const entries = rows(before.output)
+    expect(before.translationProgress).toEqual({ done: 0, total: 3 })
+    expect(entries).toEqual([
+      { index: 1, paragraph: 0, fp: expect.any(String), segments: ['본문'] },
+      { index: 1, box: 0, paragraph: 0, fp: expect.any(String), segments: ['같은 글'] },
+      { index: 1, box: 1, paragraph: 0, fp: expect.any(String), segments: ['같은 글'] },
+    ])
+    const change = await executeTool(
+      editor,
+      {
+        id: 't',
+        name: 'translate_blocks',
+        input: {
+          blocks: [{ ...entries[1], segments: ['First box'] }],
+        },
+      },
+      ids,
+    )
+    expect(change.isError).toBeFalsy()
+    const after = await check()
+    expect(after.translationProgress).toEqual({ done: 1, total: 3 })
+    expect(rows(after.output)).toEqual([entries[0], entries[2]])
   })
 
   it('writes a translation into one cell box and leaves the other and the cell text alone', async () => {

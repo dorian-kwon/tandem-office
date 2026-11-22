@@ -111,7 +111,11 @@ it.each([true, false])(
       tools: [{ name: 'read_runs', description: '', inputSchema: {} }],
       systemPrompt: '',
       executeTool: async (call) => {
-        expect(call.input).toEqual({ checkRemaining: true, sourceLanguage: 'ko' })
+        expect(call.input).toEqual({
+          checkRemaining: true,
+          sourceLanguage: 'ko',
+          ...(checks > 0 ? { includePendingRuns: true } : {}),
+        })
         const done = [0, 249, canFinish ? 252 : 249][checks++]!
         return {
           output: 'Check includes the header.',
@@ -156,4 +160,49 @@ it('refuses to certify an output when counted source units disappear without tra
   await expect(new BatchProjectAgent().run(request, 'Translate', 'one')).rejects.toThrow(
     'account for all',
   )
+})
+
+it('passes remaining textbox paragraphs from the editor to the next model turn as one batch', async () => {
+  const locations = [2, 3, 6].map((box) => ({
+    index: 197,
+    box,
+    paragraph: 0,
+    fp: 'fp-' + box,
+    segments: ['원문'],
+  }))
+  const blocks = locations.map((location) => ({ ...location, segments: ['Translated'] }))
+  const editBoxes = { id: 'boxes', name: 'translate_blocks', input: { blocks } }
+  const finish = vi.fn(async () => {})
+  const request = task(['Done', editBoxes, 'Done'], finish)
+  const stream = vi.spyOn(request.transport, 'stream')
+  request.sourceLanguage = 'ko'
+  let translated = false
+  request.open = async () => ({
+    tools: ['read_runs', 'translate_blocks'].map((name) => ({
+      name,
+      description: '',
+      inputSchema: {},
+    })),
+    systemPrompt: '',
+    executeTool: async (call) => {
+      if (call.name === 'translate_blocks') {
+        expect(call.input.blocks).toEqual(blocks)
+        translated = true
+        return { output: 'OK', summary: '', mutated: true }
+      }
+      return {
+        output:
+          call.input.includePendingRuns && !translated
+            ? locations.map((unit) => JSON.stringify(unit)).join('\n')
+            : 'Check',
+        summary: '',
+        translationProgress: { done: translated ? 36 : 33, total: 36 },
+      }
+    },
+    finish,
+  })
+  await new BatchProjectAgent().run(request, 'Translate', 'one')
+  const continuation = stream.mock.calls[1]![0].messages.at(-1)!.text
+  for (const unit of locations) expect(continuation).toContain(JSON.stringify(unit))
+  expect(finish).toHaveBeenCalledExactlyOnceWith(true)
 })
