@@ -55,6 +55,7 @@ export const th = {
   appNewFailed: 'สร้างเอกสารไม่สำเร็จ: {error}',
   appSaveFailed: 'บันทึกไม่สำเร็จ: {error}',
   appAutoSavedAt: 'บันทึกอัตโนมัติแล้ว ({time})',
+  appLayoutReviewCount: 'กล่องข้อความที่ต้องตรวจสอบการจัดวาง · {n}',
   appSaved: 'บันทึกแล้ว',
   appSectionBreakInserted: 'แทรกตัวแบ่งส่วนแล้ว ({type})',
   appSectionBreakPending: 'แทรกตัวแบ่งส่วนแล้ว ส่วนใหม่จะมีผลหลังจากบันทึก',

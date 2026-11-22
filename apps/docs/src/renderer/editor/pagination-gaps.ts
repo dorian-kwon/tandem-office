@@ -1300,6 +1300,7 @@ export function syncFloatShifts(
   const curTops = floats.map((f) => f.el.getBoundingClientRect().top)
   floats.forEach((f, i) => {
     let above = 0
+    let anchorGaps = 0
     let pageStart = 0
     let pagePush = firstPagePush
     // page-absolute V boxes render on their ANCHOR's page at the page-relative
@@ -1308,6 +1309,7 @@ export function syncFloatShifts(
     const abs = f.pinned || f.pageRelV
     const ref = abs ? (f.anchorTop ?? f.top) + 0.5 : f.top
     for (const g of gaps) {
+      if (!abs && f.anchorTop !== undefined && g.v <= f.anchorTop) anchorGaps += g.h
       if (g.v <= ref) {
         above += g.h
         if (abs && g.v >= pageStart) {
@@ -1320,7 +1322,12 @@ export function syncFloatShifts(
     const rel = f.pageRelV ? f.top - (f.anchorTop ?? 0) - (f.pageRelFromPage ? pagePush : 0) : f.top
     const desired = origin + (pageStart + rel) * factor + above
     const applied = parseFloat(f.el.dataset.pageFloatDy ?? '0') || 0
-    const next = applied + (desired - curTops[i]) / factor
+    // Paragraph-relative shapes move with their anchor in the DOM. Only gaps
+    // crossed by their local offset should move them again.
+    const next =
+      !abs && f.anchorTop !== undefined
+        ? (above - anchorGaps) / factor
+        : applied + (desired - curTops[i]) / factor
     if (Math.abs(next) < 0.5) {
       f.el.style.removeProperty('--page-float-dy')
       delete f.el.dataset.pageFloatDy

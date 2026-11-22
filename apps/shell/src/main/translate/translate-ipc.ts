@@ -140,6 +140,11 @@ import {
  */
 
 export interface TranslateIpcDeps {
+  openWordBox?: (
+    tabId: string,
+    target: import('@genoffice/project-store/editor-run').WordBoxTarget,
+    text: string,
+  ) => Promise<void>
   lookupWikiCategories?: (categories: TranslationWikiCategories) => Promise<{ text: string }>
   learnFinalPaths?: (
     paths: string[],
@@ -676,6 +681,16 @@ function createRawHandlers(deps: TranslateIpcDeps) {
       if (!(await lstat(sourceDir)).isDirectory() || !(await lstat(source)).isFile())
         throw new TranslateIpcError('SOURCE_MISSING', 'The original project file is missing.')
       const output = await existingOutputPath(join(dir, 'output'), item.output)
+      const sample =
+        args.layoutIndex === undefined ? undefined : item.layoutReview?.samples[args.layoutIndex]
+      if (
+        args.layoutIndex !== undefined &&
+        (!Number.isSafeInteger(args.layoutIndex) ||
+          !sample?.target ||
+          !deps.openWordBox ||
+          extname(output).toLowerCase() !== '.docx')
+      )
+        throw new TranslateIpcError('INVALID_ARGUMENT', 'Choose a text box from this result.')
       let left = source
       if (entry.kind === 'image') {
         if (
@@ -685,8 +700,9 @@ function createRawHandlers(deps: TranslateIpcDeps) {
           throw new TranslateIpcError('UNSUPPORTED_SOURCE', 'The source image cannot be previewed.')
         left = await deps.batchImagePreview(source)
       }
-      await openPair(left, output, viewDeps())
+      const { outputTabId } = await openPair(left, output, viewDeps())
       noteRecent(dir, entry.file, item.output)
+      if (sample?.target) await deps.openWordBox!(outputTabId, sample.target, sample.text)
     },
     async batchStatus(dir: string) {
       return batch.status(registeredDir(dir))

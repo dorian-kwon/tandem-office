@@ -57,6 +57,7 @@ export const pt = {
   appNewFailed: 'Falha ao criar o documento: {error}',
   appSaveFailed: 'Falha ao salvar: {error}',
   appAutoSavedAt: 'Salvo automaticamente ({time})',
+  appLayoutReviewCount: 'Caixas de texto cuja disposição precisa de revisão · {n}',
   appSaved: 'Salvo',
   appSectionBreakInserted: 'Quebra de seção inserida ({type})',
   appSectionBreakPending: 'Quebra de seção inserida; a nova seção entra em vigor após salvar',

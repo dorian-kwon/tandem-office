@@ -2,13 +2,21 @@ import { nativeDocumentTools, type DocumentToolEditor } from './project-document
 import { createChoiceSkill } from './ai-choice'
 import { useEffect, useRef } from 'react'
 import type { AgentLoop } from '@genoffice/agent-core'
-import type { ProjectEditorToolBridge } from '@genoffice/project-store/editor-run'
+import {
+  MAX_BOX_REVIEW_SAMPLES,
+  type ProjectEditorToolBridge,
+  type EditorBoxReview,
+} from '@genoffice/project-store/editor-run'
 
 type DocumentTools = NonNullable<ReturnType<AgentLoop['openDocumentTools']>>
 export function useProjectEditorTools(options: {
   path?: string | null | undefined
   ready: boolean
   busy: boolean
+  boxLayout?: {
+    prepare(): boolean | Promise<boolean>
+    review(): EditorBoxReview['samples'] | Promise<EditorBoxReview['samples']>
+  }
   documentEditor?: DocumentToolEditor
   documentLoop?: () => Pick<AgentLoop, 'openDocumentTools'> | null
 }) {
@@ -49,7 +57,7 @@ export function useProjectEditorTools(options: {
       }
       const current = latest.current
       if (!current.ready || !current.path || current.path !== message.path) {
-        if (message.kind === 'execute') error('The requested document is no longer open.')
+        if (message.kind !== 'describe') error('The requested document is no longer open.')
         return
       }
       if (message.kind === 'describe') {
@@ -90,7 +98,12 @@ export function useProjectEditorTools(options: {
         })
         return
       }
-      if (message.kind !== 'execute') return
+      if (
+        message.kind !== 'execute' &&
+        message.kind !== 'prepare-layout' &&
+        message.kind !== 'review-layout'
+      )
+        return
       const active = session
       if (
         !active ||
@@ -103,6 +116,30 @@ export function useProjectEditorTools(options: {
       const controller = new AbortController()
       active.running = { id, controller }
       try {
+        if (message.kind === 'prepare-layout' || message.kind === 'review-layout') {
+          if (!current.boxLayout) return error('Word layout diagnostics are unavailable.')
+          if (message.kind === 'prepare-layout') {
+            const needsSave = await current.boxLayout.prepare()
+            controller.signal.throwIfAborted()
+            api.replyToEditorToolRequest({ ...base, kind: 'layout-prepared', needsSave })
+          } else {
+            const boxes = await current.boxLayout.review()
+            controller.signal.throwIfAborted()
+            const samples = boxes
+              .slice(0, MAX_BOX_REVIEW_SAMPLES)
+              .map(({ location, text, target }) => ({
+                ...(target ? { target } : {}),
+                location: location.slice(0, 240),
+                text: text.slice(0, 200),
+              }))
+            api.replyToEditorToolRequest({
+              ...base,
+              kind: 'layout-reviewed',
+              review: { count: boxes.length, samples },
+            })
+          }
+          return
+        }
         const execution = await active.tools.executeTool(message.call, controller.signal)
         api.replyToEditorToolRequest({ ...base, kind: 'result', execution })
       } catch (cause) {

@@ -241,7 +241,14 @@ export class ProjectBatchQueue {
                     !message.targets.some((t) => t.file === file && t.state === 'running')
                   )
                     return
-                  if (item.done === undefined && item.total === undefined && !item.verified) return
+                  if (
+                    item.done === undefined &&
+                    item.total === undefined &&
+                    !item.verified &&
+                    item.layoutReview === undefined
+                  )
+                    return
+                  delete item.layoutReview
                   if (item.reviewSamples) {
                     delete item.reviewSamples
                     delete item.error
@@ -284,9 +291,10 @@ export class ProjectBatchQueue {
           const output = await run(
             item.file,
             signal,
-            ({ phase, operations, done, total, verified, savedOutput }) => {
+            ({ phase, operations, done, total, verified, savedOutput, layoutReview }) => {
               if (item.state !== 'running' || signal.aborted) return
               if (savedOutput) item.output = savedOutput
+              if (layoutReview !== undefined) item.layoutReview = layoutReview
               const changedPhase = phase !== undefined && phase !== item.phase
               if (changedPhase) {
                 // Page recognition and text translation use different units.

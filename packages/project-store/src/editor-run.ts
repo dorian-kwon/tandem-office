@@ -51,15 +51,30 @@ interface ToolRequestBase {
   session: string
   path: string
 }
+/** Local layout diagnostics; the count includes boxes beyond the displayed examples. */
+export interface WordBoxTarget {
+  block: number
+  box: number
+  cellPos?: number
+}
+export interface EditorBoxReview {
+  count: number
+  samples: { location: string; text: string; target?: WordBoxTarget }[]
+}
+export const MAX_BOX_REVIEW_SAMPLES = 100
 export type EditorToolRequest = ToolRequestBase &
   (
     | { kind: 'describe'; choices?: BatchTranslationChoices }
     | { kind: 'execute'; call: AgentToolCall }
+    | { kind: 'prepare-layout' }
+    | { kind: 'review-layout' }
     | { kind: 'cancel' | 'close' }
   )
 export type EditorToolReply =
   | { id: string; session: string; kind: 'described'; tools: AgentToolDef[]; systemPrompt: string }
   | { id: string; session: string; kind: 'result'; execution: ToolExecution }
+  | { id: string; session: string; kind: 'layout-prepared'; needsSave: boolean }
+  | { id: string; session: string; kind: 'layout-reviewed'; review: EditorBoxReview }
   | { id: string; session: string; kind: 'error'; error: string }
 
 export interface ProjectEditorToolBridge {

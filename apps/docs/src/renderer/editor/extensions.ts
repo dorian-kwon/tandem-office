@@ -203,6 +203,7 @@ import {
   textboxIsFilled,
   wireChartEditing,
 } from './protected-render'
+import { hasPendingTranslationBoxes } from './translation-box-layout'
 import { shrinkBoxToFit } from '../ai/box-fit'
 import { isStraightLineKind } from './shape-svg'
 import {
@@ -6175,6 +6176,7 @@ function mountTextboxEditors(
   const minHeights = knownBoxes.map((box) => box.minHeightPx ?? box.heightPx)
   const measuredHeights = knownBoxes.map((box) => box.heightPx)
   const resizeFrames: Array<number | undefined> = []
+  let syncingModel = false
   // wrapTopAndBottom band on the wrapper must follow autogrow, or the text
   // below would overlap a box that outgrew its parse-time height
   const refreshBand = () => {
@@ -6236,7 +6238,8 @@ function mountTextboxEditors(
       onFocus: () => setActiveSubEditor(sub),
       onTransaction: ({ transaction }) => {
         notifySubEditorState(transaction.docChanged)
-        if (transaction.docChanged) scheduleMeasure(i)
+        if (transaction.docChanged && !(syncingModel && hasPendingTranslationBoxes(view.dom)))
+          scheduleMeasure(i)
       },
     })
     // TipTap initializes the host element and may clear attributes emitted by
@@ -6292,7 +6295,14 @@ function mountTextboxEditors(
     knownBoxes = boxes
     boxes.forEach((box, i) => {
       const sub = editors[i]
-      if (sub && !sub.isDestroyed) sub.commands.setContent(textboxDocJson(box))
+      if (sub && !sub.isDestroyed) {
+        syncingModel = true
+        try {
+          sub.commands.setContent(textboxDocJson(box))
+        } finally {
+          syncingModel = false
+        }
+      }
       const el = boxEls[i]
       if (el) {
         el.setAttribute('style', textboxBoxStyle(box))

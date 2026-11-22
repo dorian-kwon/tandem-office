@@ -6,6 +6,11 @@
  * so state never goes stale.
  */
 import { restoreNoteRuns } from './ai/note-run-save'
+import {
+  fitPendingTranslationBoxes,
+  hasPendingTranslationBoxes,
+  reviewTranslationBoxLayout,
+} from './editor/translation-box-layout'
 import { clearTranslationProgress } from './ai/translate-runs'
 import type { Editor } from '@tiptap/core'
 import type { EditorState } from '@tiptap/pm/state'
@@ -1423,6 +1428,11 @@ async function saveOnce(
     if (!(await waitForFullContent()) || docGeneration !== generation) return false
     // flush pending in-place table cell / textbox edits into the PM doc first
     window.dispatchEvent(new Event('ai-docs-commit-tables'))
+    if (hasPendingTranslationBoxes(editor.view.dom)) {
+      await document.fonts?.ready
+      if (generation !== docGeneration) return false
+    }
+    const checkedBoxes = fitPendingTranslationBoxes(editor)
     // identity snapshot: detects edits that arrive while the save is in flight
     const fontSettingsVersion = ctx.fontSettingsVersionRef?.current
     const docSnapshot = editor.state.doc
@@ -1629,7 +1639,17 @@ async function saveOnce(
     ctx.setStatus(
       auto ? t('appAutoSavedAt', { time: new Date().toLocaleTimeString() }) : t('appSaved'),
     )
-    if (!auto) showToast(t('appSaved'))
+    if (!auto) {
+      const unresolved = checkedBoxes ? reviewTranslationBoxLayout(editor) : []
+      const message = unresolved.length
+        ? [
+            t('appSaved'),
+            t('appLayoutReviewCount', { n: unresolved.length }),
+            unresolved[0].location,
+          ].join(' · ')
+        : t('appSaved')
+      showToast(message)
+    }
     return true
   } catch (err) {
     ctx.setStatus(t('appSaveFailed', { error: String(err) }))

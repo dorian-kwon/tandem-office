@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Editor } from '@tiptap/core'
 import JSZip from 'jszip'
 import { buildAnchoredTextboxParagraphXml, parseDocx, saveDocx } from '@genoffice/docx-engine'
 import { buildDocx } from '../../../packages/docx-engine/tests/helpers/build-docx'
 import { placeOcrText } from '../../shell/src/main/translate/ocr-placement'
+import { handleDocsControl } from '../src/renderer/control'
 import { executeTool } from '../src/renderer/ai/tools'
 import { assignTableSegments } from '../src/renderer/editor/cell-box-segments'
 import { blocksToPmDoc, pmDocToSavePlan, type PmNode } from '../src/renderer/editor/convert'
@@ -92,6 +93,49 @@ async function saved(parsed: Awaited<ReturnType<typeof parseDocx>>, editor: Edit
 const wt = (xml: string) => [...xml.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)].map((m) => m[1])
 
 describe('translating text boxes inside table cells', () => {
+  it('opens the reviewed cell box in the saved and reopened Word, and detects a changed sample', async () => {
+    const { parsed, editor } = await open(
+      cell('First', box(1, 'First caption')),
+      cell('Second', box(2, 'Review this caption')),
+    )
+    let cellPos = 0
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'docCellBoxes') cellPos = pos
+    })
+    const { out } = await saved(parsed, editor)
+    const reopened = new Editor({
+      element: document.createElement('div'),
+      extensions: editorExtensions,
+      content: blocksToPmDoc((await parseDocx(out)).blocks) as never,
+    })
+    live.push(reopened)
+    const boxes = reopened.view.dom.querySelectorAll<HTMLElement>('.doc-cell-boxes .doc-textbox')
+    expect(boxes).toHaveLength(2)
+    const scroll = vi.fn()
+    boxes[0]!.scrollIntoView = vi.fn()
+    boxes[1]!.scrollIntoView = scroll
+    const textBox = { block: tableIndex, cellPos, box: 0, text: 'Review this caption' }
+    const goto = (text: string) =>
+      handleDocsControl(
+        {
+          cmd: 'goto',
+          target: { kind: 'block', block: tableIndex, textBox: { ...textBox, text } },
+        },
+        reopened,
+        true,
+      )
+    expect(goto(textBox.text)).toMatchObject({
+      status: 'ok',
+      result: { block: tableIndex, box: 0 },
+    })
+    expect(scroll).toHaveBeenCalledWith({ block: 'center', inline: 'nearest' })
+    expect(boxes[0]!.scrollIntoView).not.toHaveBeenCalled()
+    expect(goto('Removed caption')).toMatchObject({
+      status: 'error',
+      error: { reason: 'target_not_found' },
+    })
+    expect(scroll).toHaveBeenCalledTimes(1)
+  })
   it('lists the paragraphs of each cell box with the table-wide box number', async () => {
     const { editor } = await open(cell('A', box(1, 'BOX ONE')), cell('B', box(2, 'BOX TWO')))
 

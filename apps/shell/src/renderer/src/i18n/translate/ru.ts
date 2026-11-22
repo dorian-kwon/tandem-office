@@ -23,6 +23,8 @@ export const ru = {
   batchVerifiedCount: 'Проверка на остатки исходного текста завершена',
   batchNoRemaining: 'Единиц для перевода не осталось',
   batchUnknownCount: 'Общее число единиц перевода неизвестно',
+  batchLayoutReviewCount: 'Текстовые поля для проверки вёрстки · {n}',
+  batchLayoutUnchecked: 'Не удалось проверить расположение текстовых полей',
   batchUnverified: 'Проверка на остатки исходного текста не проводилась',
   batchOpenPair: 'Открыть оригинал и перевод вместе',
   batchOverall: 'Общий ход работы',

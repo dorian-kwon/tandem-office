@@ -57,6 +57,7 @@ export const it = {
   appNewFailed: 'Creazione del documento non riuscita: {error}',
   appSaveFailed: 'Salvataggio non riuscito: {error}',
   appAutoSavedAt: 'Salvato automaticamente ({time})',
+  appLayoutReviewCount: 'Caselle di testo di cui verificare la disposizione · {n}',
   appSaved: 'Salvato',
   appSectionBreakInserted: 'Interruzione di sezione inserita ({type})',
   appSectionBreakPending:

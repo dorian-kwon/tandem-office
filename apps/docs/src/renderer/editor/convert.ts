@@ -3263,7 +3263,7 @@ function textboxSizesPatch(node: PmNode, original: Block): (TextboxSizePatch | n
     const hPx = box.heightPx && box.heightPx !== initial[index].heightPx ? box.heightPx : null
     if (wPx == null && hPx == null) return null
     changed = true
-    return { wPx, hPx }
+    return { wPx, hPx, txbxIndex: initial[index].txbxIndex, sizeScale: initial[index].sizeScale }
   })
   return changed ? sizes : null
 }

@@ -22,6 +22,8 @@ export const zh = {
   batchVerifiedCount: '已检查残留原文',
   batchNoRemaining: '没有待翻译的内容',
   batchUnknownCount: '翻译单元总数未知',
+  batchLayoutReviewCount: '需要检查布局的文本框 · {n}',
+  batchLayoutUnchecked: '未能检查文本框布局',
   batchUnverified: '尚未检查残留原文',
   batchOpenPair: '同时打开原文和译文',
   batchOverall: '总体进度',

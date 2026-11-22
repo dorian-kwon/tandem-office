@@ -2121,6 +2121,8 @@ export interface TextboxDisplay {
    * that consume no segment (ink-only shapes, WordArt, pictures).
    */
   txbxIndex?: number
+  /** Coordinate transform of an owning group, for writing a display size back to its child. */
+  sizeScale?: { x: number; y: number }
   /**
    * wps:cNvPr id of the owning DrawingML shape (pic:cNvPr for a photo box).
    * A box with no txbxIndex has no w:txbxContent yet: its first text commit

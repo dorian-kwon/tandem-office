@@ -23,6 +23,8 @@ export const hi = {
   batchVerifiedCount: 'बचे हुए मूल पाठ की जाँच पूरी हुई',
   batchNoRemaining: 'अनुवाद की कोई इकाई शेष नहीं',
   batchUnknownCount: 'अनुवाद इकाइयों की कुल संख्या अज्ञात है',
+  batchLayoutReviewCount: 'लेआउट जाँच के लिए टेक्स्ट बॉक्स · {n}',
+  batchLayoutUnchecked: 'टेक्स्ट बॉक्स का लेआउट जाँचा नहीं जा सका',
   batchUnverified: 'बचे हुए मूल पाठ की जाँच नहीं हुई',
   batchOpenPair: 'मूल और अनुवाद एक साथ खोलें',
   batchOverall: 'कुल प्रगति',

@@ -37,6 +37,7 @@ export function finishProjectTurn(turn: ProjectTurn | null, result: AgentRunResu
 }
 
 export function useProjectEditorRun(options: {
+  boxLayout?: NonNullable<Parameters<typeof useProjectEditorTools>[0]['boxLayout']>
   documentEditor?: NonNullable<Parameters<typeof useProjectEditorTools>[0]['documentEditor']>
   documentLoop?: NonNullable<Parameters<typeof useProjectEditorTools>[0]['documentLoop']>
   turn: RefObject<ProjectTurn | null>

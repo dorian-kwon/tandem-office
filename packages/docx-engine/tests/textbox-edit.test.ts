@@ -58,6 +58,45 @@ const BOX_WITH_PICTURE = (spPr: string) =>
 const PIC_EXT = '<a:ext cx="457200" cy="457200"/>'
 
 describe('textbox editing', () => {
+  it('uses the source text ordinal even when a picture occupies a display slot and an empty box occupies an XML slot', () => {
+    const withHeight = TEXTBOX_PARAGRAPH.replace(
+      'style="position:absolute"',
+      'style="position:absolute;height:134pt"',
+    )
+    const empty = withHeight.replaceAll(TXBX_CONTENT, '<w:txbxContent><w:p/></w:txbxContent>')
+    const input = empty + withHeight + PIC_IN_BOX + withHeight
+    const resized = patchTextboxSizes(input, [null, null, { txbxIndex: 2, hPx: 240 }])
+    expect(resized).toBe(
+      empty +
+        withHeight +
+        PIC_IN_BOX +
+        withHeight
+          .replaceAll('cy="1704975"', 'cy="2286000"')
+          .replace('height:134pt', 'height:180pt'),
+    )
+  })
+
+  it('resizes only the matching grouped shape in local coordinates without stretching the group or another label', () => {
+    const shape = (label: string) =>
+      `<wps:wsp><wps:spPr><a:xfrm><a:ext cx="40000" cy="60000"/></a:xfrm></wps:spPr><wps:txbx><w:txbxContent><w:p><w:r><w:t>${label}</w:t></w:r></w:p></w:txbxContent></wps:txbx></wps:wsp>`
+    const first = shape('one')
+    const second = shape('two')
+    const drawing = `<w:drawing><wp:anchor><wp:extent cx="2000000" cy="4000000"/><a:graphic><a:graphicData><wpg:wgp><wpg:grpSp>${first}${second}</wpg:grpSp></wpg:wgp></a:graphicData></a:graphic></wp:anchor></w:drawing>`
+    const vml = (name: string) =>
+      `<v:shape id="${name}" style="width:200;height:300"><v:textbox><w:txbxContent><w:p/></w:txbxContent></v:textbox></v:shape>`
+    const fallback = `<v:group style="width:10pt;height:20pt">${vml('first')}${vml('second')}</v:group>`
+    const xml = `<mc:AlternateContent><mc:Choice Requires="wpg">${drawing}</mc:Choice><mc:Fallback>${fallback}</mc:Fallback></mc:AlternateContent>`
+    const expected = xml
+      .replace(second, second.replace('cx="40000" cy="60000"', 'cx="190500" cy="190500"'))
+      .replace(
+        vml('second'),
+        vml('second').replace('width:200;height:300', 'width:952.5;height:952.5'),
+      )
+    expect(
+      patchTextboxSizes(xml, [{ txbxIndex: 1, sizeScale: { x: 2, y: 4 }, hPx: 80, wPx: 40 }]),
+    ).toBe(expected)
+  })
+
   it('extracts the box size from the shape extent', async () => {
     const doc = await parseDocx(await buildDocx({ bodyXml: TEXTBOX_PARAGRAPH }))
     const box = doc.blocks[0].textboxes?.[0]

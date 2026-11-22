@@ -105,6 +105,10 @@ import type { AiPageSetupAccess } from './page-setup'
 import type { AiNotesAccess } from './note-ops'
 import { createDocsSkill } from './docs-skill'
 import { MindMapCard } from './MindMapCard'
+import {
+  prepareTranslationBoxLayout,
+  reviewTranslationBoxLayout,
+} from '../editor/translation-box-layout'
 import { insertPictureAtSelection } from '../editor/insert-picture'
 import {
   buildDocWriterRequest,
@@ -1871,6 +1875,13 @@ export function AiPanel({
 
   useProjectEditorRun({
     documentEditor: 'docs',
+    boxLayout: {
+      prepare: () => prepareTranslationBoxLayout(editor),
+      review: async () => {
+        await editor.view.dom.ownerDocument.fonts?.ready
+        return reviewTranslationBoxLayout(editor)
+      },
+    },
     documentLoop: () => loopRef.current,
     turn: runStatus.projectTurn,
     path: filePath,

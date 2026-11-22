@@ -58,6 +58,7 @@ export const de = {
   appNewFailed: 'Erstellen des Dokuments fehlgeschlagen: {error}',
   appSaveFailed: 'Speichern fehlgeschlagen: {error}',
   appAutoSavedAt: 'Automatisch gespeichert ({time})',
+  appLayoutReviewCount: 'Textfelder zur Layoutprüfung · {n}',
   appSaved: 'Gespeichert',
   appSectionBreakInserted: 'Abschnittsumbruch eingefügt ({type})',
   appSectionBreakPending:

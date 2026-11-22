@@ -54,6 +54,7 @@ export const he = {
   appNewFailed: 'יצירת המסמך נכשלה: {error}',
   appSaveFailed: 'השמירה נכשלה: {error}',
   appAutoSavedAt: 'נשמר אוטומטית ({time})',
+  appLayoutReviewCount: 'תיבות טקסט שיש לבדוק את הפריסה שלהן · {n}',
   appSaved: 'נשמר',
   appSectionBreakInserted: 'הוסף מעבר מקטע ({type})',
   appSectionBreakPending: 'הוסף מעבר מקטע; המקטע החדש ייכנס לתוקף לאחר השמירה',

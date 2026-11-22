@@ -23,6 +23,8 @@ export const pt = {
   batchVerifiedCount: 'Verificação de texto de origem restante concluída',
   batchNoRemaining: 'Nenhuma unidade de tradução restante',
   batchUnknownCount: 'Total de unidades de tradução desconhecido',
+  batchLayoutReviewCount: 'Caixas de texto cuja disposição precisa de revisão · {n}',
+  batchLayoutUnchecked: 'Não foi possível verificar a disposição das caixas de texto',
   batchUnverified: 'Texto de origem restante não verificado',
   batchOpenPair: 'Abrir o original e a tradução juntos',
   batchOverall: 'Progresso geral',

@@ -1153,8 +1153,121 @@ function isBoxDrawing(drawingXml: string): boolean {
 }
 
 export interface TextboxSizePatch {
+  /** Ordinal of the owning text content in the non-fallback XML, including empty textboxes. */
+  txbxIndex?: number
+  sizeScale?: { x: number; y: number }
   wPx?: number | null
   hPx?: number | null
+}
+
+/** Resolve the same non-fallback text ordinal used by patchTextboxParas. Pictures,
+ * empty shapes and multiple children sharing a drawing make display-array positions unreliable. */
+function resizeAddressedTextboxes(
+  xml: string,
+  sizes: ReadonlyMap<number, TextboxSizePatch>,
+): string {
+  const segments = (tag: string) => xmlSegments(xml, tag, 0, xml.length)
+  const contents = segments('w:txbxContent')
+  const fallbacks = segments('mc:Fallback')
+  const choices = segments('mc:Choice')
+  const visible = contents.filter((c) => !fallbacks.some((f) => f.start < c.start && c.end < f.end))
+  const shapes = segments('wps:wsp')
+  const drawings = segments('w:drawing')
+  const vml = ['v:shape', 'v:rect', 'v:roundrect', 'v:oval', 'v:line'].flatMap(segments)
+  const changes: Array<{ at: number; end: number; value: string }> = []
+  function replace(at: number, original: string, value: string) {
+    if (original !== value) changes.push({ at, end: at + original.length, value })
+  }
+  function setExtent(at: number, tag: string, size: TextboxSizePatch, sx = 1, sy = 1) {
+    const value = tag.replace(/\b(cx|cy)="\d+"/g, (original, key: string) => {
+      const px = key === 'cx' ? size.wPx : size.hPx
+      if (px == null) return original
+      return (
+        key + '="' + Math.max(1, Math.round((px * EMU_PER_PX) / (key === 'cx' ? sx : sy))) + '"'
+      )
+    })
+    replace(at, tag, value)
+  }
+  for (const [index, size] of sizes) {
+    const c = visible[index]
+    if (!c) continue
+    const shape = shapes.find((s) => s.start < c.start && c.end < s.end)
+    const drawing = shape && drawings.find((d) => d.start < shape.start && shape.end < d.end)
+    if (!shape || !drawing) continue
+    const full = xml.slice(shape.start, shape.end)
+    const spPr = xmlSegments(full, 'wps:spPr', 0, full.length)[0]
+    const ext = spPr && /<a:ext\b[^>]*>/.exec(full.slice(spPr.start, spPr.end))
+    if (spPr && ext)
+      setExtent(
+        shape.start + spPr.start + ext.index,
+        ext[0],
+        size,
+        size.sizeScale?.x,
+        size.sizeScale?.y,
+      )
+    const prefix = xml.slice(drawing.start, shape.start)
+    if (!prefix.includes('<wpg:wgp') && !prefix.includes('<wpc:wpc')) {
+      const wp = /<wp:extent\b[^>]*>/.exec(prefix)
+      if (wp) setExtent(drawing.start + wp.index, wp[0], size)
+    }
+    if (size.hPx != null) {
+      const ownBody = xmlSegments(full, 'wps:bodyPr', 0, full.length).at(-1)
+      if (ownBody) {
+        const fit = /<a:spAutoFit\s*\/>|<a:spAutoFit\s*>\s*<\/a:spAutoFit>/.exec(
+          full.slice(ownBody.start, ownBody.end),
+        )
+        if (fit) replace(shape.start + ownBody.start + fit.index, fit[0], '<a:noAutofit/>')
+      }
+    }
+    const choice = choices.find((choice) => choice.start < c.start && c.end < choice.end)
+    if (!choice) continue
+    const alternative = fallbacks.find(
+      (f) => f.start >= choice.end && !xml.slice(choice.end, f.start).trim(),
+    )
+    if (!alternative) continue
+    const from = visible.filter((v) => choice.start < v.start && v.end < choice.end)
+    const to = contents.filter((v) => alternative.start < v.start && v.end < alternative.end)
+    if (from.length !== to.length) continue
+    const twin = to[from.indexOf(c)]
+    const host = vml
+      .filter((v) => v.start > alternative.start && v.start < twin.start && v.end > twin.end)
+      .sort((a, b) => b.start - a.start)[0]
+    if (!host) continue
+    const tag = xml.slice(host.start, xml.indexOf('>', host.start) + 1)
+    const revised = tag.replace(
+      /\bstyle="([^"]*)"/,
+      (_match, css: string) =>
+        'style="' +
+        css.replace(
+          /(^|;)(\s*)(width|height):(\s*)([\d.]+)(pt|px)?(?=;|$)/g,
+          (original, sep, space, key, after, oldValue, unit) => {
+            const px = key === 'width' ? size.wPx : size.hPx
+            if (px == null) return original
+            let value = unit === 'pt' ? px * 0.75 : px
+            if (!unit) {
+              // A VML group child uses its own coordinate system. Apply the same
+              // proportional resize as its DrawingML twin, keeping that system intact.
+              const axis = key === 'width' ? /\bcx="(\d+)"/ : /\bcy="(\d+)"/
+              const oldEmu = Number(ext && axis.exec(ext[0])?.[1])
+              if (!size.sizeScale || !oldEmu) return original
+              const scale = key === 'width' ? size.sizeScale.x : size.sizeScale.y
+              value = (Number(oldValue) * (px * EMU_PER_PX)) / (oldEmu * scale)
+            }
+            return sep + space + key + ':' + after + Math.round(value * 100) / 100 + (unit ?? '')
+          },
+        ) +
+        '"',
+    )
+    replace(host.start, tag, revised)
+  }
+  // Keep every untouched byte, including all image data and sibling shapes.
+  let out = ''
+  let cursor = 0
+  for (const change of changes.sort((a, b) => a.at - b.at)) {
+    out += xml.slice(cursor, change.at) + change.value
+    cursor = change.end
+  }
+  return out + xml.slice(cursor)
 }
 
 /** Resize fixed DrawingML textboxes/shapes while preserving anchors and styling. */
@@ -1164,6 +1277,13 @@ export function patchTextboxSizes(
 ): string {
   if (sizes.every((size) => size == null || (size.wPx == null && size.hPx == null)))
     return paragraphXml
+  const addressed = new Map<number, TextboxSizePatch>()
+  for (const size of sizes) if (size?.txbxIndex !== undefined) addressed.set(size.txbxIndex, size)
+  if (addressed.size) {
+    paragraphXml = resizeAddressedTextboxes(paragraphXml, addressed)
+    sizes = sizes.map((size) => (size?.txbxIndex === undefined ? size : null))
+    if (sizes.every((size) => !size)) return paragraphXml
+  }
   const drawings = xmlSegments(paragraphXml, 'w:drawing', 0, paragraphXml.length)
   let out = ''
   let cursor = 0

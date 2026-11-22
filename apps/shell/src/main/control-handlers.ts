@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs'
+import type { WordBoxTarget } from '@genoffice/project-store/editor-run'
 import { PRODUCT_NAME } from '@genoffice/i18n'
 import type { WebContents } from 'electron'
 import type {
@@ -87,6 +88,16 @@ function fail(
   detail?: Record<string, unknown>,
 ): ControlReply {
   return { ok: false, error: { reason, message, ...(detail ? { detail } : {}) } }
+}
+
+export async function openWordBox(
+  wc: WebContents,
+  box: WordBoxTarget,
+  text: string,
+): Promise<void> {
+  const target = { kind: 'block' as const, block: box.block, textBox: { ...box, text } }
+  const reply = await ask(wc, { cmd: 'goto', target })
+  if (!reply.ok) throw new Error(reply.error.message)
 }
 
 async function ask(

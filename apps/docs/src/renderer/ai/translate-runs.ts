@@ -21,6 +21,10 @@ import { REDACT_MARK } from './redact'
 import { isTrackedDeleted } from './doc-utils'
 import type { NoteInfo, NoteRun, Run, TextboxDisplay } from '@genoffice/docx-engine'
 import type { CellBox } from '../editor/cell-box-segments'
+import {
+  clearTranslationBoxLayout,
+  prepareTranslationBoxLayout,
+} from '../editor/translation-box-layout'
 import { shrinkBoxToFit } from './box-fit'
 import {
   draftNestedTable,
@@ -1468,6 +1472,7 @@ export function applyRunTranslations(
       }
     }
     if (track) tr.setMeta(TRACK_IGNORE, true)
+    if (boxDrafts.size) prepareTranslationBoxLayout(originalAiEditor(editor))
     editor.view.dispatch(tr)
   }
   for (const report of reports) {
@@ -1773,6 +1778,7 @@ const handledUnits = new WeakMap<object, Map<string, UnitReceipt>>()
 const translationLanguages = new WeakMap<object, string>()
 /** Opening a different file can reuse the same TipTap editor. Saves retain its receipts. */
 export function clearTranslationProgress(editor: Editor): void {
+  clearTranslationBoxLayout(originalAiEditor(editor))
   const live = originalAiEditor(editor)
   handledUnits.delete(live)
   translationLanguages.delete(live)

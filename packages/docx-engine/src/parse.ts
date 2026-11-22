@@ -3070,7 +3070,10 @@ function extractTextboxes(
       }
     }
     const box: TextboxDisplay = { paras: [] }
-    if (!nested && topContents.length > 0) box.txbxIndex = ordinal
+    if (!nested && topContents.length > 0) {
+      box.txbxIndex = ordinal
+      if (ctm) box.sizeScale = { x: scaleX, y: scaleY }
+    }
     if (nested) box.readOnly = true
     const shapeId = attrsOf(findChild(shape, 'wps:cNvPr') ?? {})['id']
     if (!nested && shapeId) box.shapeId = shapeId

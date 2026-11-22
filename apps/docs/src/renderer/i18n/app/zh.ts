@@ -55,6 +55,7 @@ export const zh = {
   appNewFailed: '新建失败: {error}',
   appSaveFailed: '保存失败: {error}',
   appAutoSavedAt: '已自动保存 ({time})',
+  appLayoutReviewCount: '需要检查布局的文本框 · {n}',
   appSaved: '已保存',
   // Section breaks
   appSectionBreakInserted: '已插入分节符({type})',

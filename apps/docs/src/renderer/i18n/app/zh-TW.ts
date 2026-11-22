@@ -54,6 +54,7 @@ export const zhTW = {
   appNewFailed: '建立失敗: {error}',
   appSaveFailed: '儲存失敗: {error}',
   appAutoSavedAt: '已自動儲存 ({time})',
+  appLayoutReviewCount: '需要檢查版面的文字方塊 · {n}',
   appSaved: '已儲存',
   appSectionBreakInserted: '已插入分節符號({type})',
   appSectionBreakPending: '已插入分節符號,儲存後新節生效',

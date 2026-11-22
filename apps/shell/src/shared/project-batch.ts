@@ -1,3 +1,4 @@
+import type { EditorBoxReview } from '@genoffice/project-store/editor-run'
 export type ProjectBatchItemState = 'waiting' | 'running' | 'saved' | 'failed' | 'stopped'
 export interface ProjectBatchActivity {
   phase?: 'opening' | 'ocr' | 'translating' | 'saving'
@@ -5,6 +6,8 @@ export interface ProjectBatchActivity {
   verified?: boolean
   /** File confirmed on disk by the editor after saving its edits. */
   savedOutput?: string
+  /** null when the saved Word output could not be measured. */
+  layoutReview?: EditorBoxReview | null
   operations?: number
   done?: number
   total?: number

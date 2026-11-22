@@ -23,6 +23,8 @@ export const ar = {
   batchVerifiedCount: 'تم التحقق من النص الأصلي المتبقي',
   batchNoRemaining: 'لا توجد وحدات ترجمة متبقية',
   batchUnknownCount: 'إجمالي وحدات الترجمة غير معروف',
+  batchLayoutReviewCount: 'مربعات نص تحتاج إلى مراجعة التخطيط · {n}',
+  batchLayoutUnchecked: 'تعذّر التحقق من تخطيط مربعات النص',
   batchUnverified: 'لم يتم فحص النص الأصلي المتبقي',
   batchOpenPair: 'فتح الأصل والترجمة معًا',
   batchOverall: 'التقدم الإجمالي',

@@ -23,6 +23,8 @@ export const zhTW = {
   batchVerifiedCount: '已檢查殘留原文',
   batchNoRemaining: '沒有待翻譯的內容',
   batchUnknownCount: '翻譯單元總數未知',
+  batchLayoutReviewCount: '需要檢查版面的文字方塊 · {n}',
+  batchLayoutUnchecked: '無法檢查文字方塊版面',
   batchUnverified: '尚未檢查殘留原文',
   batchOpenPair: '一起開啟原文與譯文',
   batchOverall: '整體進度',

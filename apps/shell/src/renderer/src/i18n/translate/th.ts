@@ -23,6 +23,8 @@ export const th = {
   batchVerifiedCount: 'ตรวจสอบข้อความต้นฉบับที่เหลือแล้ว',
   batchNoRemaining: 'ไม่มีหน่วยการแปลเหลืออยู่',
   batchUnknownCount: 'ยังไม่ทราบจำนวนหน่วยการแปลทั้งหมด',
+  batchLayoutReviewCount: 'กล่องข้อความที่ต้องตรวจสอบการจัดวาง · {n}',
+  batchLayoutUnchecked: 'ไม่สามารถตรวจสอบการจัดวางกล่องข้อความได้',
   batchUnverified: 'ยังไม่ได้ตรวจสอบข้อความต้นฉบับที่เหลือ',
   batchOpenPair: 'เปิดต้นฉบับและคำแปลพร้อมกัน',
   batchOverall: 'ความคืบหน้าโดยรวม',

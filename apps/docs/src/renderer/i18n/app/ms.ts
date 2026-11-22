@@ -58,6 +58,7 @@ export const ms = {
   appNewFailed: 'Gagal membuat dokumen: {error}',
   appSaveFailed: 'Gagal menyimpan: {error}',
   appAutoSavedAt: 'Disimpan secara automatik ({time})',
+  appLayoutReviewCount: 'Kotak teks yang perlu disemak susun aturnya · {n}',
   appSaved: 'Disimpan',
   appSectionBreakInserted: 'Pemisah seksyen disisipkan ({type})',
   appSectionBreakPending:

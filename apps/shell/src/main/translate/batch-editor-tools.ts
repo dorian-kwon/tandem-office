@@ -5,6 +5,8 @@ import {
   EDITOR_TOOL_REQUEST,
   EDITOR_TOOL_REPLY,
   type BatchTranslationChoices,
+  type EditorBoxReview,
+  MAX_BOX_REVIEW_SAMPLES,
   type EditorToolReply,
   type EditorToolRequest,
 } from '@genoffice/project-store/editor-run'
@@ -13,6 +15,8 @@ export interface BatchEditorTools {
   tools: AgentToolDef[]
   systemPrompt: string
   executeTool(call: AgentToolCall, signal?: AbortSignal): Promise<ToolExecution>
+  prepareLayout(): Promise<boolean>
+  reviewLayout(): Promise<EditorBoxReview>
   close(): void
 }
 
@@ -121,6 +125,41 @@ export async function openBatchEditorTools(
       tools: result.tools,
       systemPrompt: result.systemPrompt,
       close,
+      async prepareLayout() {
+        const response = await request({ kind: 'prepare-layout', id: randomUUID(), path, session })
+        if (response.kind !== 'layout-prepared' || typeof response.needsSave !== 'boolean')
+          throw new Error('Invalid Word layout preparation.')
+        return response.needsSave
+      },
+      async reviewLayout() {
+        const response = await request({ kind: 'review-layout', id: randomUUID(), path, session })
+        if (response.kind !== 'layout-reviewed') throw new Error('Invalid Word layout review.')
+        const review = response.review
+        if (
+          !review ||
+          !Number.isSafeInteger(review.count) ||
+          review.count < 0 ||
+          !Array.isArray(review.samples) ||
+          review.samples.length !== Math.min(review.count, MAX_BOX_REVIEW_SAMPLES) ||
+          review.samples.some(
+            (s) =>
+              !s ||
+              typeof s.location !== 'string' ||
+              s.location.length > 240 ||
+              typeof s.text !== 'string' ||
+              s.text.length > 200 ||
+              (s.target !== undefined &&
+                (!s.target ||
+                  ![
+                    s.target.block,
+                    s.target.box,
+                    ...(s.target.cellPos === undefined ? [] : [s.target.cellPos]),
+                  ].every((n) => Number.isSafeInteger(n) && n >= 0))),
+          )
+        )
+          throw new Error('Invalid Word layout results.')
+        return review
+      },
       async executeTool(call, callSignal) {
         const response = await request(
           { kind: 'execute', id: randomUUID(), path, session, call },

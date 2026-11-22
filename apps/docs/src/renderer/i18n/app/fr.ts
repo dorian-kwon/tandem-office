@@ -57,6 +57,7 @@ export const fr = {
   appNewFailed: 'Échec de la création du document : {error}',
   appSaveFailed: "Échec de l'enregistrement : {error}",
   appAutoSavedAt: 'Enregistrement automatique ({time})',
+  appLayoutReviewCount: 'Zones de texte à vérifier pour la mise en page · {n}',
   appSaved: 'Enregistré',
   appSectionBreakInserted: 'Saut de section inséré ({type})',
   appSectionBreakPending:

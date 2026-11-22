@@ -1,8 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Editor } from '@tiptap/core'
 import { parseDocx, saveDocx, type TextboxDisplay } from '@genoffice/docx-engine'
 import { buildDocx } from '../../../packages/docx-engine/tests/helpers/build-docx'
 import { blocksToPmDoc, pmDocToSavePlan, type PmNode } from '../src/renderer/editor/convert'
+import {
+  fitPendingTranslationBoxes,
+  prepareTranslationBoxLayout,
+  reviewTranslationBoxLayout,
+} from '../src/renderer/editor/translation-box-layout'
 import { editorExtensions } from '../src/renderer/editor/extensions'
 
 const TXBX_CONTENT =
@@ -106,6 +111,51 @@ describe('text box rich-text edit and save', () => {
     expect(plan.changedCount).toBe(0)
     expect(plan.saveBlocks.every((b) => b.kind === 'original')).toBe(true)
     editor.destroy()
+  })
+
+  it('fits a clipped translation on save and persists the correction without changing its text', async () => {
+    const { editor, parsed } = await openTextboxDoc()
+    const pos = textboxNodePos(editor)
+    const boxes = () => editor.state.doc.nodeAt(pos)!.attrs.textboxes as TextboxDisplay[]
+    editTextboxPara(
+      editor,
+      0,
+      boxes()[0].paras[0].runs.map((r) => ({ ...r, sizeHalfPoints: 24 })),
+    )
+    const el = editor.view.dom.querySelector<HTMLElement>('.doc-textbox')!
+    // jsdom has no glyph layout. Model a 16px-high line of text that fits at 8pt.
+    const sheet = document.createElement('style')
+    sheet.textContent = '.doc-textbox { overflow: hidden; font-size: 16px }'
+    document.head.append(sheet)
+    document.body.append(editor.view.dom)
+    Object.defineProperty(el, 'offsetHeight', { get: () => 16 })
+    const rect = (height: number) => new DOMRect(0, 0, 100, height)
+    const rectSpy = vi.spyOn(el, 'getBoundingClientRect').mockImplementation(() => rect(16))
+    const range = Object.assign(document.createRange(), {
+      getClientRects: () => [
+        rect((boxes()[0].paras[0].runs[0].sizeHalfPoints ?? 24) > 16 ? 32 : 16),
+      ],
+    })
+    const rangeSpy = vi.spyOn(document, 'createRange').mockReturnValue(range)
+    const text = el.textContent
+    try {
+      expect(fitPendingTranslationBoxes(editor)).toBe(false)
+      expect(reviewTranslationBoxLayout(editor)).toHaveLength(1)
+      expect(prepareTranslationBoxLayout(editor)).toBe(true)
+      expect(fitPendingTranslationBoxes(editor)).toBe(true)
+      expect(reviewTranslationBoxLayout(editor)).toEqual([])
+      expect(el.textContent).toBe(text)
+      const plan = pmDocToSavePlan(editor.getJSON() as PmNode, parsed.blocks)
+      const reopened = await parseDocx(await saveDocx(parsed, plan.saveBlocks))
+      const saved = reopened.blocks.find((b) => b.textboxes)?.textboxes?.[0]
+      expect(saved?.paras[0].runs[0].sizeHalfPoints).toBeLessThanOrEqual(16)
+    } finally {
+      sheet.remove()
+      editor.view.dom.remove()
+      rangeSpy.mockRestore()
+      rectSpy.mockRestore()
+      editor.destroy()
+    }
   })
 
   it('persists an auto-grown textbox height without changing its width', async () => {

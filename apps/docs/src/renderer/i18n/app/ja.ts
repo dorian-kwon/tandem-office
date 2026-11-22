@@ -57,6 +57,7 @@ export const ja = {
   appNewFailed: '新規作成に失敗しました: {error}',
   appSaveFailed: '保存に失敗しました: {error}',
   appAutoSavedAt: '自動保存しました ({time})',
+  appLayoutReviewCount: '配置の確認が必要なテキストボックス · {n}',
   appSaved: '保存しました',
   // Section breaks
   appSectionBreakInserted: 'セクション区切りを挿入しました({type})',

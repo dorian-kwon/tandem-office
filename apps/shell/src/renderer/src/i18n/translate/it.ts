@@ -23,6 +23,8 @@ export const it = {
   batchVerifiedCount: 'Verifica del testo originale residuo completata',
   batchNoRemaining: 'Nessuna unità di traduzione rimanente',
   batchUnknownCount: 'Totale delle unità di traduzione sconosciuto',
+  batchLayoutReviewCount: 'Caselle di testo di cui verificare la disposizione · {n}',
+  batchLayoutUnchecked: 'Impossibile verificare la disposizione delle caselle di testo',
   batchUnverified: 'Testo originale residuo non verificato',
   batchOpenPair: 'Apri insieme originale e traduzione',
   batchOverall: 'Avanzamento complessivo',

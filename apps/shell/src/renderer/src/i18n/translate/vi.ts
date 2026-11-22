@@ -23,6 +23,8 @@ export const vi = {
   batchVerifiedCount: 'Đã kiểm tra phần văn bản nguồn còn lại',
   batchNoRemaining: 'Không còn đơn vị cần dịch',
   batchUnknownCount: 'Chưa rõ tổng số đơn vị dịch',
+  batchLayoutReviewCount: 'Hộp văn bản cần kiểm tra bố cục · {n}',
+  batchLayoutUnchecked: 'Không thể kiểm tra bố cục hộp văn bản',
   batchUnverified: 'Chưa kiểm tra phần văn bản nguồn còn lại',
   batchOpenPair: 'Mở đồng thời bản gốc và bản dịch',
   batchOverall: 'Tiến độ tổng thể',

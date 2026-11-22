@@ -23,6 +23,8 @@ export const ko = {
   batchVerifiedCount: '남은 원문 검사 완료',
   batchNoRemaining: '남은 번역 대상 없음',
   batchUnknownCount: '전체 번역 단위 수 미확인',
+  batchLayoutReviewCount: '배치 확인이 필요한 텍스트 상자 {n}개',
+  batchLayoutUnchecked: '텍스트 상자 배치를 확인하지 못했습니다',
   batchUnverified: '남은 원문 미검사',
   batchOpenPair: '원본·번역본 함께 열기',
   batchOverall: '전체 진행',

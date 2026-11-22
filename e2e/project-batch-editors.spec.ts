@@ -4,6 +4,8 @@ import { join } from 'node:path'
 import JSZip from 'jszip'
 import { Document, Packer, Paragraph, Header } from 'docx'
 import { runFingerprint } from '../apps/docs/src/renderer/ai/run-fingerprint'
+import { buildAnchoredTextboxParagraphXml } from '@genoffice/docx-engine'
+import { buildDocx } from '../packages/docx-engine/tests/helpers/build-docx'
 import { createProject, addSource } from '@genoffice/translate-project'
 import { launchShell, closeAndSaveVideo } from './helpers'
 import {
@@ -250,6 +252,95 @@ test('project batch saves only selected documents, shows live progress and retri
         focus: 'b',
       })
     expect(await readFile(join(dir, 'source', 'second.docx'))).toEqual(await readFile(word))
+  } finally {
+    await closeAndSaveVideo(launched, 'project-batch')
+    await rm(launched.userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('opens the saved batch Word directly at a clipped text box inside its table cell', async () => {
+  const root = test.info().outputPath('review-fixtures')
+  await mkdir(root, { recursive: true })
+  const { dir } = await createProject(root, 'Layout review', 'ko', 'en')
+  const name = 'layout.docx'
+  const file = join(root, name)
+  const caption = 'Original translated caption in the second cell. '.repeat(15)
+  const box = buildAnchoredTextboxParagraphXml({
+    id: 23,
+    anchor: 'paragraph',
+    xEmu: 0,
+    yEmu: 0,
+    widthEmu: 250000,
+    heightEmu: 100000,
+    paragraphs: [{ runs: [{ text: caption, sizeHalfPoints: 12 }] }],
+    wrap: 'none',
+    holderLineTwips: 20,
+  })
+  const bytes = await buildDocx({
+    bodyXml:
+      '<w:p><w:r><w:t>English guide</w:t></w:r></w:p>' +
+      '<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="1600"/><w:gridCol w:w="1600"/></w:tblGrid><w:tr>' +
+      '<w:tc><w:p><w:r><w:t>First cell</w:t></w:r></w:p></w:tc><w:tc><w:p/><w:p><w:r><w:t>Second cell</w:t></w:r></w:p>' +
+      box +
+      '</w:tc></w:tr></w:tbl><w:p/>',
+  })
+  await writeFile(file, bytes)
+  await addSource(dir, file)
+  const launched = await launchShell({
+    onboardingSeen: true,
+    hideUpdateWindows: true,
+    recordVideo: false,
+    videoDir: 'project-batch',
+  })
+  try {
+    const { app, page } = launched
+    await stubEverything(app)
+    await queuePicks(app, [dir])
+    await page.getByRole('button', { name: 'Open existing project folder' }).click()
+    await queueTurns(app, [{ text: 'PROJECT_ALREADY_TRANSLATED\nPROJECT_TRANSLATION_COMPLETE' }])
+    await openBatchSelection(page)
+    const progress = await submitBatchSelection(page)
+    const row = batchRow(progress, name)
+    await expect(row).toHaveAttribute('data-batch-state', 'saved', { timeout: 55_000 })
+    await expect(row.locator('[data-batch-coverage="verified"]')).toBeVisible()
+    const review = row.locator('details[data-batch-layout="review"]')
+    await expect(review.locator('summary')).toContainText('1')
+    await review.locator('summary').click()
+    const location = review.getByTestId('project-batch-open-layout')
+    await expect(location).toHaveText(/cell @\d+ · box 0/)
+    // Capture the real renderer's navigation reply. Chromium suppresses animation
+    // frames for hidden windows, so watching the highlight would be timing-dependent.
+    await app.evaluate(({ app, webContents }) => {
+      const host = globalThis as unknown as { batchLayoutNav: unknown[] }
+      host.batchLayoutNav = []
+      const observe = (wc: Electron.WebContents) => {
+        const execute = wc.executeJavaScript.bind(wc)
+        wc.executeJavaScript = async (code, gesture) => {
+          const reply = await execute(code, gesture)
+          if (code.includes('window.__genofficeControl') && code.includes('"textBox"'))
+            host.batchLayoutNav.push(reply)
+          return reply
+        }
+      }
+      for (const wc of webContents.getAllWebContents()) observe(wc)
+      app.on('web-contents-created', (_event, wc) => observe(wc))
+    })
+    await location.click()
+    const response = () =>
+      app.evaluate(() => (globalThis as unknown as { batchLayoutNav: unknown[] }).batchLayoutNav)
+    await expect
+      .poll(response, { timeout: 25_000 })
+      .toContainEqual({ status: 'ok', result: { block: 1, box: 0 } })
+    const paths = await page.evaluate(async () => {
+      const split = await window.aiOfficeTabs.getSplit()
+      const tabs = await window.aiOfficeTabs.list()
+      return (
+        split &&
+        [split.aTabId, split.bTabId].map((id) => tabs.find((tab) => tab.id === id)?.filePath)
+      )
+    })
+    expect(paths).toEqual([join(dir, 'source', name), join(dir, 'output', name)])
+    expect(await readFile(join(dir, 'source', name))).toEqual(Buffer.from(bytes))
   } finally {
     await closeAndSaveVideo(launched, 'project-batch')
     await rm(launched.userDataDir, { recursive: true, force: true })

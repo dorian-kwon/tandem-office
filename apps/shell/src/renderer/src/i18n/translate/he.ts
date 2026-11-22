@@ -23,6 +23,8 @@ export const he = {
   batchVerifiedCount: 'הושלמה בדיקה של טקסט המקור שנותר',
   batchNoRemaining: 'לא נותרו יחידות לתרגום',
   batchUnknownCount: 'מספר יחידות התרגום הכולל אינו ידוע',
+  batchLayoutReviewCount: 'תיבות טקסט שיש לבדוק את הפריסה שלהן · {n}',
+  batchLayoutUnchecked: 'לא ניתן היה לבדוק את פריסת תיבות הטקסט',
   batchUnverified: 'טקסט המקור שנותר לא נבדק',
   batchOpenPair: 'פתיחת המקור והתרגום יחד',
   batchOverall: 'התקדמות כוללת',

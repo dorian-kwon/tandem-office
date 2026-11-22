@@ -23,6 +23,8 @@ export const de = {
   batchVerifiedCount: 'Auf verbliebenen Ausgangstext geprüft',
   batchNoRemaining: 'Keine verbleibenden Übersetzungseinheiten',
   batchUnknownCount: 'Gesamtzahl der Übersetzungseinheiten unbekannt',
+  batchLayoutReviewCount: 'Textfelder zur Layoutprüfung · {n}',
+  batchLayoutUnchecked: 'Das Layout der Textfelder konnte nicht geprüft werden',
   batchUnverified: 'Noch nicht auf verbliebenen Ausgangstext geprüft',
   batchOpenPair: 'Original und Übersetzung gemeinsam öffnen',
   batchOverall: 'Gesamtfortschritt',

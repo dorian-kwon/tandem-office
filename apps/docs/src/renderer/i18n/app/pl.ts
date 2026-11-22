@@ -57,6 +57,7 @@ export const pl = {
   appNewFailed: 'Nie udało się utworzyć dokumentu: {error}',
   appSaveFailed: 'Zapisywanie nie powiodło się: {error}',
   appAutoSavedAt: 'Zapisano automatycznie ({time})',
+  appLayoutReviewCount: 'Pola tekstowe wymagające sprawdzenia układu · {n}',
   appSaved: 'Zapisano',
   appSectionBreakInserted: 'Wstawiono podział sekcji ({type})',
   appSectionBreakPending: 'Wstawiono podział sekcji; nowa sekcja zacznie obowiązywać po zapisaniu',

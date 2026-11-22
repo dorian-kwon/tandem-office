@@ -23,6 +23,8 @@ export const en = {
   batchVerifiedCount: 'Checked for remaining source text',
   batchNoRemaining: 'No translation units remaining',
   batchUnknownCount: 'Translation unit total unknown',
+  batchLayoutReviewCount: 'Text boxes to check for layout · {n}',
+  batchLayoutUnchecked: 'Text box layout could not be checked',
   batchUnverified: 'Remaining source text not checked',
   batchOpenPair: 'Open original and translation together',
   batchOverall: 'Overall progress',

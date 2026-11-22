@@ -137,7 +137,7 @@ import {
 } from './user-skills'
 import { OPEN_DOCUMENTS_FILE, clearOpenDocuments, publishOpenDocuments } from './open-documents'
 import { startControlServer, type ControlServer } from './control-server'
-import { controlHandler } from './control-handlers'
+import { controlHandler, openWordBox } from './control-handlers'
 import { installCliLinkBestEffort } from './cli-link'
 import { createDefaultAppService, execFileRunner } from './default-app'
 import { registerIntegrationsIpc } from './integrations-ipc'
@@ -9637,11 +9637,18 @@ async function batchDocumentTools(
       executeTool: (call, toolSignal) => editor.executeTool(call, toolSignal),
       async finish(mutated) {
         try {
-          editor.close()
           report?.({ phase: 'saving' })
-          await tab.save(mutated)
+          const checkLayout =
+            !!report && !signal.aborted && extname(output).toLowerCase() === '.docx'
+          const needsFit = checkLayout && (await editor.prepareLayout().catch(() => false))
+          await tab.save(mutated || needsFit)
           report?.({ savedOutput: basename(output) })
+          if (checkLayout && !signal.aborted) {
+            const layoutReview = await editor.reviewLayout().catch(() => null)
+            report?.({ layoutReview })
+          }
         } finally {
+          editor.close()
           editorTurnWiki.delete(id)
           await tab.close()
         }
@@ -9731,6 +9738,11 @@ const runProjectBatchChat: NonNullable<TranslateIpcDeps['runBatchChat']> = (requ
 registerTranslateIpc(
   ipcMain,
   {
+    openWordBox: async (tabId, target, text) => {
+      const contents = await liveDocumentContents(tabId)
+      if (!contents) throw new Error('The translated document is no longer open.')
+      await openWordBox(contents, target, text)
+    },
     convertBatchWorkbook: async (source, output) => {
       const result = await bundledCliRunner().run([
         'convert',

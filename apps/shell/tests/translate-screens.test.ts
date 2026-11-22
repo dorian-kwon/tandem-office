@@ -981,6 +981,16 @@ describe('project batch dialogs', () => {
         file: 'source.pdf',
         state: 'saved',
         output: 'source English.docx',
+        layoutReview: {
+          count: 1,
+          samples: [
+            {
+              location: 'Block 3 · box 1',
+              text: 'Check this caption',
+              target: { block: 3, box: 1 },
+            },
+          ],
+        },
         phase: 'saving',
         done: 3,
         total: 3,
@@ -1013,6 +1023,20 @@ describe('project batch dialogs', () => {
     expect(row('draft.docx').textContent).toContain('Processed 2 of 3 translation units')
     expect(row('draft.docx').querySelector('[data-batch-coverage="verified"]')).toBeNull()
     expect(row('review.docx').textContent).toContain('Source needs review 9')
+    const layout = row('source.pdf').querySelector('[data-batch-layout="review"]')!
+    expect(layout.querySelector('summary')?.textContent).toContain(
+      'Text boxes to check for layout · 1',
+    )
+    expect(layout.textContent).toContain('Block 3 · box 1')
+    expect(layout.textContent).toContain('Check this caption')
+    await click(layout.querySelector('[data-testid="project-batch-open-layout"]')!)
+    expect(api.batchOpenResult).toHaveBeenLastCalledWith({
+      dir,
+      batchId: 'verified-run',
+      file: 'source.pdf',
+      layoutIndex: 0,
+    })
+    expect(row('source.pdf').querySelector('[data-batch-coverage="verified"]')).not.toBeNull()
     expect(host.querySelectorAll('[data-testid="project-batch-open-result"]')).toHaveLength(4)
     for (const file of ['source.pdf', 'input.hwp', 'partial.docx', 'review.docx']) {
       const button = row(file).querySelector('button[data-testid="project-batch-open-result"]')!

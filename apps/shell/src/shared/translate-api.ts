@@ -406,7 +406,12 @@ export interface TranslationWikiOpenResult {
 
 export interface TranslateApi {
   batchSend(args: ProjectBatchSend): Promise<ProjectBatchSnapshot>
-  batchOpenResult(args: { dir: string; batchId: string; file: string }): Promise<void>
+  batchOpenResult(args: {
+    dir: string
+    batchId: string
+    file: string
+    layoutIndex?: number
+  }): Promise<void>
   batchStart(args: ProjectBatchStart): Promise<ProjectBatchSnapshot>
   batchStop(dir: string): Promise<void>
   batchStatus(dir: string): Promise<ProjectBatchSnapshot | null>

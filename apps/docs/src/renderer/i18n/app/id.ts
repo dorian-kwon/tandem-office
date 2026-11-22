@@ -58,6 +58,7 @@ export const id = {
   appNewFailed: 'Gagal membuat dokumen: {error}',
   appSaveFailed: 'Gagal menyimpan: {error}',
   appAutoSavedAt: 'Disimpan otomatis ({time})',
+  appLayoutReviewCount: 'Kotak teks yang tata letaknya perlu diperiksa · {n}',
   appSaved: 'Disimpan',
   appSectionBreakInserted: 'Pemisah bagian disisipkan ({type})',
   appSectionBreakPending: 'Pemisah bagian disisipkan; bagian baru berlaku setelah disimpan',

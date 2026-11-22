@@ -23,6 +23,8 @@ export const es = {
   batchVerifiedCount: 'Comprobado si queda texto original',
   batchNoRemaining: 'No quedan unidades por traducir',
   batchUnknownCount: 'Total de unidades de traducción desconocido',
+  batchLayoutReviewCount: 'Cuadros de texto cuya disposición debe revisarse · {n}',
+  batchLayoutUnchecked: 'No se pudo comprobar la disposición de los cuadros de texto',
   batchUnverified: 'Sin comprobar si queda texto original',
   batchOpenPair: 'Abrir el original y la traducción juntos',
   batchOverall: 'Progreso general',

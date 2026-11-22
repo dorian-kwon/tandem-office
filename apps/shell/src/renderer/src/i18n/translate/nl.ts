@@ -23,6 +23,8 @@ export const nl = {
   batchVerifiedCount: 'Gecontroleerd op resterende brontekst',
   batchNoRemaining: 'Geen vertaaleenheden meer over',
   batchUnknownCount: 'Totaal aantal vertaaleenheden onbekend',
+  batchLayoutReviewCount: 'Tekstvakken waarvan de indeling moet worden gecontroleerd · {n}',
+  batchLayoutUnchecked: 'De indeling van de tekstvakken kon niet worden gecontroleerd',
   batchUnverified: 'Niet gecontroleerd op resterende brontekst',
   batchOpenPair: 'Origineel en vertaling samen openen',
   batchOverall: 'Totale voortgang',

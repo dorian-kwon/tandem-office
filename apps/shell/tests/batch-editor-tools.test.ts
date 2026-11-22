@@ -78,3 +78,30 @@ it('cancels in-flight edits and waits for the renderer to finish before returnin
   await expect(work).rejects.toThrow()
   tools.close()
 })
+
+it('uses private layout checks scoped to the current Word document without exposing model tools', async () => {
+  const { out, wc, answer } = editor()
+  const opening = openBatchEditorTools(wc, '/work/report.docx', new AbortController().signal)
+  const { id, session } = out[0]!
+  answer({ kind: 'described', id, session, tools: [], systemPrompt: '' })
+  const host = await opening
+  expect(host.tools).toEqual([])
+  const preparation = host.prepareLayout()
+  expect(out.at(-1)).toMatchObject({ kind: 'prepare-layout', path: '/work/report.docx' })
+  answer({ kind: 'layout-prepared', id: out.at(-1)!.id, session, needsSave: true })
+  expect(await preparation).toBe(true)
+  const check = host.reviewLayout()
+  expect(out.at(-1)).toMatchObject({ kind: 'review-layout', path: '/work/report.docx' })
+  const review = { count: 1, samples: [{ location: 'Block 2 · box 1', text: 'caption' }] }
+  answer({ kind: 'layout-reviewed', id: out.at(-1)!.id, session, review })
+  expect(await check).toEqual(review)
+  const invalid = host.reviewLayout()
+  answer({
+    kind: 'layout-reviewed',
+    id: out.at(-1)!.id,
+    session,
+    review: { count: 3, samples: [] },
+  })
+  await expect(invalid).rejects.toThrow('Invalid Word layout results')
+  host.close()
+})

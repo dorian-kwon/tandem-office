@@ -58,6 +58,7 @@ export const nl = {
   appNewFailed: 'Document maken mislukt: {error}',
   appSaveFailed: 'Opslaan mislukt: {error}',
   appAutoSavedAt: 'Automatisch opgeslagen ({time})',
+  appLayoutReviewCount: 'Tekstvakken waarvan de indeling moet worden gecontroleerd · {n}',
   appSaved: 'Opgeslagen',
   appSectionBreakInserted: 'Sectie-einde ingevoegd ({type})',
   appSectionBreakPending:

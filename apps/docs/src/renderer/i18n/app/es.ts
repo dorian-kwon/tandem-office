@@ -58,6 +58,7 @@ export const es = {
   appNewFailed: 'Error al crear el documento: {error}',
   appSaveFailed: 'Error al guardar: {error}',
   appAutoSavedAt: 'Guardado automáticamente ({time})',
+  appLayoutReviewCount: 'Cuadros de texto cuya disposición debe revisarse · {n}',
   appSaved: 'Guardado',
   appSectionBreakInserted: 'Salto de sección insertado ({type})',
   appSectionBreakPending:

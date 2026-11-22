@@ -23,6 +23,8 @@ export const cs = {
   batchVerifiedCount: 'Kontrola zbývajícího původního textu dokončena',
   batchNoRemaining: 'Nezbývají žádné jednotky k překladu',
   batchUnknownCount: 'Celkový počet jednotek není znám',
+  batchLayoutReviewCount: 'Textová pole ke kontrole rozložení · {n}',
+  batchLayoutUnchecked: 'Rozložení textových polí se nepodařilo zkontrolovat',
   batchUnverified: 'Zbývající původní text nebyl zkontrolován',
   batchOpenPair: 'Otevřít originál a překlad společně',
   batchOverall: 'Celkový průběh',

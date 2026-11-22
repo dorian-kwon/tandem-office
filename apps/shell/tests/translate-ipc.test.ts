@@ -1372,9 +1372,15 @@ describe('project batch translation', () => {
         showSplit: vi.fn(),
         setPaneHidden: vi.fn(() => true),
       }
+      const openWordBox = vi.fn(async () => {})
+      const target = { block: 2, box: 1, cellPos: 34 }
       const h = handlers({
         view,
+        openWordBox,
         runBatchEditor: async ({ outputPath, report }) => {
+          report({
+            layoutReview: { count: 1, samples: [{ location: 'box 1', text: 'caption', target }] },
+          })
           if (!completed) {
             writeFileSync(outputPath, 'Partial translation')
             report({ savedOutput: basename(outputPath) })
@@ -1383,7 +1389,7 @@ describe('project batch translation', () => {
         },
       })
       const { dir } = await createIn(h, { name: 'OpenPair', sourceLang: 'ko', targetLang: 'en' })
-      const file = 'test.md'
+      const file = 'test.docx'
       const input = join(root, file)
       writeFileSync(input, 'Original')
       await addPicked(h, dir, 'source', input)
@@ -1396,11 +1402,15 @@ describe('project batch translation', () => {
       expect(opened).toEqual([source, output])
       expect(view.setTabReadOnly).toHaveBeenCalledWith(source)
       expect(view.showSplit).toHaveBeenCalledWith(source, output)
+      expect(openWordBox).not.toHaveBeenCalled()
+      await expect(h.batchOpenResult({ ...args, layoutIndex: 1 })).rejects.toThrow()
+      await h.batchOpenResult({ ...args, layoutIndex: 0 })
+      expect(openWordBox).toHaveBeenCalledWith(output, target, 'caption')
       await expect(h.batchOpenResult({ ...args, batchId: 'stale' })).rejects.toThrow()
       rmSync(output)
       await expect(h.batchOpenResult(args)).rejects.toThrow()
       expect(existsSync(output)).toBe(false)
-      expect(opened).toHaveLength(2)
+      expect(opened).toHaveLength(4)
     },
   )
 

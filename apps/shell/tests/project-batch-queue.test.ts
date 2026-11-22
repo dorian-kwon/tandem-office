@@ -272,3 +272,34 @@ it('keeps unresolved source excerpts available for review and retries only unfin
   })
   expect(() => queue.start(dir, ['one'], owner, vi.fn(), true)).toThrow('no unfinished')
 })
+
+it('keeps saved layout warnings separate from verified translation counts and clears them on rerun', async () => {
+  const { queue, done } = harness()
+  const first = done()
+  const review = { count: 1, samples: [{ location: 'box 2', text: 'long label' }] }
+  queue.start(
+    dir,
+    ['first.docx'],
+    owner,
+    async (_file, _signal, report) => {
+      report({ phase: 'translating', done: 4, total: 4, verified: true })
+      report({ phase: 'saving' })
+      report({ savedOutput: 'first EN.docx' })
+      report({ layoutReview: review })
+    },
+    false,
+  )
+  await first
+  const snapshot = queue.status(dir)!
+  expect(snapshot.items[0]).toMatchObject({
+    state: 'saved',
+    done: 4,
+    total: 4,
+    verified: true,
+    layoutReview: review,
+  })
+  const second = done()
+  queue.start(dir, ['first.docx'], owner, async () => 'first EN.docx', false, snapshot.id!)
+  await second
+  expect(queue.status(dir)?.items[0]?.layoutReview).toBeUndefined()
+})

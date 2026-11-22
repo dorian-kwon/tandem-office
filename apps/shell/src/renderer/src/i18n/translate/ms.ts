@@ -23,6 +23,8 @@ export const ms = {
   batchVerifiedCount: 'Semakan baki teks sumber selesai',
   batchNoRemaining: 'Tiada unit terjemahan yang tinggal',
   batchUnknownCount: 'Jumlah unit terjemahan belum diketahui',
+  batchLayoutReviewCount: 'Kotak teks yang perlu disemak susun aturnya · {n}',
+  batchLayoutUnchecked: 'Susun atur kotak teks tidak dapat disemak',
   batchUnverified: 'Baki teks sumber belum disemak',
   batchOpenPair: 'Buka dokumen asal dan terjemahan bersama',
   batchOverall: 'Kemajuan keseluruhan',

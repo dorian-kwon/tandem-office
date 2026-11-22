@@ -23,6 +23,8 @@ export const pl = {
   batchVerifiedCount: 'Sprawdzono, czy pozostał tekst źródłowy',
   batchNoRemaining: 'Brak pozostałych jednostek tłumaczenia',
   batchUnknownCount: 'Łączna liczba jednostek nieznana',
+  batchLayoutReviewCount: 'Pola tekstowe wymagające sprawdzenia układu · {n}',
+  batchLayoutUnchecked: 'Nie udało się sprawdzić układu pól tekstowych',
   batchUnverified: 'Nie sprawdzono, czy pozostał tekst źródłowy',
   batchOpenPair: 'Otwórz razem oryginał i tłumaczenie',
   batchOverall: 'Postęp ogólny',

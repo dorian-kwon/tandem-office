@@ -57,6 +57,7 @@ export const en = {
   appNewFailed: 'Failed to create document: {error}',
   appSaveFailed: 'Save failed: {error}',
   appAutoSavedAt: 'AutoSaved ({time})',
+  appLayoutReviewCount: 'Text boxes to check for layout · {n}',
   appSaved: 'Saved',
   appSectionBreakInserted: 'Section break inserted ({type})',
   appSectionBreakPending: 'Section break inserted; the new section takes effect after saving',

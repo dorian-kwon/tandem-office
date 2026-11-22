@@ -23,6 +23,8 @@ export const ja = {
   batchVerifiedCount: '原文の残りを確認済み',
   batchNoRemaining: '残りの翻訳対象なし',
   batchUnknownCount: '翻訳単位の総数は不明',
+  batchLayoutReviewCount: '配置の確認が必要なテキストボックス · {n}',
+  batchLayoutUnchecked: 'テキストボックスの配置を確認できませんでした',
   batchUnverified: '原文の残りは未確認',
   batchOpenPair: '原文と翻訳を一緒に開く',
   batchOverall: '全体の進捗',

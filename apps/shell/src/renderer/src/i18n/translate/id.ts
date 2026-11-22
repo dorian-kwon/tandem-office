@@ -23,6 +23,8 @@ export const id = {
   batchVerifiedCount: 'Pemeriksaan sisa teks sumber selesai',
   batchNoRemaining: 'Tidak ada unit terjemahan tersisa',
   batchUnknownCount: 'Total unit terjemahan belum diketahui',
+  batchLayoutReviewCount: 'Kotak teks yang tata letaknya perlu diperiksa · {n}',
+  batchLayoutUnchecked: 'Tata letak kotak teks tidak dapat diperiksa',
   batchUnverified: 'Sisa teks sumber belum diperiksa',
   batchOpenPair: 'Buka dokumen asli dan terjemahan bersama',
   batchOverall: 'Progres keseluruhan',

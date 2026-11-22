@@ -23,6 +23,8 @@ export const fr = {
   batchVerifiedCount: 'Recherche du texte source restant effectuée',
   batchNoRemaining: 'Aucune unité de traduction restante',
   batchUnknownCount: 'Nombre total d’unités inconnu',
+  batchLayoutReviewCount: 'Zones de texte à vérifier pour la mise en page · {n}',
+  batchLayoutUnchecked: 'La disposition des zones de texte n’a pas pu être vérifiée',
   batchUnverified: 'Texte source restant non vérifié',
   batchOpenPair: 'Ouvrir ensemble l’original et la traduction',
   batchOverall: 'Avancement global',

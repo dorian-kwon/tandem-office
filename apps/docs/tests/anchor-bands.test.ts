@@ -154,6 +154,27 @@ describe('syncAnchorBands', () => {
 })
 
 describe('syncFloatShifts with in-table gaps', () => {
+  it('moves paragraph-relative diagrams only across intervening page gaps', () => {
+    const pm = document.createElement('div')
+    const gap = document.createElement('div')
+    gap.className = 'page-gap'
+    gap.dataset.boundaryY = '200'
+    gap.getBoundingClientRect = () => rectOf(400, 80)
+    pm.appendChild(gap)
+    const box = document.createElement('div')
+    box.getBoundingClientRect = () => rectOf(530, 60)
+    // A prior section has displaced the flow. Same-page callouts still track
+    // their paragraph, including after a previous pagination pass.
+    box.dataset.pageFloatDy = '150'
+    box.style.setProperty('--page-float-dy', '150px')
+    syncFloatShifts(pm, [{ el: box, anchorTop: 250, top: 274 }], 0, 2)
+    expect(box.style.getPropertyValue('--page-float-dy')).toBe('')
+    syncFloatShifts(pm, [{ el: box, anchorTop: 190, top: 214 }], 0, 2)
+    expect(box.style.getPropertyValue('--page-float-dy')).toBe('40.0px')
+    syncFloatShifts(pm, [{ el: box, anchorTop: 214, top: 190 }], 0, 2)
+    expect(box.style.getPropertyValue('--page-float-dy')).toBe('-40.0px')
+  })
+
   it('counts gap rows inside tables when shifting floats below them', () => {
     const pm = document.createElement('div')
     pm.getBoundingClientRect = () => rectOf(0, 1000)

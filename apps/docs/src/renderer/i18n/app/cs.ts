@@ -57,6 +57,7 @@ export const cs = {
   appNewFailed: 'Dokument se nepodařilo vytvořit: {error}',
   appSaveFailed: 'Uložení se nezdařilo: {error}',
   appAutoSavedAt: 'Automaticky uloženo ({time})',
+  appLayoutReviewCount: 'Textová pole ke kontrole rozložení · {n}',
   appSaved: 'Uloženo',
   appSectionBreakInserted: 'Konec oddílu vložen ({type})',
   appSectionBreakPending: 'Konec oddílu vložen; nový oddíl se projeví po uložení',

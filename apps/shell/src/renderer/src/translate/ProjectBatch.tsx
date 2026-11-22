@@ -151,13 +151,14 @@ const DocumentProgress = memo(function DocumentProgress({
   operations,
   verified,
   reviewSamples,
+  layoutReview,
   openPair,
   output,
   error,
   rerun,
   rerunDisabled,
 }: ProjectBatchItem & {
-  openPair?: (file: string) => Promise<void>
+  openPair?: (file: string, layoutIndex?: number) => Promise<void>
   rerun: (file: string) => void
   rerunDisabled: boolean
 }) {
@@ -168,12 +169,12 @@ const DocumentProgress = memo(function DocumentProgress({
   const label = s(state === 'running' && phase ? phaseLabel[phase] : stateLabel[state])
   const known = done !== undefined && total !== undefined
   const confirmed = state === 'saved' && verified === true && known && done === total
-  const open = async () => {
+  const open = async (layoutIndex?: number) => {
     if (!openPair || opening) return
     setOpening(true)
     setOpenError('')
     try {
-      await openPair(file)
+      await openPair(file, layoutIndex)
     } catch (cause) {
       setOpenError(translateErrorText(lang, cause))
     } finally {
@@ -257,6 +258,42 @@ const DocumentProgress = memo(function DocumentProgress({
       {operations !== undefined && operations > 0 && (
         <small data-batch-operations={operations}>{s('batchOperations', { n: operations })}</small>
       )}
+      {output && layoutReview === null && (
+        <small data-batch-layout="unchecked">{s('batchLayoutUnchecked')}</small>
+      )}
+      {output && layoutReview && layoutReview.count > 0 && (
+        <details data-batch-layout="review">
+          <summary>{s('batchLayoutReviewCount', { n: layoutReview.count })}</summary>
+          <ul>
+            {layoutReview.samples.map(({ location, text, target }, i) => (
+              <li key={i}>
+                {target && openPair && (state === 'saved' || state === 'failed') ? (
+                  <button
+                    type="button"
+                    className="projects-ghost"
+                    data-testid="project-batch-open-layout"
+                    disabled={opening}
+                    onClick={() => void open(i)}
+                  >
+                    {location}
+                  </button>
+                ) : (
+                  <code>{location}</code>
+                )}
+                {text && (
+                  <>
+                    {' '}
+                    · <span dir="auto">{text}</span>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+          {layoutReview.count > layoutReview.samples.length && (
+            <small>… (+{layoutReview.count - layoutReview.samples.length})</small>
+          )}
+        </details>
+      )}
       {reviewSamples && reviewSamples.length > 0 && (
         <details>
           <summary>{s('batchReview', { n: known ? total - done : reviewSamples.length })}</summary>
@@ -296,7 +333,7 @@ function BatchConversation({
   pending,
   availableFiles,
 }: {
-  openPair?: (file: string) => Promise<void>
+  openPair?: (file: string, layoutIndex?: number) => Promise<void>
   rerun: (file: string) => void
   pending: boolean
   availableFiles: ReadonlySet<string>
@@ -528,8 +565,14 @@ export function ProjectBatchControl({
   // including one requested in chat, gets its own progress dialog.
   const batchId = state?.id
   const openPair = useCallback(
-    async (file: string) => {
-      if (batchId) await api.batchOpenResult({ dir, batchId, file })
+    async (file: string, layoutIndex?: number) => {
+      if (batchId)
+        await api.batchOpenResult({
+          dir,
+          batchId,
+          file,
+          ...(layoutIndex === undefined ? {} : { layoutIndex }),
+        })
     },
     [api, dir, batchId],
   )

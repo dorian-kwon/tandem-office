@@ -57,6 +57,7 @@ export const ru = {
   appNewFailed: 'Не удалось создать документ: {error}',
   appSaveFailed: 'Не удалось сохранить: {error}',
   appAutoSavedAt: 'Автосохранение ({time})',
+  appLayoutReviewCount: 'Текстовые поля для проверки вёрстки · {n}',
   appSaved: 'Сохранено',
   appSectionBreakInserted: 'Вставлен разрыв раздела ({type})',
   appSectionBreakPending: 'Разрыв раздела вставлен; новый раздел вступит в силу после сохранения',
