@@ -994,8 +994,10 @@ export interface FrozenSelection {
   doc: ProseMirrorNode
 }
 
-export interface ToolExecution {
-  translationProgress?: { done: number; total: number }
+export interface ToolExecution extends Pick<
+  import('@genoffice/agent-core').ToolExecution,
+  'translationProgress' | 'pendingTranslationSamples'
+> {
   changeLocations?: readonly AiChangeLocation[]
   /** result text fed back to the model */
   output: string
