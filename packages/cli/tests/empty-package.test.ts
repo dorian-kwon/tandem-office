@@ -71,8 +71,9 @@ describe('empty packaged inputs', () => {
 
   it('does not refuse a zero-byte file for open, which lets the editor start a new document', async () => {
     const input = empty('docx')
+    const dir = dirs.at(-1)!
     const r = await run(['open', input, '--json'], {
-      env: { GENOFFICE_APP_BIN: join(dirs.at(-1)!, 'missing-app') },
+      env: { GENOFFICE_USER_DATA: dir, GENOFFICE_APP_BIN: join(dir, 'missing-app') },
     })
     // it got as far as launching the (missing) app instead of refusing the input
     expect(r.code).toBe(4)
