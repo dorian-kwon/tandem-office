@@ -19,6 +19,7 @@
 import { openDocumentInfo } from './document-info.mjs'
 import { convertToHanja } from './hanja.mjs'
 import { autoFillBlock } from './table-auto-fill.mjs'
+import { isTableCellPosition } from './textbox-edit.mjs'
 import {
   HWPUNIT_PER_PX,
   cellExtents,
@@ -225,6 +226,7 @@ export function nestedTableAt(ih) {
     depth = depthOf(cursor.getCellTableContext?.()?.cellPath)
   } else {
     const pos = cursor.getPosition?.() ?? ih.getCursorPosition?.()
+    if (!isTableCellPosition(ih?.wasm ?? cursor?.wasm, pos)) return null
     depth = pos?.parentParaIndex === undefined ? 0 : depthOf(pos.cellPath)
   }
   if (depth < 2) return null
@@ -2460,7 +2462,7 @@ function hancomTableRowKey(ih, e) {
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return false
   const pos = ih.getCursorPosition?.()
   if (!pos) return false
-  if (cursor.isInTextBox?.() && depthOf(pos.cellPath) < 2) return false
+  if (!isTableCellPosition(ih?.wasm ?? cursor?.wasm, pos)) return false
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
     if (ih.dispatcher?.isEnabled?.('ieum:table-insert-row-below')) {

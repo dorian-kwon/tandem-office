@@ -2312,6 +2312,7 @@ th.cell-rev-del {
   /* one card row tall: wrapped cards land on the hidden second row */
   height: 62px;
   overflow: hidden;
+  contain: layout style;
 }
 
 .style-gallery-more {
@@ -2565,6 +2566,7 @@ th.cell-rev-del {
 /* the document stays ltr under an RTL UI — the chrome mirrors, the content does not */
 
 .editor-scroll {
+  overflow-anchor: none;
   direction: ltr;
   flex: 1;
   overflow-y: auto;

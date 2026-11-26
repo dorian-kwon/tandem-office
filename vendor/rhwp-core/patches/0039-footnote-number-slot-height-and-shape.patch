@@ -1,7 +1,16 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: pblsketch <239486537+pblsketch@users.noreply.github.com>
 Date: Sun, 8 Nov 2026 00:00:00 +0900
-Subject: [PATCH 27/29] fix(footnote): 자동 번호 없는 각주와 저장 줄 없는 각주를 한글처럼 그리고 각주 모양 호출을 더한다
+Subject: [PATCH] =?UTF-8?q?fix(footnote):=20=EC=9E=90=EB=8F=99=20=EB=B2=88?=
+ =?UTF-8?q?=ED=98=B8=20=EC=97=86=EB=8A=94=20=EA=B0=81=EC=A3=BC=EC=99=80=20?=
+ =?UTF-8?q?=EC=A0=80=EC=9E=A5=20=EC=A4=84=20=EC=97=86=EB=8A=94=20=EA=B0=81?=
+ =?UTF-8?q?=EC=A3=BC=EB=A5=BC=20=ED=95=9C=EA=B8=80=EC=B2=98=EB=9F=BC=20?=
+ =?UTF-8?q?=EA=B7=B8=EB=A6=AC=EA=B3=A0=20=EA=B0=81=EC=A3=BC=20=EB=AA=A8?=
+ =?UTF-8?q?=EC=96=91=20=ED=98=B8=EC=B6=9C=EC=9D=84=20=EB=8D=94=ED=95=9C?=
+ =?UTF-8?q?=EB=8B=A4?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 생성기가 만든 HWPX(번호를 글로 적고 줄 배치를 저장하지 않은 문서)의 각주를 한컴
 한글 2024가 인쇄한 대로 다룬다.
@@ -25,14 +34,14 @@ Ported onto v0.9.0: v0.9.0 has getFootnoteShape/applyFootnoteShape of its own (w
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ---
- src/document_core/commands/footnote_ops.rs     | 34 +++++++++++++++++--
- src/document_core/commands/object_ops/shape.rs |  3 ++
- src/renderer/layout/picture_footnote.rs        | 47 +++++++++++++++++++++-----
- src/renderer/typeset/notes/footnotes/body.rs   | 20 ++++++++++-
+ src/document_core/commands/footnote_ops.rs    | 34 +++++++++++++-
+ .../commands/object_ops/shape.rs              |  3 ++
+ src/renderer/layout/picture_footnote.rs       | 47 +++++++++++++++----
+ src/renderer/typeset/notes/footnotes/body.rs  | 20 +++++++-
  4 files changed, 93 insertions(+), 11 deletions(-)
 
 diff --git a/src/document_core/commands/footnote_ops.rs b/src/document_core/commands/footnote_ops.rs
-index 2cf53f1de62f275adcccccbf37d56c16c3166916..026f5c8789690ef782e11cfad46c0b6aa211b7bf 100644
+index 2cf53f1de..026f5c878 100644
 --- a/src/document_core/commands/footnote_ops.rs
 +++ b/src/document_core/commands/footnote_ops.rs
 @@ -472,10 +472,11 @@ impl DocumentCore {
@@ -94,7 +103,7 @@ index 2cf53f1de62f275adcccccbf37d56c16c3166916..026f5c8789690ef782e11cfad46c0b6a
 +        .unwrap_or(-1)
 +}
 diff --git a/src/document_core/commands/object_ops/shape.rs b/src/document_core/commands/object_ops/shape.rs
-index 27ca7b12624a1e437bc0dd5d17d6603936bc5f93..12f2fb4a4dd48d0247eb3330895ec6612d28a7b6 100644
+index 27ca7b126..12f2fb4a4 100644
 --- a/src/document_core/commands/object_ops/shape.rs
 +++ b/src/document_core/commands/object_ops/shape.rs
 @@ -2709,12 +2709,15 @@ impl DocumentCore {
@@ -114,10 +123,10 @@ index 27ca7b12624a1e437bc0dd5d17d6603936bc5f93..12f2fb4a4dd48d0247eb3330895ec661
              if let Some(v) = crate::document_core::helpers::json_u16(props_json, "startNumber") {
                  shape.start_number = v.max(1);
 diff --git a/src/renderer/layout/picture_footnote.rs b/src/renderer/layout/picture_footnote.rs
-index 9e73b8f56f219efddc25728c6711f5aa9a20d68a..19206b70bbba7dc7dc005257fbb9e468c4cf929b 100644
+index ac6018b36..4583bc619 100644
 --- a/src/renderer/layout/picture_footnote.rs
 +++ b/src/renderer/layout/picture_footnote.rs
-@@ -322,6 +322,26 @@ fn shrink_footnote_number(nodes: &mut [RenderNode], number: &str) {
+@@ -334,6 +334,26 @@ fn shrink_footnote_number(nodes: &mut [RenderNode], number: &str) {
      }
  }
  
@@ -144,7 +153,7 @@ index 9e73b8f56f219efddc25728c6711f5aa9a20d68a..19206b70bbba7dc7dc005257fbb9e468
  fn footnote_composed_line_count(
      paragraphs: &[Paragraph],
      content_width_px: f64,
-@@ -1641,13 +1661,21 @@ impl LayoutEngine {
+@@ -1781,13 +1801,21 @@ impl LayoutEngine {
          for (frame_index, fn_ref) in footnotes.iter().enumerate() {
              let i = source_indices[frame_index];
              let fn_paras = get_footnote_paragraphs(fn_ref, paragraphs);
@@ -173,7 +182,7 @@ index 9e73b8f56f219efddc25728c6711f5aa9a20d68a..19206b70bbba7dc7dc005257fbb9e468
              let (fragment_start, fragment_end) = fragment_line_bounds(
                  fn_ref.fragment,
                  footnote_composed_line_count(fn_paras, fn_area.width, styles, self.dpi),
-@@ -1876,7 +1904,10 @@ impl LayoutEngine {
+@@ -2063,7 +2091,10 @@ impl LayoutEngine {
                          Some(placement.spacing),
                          None,
                      );
@@ -186,7 +195,7 @@ index 9e73b8f56f219efddc25728c6711f5aa9a20d68a..19206b70bbba7dc7dc005257fbb9e468
                              &mut fn_node.children[first_new_child..],
                              paragraph_number.trim_end(),
 diff --git a/src/renderer/typeset/notes/footnotes/body.rs b/src/renderer/typeset/notes/footnotes/body.rs
-index 4123505c8259061c3e6d6afaf51107a7a5815d08..7cb85d34c710bf96833539ba2552d31e87aa8d25 100644
+index 4123505c8..7cb85d34c 100644
 --- a/src/renderer/typeset/notes/footnotes/body.rs
 +++ b/src/renderer/typeset/notes/footnotes/body.rs
 @@ -437,7 +437,17 @@ impl TypesetEngine {
@@ -220,3 +229,6 @@ index 4123505c8259061c3e6d6afaf51107a7a5815d08..7cb85d34c710bf96833539ba2552d31e
 +        .iter()
 +        .any(|para| para.line_segs.is_empty() && !para.text.is_empty())
 +}
+-- 
+2.52.0.windows.1
+

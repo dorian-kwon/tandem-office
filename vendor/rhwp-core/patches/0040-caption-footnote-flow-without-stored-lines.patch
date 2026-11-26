@@ -1,7 +1,14 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: pblsketch <239486537+pblsketch@users.noreply.github.com>
 Date: Sun, 8 Nov 2026 00:00:00 +0900
-Subject: [PATCH 28/29] fix(layout): 저장 줄 없는 캡션·각주의 높이를 그리는 쪽과 같게 잰다
+Subject: [PATCH] =?UTF-8?q?fix(layout):=20=EC=A0=80=EC=9E=A5=20=EC=A4=84?=
+ =?UTF-8?q?=20=EC=97=86=EB=8A=94=20=EC=BA=A1=EC=85=98=C2=B7=EA=B0=81?=
+ =?UTF-8?q?=EC=A3=BC=EC=9D=98=20=EB=86=92=EC=9D=B4=EB=A5=BC=20=EA=B7=B8?=
+ =?UTF-8?q?=EB=A6=AC=EB=8A=94=20=EC=AA=BD=EA=B3=BC=20=EA=B0=99=EA=B2=8C=20?=
+ =?UTF-8?q?=EC=9E=B0=EB=8B=A4?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 생성기가 만든 HWPX(linesegarray 없음)에서 캡션·각주 문단은 로드 때 줄을
 만들지 않아, 높이를 재는 쪽은 한 줄(또는 400HU)로 잡고 그리는 쪽은 실제 폭으로
@@ -26,19 +33,22 @@ Ported onto devel 7d06d5c70 + 0001–0038: devel already composes caption paragr
 Ported onto v0.9.0: v0.9.0 reserves every body footnote by its reference line (#8468, own_line_notes) in the whole fit and the line split, and removed the empty footer band reclaim. The note reserve of this patch (synthetic_note_reserve, pending_note_height), the overflow guard, the marker-page routing and the band-reclaim change are dropped; keeping them would count the notes twice. The load-time caption and footnote line pass, the TAC picture caption extent and the synthetic-line footnote height (estimate_footnote_note_height, footnote_has_unlaid_paragraph) stay.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+# Conflicts:
+#	src/document_core/commands/document.rs
 ---
- src/document_core/commands/document.rs       | 175 +++++++++++++++++++++++++--
+ src/document_core/commands/document.rs       | 183 ++++++++++++++++++-
  src/renderer/composer.rs                     |   3 +-
- src/renderer/composer/line_breaking.rs       |  37 +++++-
- src/renderer/pagination.rs                   |  20 +++
+ src/renderer/composer/line_breaking.rs       |  37 +++-
+ src/renderer/pagination.rs                   |  20 ++
  src/renderer/typeset/notes/footnotes/body.rs |  11 +-
- 5 files changed, 230 insertions(+), 16 deletions(-)
+ 5 files changed, 238 insertions(+), 16 deletions(-)
 
 diff --git a/src/document_core/commands/document.rs b/src/document_core/commands/document.rs
-index 30208a0a4f9f3117b38e30da5db4c57e9b94c936..2092e235ea90b5b98da46d3447f97bb4f31e67f0 100644
+index dd3e6cc5e..0c4c13ac8 100644
 --- a/src/document_core/commands/document.rs
 +++ b/src/document_core/commands/document.rs
-@@ -382,15 +382,10 @@ impl DocumentCore {
+@@ -384,15 +384,10 @@ impl DocumentCore {
          // [#7436] 저장 줄 없는 번호 문단도 번호 폭을 뺀 상자로 줄을 나눈다 — 재조판 전에
          // 문서 순서로 번호 문자열을 정해 둔다.
          crate::renderer::layout::assign_numbering_markers(&mut document.sections, &styles);
@@ -52,17 +62,17 @@ index 30208a0a4f9f3117b38e30da5db4c57e9b94c936..2092e235ea90b5b98da46d3447f97bb4
          // 캡션의 표시 여부·문서 계보와 별개로 글자모양은 실제 줄 상자를 정의한다.
          // 예약과 배치가 같은 구성 결과를 쓰도록 없는 캡션 줄만 보완한다.
 +        // 본문 합성보다 먼저 한다. 글자처럼 취급 그림을 든 본문 줄의 높이가 캡션 높이를
-+        // 읽는다(`tac_picture_caption_extent_hwp`).
++        // 읽는다(	ac_picture_caption_extent_hwp).
          for section in &mut document.sections {
              Self::reflow_unstored_caption_paragraphs(
                  &mut section.paragraphs,
-@@ -399,6 +394,40 @@ impl DocumentCore {
+@@ -401,6 +396,40 @@ impl DocumentCore {
                  0,
              );
          }
 +        // 각주 문단의 빈 줄은 HWP5 에서도 만든다. 본문 문단과 달리 이 줄은 저장 쪽
 +        // 나눔의 일부가 아니고(목록 밖의 흐름), 없으면 높이를 문단당 400HU 로 잡아
-+        // 그리는 쪽과 겹친다. 줄 정보 없는 HWPX 를 예전 엔진으로 `.hwp` 로 바꾼 파일이
++        // 그리는 쪽과 겹친다. 줄 정보 없는 HWPX 를 예전 엔진으로 .hwp 로 바꾼 파일이
 +        // 그렇다. HWP3 출처는 종전 계약을 지킨다.
 +        let include_note_caption = include_empty
 +            || (matches!(source_format, crate::parser::FileFormat::Hwp)
@@ -97,23 +107,7 @@ index 30208a0a4f9f3117b38e30da5db4c57e9b94c936..2092e235ea90b5b98da46d3447f97bb4
          Self::clear_missing_lineseg_placeholders(&mut document);
          if !document.layout_profile().hwp3_native_layout() {
              Self::project_unstored_float_bands(&mut document, &styles, DEFAULT_DPI);
-@@ -669,6 +698,15 @@ impl DocumentCore {
-                             crate::renderer::layout::picture_flow_frame_size_hu(picture);
-                         (&mut picture.caption, width)
-                     }
-+                    // 도형 캡션도 같은 상자(위·아래는 개체 폭)로 그린다.
-+                    Control::Shape(shape) => {
-+                        let width =
-+                            crate::renderer::float_placement::signed_hwpunit(shape.common().width);
-+                        match shape.drawing_mut() {
-+                            Some(drawing) => (&mut drawing.caption, width),
-+                            None => continue,
-+                        }
-+                    }
-                     _ => continue,
-                 };
-                 if let Some(caption) = caption {
-@@ -706,6 +744,7 @@ impl DocumentCore {
+@@ -741,6 +770,7 @@ impl DocumentCore {
                              );
                          }
                      }
@@ -121,7 +115,7 @@ index 30208a0a4f9f3117b38e30da5db4c57e9b94c936..2092e235ea90b5b98da46d3447f97bb4
                      Self::reflow_unstored_caption_paragraphs(
                          &mut caption.paragraphs,
                          styles,
-@@ -727,6 +766,128 @@ impl DocumentCore {
+@@ -762,6 +792,145 @@ impl DocumentCore {
          }
      }
  
@@ -189,15 +183,30 @@ index 30208a0a4f9f3117b38e30da5db4c57e9b94c936..2092e235ea90b5b98da46d3447f97bb4
 +            let control_lines: Vec<Option<usize>> = (0..para.controls.len())
 +                .map(|index| crate::renderer::layout::control_line_seg_index(para, index))
 +                .collect();
-+            let mut picture_line_heights: Vec<(usize, i32)> = Vec::new();
++            let mut picture_line_heights: Vec<(usize, i32, bool)> = Vec::new();
 +            for (index, control) in para.controls.iter_mut().enumerate() {
 +                match control {
 +                    Control::Picture(picture) if picture.common.treat_as_char => {
 +                        let extent =
 +                            crate::renderer::composer::tac_picture_caption_extent_hwp(picture);
++                        // v0.9.1(#8939) strips bit 31 from HWP5 files saved without /RhwpLineSegTags,
++                        // including earlier-engine HWP files whose captions had no stored lines.
++                        let caption_synthetic = picture.caption.as_ref().is_some_and(|caption| {
++                            caption.paragraphs.iter().any(|p| !p.line_segs.is_empty())
++                                && caption.paragraphs.iter().all(|p| {
++                                    p.line_segs.iter().all(|s| {
++                                        s.tag
++                                            & crate::model::paragraph::LineSeg::TAG_IMPLEMENTATION_PROPERTY
++                                            != 0
++                                    })
++                                })
++                        });
 +                        if let (Some(line), true) = (control_lines[index], extent > 0) {
-+                            picture_line_heights
-+                                .push((line, picture.common.height as i32 + extent));
++                            picture_line_heights.push((
++                                line,
++                                picture.common.height as i32 + extent,
++                                caption_synthetic,
++                            ));
 +                        }
 +                    }
 +                    Control::Table(table) => {
@@ -233,9 +242,11 @@ index 30208a0a4f9f3117b38e30da5db4c57e9b94c936..2092e235ea90b5b98da46d3447f97bb4
 +                    _ => {}
 +                }
 +            }
-+            for (line, needed) in picture_line_heights {
++            for (line, needed, caption_synthetic) in picture_line_heights {
 +                if let Some(seg) = para.line_segs.get_mut(line) {
-+                    if seg.tag & crate::model::paragraph::LineSeg::TAG_IMPLEMENTATION_PROPERTY != 0
++                    if (seg.tag & crate::model::paragraph::LineSeg::TAG_IMPLEMENTATION_PROPERTY
++                        != 0
++                        || caption_synthetic)
 +                        && seg.line_height < needed
 +                    {
 +                        seg.line_height = needed;
@@ -251,10 +262,10 @@ index 30208a0a4f9f3117b38e30da5db4c57e9b94c936..2092e235ea90b5b98da46d3447f97bb4
      ///
      /// HWPX 파일에서 `<hp:lineSegArray>`가 누락된 문단은 모든 LineSeg 필드가 0으로
 diff --git a/src/renderer/composer.rs b/src/renderer/composer.rs
-index 6eb55e22762e564985e731f3d6cfb8cdc1b54450..241105b5958d0bf4b99887cc27f445a3ea5bdb6a 100644
+index 989a48dd4..4f8205be7 100644
 --- a/src/renderer/composer.rs
 +++ b/src/renderer/composer.rs
-@@ -351,7 +351,8 @@ pub(crate) use line_breaking::{condense_space_savings_px, overflowing_space_cut}
+@@ -357,7 +357,8 @@ pub(crate) use line_breaking::{condense_space_savings_px, overflowing_space_cut}
  mod picture_anchor_projection;
  pub(crate) use line_breaking::{
      control_is_square_float_object, control_is_width_neutral_marker, frame_metrics_for_line,
@@ -265,10 +276,10 @@ index 6eb55e22762e564985e731f3d6cfb8cdc1b54450..241105b5958d0bf4b99887cc27f445a3
  pub mod lineseg_compare;
  
 diff --git a/src/renderer/composer/line_breaking.rs b/src/renderer/composer/line_breaking.rs
-index 941e5640a0ca98ecc631e69416a2a72f55dcbff5..6822c8d9a32314de1e58e416ccbfb543699c0844 100755
+index bc5d84f7e..66d79cd00 100755
 --- a/src/renderer/composer/line_breaking.rs
 +++ b/src/renderer/composer/line_breaking.rs
-@@ -3345,13 +3345,41 @@ fn tac_shape_box_hu(shape: &crate::model::shape::ShapeObject) -> (i32, i32) {
+@@ -3547,13 +3547,41 @@ fn tac_shape_box_hu(shape: &crate::model::shape::ShapeObject) -> (i32, i32) {
      )
  }
  
@@ -313,7 +324,7 @@ index 941e5640a0ca98ecc631e69416a2a72f55dcbff5..6822c8d9a32314de1e58e416ccbfb543
              Control::Shape(shape) if shape.common().treat_as_char => {
                  Some(tac_shape_box_hu(shape).1)
              }
-@@ -3380,7 +3408,8 @@ pub(crate) fn inline_control_size_hwp_with_storage<S: crate::storage::Storage>(
+@@ -3582,7 +3610,8 @@ pub(crate) fn inline_control_size_hwp_with_storage<S: crate::storage::Storage>(
      Ok({
          let (width, height) = match ctrl {
              Control::Picture(pic) if pic.common.treat_as_char => {
@@ -324,7 +335,7 @@ index 941e5640a0ca98ecc631e69416a2a72f55dcbff5..6822c8d9a32314de1e58e416ccbfb543
              Control::Shape(shape) if shape.common().treat_as_char => tac_shape_box_hu(shape),
              Control::Table(table) if table.common.treat_as_char => {
 diff --git a/src/renderer/pagination.rs b/src/renderer/pagination.rs
-index 1ed086c325547c97e79bd9be2726dc2744fcb001..cdb12b52e6f934945ee11555e7d2e7bf1f0ddb89 100644
+index 08032cd2c..f57713b60 100644
 --- a/src/renderer/pagination.rs
 +++ b/src/renderer/pagination.rs
 @@ -73,13 +73,33 @@ pub(crate) fn reconsider_synthetic_text_page_break(
@@ -362,7 +373,7 @@ index 1ed086c325547c97e79bd9be2726dc2744fcb001..cdb12b52e6f934945ee11555e7d2e7bf
          }
      }
 diff --git a/src/renderer/typeset/notes/footnotes/body.rs b/src/renderer/typeset/notes/footnotes/body.rs
-index 7cb85d34c710bf96833539ba2552d31e87aa8d25..5968920df1b79a6e3e6515eca60f2db0801c4445 100644
+index 7cb85d34c..5968920df 100644
 --- a/src/renderer/typeset/notes/footnotes/body.rs
 +++ b/src/renderer/typeset/notes/footnotes/body.rs
 @@ -469,9 +469,12 @@ impl TypesetEngine {
@@ -382,3 +393,6 @@ index 7cb85d34c710bf96833539ba2552d31e87aa8d25..5968920df1b79a6e3e6515eca60f2db0
 +            })
 +    })
  }
+-- 
+2.52.0.windows.1
+

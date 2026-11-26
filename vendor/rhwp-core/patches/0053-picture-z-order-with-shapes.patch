@@ -1,7 +1,10 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: pblsketch <239486537+pblsketch@users.noreply.github.com>
 Date: Mon, 16 Nov 2026 00:00:00 +0900
-Subject: [PATCH 53/54] fix(shape): 그림도 도형과 같은 z 순서로 앞뒤를 바꾼다
+Subject: [PATCH] =?UTF-8?q?fix(shape):=20=EA=B7=B8=EB=A6=BC=EB=8F=84=20?=
+ =?UTF-8?q?=EB=8F=84=ED=98=95=EA=B3=BC=20=EA=B0=99=EC=9D=80=20z=20?=
+ =?UTF-8?q?=EC=88=9C=EC=84=9C=EB=A1=9C=20=EC=95=9E=EB=92=A4=EB=A5=BC=20?=
+ =?UTF-8?q?=EB=B0=94=EA=BE=BC=EB=8B=A4?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -110,3 +113,6 @@ index 12f2fb4a4..d618bd462 100644
                  }
              }
              applied
+-- 
+2.52.0.windows.1
+

@@ -1,7 +1,10 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: pblsketch <239486537+pblsketch@users.noreply.github.com>
 Date: Mon, 16 Nov 2026 00:00:00 +0900
-Subject: [PATCH 52/54] fix(picture): 자르기 양을 그림의 원본 좌표 범위로 잰다
+Subject: [PATCH] =?UTF-8?q?fix(picture):=20=EC=9E=90=EB=A5=B4=EA=B8=B0=20?=
+ =?UTF-8?q?=EC=96=91=EC=9D=84=20=EA=B7=B8=EB=A6=BC=EC=9D=98=20=EC=9B=90?=
+ =?UTF-8?q?=EB=B3=B8=20=EC=A2=8C=ED=91=9C=20=EB=B2=94=EC=9C=84=EB=A1=9C=20?=
+ =?UTF-8?q?=EC=9E=B0=EB=8B=A4?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -105,3 +108,6 @@ index 11cc2edfc..ae446aaa2 100644
          let target = capture.target.clone();
          self.picture_transform_store[index].1 = capture;
          self.document.sections[target.sec].raw_stream = None;
+-- 
+2.52.0.windows.1
+

@@ -541,6 +541,7 @@ function hashStr(str: string): number {
 }
 
 const EMPTY_BLOCKS: Block[] = []
+const BLANK_NUM_ID_FALLBACK = { bullet: BLANK_BULLET_NUM_ID, ordered: BLANK_ORDERED_NUM_ID }
 
 // O(doc) derivations cached by PM doc reference: caret moves and unrelated
 // state updates reuse the last result instead of re-walking the whole document
@@ -926,7 +927,52 @@ export function App() {
   const [evenOddHfDirty, setEvenOddHfDirty] = useState(false)
   const [mirrorMargins, setMirrorMargins] = useState(false)
   const [mirrorMarginsDirty, setMirrorMarginsDirty] = useState(false)
-  const [pageInfo, setPageInfo] = useState({ current: 1, total: 1 })
+  // Total page count lives in React state (changes only on pagination passes).
+  // Current page updates on scroll via ref + direct DOM write on the status bar
+  // button (and a lightweight subscription for NavPane's Pages tab) so scrolling
+  // across pages never triggers a React root commit — React's commitBeforeMutationEffects
+  // walks every DOM node of a focused contentEditable editor on every commit.
+  const [pageTotal, setPageTotal] = useState(1)
+  const currentPageRef = useRef(1)
+  const pageTotalRef = useRef(1)
+  const statusPageRef = useRef<HTMLButtonElement>(null)
+  const currentPageListenersRef = useRef(new Set<(page: number) => void>())
+  const subscribeCurrentPage = useCallback((listener: (page: number) => void) => {
+    currentPageListenersRef.current.add(listener)
+    listener(currentPageRef.current)
+    return () => {
+      currentPageListenersRef.current.delete(listener)
+    }
+  }, [])
+  const publishPageInfo = useCallback((current: number, total: number) => {
+    const prevCurrent = currentPageRef.current
+    const prevTotal = pageTotalRef.current
+    currentPageRef.current = current
+    pageTotalRef.current = total
+    if (statusPageRef.current && (prevCurrent !== current || prevTotal !== total)) {
+      const el = statusPageRef.current
+      const text = t('appPageOf', { current, total })
+      // Update the existing Text node in place (CharacterData mutation) instead of
+      // replacing children via textContent — childList mutations inside .app trigger
+      // Blink :has() style invalidation across the whole document on every page tick.
+      const first = el.firstChild
+      if (first && first.nodeType === Node.TEXT_NODE && !first.nextSibling) {
+        first.nodeValue = text
+      } else {
+        el.textContent = text
+      }
+    }
+    if (prevTotal !== total) {
+      setPageTotal(total)
+    }
+    if (prevCurrent !== current) {
+      for (const listener of currentPageListenersRef.current) listener(current)
+    }
+  }, [])
+  const navPageInfo = useMemo(
+    () => ({ current: currentPageRef.current, total: pageTotal }),
+    [pageTotal],
+  )
   // last page's number for the document-end footer: text for the page marker, num for
   // even/odd parity (section restarts / pageNumberFmt make both differ from the physical count)
   const [lastPageNo, setLastPageNo] = useState<{ text: string; num: number } | null>(null)
@@ -978,7 +1024,7 @@ export function App() {
     restingHfAreaVariant(kind, {
       titlePg,
       evenOddHf,
-      pageCount: pageInfo.total,
+      pageCount: pageTotal,
       ...(lastPageNo ? { lastPageNo: lastPageNo.num } : {}),
     })
   const headerAreaView = areaView('header')
@@ -2777,9 +2823,9 @@ export function App() {
         case 'TIME':
           return now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
         case 'NUMPAGES':
-          return String(pageInfo.total)
+          return String(pageTotalRef.current)
         case 'PAGE':
-          return String(pageInfo.current)
+          return String(currentPageRef.current)
         case 'FILENAME':
           return doc?.fileName ?? ''
         case 'MERGEFIELD': {
@@ -2791,7 +2837,7 @@ export function App() {
           return ''
       }
     },
-    [pageInfo, doc],
+    [doc],
   )
 
   const insertField = useCallback(
@@ -3912,7 +3958,7 @@ export function App() {
   // status-bar page number: real page slicing (same algorithm as the pagination preview). Edits remeasure with debounce; scrolling only relocates
   useEffect(() => {
     if (!doc || !section) {
-      setPageInfo({ current: 1, total: 1 })
+      publishPageInfo(1, 1)
       setLastPageNo(null)
       setEdgeSectionPages(null)
       pageLayoutRef.current = null
@@ -3954,8 +4000,29 @@ export function App() {
     let secWidthSig = ''
     let charSpaceSig = ''
     const colWidthPass = newWidthPassState()
-    const pmEl = () => document.querySelector('.editor-scroll .ProseMirror') as HTMLElement | null
-    const locate = () => {
+    let cachedPm: HTMLElement | null = null
+    let cachedWrap: HTMLElement | null = null
+    let cachedGaps: Array<{ offsetTop: number; height: number }> | null = null
+    const pmEl = () => {
+      if (cachedPm && cachedPm.isConnected) return cachedPm
+      cachedPm = document.querySelector('.editor-scroll .ProseMirror') as HTMLElement | null
+      cachedWrap = cachedPm?.closest<HTMLElement>('.page-wrap') ?? null
+      return cachedPm
+    }
+    const collectGapMetrics = (pm: HTMLElement, pmTop: number) => {
+      const list: Array<{ offsetTop: number; height: number }> = []
+      for (const gap of pm.querySelectorAll(
+        '.page-gap:not(.page-gap-carry), .page-repeat-header',
+      )) {
+        if (gap.classList.contains('page-repeat-header') && insideFloatTable(gap)) continue
+        const r = gap.getBoundingClientRect()
+        list.push({ offsetTop: r.top - pmTop, height: r.height })
+      }
+      list.sort((a, b) => a.offsetTop - b.offsetTop)
+      cachedGaps = list
+      return list
+    }
+    const locate = (refreshGaps = false) => {
       const pm = pmEl()
       if (!pm || slices.length === 0) return
       const pmRect = pm.getBoundingClientRect()
@@ -3965,34 +4032,32 @@ export function App() {
       // first content line instead of the viewport middle
       const mpIdx = multipageActiveRef.current
       const mpFrame = mpIdx == null ? null : mpFramesRef.current[mpIdx]
-      const wrapTop = pm.closest('.page-wrap')?.getBoundingClientRect().top ?? pmRect.top
+      const wrapTop =
+        mpFrame && cachedWrap && cachedWrap.isConnected
+          ? cachedWrap.getBoundingClientRect().top
+          : pmRect.top
       const midScreen = mpFrame
         ? wrapTop + (mpFrame.top + mTopPx + 1) * factor
         : Math.min(scrollRect.top + scrollRect.height / 2, pmRect.bottom)
       // slices use gapless virtual coordinates; subtract the page-gap height above the midpoint
       // (including mid-paragraph inline gaps and repeated-header clone rows, which carry
-      // page-repeat-header but not page-gap)
-      // page-turn gaps only, like the page frames: a split floating table's
-      // in-table gaps count (they are page turns) while its carry spacer does
-      // not — the two sums agree past the spacer, and inside the float's pages
-      // only the former maps the midpoint onto the page shown there. Its
-      // repeated-header clones are float content (the carry covers only the
-      // gap bands; the continuation's page starts at the gap's bottom)
+      // page-repeat-header but not page-gap).
+      // Between pagination passes the gap offsets relative to pmRect.top stay fixed while
+      // scrolling, so caching them avoids a full-DOM querySelectorAll + N getBoundingClientRect
+      // calls on every scroll frame.
+      const gaps = refreshGaps || !cachedGaps ? collectGapMetrics(pm, pmRect.top) : cachedGaps
+      const midRelPm = midScreen - pmRect.top
       let gapAbove = 0
-      for (const gap of pm.querySelectorAll(
-        '.page-gap:not(.page-gap-carry), .page-repeat-header',
-      )) {
-        if (gap.classList.contains('page-repeat-header') && insideFloatTable(gap)) continue
-        const r = gap.getBoundingClientRect()
-        if (r.top < midScreen) gapAbove += Math.min(r.height, midScreen - r.top)
+      for (let i = 0; i < gaps.length; i++) {
+        const g = gaps[i]
+        if (g.offsetTop >= midRelPm) break
+        gapAbove += Math.min(g.height, midRelPm - g.offsetTop)
       }
       const midY = (midScreen - origin - gapAbove) / factor
       // visible-page numbering so the status bar and F9 NUMPAGES agree with the gap widgets
       const current = visiblePageCount(slices, pageAt(slices, midY))
       const total = visiblePageCount(slices)
-      setPageInfo((prev) =>
-        prev.current === current && prev.total === total ? prev : { current, total },
-      )
+      publishPageInfo(current, total)
     }
     let lastPassAt = 0
     let lastPassMs = 0
@@ -4157,7 +4222,7 @@ export function App() {
           fastPasses++
           const dbg = (window as unknown as Record<string, Record<string, unknown>>).__pageDebug
           if (dbg) dbg.fastPasses = fastPasses
-          locate()
+          locate(true)
           return
         }
         if (!edited) fastReject = 'multi-or-trigger'
@@ -4174,6 +4239,8 @@ export function App() {
     const remeasurePass = (dirty: number | null) => {
       const pm = pmEl()
       if (!pm) return
+      const savedScrollTop = scroller.scrollTop
+      const savedScrollLeft = scroller.scrollLeft
       followUps = selfScheduled ? followUps + 1 : 0
       selfScheduled = false
       retrigger = []
@@ -4775,13 +4842,15 @@ export function App() {
               let cutRow: Element | null = null
               for (const tr of Array.from(b.el.querySelectorAll('tr')).filter(
                 (r) =>
-                  !r.closest('.doc-nested-table') && !r.classList.contains('page-repeat-header'),
+                  !r.closest('.doc-nested-table') &&
+                  !r.classList.contains('page-gap') &&
+                  !r.classList.contains('page-repeat-header'),
               )) {
                 const trTop = tr.getBoundingClientRect().top
                 const gapsAbove = gapRects.reduce((s, g) => (g.top <= trTop ? s + g.height : s), 0)
                 const off = (trTop - elTop - gapsAbove) / factor
                 // last real row starting at/above the cut = the row the cut falls inside
-                if (!tr.classList.contains('page-gap') && off <= cutOff + 0.5) cutRow = tr
+                if (off <= cutOff + 0.5) cutRow = tr
                 if (Math.abs(off - cutOff) < 1.5) {
                   matched = true
                   try {
@@ -5254,6 +5323,9 @@ export function App() {
         } else {
           pm.style.removeProperty('min-height')
         }
+        // Measuring with the page gaps collapsed can clamp the viewport during typing.
+        if (scroller.scrollTop !== savedScrollTop) scroller.scrollTop = savedScrollTop
+        if (scroller.scrollLeft !== savedScrollLeft) scroller.scrollLeft = savedScrollLeft
         // endnote area: Word puts it right after the last body line, not at the page
         // bottom — anchor it to the flow end measured in the final display state
         setEndnotesAreaTop(
@@ -5334,7 +5406,7 @@ export function App() {
           return gapIds
         })
       }
-      locate()
+      locate(true)
       setLayoutRev((v) => v + 1)
     }
     const onUpdate = (
@@ -5423,7 +5495,15 @@ export function App() {
       .catch(() => {})
     const onLoadingDone = () => onFontsChanged(true)
     document.fonts.addEventListener('loadingdone', onLoadingDone)
-    scroller.addEventListener('scroll', locate, { passive: true })
+    let scrollLocateRaf = 0
+    const onScrollLocate = () => {
+      if (scrollLocateRaf) return
+      scrollLocateRaf = requestAnimationFrame(() => {
+        scrollLocateRaf = 0
+        locate()
+      })
+    }
+    scroller.addEventListener('scroll', onScrollLocate, { passive: true })
     const onDocUpdate = ({ transaction }: { transaction: Transaction }) => {
       // an "update" without a document change (setEditable) needs no new page pass
       if (!transaction.docChanged) return
@@ -5466,8 +5546,9 @@ export function App() {
     return () => {
       if (timer) window.clearTimeout(timer)
       if (hfTimer) window.clearTimeout(hfTimer)
+      if (scrollLocateRaf) cancelAnimationFrame(scrollLocateRaf)
       document.fonts.removeEventListener('loadingdone', onLoadingDone)
-      scroller.removeEventListener('scroll', locate)
+      scroller.removeEventListener('scroll', onScrollLocate)
       editor?.off('update', onDocUpdate)
       editor?.off('transaction', onShrinkTr)
     }
@@ -5507,6 +5588,7 @@ export function App() {
     revisionDisplay,
     delSectBreaks,
     pendingWatermarkImage,
+    publishPageInfo,
   ])
 
   // section at the cursor: the target the Layout tab acts on
@@ -5610,7 +5692,7 @@ export function App() {
       return true
     })
     setStats({
-      pages: pageInfo.total,
+      pages: pageTotal,
       words: countWords(text),
       asianChars: asianCharCount(text),
       nonAsianWords: nonAsianWordCount(text),
@@ -5619,7 +5701,7 @@ export function App() {
       paragraphs,
       lines,
     })
-  }, [editor, zoom, pageInfo.total])
+  }, [editor, zoom, pageTotal])
 
   // Review > Editor, the Tools menu and Word's F7 all run the same AI proofread
   // behind the one-time whole-document-rewrite acknowledgement
@@ -6385,8 +6467,8 @@ export function App() {
     sections[0]?.pageNumberStart ?? 1,
     sections[0]?.pageNumberFmt,
   )
-  const lastPageNoText = lastPageNo?.text ?? String(pageInfo.total)
-  const lastPageIdx = Math.max(0, pageInfo.total - 1)
+  const lastPageNoText = lastPageNo?.text ?? String(pageTotal)
+  const lastPageIdx = Math.max(0, pageTotal - 1)
   /** open the strip editor for `kind` on page `pageIdx` (default: the document's first header / last footer) */
   const openHfEditor = (kind: 'header' | 'footer', pageIdx?: number) => {
     hfEditorRef.current?.exit()
@@ -6598,31 +6680,62 @@ export function App() {
       .slice(0, 80)
     setEditQueue((queue) => [...queue, { qid, instruction, capturedText }])
   }
-  const queueUpdate = (qid: string, instruction: string): void =>
-    setEditQueue((queue) => queue.map((i) => (i.qid === qid ? { ...i, instruction } : i)))
-  const queueRemove = (qid: string): void => {
-    removeQueueAnchors(editor, [qid])
-    setEditQueue((queue) => queue.filter((i) => i.qid !== qid))
-  }
-  const queueClear = (): void => {
-    clearQueueAnchors(editor)
+  const queueUpdate = useCallback(
+    (qid: string, instruction: string): void =>
+      setEditQueue((queue) => queue.map((i) => (i.qid === qid ? { ...i, instruction } : i))),
+    [],
+  )
+  const queueRemove = useCallback(
+    (qid: string): void => {
+      if (editor) removeQueueAnchors(editor, [qid])
+      setEditQueue((queue) => queue.filter((i) => i.qid !== qid))
+    },
+    [editor],
+  )
+  const queueClear = useCallback((): void => {
+    if (editor) clearQueueAnchors(editor)
     setEditQueue([])
-  }
+  }, [editor])
   /** a submission hands its items to the run and drops them from the queue */
-  const queueConsume = (qids: string[]): void => {
-    removeQueueAnchors(editor, qids)
-    setEditQueue((queue) => queue.filter((i) => !qids.includes(i.qid)))
-  }
-  const queueFocus = (qid: string): void => {
-    const selection = selectionForAnchor(editor, qid)
-    if (!selection) return
-    editor.view.dispatch(editor.state.tr.setSelection(selection).scrollIntoView())
-    editor.view.focus()
-  }
-  const askSendNow = (text: string): void => {
+  const queueConsume = useCallback(
+    (qids: string[]): void => {
+      if (editor) removeQueueAnchors(editor, qids)
+      setEditQueue((queue) => queue.filter((i) => !qids.includes(i.qid)))
+    },
+    [editor],
+  )
+  const queueFocus = useCallback(
+    (qid: string): void => {
+      if (!editor) return
+      const selection = selectionForAnchor(editor, qid)
+      if (!selection) return
+      editor.view.dispatch(editor.state.tr.setSelection(selection).scrollIntoView())
+      editor.view.focus()
+    },
+    [editor],
+  )
+  const askSendNow = useCallback((text: string): void => {
     setShowAi(true)
     setAiPreset({ text, nonce: Date.now(), autoRun: true })
-  }
+  }, [])
+  const aiDockActions = useStableCallbacks({
+    onExpand: aiDock.onExpand,
+    onCollapse: () => setShowAi(false),
+  })
+  const onAiHandedRunDone = useCallback(() => {
+    const ctx = fileCtxRef.current
+    if (ctx.doc && !ctx.doc.filePath) {
+      void saveIntoProjectImpl(ctx, ctx.doc.fileName)
+    }
+  }, [])
+  const openFindBar = useCallback(() => {
+    setShowFind(true)
+    setFindFocusInput((n) => n + 1)
+  }, [])
+  const openReplaceBar = useCallback(() => {
+    setShowFind(true)
+    setFindFocusReplace((n) => n + 1)
+  }, [])
 
   // AI comment tools run the same review-actions code paths as the comments pane
   const aiCommentsAccess = useMemo<AiCommentsAccess>(
@@ -7674,14 +7787,8 @@ export function App() {
         editor={editor}
         formatState={formatState}
         hasDoc={!!doc}
-        onFind={() => {
-          setShowFind(true)
-          setFindFocusInput((n) => n + 1)
-        }}
-        onReplace={() => {
-          setShowFind(true)
-          setFindFocusReplace((n) => n + 1)
-        }}
+        onFind={openFindBar}
+        onReplace={openReplaceBar}
         blocks={doc?.parsed.blocks ?? EMPTY_BLOCKS}
         styles={ribbonStyles}
         docDefaults={doc?.parsed.docDefaults}
@@ -7752,14 +7859,11 @@ export function App() {
               blocks={doc.parsed.blocks}
               settings={settings}
               docEmpty={wordCount === 0}
-              numIdFallback={
-                doc.isBlank ? { bullet: BLANK_BULLET_NUM_ID, ordered: BLANK_ORDERED_NUM_ID } : null
-              }
+              numIdFallback={doc.isBlank ? BLANK_NUM_ID_FALLBACK : null}
               preset={aiPreset}
               open={aiDock.open}
               hideRail={!aiSidebarEnabled}
-              onExpand={aiDock.onExpand}
-              onCollapse={() => setShowAi(false)}
+              {...aiDockActions}
               onTranslationLockChange={setTranslationLocked}
               ocrOpenDocument={ocrOpenDocument}
               filePath={doc?.filePath ?? null}
@@ -7776,12 +7880,7 @@ export function App() {
               notesAccess={aiNotesAccess}
               templateDocument={templateDocument}
               // a template copy whose run ended well goes into the panel's project (spec 6)
-              onHandedRunDone={() => {
-                const ctx = fileCtxRef.current
-                if (ctx.doc && !ctx.doc.filePath) {
-                  void saveIntoProjectImpl(ctx, ctx.doc.fileName)
-                }
-              }}
+              onHandedRunDone={onAiHandedRunDone}
             />
           </div>
         )}
@@ -7808,7 +7907,8 @@ export function App() {
                 editor={editor}
                 doc={editor.state.doc}
                 zoom={zoom / 100}
-                pageInfo={pageInfo}
+                pageInfo={navPageInfo}
+                subscribeCurrentPage={subscribeCurrentPage}
                 onClose={closeNav}
               />
             )}
@@ -7936,7 +8036,7 @@ export function App() {
                               commitHfAt(0, 'header', target.variant, next, target.owner)
                             }}
                             pageNo={firstPageNoText}
-                            pageTotal={pageInfo.total}
+                            pageTotal={pageTotal}
                             sectionPages={edgeSectionPages?.first}
                             sectionLabel={hfSectionLabel('header', 0)}
                             editRequest={
@@ -8008,7 +8108,7 @@ export function App() {
                               )
                             }}
                             pageNo={lastPageNoText}
-                            pageTotal={pageInfo.total}
+                            pageTotal={pageTotal}
                             sectionPages={edgeSectionPages?.last}
                             linked={hfLinkedAt(lastSectionIdx, 'footer', footerAreaView)}
                             sectionLabel={hfSectionLabel('footer', lastSectionIdx)}
@@ -8148,6 +8248,7 @@ export function App() {
               {doc && (
                 <>
                   <button
+                    ref={statusPageRef}
                     className="status-item status-btn status-page"
                     data-tip={t('appGoToTitle')}
                     onClick={() => {
@@ -8155,7 +8256,7 @@ export function App() {
                       setFindFocusGoTo((n) => n + 1)
                     }}
                   >
-                    {t('appPageOf', { current: pageInfo.current, total: pageInfo.total })}
+                    {t('appPageOf', { current: currentPageRef.current, total: pageTotal })}
                   </button>
                   <button
                     className="status-item status-btn status-wordcount"

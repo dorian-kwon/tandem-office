@@ -137,6 +137,27 @@ function rangeRect(editor: Editor, from: number, to: number): AnchorRect | null 
   }
 }
 
+function placeTrigger(el: HTMLElement, left: number, top: number) {
+  const x = Math.max(EDGE, Math.min(left, window.innerWidth - el.offsetWidth - EDGE))
+  el.style.transform = `translate3d(${x}px, ${top}px, 0)`
+}
+
+function popoverTransform(rect: AnchorRect, height: number): string {
+  const below = rect.bottom + GAP
+  const above = rect.top - GAP - height
+  const top =
+    below + height <= window.innerHeight - EDGE
+      ? below
+      : above >= EDGE
+        ? above
+        : Math.max(EDGE, window.innerHeight - EDGE - height)
+  const left = Math.min(
+    Math.max(EDGE, (rect.left + rect.right) / 2 - WIDTH / 2),
+    Math.max(EDGE, window.innerWidth - WIDTH - EDGE),
+  )
+  return `translate3d(${left}px, ${top}px, 0)`
+}
+
 export function AiAskPopover({
   editor,
   queueFull,
@@ -242,16 +263,32 @@ export function AiAskPopover({
     editor.on('blur', hide)
     // a selection inside a box never reaches the editor's own events
     document.addEventListener('selectionchange', update)
+    let raf = 0
+    const onScrollOrResize = () => {
+      if (raf || !triggersRef.current) return
+      raf = requestAnimationFrame(() => {
+        raf = 0
+        const el = triggersRef.current
+        if (!el || openRef.current) return
+        const { empty, to } = editor.state.selection
+        const rect =
+          readBoxSelection(editor.view.dom, window.getSelection())?.rect ??
+          (!empty && editor.isFocused ? rangeRect(editor, to, to) : null)
+        if (rect) placeTrigger(el, rect.right + 6, rect.bottom + 4)
+        else hide()
+      })
+    }
     const scroller = document.querySelector('.editor-scroll')
-    scroller?.addEventListener('scroll', update, { passive: true })
-    window.addEventListener('resize', update)
+    scroller?.addEventListener('scroll', onScrollOrResize, { passive: true })
+    window.addEventListener('resize', onScrollOrResize)
     return () => {
+      if (raf) cancelAnimationFrame(raf)
       editor.off('selectionUpdate', update)
       editor.off('focus', update)
       editor.off('blur', hide)
       document.removeEventListener('selectionchange', update)
-      scroller?.removeEventListener('scroll', update)
-      window.removeEventListener('resize', update)
+      scroller?.removeEventListener('scroll', onScrollOrResize)
+      window.removeEventListener('resize', onScrollOrResize)
     }
   }, [editor])
 
@@ -260,8 +297,7 @@ export function AiAskPopover({
   useLayoutEffect(() => {
     const el = triggersRef.current
     if (!el || !trigger) return
-    const left = Math.min(trigger.left, window.innerWidth - el.offsetWidth - EDGE)
-    el.style.left = `${Math.max(EDGE, left)}px`
+    placeTrigger(el, trigger.left, trigger.top)
   }, [trigger])
 
   // clicking a queued anchor in the document re-opens the popover on that item
@@ -281,14 +317,34 @@ export function AiAskPopover({
   // popover position follows scroll/resize; a vanished anchor closes it
   useLayoutEffect(() => {
     if (!open) return
+    let raf = 0
+    const placeDom = (r: AnchorRect) => {
+      const el = boxRef.current
+      if (!el) return
+      el.style.transform = popoverTransform(r, el.offsetHeight || EST_HEIGHT)
+    }
     const update = () => setRect(anchorRect())
+    const onScrollOrResize = () => {
+      if (raf) return
+      raf = requestAnimationFrame(() => {
+        raf = 0
+        const next = anchorRect()
+        if (!next) {
+          setRect(null)
+          return
+        }
+        if (boxRef.current) placeDom(next)
+        else setRect(next)
+      })
+    }
     update()
     const scroller = document.querySelector('.editor-scroll')
-    scroller?.addEventListener('scroll', update, { passive: true })
-    window.addEventListener('resize', update)
+    scroller?.addEventListener('scroll', onScrollOrResize, { passive: true })
+    window.addEventListener('resize', onScrollOrResize)
     return () => {
-      scroller?.removeEventListener('scroll', update)
-      window.removeEventListener('resize', update)
+      if (raf) cancelAnimationFrame(raf)
+      scroller?.removeEventListener('scroll', onScrollOrResize)
+      window.removeEventListener('resize', onScrollOrResize)
     }
   }, [open, anchorRect])
 
@@ -371,23 +427,11 @@ export function AiAskPopover({
   let box: React.JSX.Element | null = null
   if (open && rect) {
     const height = boxRef.current?.offsetHeight ?? EST_HEIGHT
-    const below = rect.bottom + GAP
-    const above = rect.top - GAP - height
-    const top =
-      below + height <= window.innerHeight - EDGE
-        ? below
-        : above >= EDGE
-          ? above
-          : Math.max(EDGE, window.innerHeight - EDGE - height)
-    const left = Math.min(
-      Math.max(EDGE, (rect.left + rect.right) / 2 - WIDTH / 2),
-      Math.max(EDGE, window.innerWidth - WIDTH - EDGE),
-    )
     box = (
       <div
         ref={boxRef}
         className="ai-ask-pop"
-        style={{ left, top, width: WIDTH }}
+        style={{ left: 0, top: 0, transform: popoverTransform(rect, height), width: WIDTH }}
         role="dialog"
         onKeyDown={(e) => {
           if (e.key === 'Escape') {
@@ -515,7 +559,7 @@ export function AiAskPopover({
   return (
     <>
       {trigger && !open && (
-        <div ref={triggersRef} className="ai-ask-triggers" style={{ top: trigger.top }}>
+        <div ref={triggersRef} className="ai-ask-triggers" style={{ left: 0, top: 0 }}>
           <button
             ref={triggerRef}
             className="ai-ask-trigger"

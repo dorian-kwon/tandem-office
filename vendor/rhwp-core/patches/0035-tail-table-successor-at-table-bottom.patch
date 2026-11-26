@@ -1,7 +1,15 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: pblsketch <239486537+pblsketch@users.noreply.github.com>
 Date: Sun, 8 Nov 2026 00:00:00 +0900
-Subject: [PATCH 24/29] fix(layout): 글 있는 문단을 끝내는 문단 기준 위아래 표 뒤 첫 줄을 표 아래끝에 둔다
+Subject: [PATCH] =?UTF-8?q?fix(layout):=20=EA=B8=80=20=EC=9E=88=EB=8A=94?=
+ =?UTF-8?q?=20=EB=AC=B8=EB=8B=A8=EC=9D=84=20=EB=81=9D=EB=82=B4=EB=8A=94=20?=
+ =?UTF-8?q?=EB=AC=B8=EB=8B=A8=20=EA=B8=B0=EC=A4=80=20=EC=9C=84=EC=95=84?=
+ =?UTF-8?q?=EB=9E=98=20=ED=91=9C=20=EB=92=A4=20=EC=B2=AB=20=EC=A4=84?=
+ =?UTF-8?q?=EC=9D=84=20=ED=91=9C=20=EC=95=84=EB=9E=98=EB=81=9D=EC=97=90=20?=
+ =?UTF-8?q?=EB=91=94=EB=8B=A4?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 What Hangul does: when a paragraph-relative topAndBottom table ends the flow
 of a paragraph that has text, Hangul 2024 starts the next paragraph's first
@@ -56,10 +64,10 @@ Evidence (Hangul 2024 13.0.0.711 print through the official automation):
  4 files changed, 69 insertions(+), 1 deletion(-)
 
 diff --git a/src/model/document.rs b/src/model/document.rs
-index 9c2b319d9a721b866a05985aa0d0462f4988b896..c41025c52c62dabd77af7516b8980a1744ba1d8a 100644
+index ebfd6bacb..cb833b4f4 100644
 --- a/src/model/document.rs
 +++ b/src/model/document.rs
-@@ -482,6 +482,25 @@ impl Document {
+@@ -485,6 +485,25 @@ impl Document {
          })
      }
  
@@ -85,7 +93,7 @@ index 9c2b319d9a721b866a05985aa0d0462f4988b896..c41025c52c62dabd77af7516b8980a17
      /// [#2403 Stage 1] 레이아웃 호환 정책 질의 표면.
      ///
      /// 계보와 실제 저장 포맷을 구분한다. HWP5의 문단 단위·저장 줄은 HWP5 계약을
-@@ -531,6 +550,7 @@ impl Document {
+@@ -534,6 +553,7 @@ impl Document {
              self.provenance.format == SourceFormat::Hwp3 && self.header.encrypted,
          )
          .with_stored_rows_before_hancom_2020(self.provenance.stored_rows_before_hancom_2020)
@@ -94,7 +102,7 @@ index 9c2b319d9a721b866a05985aa0d0462f4988b896..c41025c52c62dabd77af7516b8980a17
          // 봉인한다(파서 seal_body_raw_provenance). 편집 명령은 raw_stream 만
          // None 으로 지우고 봉인은 남기므로, "봉인은 있는데 raw_stream 이 사라짐"
 diff --git a/src/model/provenance.rs b/src/model/provenance.rs
-index 888dbf8927a57d5bbe054773c6ddc2a8f5d4ba98..87e93e2e6ed4c098d4d5befce59a88206a9b11f5 100644
+index 888dbf892..87e93e2e6 100644
 --- a/src/model/provenance.rs
 +++ b/src/model/provenance.rs
 @@ -92,6 +92,9 @@ pub struct LayoutCompatibilityProfile {
@@ -137,10 +145,10 @@ index 888dbf8927a57d5bbe054773c6ddc2a8f5d4ba98..87e93e2e6ed4c098d4d5befce59a8820
      /// 유도한다(native HWP5 raw_stream 소실 신호).
      pub(crate) fn with_session_edited(mut self, enabled: bool) -> Self {
 diff --git a/src/renderer/layout.rs b/src/renderer/layout.rs
-index 9eb14ac6de10e47bb46d2fce72be10d94fa5826e..3837f7733828f08c667a9584aa328e12c7105450 100644
+index fa079a04f..d9f59ec27 100644
 --- a/src/renderer/layout.rs
 +++ b/src/renderer/layout.rs
-@@ -16612,10 +16612,28 @@ impl LayoutEngine {
+@@ -17185,10 +17185,28 @@ impl LayoutEngine {
          // A complete stored object frame owns the successor's line origin.
          // Consume that same accepted result after painting; generic empty-host
          // line advances above must not replace it with a separate cursor.
@@ -170,10 +178,10 @@ index 9eb14ac6de10e47bb46d2fce72be10d94fa5826e..3837f7733828f08c667a9584aa328e12
              y_offset = col_area.y + origin;
          }
 diff --git a/src/renderer/typeset/table/block/entry.rs b/src/renderer/typeset/table/block/entry.rs
-index b40210c7dccf101ca275d462aa83aef88d5461c5..8a6f9d41ac2e21e058b3aa5cb96aa3e26a5368fd 100644
+index 8095ec5a5..95ab4a8a4 100644
 --- a/src/renderer/typeset/table/block/entry.rs
 +++ b/src/renderer/typeset/table/block/entry.rs
-@@ -2593,7 +2593,19 @@ impl TypesetEngine {
+@@ -2888,7 +2888,19 @@ impl TypesetEngine {
                          && p.table_top + ft.effective_height <= available + below_body_slack)
                      })))
          {
@@ -194,3 +202,6 @@ index b40210c7dccf101ca275d462aa83aef88d5461c5..8a6f9d41ac2e21e058b3aa5cb96aa3e2
                  st.record_paragraph_float_placement((para_idx, ctrl_idx), placement);
              }
              // RowBreak 표를 통째 수용해도 빈 호스트의 흐름 전용 하단여백은
+-- 
+2.52.0.windows.1
+

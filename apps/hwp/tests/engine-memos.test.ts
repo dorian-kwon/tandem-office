@@ -1015,21 +1015,21 @@ describe('the engine writes Hancom memo identity', () => {
     expect(Buffer.compare(Buffer.from(doc.exportHwp()), Buffer.from(original))).toBe(0)
   })
 
-  // What this engine (rhwp v0.9.0, whose memo support is upstream's #8269, with the
+  // What this engine (rhwp v0.9.1, whose memo support is upstream's #8269, with the
   // patches) writes for these memo-free documents, unedited and after typing, as HWP and
   // HWPX. A later engine that changes how these documents save updates them on purpose.
   const before: Record<string, Record<string, string>> = {
     'format-copy-table.hwp': {
       hwp: 'd90a4045fa4a1cb72fdb287580721a681ad73753519ff4eaa6b0816485b7a6df',
-      hwpx: 'e54b6b604b2610b41ed581bbd0dfd662954f8f61b5971165b717deb79726a0a1',
-      editedHwp: '78e031ac0f9c84936a696deb75b8dbf9e00d2e3c8b3052356d31a99b8ae666ab',
-      editedHwpx: 'a617c26bbe31e6534d9a50b04db49a876be4bbdc51c9d0659c0ea684b66b866c',
+      hwpx: 'd723747af6ad0d41bdce1c32160498b0bf75f3d82c26792bf15bbc90692fc6ad',
+      editedHwp: 'cb683c03b48d2c0a6ee20d2767b61e8f39e0b6ad7a9b51626ea880c5935d6b29',
+      editedHwpx: '01b92a9da085af45365c0e188bd98428c63f2ef75ac58a6a8ac4e971d456058a',
     },
     'hancom-page-number-no-dash.hwpx': {
-      hwp: 'c3e3c463c70d787ddf5e2a568bbb83da12df18d0284e373eb1799a6449578b96',
-      hwpx: 'bc3fb577f4836ad12c7d9878c0bcc3eff1a5042be0a98cf668ddbb058a728c90',
-      editedHwp: '63a6d970a15095b535a882f4e87219f386716b0beb7c04a120cead28da4def5d',
-      editedHwpx: 'a27eadf418310de4d9685dc073207c6ee0ed0a75f70cfb3b7513601d79e58eb3',
+      hwp: '75a32077184f5a3aa0935d79af107cd20b3e77037f209a83642db0ab39e90757',
+      hwpx: '955c9318f0a559af55d46f62c10707d95c29c57322d89294bd423fb63aec9b59',
+      editedHwp: 'f681d231ec930968ab52015d4977006a59957cde8a4f7f36fe2349b199b001c0',
+      editedHwpx: '9a4c3bbc0c0c49b08fcbd72ac2d6f7fe9b322af4e5d1ef55b73e73c11f1f42b7',
     },
   }
 

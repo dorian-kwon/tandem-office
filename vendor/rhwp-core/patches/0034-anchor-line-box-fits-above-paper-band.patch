@@ -1,7 +1,14 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: pblsketch <239486537+pblsketch@users.noreply.github.com>
 Date: Sun, 8 Nov 2026 00:00:00 +0900
-Subject: [PATCH 23/29] fix(typeset): 0020 의 "앵커 글이 개체 위에 들어감" 판정을 줄 상자로 잰다
+Subject: [PATCH] =?UTF-8?q?fix(typeset):=200020=20=EC=9D=98=20"=EC=95=B5?=
+ =?UTF-8?q?=EC=BB=A4=20=EA=B8=80=EC=9D=B4=20=EA=B0=9C=EC=B2=B4=20=EC=9C=84?=
+ =?UTF-8?q?=EC=97=90=20=EB=93=A4=EC=96=B4=EA=B0=90"=20=ED=8C=90=EC=A0=95?=
+ =?UTF-8?q?=EC=9D=84=20=EC=A4=84=20=EC=83=81=EC=9E=90=EB=A1=9C=20=EC=9E=B0?=
+ =?UTF-8?q?=EB=8B=A4?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 0020(topbottom-float-anchor-flow)은 종이·쪽 기준 자리차지 개체를 앵커한 문단이 개체
 밴드에 걸리면 앵커 문단을 개체 아래끝에서 시작한다. 들어감 판정은 그리는 쪽의 옛 판정
@@ -34,10 +41,10 @@ paper-topbottom-box-stale-ladder.hwpx 는 그대로 2쪽, 2쪽 글줄 18. 위 �
  2 files changed, 15 insertions(+), 2 deletions(-)
 
 diff --git a/src/renderer/typeset.rs b/src/renderer/typeset.rs
-index 8c46139f59883449a8e2b0aa8b685679694035c8..33e987f96185aba1ec3d0940126d5a9e28f0b405 100644
+index 41017fc6e..78a957f01 100644
 --- a/src/renderer/typeset.rs
 +++ b/src/renderer/typeset.rs
-@@ -6883,6 +6883,7 @@ impl TypesetEngine {
+@@ -7155,6 +7155,7 @@ impl TypesetEngine {
  /// `flow_y` 와 돌려주는 값은 단 상단 기준 px 이다. 이미 개체 아래면 `None`.
  pub(crate) fn topbottom_float_anchor_flow_bottom(
      para: &Paragraph,
@@ -45,7 +52,7 @@ index 8c46139f59883449a8e2b0aa8b685679694035c8..33e987f96185aba1ec3d0940126d5a9e
      anchor_text_height: f64,
      flow_y: f64,
      col: &crate::renderer::page_layout::LayoutRect,
-@@ -6954,7 +6955,10 @@ pub(crate) fn topbottom_float_anchor_flow_bottom(
+@@ -7226,7 +7227,10 @@ pub(crate) fn topbottom_float_anchor_flow_bottom(
          .filter_map(float_common)
          .find(|common| matches!(common.text_wrap, TextWrap::TopAndBottom))
          .map(|common| geometry(common).1);
@@ -58,10 +65,10 @@ index 8c46139f59883449a8e2b0aa8b685679694035c8..33e987f96185aba1ec3d0940126d5a9e
      }
      Some(bottom - col.y)
 diff --git a/src/renderer/typeset/section/flow.rs b/src/renderer/typeset/section/flow.rs
-index 71ad6126cf9f6f4bbd88d66ccc4bbc67e5cde53e..76287996566f0c311f539e888101978cdb0cb0e2 100644
+index cafc7d9ce..3b69792d3 100644
 --- a/src/renderer/typeset/section/flow.rs
 +++ b/src/renderer/typeset/section/flow.rs
-@@ -268,9 +268,18 @@ impl TypesetEngine {
+@@ -269,9 +269,18 @@ impl TypesetEngine {
                              .sum::<f64>()
                      })
                      .unwrap_or(f64::MAX);
@@ -81,3 +88,6 @@ index 71ad6126cf9f6f4bbd88d66ccc4bbc67e5cde53e..76287996566f0c311f539e888101978c
                      st.current_height,
                      &column,
                      &st.layout.body_area,
+-- 
+2.52.0.windows.1
+

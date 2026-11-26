@@ -287,6 +287,17 @@ describe('HWP dialog design system', () => {
 
     // Deliberate: every dialog gets the same capped shell, padding and accent.
     const allowed = new Set([
+      '.dialog-wrap > .dialog-title | flex',
+      '.dialog-wrap > .dialog-footer | flex',
+      '.dialog-wrap > .dialog-body | overscroll-behavior',
+      '.cs-left-col > .dialog-body | overscroll-behavior',
+      '.dialog-wrap.dialog-pdf-import | display,flex-direction,max-height,overflow',
+      '.dialog-pdf-import > .dialog-title | flex',
+      '.dialog-pdf-import > .dialog-footer | flex',
+      '.dialog-wrap.about-dialog | display,flex-direction,max-height,overflow',
+      '.about-dialog > .dialog-title | flex',
+      '.about-dialog > .dialog-footer | flex',
+      '.about-dialog > .dialog-footer | border-top',
       '.dialog-wrap.recovery-dialog | display,flex-direction,max-height,overflow',
       '.recovery-dialog > .dialog-title | flex',
       '.recovery-dialog > .dialog-footer | flex',

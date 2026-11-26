@@ -1,7 +1,14 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: pblsketch <239486537+pblsketch@users.noreply.github.com>
 Date: Sun, 8 Nov 2026 00:00:00 +0900
-Subject: [PATCH 16/29] fix(table): 합친 칸이 있는 표의 칸 하나 크기 바꾸기와 칸 자리 정하기
+Subject: [PATCH] =?UTF-8?q?fix(table):=20=ED=95=A9=EC=B9=9C=20=EC=B9=B8?=
+ =?UTF-8?q?=EC=9D=B4=20=EC=9E=88=EB=8A=94=20=ED=91=9C=EC=9D=98=20=EC=B9=B8?=
+ =?UTF-8?q?=20=ED=95=98=EB=82=98=20=ED=81=AC=EA=B8=B0=20=EB=B0=94=EA=BE=B8?=
+ =?UTF-8?q?=EA=B8=B0=EC=99=80=20=EC=B9=B8=20=EC=9E=90=EB=A6=AC=20=EC=A0=95?=
+ =?UTF-8?q?=ED=95=98=EA=B8=B0?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 resizeTableCell(Shift+←/→)이 행마다 너비를 누적해 칸을 다시 놓던 것을
 칸마다의 시작·끝 좌표로 바꾼다. 위 행에서 세로로 합쳐 내려온 칸의 자리를
@@ -13,12 +20,12 @@ setTableCellExtents를 더한다. 한 축(가로/세로)을 따라 칸들의 시
 
 Ported onto devel 7d06d5c70: applied without conflicts once 0016 was in place (the trial conflicts came from picking it without 0016); no code changes needed. setTableCellExtents is new — devel has no equivalent.
 ---
- src/document_core/commands/table_ops.rs | 356 ++++++++++++++++++++++----------
+ src/document_core/commands/table_ops.rs | 356 +++++++++++++++++-------
  src/wasm_api.rs                         |  21 ++
  2 files changed, 269 insertions(+), 108 deletions(-)
 
 diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/commands/table_ops.rs
-index 3024acbcc131a50f0ccf7c906f0565c74671d80d..e3bc5ffd32fa42a70e834a9ae798ccebc5819696 100644
+index d588a2b77..171a2b62e 100644
 --- a/src/document_core/commands/table_ops.rs
 +++ b/src/document_core/commands/table_ops.rs
 @@ -4070,8 +4070,11 @@ impl DocumentCore {
@@ -416,10 +423,10 @@ index 3024acbcc131a50f0ccf7c906f0565c74671d80d..e3bc5ffd32fa42a70e834a9ae798cceb
  
  /// 셀 텍스트에서 숫자를 추출한다 (콤마 제거, 공백 무시).
 diff --git a/src/wasm_api.rs b/src/wasm_api.rs
-index 6315aa8596e88685218f81d3a85952df31b213b7..f7881e83e5cec3e112eef3aeb5a987c4df02f61e 100644
+index 179183fc8..9acfa8a38 100644
 --- a/src/wasm_api.rs
 +++ b/src/wasm_api.rs
-@@ -4049,6 +4049,27 @@ impl HwpDocument {
+@@ -4252,6 +4252,27 @@ impl HwpDocument {
          .map_err(|e| e.into())
      }
  
@@ -447,3 +454,6 @@ index 6315aa8596e88685218f81d3a85952df31b213b7..f7881e83e5cec3e112eef3aeb5a987c4
      /// 표의 위치 오프셋(vertical_offset, horizontal_offset)을 이동한다.
      ///
      /// delta_h, delta_v: HWPUNIT 단위 이동량 (양수=오른쪽/아래, 음수=왼쪽/위)
+-- 
+2.52.0.windows.1
+

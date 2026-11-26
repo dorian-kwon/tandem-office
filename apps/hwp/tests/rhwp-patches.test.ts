@@ -19,6 +19,7 @@ import {
   missingPluginHooks,
   patchTargets,
   pluginHooks,
+  textboxEditHooks,
 } from '../scripts/rhwp-patches.mjs'
 import { AGENT_PLUGIN_ID } from '../studio-plugin/agent-plugin.mjs'
 
@@ -113,7 +114,7 @@ describe('a patch whose text is gone', () => {
 
 describe('what the plugin reaches into the studio for', () => {
   const complete = (file: string) => {
-    const needles = [...pluginHooks, ...hancomHooks]
+    const needles = [...pluginHooks, ...hancomHooks, ...textboxEditHooks]
       .filter((hook) => hook.file === file)
       .flatMap((hook) => hook.needles)
     return needles.length > 0 ? needles.join('\n') : null
@@ -213,13 +214,16 @@ describe('rhwp nested-table patches', () => {
   })
 
   it('let Cut take a selected table in a cell, after copying it', () => {
+    // the studio's text around the patch, as the pinned commit has it: the copy already
+    // takes a table in a cell (tableObjectClipboardTarget), the guard and the delete did not
     const source = [
-      '      if (ref) {',
-      '        // 중첩 표 잘라내기는 지원하지 않는다. keydown 경로도 같은 선택 상태를 유지한다.',
-      '        if (ref.cellPath && ref.cellPath.length > 1) return;',
-      '        this.performCopy();',
+      '    if (!ref) return;',
+      '    // 중첩 표 잘라내기는 지원하지 않는다. keydown 경로도 같은 선택 상태를 유지한다.',
+      '    if (table?.cellPath && table.cellPath.length > 1) return;',
+      '    const handle = this.wasm.borrowDocumentHandle();',
+      '      if (!await this.copySelectedObject(isCurrent) || !isCurrent()) return;',
+      '      } else {',
       '        this.cursor.moveOutOfSelectedTable();',
-      "        this.eventBus.emit('table-object-selection-changed', false);",
       "        this.executeOperation({ kind: 'snapshot', operationType: 'cutTable', operation: (wasm: WasmBridge) => {",
       '          wasm.deleteTableControl(ref.sec, ref.ppi, ref.ci);',
       '          return this.cursor.getPosition();',
@@ -227,9 +231,10 @@ describe('rhwp nested-table patches', () => {
       '',
     ].join('\n')
     const patched = applyPatch('studio-nested-table-cut', source)
-    expect(patched).not.toContain('ref.cellPath.length > 1')
-    expect(patched.indexOf('this.performCopy();')).toBeLessThan(
-      patched.indexOf('wasm.deleteTableAt(ref);'),
+    expect(patched).not.toContain('cellPath.length > 1')
+    expect(patched).not.toContain('deleteTableControl')
+    expect(patched.indexOf('this.copySelectedObject(isCurrent)')).toBeLessThan(
+      patched.indexOf('wasm.deleteTableAt(table!);'),
     )
   })
 
@@ -381,185 +386,6 @@ describe('rhwp memo menu patches', () => {
     ] as const) {
       expect(STUDIO_PATCHES).toContain(name)
     }
-  })
-})
-
-describe('rhwp memo delete-undo patches', () => {
-  // the studio's text around the patches, as the pinned release has it
-  const bridge = [
-    '  getHyperlinkContext(target: HyperlinkTarget): HyperlinkContext {',
-    "    if (!this.doc) throw new Error('문서가 로드되지 않았습니다');",
-    '    return JSON.parse(this.doc.getHyperlinkContext(JSON.stringify(target)));',
-    '  }',
-    '',
-  ].join('\n')
-  const command = [
-    'export class DeleteTextCommand implements EditCommand {',
-    '  execute(wasm: WasmBridge): DocumentPosition {',
-    '    if (!isCaption && this.count > 0) {',
-    '      const target = hyperlinkTarget(this.position);',
-    '      const context = wasm.getHyperlinkContext(target);',
-    '      if (context.links.some(link => this.position.charOffset < link.end',
-    '        && link.start < this.position.charOffset + this.count)) {',
-    '        this.fragmentId = wasm.captureDeleteRange(target.section, target.para, target.para);',
-    '      }',
-    '    }',
-    '  }',
-    '}',
-    '',
-  ].join('\n')
-  const patched = applyPatch('studio-memo-delete-undo', command)
-
-  type Anchor = {
-    sectionIndex: number
-    paraIndex: number | null
-    startCharIdx: number | null
-    endCharIdx: number | null
-    path: { controlIndex: number; cellIndex?: number; paraIndex: number }[] | null
-  }
-  type Target = { section: number; para: number; cellPath: [number, number, number][] }
-
-  /** The helper the patch adds, run against a bridge that holds the given memos. */
-  function overlaps(anchors: Anchor[], target: Target, offset: number, count: number): boolean {
-    const start = patched.indexOf('export function memoAnchorOverlaps(')
-    const block = patched.slice(start, patched.indexOf('\n}\n', start) + 2)
-    const js = ts.transpileModule(block.replace('export function', 'function'), {
-      compilerOptions: { target: ts.ScriptTarget.ES2022 },
-    }).outputText
-    const helper = new Function(`${js}\nreturn memoAnchorOverlaps`)() as (
-      wasm: { getMemoAnchors(): Anchor[] },
-      target: Target,
-      offset: number,
-      count: number,
-    ) => boolean
-    return helper({ getMemoAnchors: () => anchors }, target, offset, count)
-  }
-
-  const body = (start: number, end: number): Anchor => ({
-    sectionIndex: 0,
-    paraIndex: 3,
-    startCharIdx: start,
-    endCharIdx: end,
-    path: null,
-  })
-
-  it('give the bridge the memo anchors, and none from an engine without memos', () => {
-    const patched = applyPatch('studio-memo-anchors', bridge)
-    expect(patched).toContain('  getMemoAnchors(): {')
-    expect(patched).toContain("if (!doc || typeof doc.getMemoList !== 'function') return [];")
-    expect(patched).toContain('return JSON.parse(doc.getMemoList());')
-    expect(patched.indexOf('getMemoAnchors(')).toBeLessThan(
-      patched.indexOf('  getHyperlinkContext('),
-    )
-  })
-
-  it('capture the paragraph when a typed deletion touches a memo anchor, as for a link', () => {
-    expect(patched).toContain(
-      '        || memoAnchorOverlaps(wasm, target, this.position.charOffset, this.count)) {',
-    )
-    expect(patched.indexOf('export function memoAnchorOverlaps(')).toBeLessThan(
-      patched.indexOf('export class DeleteTextCommand'),
-    )
-    expect(patched.split('captureDeleteRange').length).toBe(2)
-  })
-
-  it('see a deletion inside or at the edge of a body memo, not beside it', () => {
-    const at = { section: 0, para: 3, cellPath: [] as [number, number, number][] }
-    expect(overlaps([body(2, 5)], at, 4, 1)).toBe(true)
-    expect(overlaps([body(2, 5)], at, 2, 1)).toBe(true)
-    expect(overlaps([body(2, 5)], at, 1, 1)).toBe(false)
-    expect(overlaps([body(2, 5)], at, 5, 1)).toBe(false)
-    expect(overlaps([body(2, 5)], at, 0, 9)).toBe(true)
-    // a caret memo is not removed by a deletion, so nothing to capture
-    expect(overlaps([body(2, 2)], at, 1, 2)).toBe(false)
-    // another paragraph or section, or a range-less memo spanning paragraphs
-    expect(overlaps([body(2, 5)], { ...at, para: 4 }, 3, 1)).toBe(false)
-    expect(overlaps([{ ...body(2, 5), sectionIndex: 1 }], at, 3, 1)).toBe(false)
-    expect(overlaps([{ ...body(2, 5), startCharIdx: null, endCharIdx: null }], at, 3, 1)).toBe(
-      false,
-    )
-    expect(overlaps([], at, 3, 1)).toBe(false)
-  })
-
-  it('match a memo in a table cell or a text box by its path', () => {
-    const cell: Anchor = {
-      ...body(0, 4),
-      path: [{ controlIndex: 1, cellIndex: 2, paraIndex: 0 }],
-    }
-    const box: Anchor = { ...body(0, 4), path: [{ controlIndex: 5, paraIndex: 1 }] }
-    expect(overlaps([cell], { section: 0, para: 3, cellPath: [[1, 2, 0]] }, 1, 1)).toBe(true)
-    expect(overlaps([cell], { section: 0, para: 3, cellPath: [[1, 3, 0]] }, 1, 1)).toBe(false)
-    expect(overlaps([cell], { section: 0, para: 3, cellPath: [] }, 1, 1)).toBe(false)
-    expect(overlaps([box], { section: 0, para: 3, cellPath: [[5, 0, 1]] }, 3, 1)).toBe(true)
-  })
-
-  it('fail when the text is gone, and are in the studio build', () => {
-    expect(() => applyPatch('studio-memo-anchors', 'export class WasmBridge {}')).toThrow(
-      /rhwp patch/,
-    )
-    expect(() =>
-      applyPatch('studio-memo-delete-undo', command.replace('implements EditCommand', '')),
-    ).toThrow(/rhwp patch/)
-    expect(STUDIO_PATCHES).toContain('studio-memo-anchors')
-    expect(STUDIO_PATCHES).toContain('studio-memo-delete-undo')
-  })
-})
-
-describe('rhwp font memo patches', () => {
-  // the studio's text around the patches, as the pinned release has it
-  const bridge = [
-    'let canvasFontSubstitutionInstalled = false;',
-    '',
-    'function installCanvasFontSubstitution(): void {',
-    '  Object.defineProperty(proto, "font", {',
-    '    set(value: string) {',
-    '      descriptor.set!.call(this, scopedHostCanvasFont(String(value)) ?? substituteCssFontFamily(String(value)));',
-    '    },',
-    '  });',
-    '}',
-    '',
-  ].join('\n')
-  const patched = applyPatch('studio-font-memo-use', applyPatch('studio-font-memo-state', bridge))
-
-  /** The memo the patch adds, run against a substitution that counts its calls. */
-  function memoWith(substitute: (font: string) => string): (font: string) => string {
-    const start = patched.indexOf('let canvasFontMemo')
-    const block = patched.slice(start, patched.indexOf('\n}\n', start) + 2)
-    const js = ts.transpileModule(block, {
-      compilerOptions: { target: ts.ScriptTarget.ES2022 },
-    }).outputText
-    return new Function('substituteCssFontFamily', `${js}\nreturn memoSubstituteCssFontFamily`)(
-      substitute,
-    )
-  }
-
-  it('send the font setter through the memo, after the host fonts as before', () => {
-    expect(patched).toContain(
-      'scopedHostCanvasFont(String(value)) ?? memoSubstituteCssFontFamily(String(value))',
-    )
-    expect(patched).not.toContain('?? substituteCssFontFamily(String(value))')
-    expect(patched.startsWith('let canvasFontSubstitutionInstalled = false;\n')).toBe(true)
-  })
-
-  it('substitute a font string once in a synchronous stretch, and again after it', async () => {
-    const calls: string[] = []
-    const memo = memoWith((font) => {
-      calls.push(font)
-      return `${font} chain`
-    })
-    expect(memo('10px "A"')).toBe('10px "A" chain')
-    expect(memo('10px "A"')).toBe('10px "A" chain')
-    expect(memo('bold 10px "B"')).toBe('bold 10px "B" chain')
-    expect(calls).toEqual(['10px "A"', 'bold 10px "B"'])
-    // a microtask checkpoint: fonts found or a document opened since then are seen
-    await Promise.resolve()
-    expect(memo('10px "A"')).toBe('10px "A" chain')
-    expect(calls).toEqual(['10px "A"', 'bold 10px "B"', '10px "A"'])
-  })
-
-  it('are in the studio build', () => {
-    expect(STUDIO_PATCHES).toContain('studio-font-memo-state')
-    expect(STUDIO_PATCHES).toContain('studio-font-memo-use')
   })
 })
 
@@ -783,6 +609,29 @@ describe('rhwp clipboard objects patch', () => {
   })
 })
 
+function unresolvedNames(file: string, text: string): Set<string> {
+  const slash = (path: string) => path.replaceAll('\\', '/')
+  const target = slash(file)
+  const host = ts.createCompilerHost({})
+  const read = host.getSourceFile
+  host.getSourceFile = (name, language) =>
+    slash(name) === target ? ts.createSourceFile(name, text, language, true) : read(name, language)
+  const program = ts.createProgram(
+    [target],
+    { noResolve: true, noEmit: true, lib: ['lib.esnext.d.ts', 'lib.dom.d.ts'], types: [] },
+    host,
+  )
+  const names = new Set<string>()
+  for (const diagnostic of program.getSemanticDiagnostics(program.getSourceFile(target))) {
+    // 2304: cannot find name; 2552: cannot find name, did you mean
+    if (diagnostic.code !== 2304 && diagnostic.code !== 2552) continue
+    const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, ' ')
+    const name = /'([^']+)'/.exec(message)?.[1]
+    if (name) names.add(name)
+  }
+  return names
+}
+
 describe('the studio source the build fetched', () => {
   const studio = join(
     __dirname,
@@ -800,6 +649,7 @@ describe('the studio source the build fetched', () => {
     'src/core/local-fonts.ts',
     'src/engine/input-handler.ts',
     'src/engine/input-handler-keyboard.ts',
+    'src/engine/input-handler-picture.ts',
     'src/engine/input-handler-hyperlink.ts',
     'src/engine/input-handler-text.ts',
     'src/engine/input-handler-table.ts',
@@ -829,6 +679,27 @@ describe('the studio source the build fetched', () => {
       expect(() => applyPatch(name, readFileSync(targets[0], 'utf8')), name).not.toThrow()
     }
   })
+
+  // A patch that names something its file no longer has builds without a word (the bundler
+  // leaves the name to the global scope) and fails when it runs: rhwp v0.9.0's main.ts stopped
+  // importing getLocalFontRecords, which studio-pc-fonts called (decision 0116).
+  it.skipIf(!existsSync(studio))(
+    'names nothing its file does not declare or import',
+    () => {
+      for (const file of files) {
+        const names = STUDIO_PATCHES.filter((name) => patchTargets(name, file))
+        if (names.length === 0 || !existsSync(file)) continue
+        const before = readFileSync(file, 'utf8')
+        const after = names.reduce((code, name) => applyPatch(name, code), before)
+        const known = unresolvedNames(file, before)
+        expect(
+          [...unresolvedNames(file, after)].filter((name) => !known.has(name)),
+          file,
+        ).toEqual([])
+      }
+    },
+    120_000,
+  )
 
   it.skipIf(!existsSync(studio))('has what the plugin and the Hangul keys reach into', () => {
     const read = (file: string) => {
@@ -1210,14 +1081,14 @@ describe("Hangul's plain drag of a horizontal table border", () => {
 
 describe('rhwp hyperlink open patches', () => {
   const clickSource = [
-    '      if (!/^https?:\\/\\//i.test(link.uri)) continue;',
-    "    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return;",
-    '    // 실제 사용자 mouseup 안에서 열고 원본 탭의 opener 접근을 끊는다.',
-    "    const opened = window.open('about:blank', '_blank');",
-    "    if (!opened) { showToast({ message: '팝업이 차단되었습니다. 이 사이트의 팝업을 허용해 주세요.' }); return; }",
-    '    opened.opener = null;',
-    '    opened.location.replace(url.href);',
-    '    // visited-link formatting',
+    '      web: uri => {',
+    '        const url = new URL(uri);',
+    "        if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return false;",
+    "        const opened = window.open('about:blank', '_blank');",
+    "        if (!opened) { showToast({ message: '팝업이 차단되었습니다. 이 사이트의 팝업을 허용해 주세요.' }); return false; }",
+    '        opened.opener = null; opened.location.replace(url.href); return true;',
+    '      },',
+    '      mail: uri => { window.location.assign(uri); return true; },',
   ].join('\n')
 
   const dialogSource = [
@@ -1235,8 +1106,12 @@ describe('rhwp hyperlink open patches', () => {
     expect(patched).not.toContain('about:blank')
     expect(patched).not.toContain('window.location.assign')
     expect(patched).toContain("window.open(url.href, '_blank', 'noopener,noreferrer');")
-    expect(patched).toContain('/^mailto:/i.test(link.uri)')
-    expect(patched).toContain('url.username || url.password')
+    expect(patched).toContain(
+      "mail: uri => { window.open(uri, '_blank', 'noopener,noreferrer'); return true; },",
+    )
+    expect(patched).toContain(
+      "if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return false;",
+    )
   })
 
   it('opens hyperlink dialog previews directly through window.open without about:blank popup checks', () => {

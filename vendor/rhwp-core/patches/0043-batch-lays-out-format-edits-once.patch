@@ -1,7 +1,15 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: pblsketch <239486537+pblsketch@users.noreply.github.com>
 Date: Sun, 8 Nov 2026 00:00:00 +0900
-Subject: [PATCH 31/31] perf(batch): 일괄 처리 안의 문단 모양·스타일·개체 편집은 구역을 끝에서 한 번 배치한다
+Subject: [PATCH] =?UTF-8?q?perf(batch):=20=EC=9D=BC=EA=B4=84=20=EC=B2=98?=
+ =?UTF-8?q?=EB=A6=AC=20=EC=95=88=EC=9D=98=20=EB=AC=B8=EB=8B=A8=20=EB=AA=A8?=
+ =?UTF-8?q?=EC=96=91=C2=B7=EC=8A=A4=ED=83=80=EC=9D=BC=C2=B7=EA=B0=9C?=
+ =?UTF-8?q?=EC=B2=B4=20=ED=8E=B8=EC=A7=91=EC=9D=80=20=EA=B5=AC=EC=97=AD?=
+ =?UTF-8?q?=EC=9D=84=20=EB=81=9D=EC=97=90=EC=84=9C=20=ED=95=9C=20=EB=B2=88?=
+ =?UTF-8?q?=20=EB=B0=B0=EC=B9=98=ED=95=9C=EB=8B=A4?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 일괄 처리(beginBatch~endBatch) 안에서도 문단 모양·스타일 호출(applyParaFormat,
 setParaShapeId, applyStyle)과 머리말·꼬리말 서식 호출(applyParaFormatInHf,
@@ -23,20 +31,20 @@ insertFootnote, insertEndnote)는 쪽 나누기는 미뤘지만 구역 전체를
 - 배치 밖은 그대로다. 배치한 결과는 같은 호출을 하나씩 한 결과와 쪽 배치, 그림, HWP·HWPX
   저장 바이트가 같다.
 ---
- src/document_core/commands/formatting.rs           | 268 ++++++++++++++++++++-
- src/document_core/commands/header_footer_ops.rs    |   4 +-
- .../commands/object_ops/footnote_shape.rs          |  29 ++-
- src/document_core/commands/object_ops/note.rs      |  27 ++-
- src/document_core/commands/object_ops/picture.rs   |   4 +-
- src/document_core/commands/object_ops/table.rs     |   2 +-
- src/document_core/commands/table_ops.rs            |   4 +-
+ src/document_core/commands/formatting.rs      | 268 +++++++++++++++++-
+ .../commands/header_footer_ops.rs             |   4 +-
+ .../commands/object_ops/footnote_shape.rs     |  29 +-
+ src/document_core/commands/object_ops/note.rs |  27 +-
+ .../commands/object_ops/picture.rs            |   4 +-
+ .../commands/object_ops/table.rs              |   2 +-
+ src/document_core/commands/table_ops.rs       |   4 +-
  7 files changed, 315 insertions(+), 23 deletions(-)
 
 diff --git a/src/document_core/commands/formatting.rs b/src/document_core/commands/formatting.rs
-index 168f5232f279d1af28b007922c9abbfebc899e4f..6b99c073dc05062465709616960b5054c45b076b 100644
+index 6bd99c27a..3e97767fd 100644
 --- a/src/document_core/commands/formatting.rs
 +++ b/src/document_core/commands/formatting.rs
-@@ -1347,6 +1347,44 @@ impl DocumentCore {
+@@ -1389,6 +1389,44 @@ impl DocumentCore {
          }
      }
  
@@ -81,7 +89,7 @@ index 168f5232f279d1af28b007922c9abbfebc899e4f..6b99c073dc05062465709616960b5054
      /// 글자 서식 적용 (네이티브) — 셀 내 문단
      pub fn apply_char_format_in_cell_native(
          &mut self,
-@@ -1781,7 +1819,7 @@ impl DocumentCore {
+@@ -1826,7 +1864,7 @@ impl DocumentCore {
          }
  
          self.document.sections[sec_idx].raw_stream = None;
@@ -90,7 +98,7 @@ index 168f5232f279d1af28b007922c9abbfebc899e4f..6b99c073dc05062465709616960b5054
          self.event_log.push(DocumentEvent::ParaFormatChanged {
              section: sec_idx,
              para: para_idx,
-@@ -1865,7 +1903,7 @@ impl DocumentCore {
+@@ -1910,7 +1948,7 @@ impl DocumentCore {
          );
  
          self.document.sections[sec_idx].raw_stream = None;
@@ -99,7 +107,7 @@ index 168f5232f279d1af28b007922c9abbfebc899e4f..6b99c073dc05062465709616960b5054
          self.event_log.push(DocumentEvent::ParaFormatChanged {
              section: sec_idx,
              para: para_idx,
-@@ -2559,7 +2597,7 @@ impl DocumentCore {
+@@ -2604,7 +2642,7 @@ impl DocumentCore {
  
              self.reflow_body_paragraph(sec_idx, para_idx);
              self.document.sections[sec_idx].raw_stream = None;
@@ -108,7 +116,7 @@ index 168f5232f279d1af28b007922c9abbfebc899e4f..6b99c073dc05062465709616960b5054
              self.event_log.push(DocumentEvent::CharFormatChanged {
                  section: sec_idx,
                  para: para_idx,
-@@ -2609,7 +2647,7 @@ impl DocumentCore {
+@@ -2654,7 +2692,7 @@ impl DocumentCore {
  
          self.reflow_body_paragraph(sec_idx, para_idx);
          self.document.sections[sec_idx].raw_stream = None;
@@ -117,7 +125,7 @@ index 168f5232f279d1af28b007922c9abbfebc899e4f..6b99c073dc05062465709616960b5054
          self.event_log.push(DocumentEvent::ParaFormatChanged {
              section: sec_idx,
              para: para_idx,
-@@ -3774,3 +3812,225 @@ mod cell_reflow_width_tests {
+@@ -3819,3 +3857,225 @@ mod cell_reflow_width_tests {
          );
      }
  }
@@ -344,21 +352,21 @@ index 168f5232f279d1af28b007922c9abbfebc899e4f..6b99c073dc05062465709616960b5054
 +    }
 +}
 diff --git a/src/document_core/commands/header_footer_ops.rs b/src/document_core/commands/header_footer_ops.rs
-index bf314e322d191c6ceac584b4269ce10fdd2835b9..788c2d716b56758bbc3c09bfaca7f7c11e1199b3 100644
+index f8d7af7fc..3323a80e1 100644
 --- a/src/document_core/commands/header_footer_ops.rs
 +++ b/src/document_core/commands/header_footer_ops.rs
-@@ -876,7 +876,7 @@ impl DocumentCore {
-             }
+@@ -890,7 +890,7 @@ impl DocumentCore {
          }
+         self.sync_master_page_edit(section_idx, apply_to);
          self.document.sections[section_idx].raw_stream = None;
 -        self.rebuild_section(section_idx);
 +        self.rebuild_section_at_batch_end(section_idx, None);
          for (hf_para_idx, range_start, range_end) in changed_paragraphs {
              self.event_log.push(DocumentEvent::CharFormatChanged {
                  section: section_idx,
-@@ -1234,7 +1234,7 @@ impl DocumentCore {
-         }
+@@ -1248,7 +1248,7 @@ impl DocumentCore {
  
+         self.sync_master_page_edit(section_idx, apply_to);
          self.document.sections[section_idx].raw_stream = None;
 -        self.rebuild_section(section_idx);
 +        self.rebuild_section_at_batch_end(section_idx, None);
@@ -366,7 +374,7 @@ index bf314e322d191c6ceac584b4269ce10fdd2835b9..788c2d716b56758bbc3c09bfaca7f7c1
              section: section_idx,
              para: 0,
 diff --git a/src/document_core/commands/object_ops/footnote_shape.rs b/src/document_core/commands/object_ops/footnote_shape.rs
-index e8628a674080dbd6fc626e27aab65da40192bb50..153692da26a6e11b328ab63bee78062716878b2f 100644
+index e8628a674..153692da2 100644
 --- a/src/document_core/commands/object_ops/footnote_shape.rs
 +++ b/src/document_core/commands/object_ops/footnote_shape.rs
 @@ -457,21 +457,30 @@ impl DocumentCore {
@@ -411,7 +419,7 @@ index e8628a674080dbd6fc626e27aab65da40192bb50..153692da26a6e11b328ab63bee780627
          }
          self.paginate_if_needed();
 diff --git a/src/document_core/commands/object_ops/note.rs b/src/document_core/commands/object_ops/note.rs
-index 4de139abfe393224d3076e5b37b54e9cfce9c690..4bd228077deac580f5496c54b81c8bf97819b255 100644
+index 4de139abf..4bd228077 100644
 --- a/src/document_core/commands/object_ops/note.rs
 +++ b/src/document_core/commands/object_ops/note.rs
 @@ -599,7 +599,7 @@ impl DocumentCore {
@@ -463,7 +471,7 @@ index 4de139abfe393224d3076e5b37b54e9cfce9c690..4bd228077deac580f5496c54b81c8bf9
  
  #[cfg(test)]
 diff --git a/src/document_core/commands/object_ops/picture.rs b/src/document_core/commands/object_ops/picture.rs
-index 343dff567885615ea80271c2bdaa531150770563..332c7cbf16fc7c883300681aecaf68311b0b67e7 100644
+index 343dff567..332c7cbf1 100644
 --- a/src/document_core/commands/object_ops/picture.rs
 +++ b/src/document_core/commands/object_ops/picture.rs
 @@ -662,7 +662,7 @@ impl DocumentCore {
@@ -485,10 +493,10 @@ index 343dff567885615ea80271c2bdaa531150770563..332c7cbf16fc7c883300681aecaf6831
                  self.invalidate_page_tree_cache();
  
 diff --git a/src/document_core/commands/object_ops/table.rs b/src/document_core/commands/object_ops/table.rs
-index 2b3c5b9fad7f9b8db70ec075f19b52e4d798140f..c1c2f9c5ca57cbb5dde513295a31e02011deaeaf 100644
+index 5a91bf884..cacb243be 100644
 --- a/src/document_core/commands/object_ops/table.rs
 +++ b/src/document_core/commands/object_ops/table.rs
-@@ -1792,7 +1792,7 @@ impl DocumentCore {
+@@ -1794,7 +1794,7 @@ impl DocumentCore {
              inner_control_idx,
          )?;
          section.raw_stream = None;
@@ -498,7 +506,7 @@ index 2b3c5b9fad7f9b8db70ec075f19b52e4d798140f..c1c2f9c5ca57cbb5dde513295a31e020
          self.invalidate_page_tree_cache();
          let outer_table_ctrl = path.first().unwrap().0;
 diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/commands/table_ops.rs
-index e3bc5ffd32fa42a70e834a9ae798ccebc5819696..3f334cef884ebf6f63b62e965f86e7fc911d0ded 100644
+index 171a2b62e..f1684097f 100644
 --- a/src/document_core/commands/table_ops.rs
 +++ b/src/document_core/commands/table_ops.rs
 @@ -1668,7 +1668,7 @@ impl DocumentCore {
@@ -519,3 +527,6 @@ index e3bc5ffd32fa42a70e834a9ae798ccebc5819696..3f334cef884ebf6f63b62e965f86e7fc
          self.paginate_if_needed();
  
          if caption_created {
+-- 
+2.52.0.windows.1
+

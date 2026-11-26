@@ -1,7 +1,14 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: pblsketch <239486537+pblsketch@users.noreply.github.com>
 Date: Sun, 8 Nov 2026 00:00:00 +0900
-Subject: [PATCH 7/29] perf(canvas-metrics): 요청 수집은 글자 진행 폭을 재지 않고 폭 출처만 본다
+Subject: [PATCH] =?UTF-8?q?perf(canvas-metrics):=20=EC=9A=94=EC=B2=AD=20?=
+ =?UTF-8?q?=EC=88=98=EC=A7=91=EC=9D=80=20=EA=B8=80=EC=9E=90=20=EC=A7=84?=
+ =?UTF-8?q?=ED=96=89=20=ED=8F=AD=EC=9D=84=20=EC=9E=AC=EC=A7=80=20=EC=95=8A?=
+ =?UTF-8?q?=EA=B3=A0=20=ED=8F=AD=20=EC=B6=9C=EC=B2=98=EB=A7=8C=20=EB=B3=B8?=
+ =?UTF-8?q?=EB=8B=A4?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 편집할 때마다 studio 가 `collectCanvasMetricRequests` 를 부르고, 수집기는 문서의 모든 run 에
 `trace_char_width_decisions` 를 부른다. 그 함수는 탭의 진행 폭을 채우려고 run 전체의 글자
@@ -14,13 +21,13 @@ Subject: [PATCH 7/29] perf(canvas-metrics): 요청 수집은 글자 진행 폭�
 
 Ported onto devel 7d06d5c70: devel still calls trace_char_width_decisions from the collector (upstream issue #8162 is still open), so the patch is unchanged; only the conflict in the layout.rs re-export list had to be redone against devel's longer list.
 ---
- src/document_core/canvas_metric_requests.rs |  5 ++-
- src/renderer/layout.rs                      | 12 +++---
- src/renderer/layout/text_measurement.rs     | 61 +++++++++++++++++++++++++++++
+ src/document_core/canvas_metric_requests.rs |  5 +-
+ src/renderer/layout.rs                      | 12 ++--
+ src/renderer/layout/text_measurement.rs     | 61 +++++++++++++++++++++
  3 files changed, 70 insertions(+), 8 deletions(-)
 
 diff --git a/src/document_core/canvas_metric_requests.rs b/src/document_core/canvas_metric_requests.rs
-index 31124f94815829ebdc0dc646c33e4e6d09571c9b..69f216a054468b76a4820ca0fe863a851e8805ca 100644
+index 31124f948..69f216a05 100644
 --- a/src/document_core/canvas_metric_requests.rs
 +++ b/src/document_core/canvas_metric_requests.rs
 @@ -4,7 +4,7 @@ use crate::model::{control::Control, paragraph::Paragraph, shape::ShapeObject};
@@ -43,10 +50,10 @@ index 31124f94815829ebdc0dc646c33e4e6d09571c9b..69f216a054468b76a4820ca0fe863a85
                      for cluster in run.text.graphemes(true) {
                          let count = cluster.chars().count();
 diff --git a/src/renderer/layout.rs b/src/renderer/layout.rs
-index e4a86d8b784e166781f9be2e1b2c2925bba30714..e6cc1e7554bf0ec7167b8112459247a7a50576bf 100644
+index aa0e0d37c..40799e4fe 100644
 --- a/src/renderer/layout.rs
 +++ b/src/renderer/layout.rs
-@@ -3944,12 +3944,12 @@ pub(crate) use utils::extract_picture_transform;
+@@ -4109,12 +4109,12 @@ pub(crate) use utils::extract_picture_transform;
  pub(crate) use table_partial::{PartialTableCellProbe, ProbeCutPlan};
  pub(crate) use terminal_tracking::glyph_letter_spacing_advance;
  pub(crate) use text_measurement::{
@@ -63,13 +70,13 @@ index e4a86d8b784e166781f9be2e1b2c2925bba30714..e6cc1e7554bf0ec7167b8112459247a7
 +    has_hft_bold_tracking, is_cjk_char, is_halfwidth_cjk_quote, kopub_declared_space_em,
 +    kopub_space_advance_em, resolved_letter_spacing, resolved_to_text_style, split_into_clusters,
      trace_char_width_decisions, try_resolved_to_text_style, verified_source_projection_face,
-     verified_source_projection_text, CharWidthDecision,
- };
+     verified_source_projection_text, verified_source_projection_text_with_fallback,
+     CharWidthDecision,
 diff --git a/src/renderer/layout/text_measurement.rs b/src/renderer/layout/text_measurement.rs
-index ce0578e58b30cf149e91fda640122f1833ff68c7..c0fe7ffb336f5e474be8718b45ca2add794d46f2 100644
+index 538bfdd1e..04388da76 100644
 --- a/src/renderer/layout/text_measurement.rs
 +++ b/src/renderer/layout/text_measurement.rs
-@@ -2964,6 +2964,29 @@ pub(crate) fn trace_char_width_decisions<'a>(
+@@ -3073,6 +3073,29 @@ pub(crate) fn trace_char_width_decisions<'a>(
          .collect()
  }
  
@@ -99,7 +106,7 @@ index ce0578e58b30cf149e91fda640122f1833ff68c7..c0fe7ffb336f5e474be8718b45ca2add
  // ── 문자 분류 함수 ──────────────────────────────────────────────────
  
  /// CJK 문자 여부 판별 (EmbeddedTextMeasurer의 히우리스틱 폭 계산에서 사용)
-@@ -3267,6 +3290,44 @@ pub(crate) fn estimate_text_width_with_storage<S: crate::storage::Storage>(
+@@ -3377,6 +3400,44 @@ pub(crate) fn estimate_text_width_with_storage<S: crate::storage::Storage>(
  mod tests {
      use super::*;
  
@@ -144,3 +151,6 @@ index ce0578e58b30cf149e91fda640122f1833ff68c7..c0fe7ffb336f5e474be8718b45ca2add
      #[test]
      fn issue_4442_noto_sans_kr_regular_ascii_shared_width_uses_tracked_advances() {
          let style = TextStyle {
+-- 
+2.52.0.windows.1
+

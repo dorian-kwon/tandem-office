@@ -1,7 +1,14 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: pblsketch <239486537+pblsketch@users.noreply.github.com>
 Date: Sun, 8 Nov 2026 00:00:00 +0900
-Subject: [PATCH 21/29] fix(typeset): 선언한 표가 아닌 높이를 적은 TAC host 저장 줄은 그린 표로 센다
+Subject: [PATCH] =?UTF-8?q?fix(typeset):=20=EC=84=A0=EC=96=B8=ED=95=9C=20?=
+ =?UTF-8?q?=ED=91=9C=EA=B0=80=20=EC=95=84=EB=8B=8C=20=EB=86=92=EC=9D=B4?=
+ =?UTF-8?q?=EB=A5=BC=20=EC=A0=81=EC=9D=80=20TAC=20host=20=EC=A0=80?=
+ =?UTF-8?q?=EC=9E=A5=20=EC=A4=84=EC=9D=80=20=EA=B7=B8=EB=A6=B0=20=ED=91=9C?=
+ =?UTF-8?q?=EB=A1=9C=20=EC=84=BC=EB=8B=A4?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 한/글이 하는 일
   글 없는 host 에 글자처럼 취급하는 표 하나만 든 줄은 그 표의 바깥 상자 높이다. 한/글이
@@ -27,14 +34,14 @@ devel 이 하던 일
   모두 2쪽. 이 커밋 전 rhwp: 5종 2쪽, s45~s47 3쪽. 뒤: 5종 1쪽, s45~s47 2쪽.
   samples/ 1,337건(3MB 미만)의 쪽 수·쪽마다 본문 위치 서명은 0030·0031 을 합친 전후가 같다.
 ---
- src/renderer/typeset.rs | 42 ++++++++++++++++++++++++++++++++++++++++++
+ src/renderer/typeset.rs | 42 +++++++++++++++++++++++++++++++++++++++++
  1 file changed, 42 insertions(+)
 
 diff --git a/src/renderer/typeset.rs b/src/renderer/typeset.rs
-index 48fa84c1241a13080a98d1b271fad3e76744d88c..e0d576072a0843f1894573848e54e43e74209e99 100644
+index 62c83e809..9abe13e95 100644
 --- a/src/renderer/typeset.rs
 +++ b/src/renderer/typeset.rs
-@@ -4587,6 +4587,48 @@ impl TypesetEngine {
+@@ -4685,6 +4685,48 @@ impl TypesetEngine {
          } else {
              table_height
          };
@@ -83,3 +90,6 @@ index 48fa84c1241a13080a98d1b271fad3e76744d88c..e0d576072a0843f1894573848e54e43e
          // [#5699 H1] 위와 대칭인 과소 방향: 저장 lineseg 보유 문서인데 저장 th 관례
          // 기반 계상이 선언·실측 표높이 둘 다의 1/4 미만이면, 생성기 사다리가 표
          // 밴드를 계상하지 않은 자기모순이다(자치법규 서식류 균일 사다리). 실측
+-- 
+2.52.0.windows.1
+

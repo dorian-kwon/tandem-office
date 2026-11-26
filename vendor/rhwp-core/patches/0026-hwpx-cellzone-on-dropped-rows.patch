@@ -1,7 +1,14 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: pblsketch <239486537+pblsketch@users.noreply.github.com>
 Date: Sun, 8 Nov 2026 00:00:00 +0900
-Subject: [PATCH 15/29] fix(hwpx): 셀 영역 경계가 빠진 행에 걸려도 HWPX 저장을 거절하지 않는다
+Subject: [PATCH] =?UTF-8?q?fix(hwpx):=20=EC=85=80=20=EC=98=81=EC=97=AD=20?=
+ =?UTF-8?q?=EA=B2=BD=EA=B3=84=EA=B0=80=20=EB=B9=A0=EC=A7=84=20=ED=96=89?=
+ =?UTF-8?q?=EC=97=90=20=EA=B1=B8=EB=A0=A4=EB=8F=84=20HWPX=20=EC=A0=80?=
+ =?UTF-8?q?=EC=9E=A5=EC=9D=84=20=EA=B1=B0=EC=A0=88=ED=95=98=EC=A7=80=20?=
+ =?UTF-8?q?=EC=95=8A=EB=8A=94=EB=8B=A4?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 devel 은 세로로 합친 칸 때문에 시작하는 칸이 없는 행을 HWPX 표에서 뺀다
 (src/model/table_row_grid.rs, #8120). 행 번호·rowSpan·셀 영역을 다시 매기고,
@@ -30,13 +37,13 @@ devel 의 나머지 경로는 그대로다. 0026 의 `rows_below_dropped_rows_ar
 
 Ported onto devel 7d06d5c70: replaces 0026's serializer-side `HwpxRows` with a change to devel's row-grid projection; only the cell-zone-on-dropped-row case differs from devel.
 ---
- src/model/table_row_grid.rs                        | 19 ++++++--
- src/serializer/hwpx/table.rs                       | 51 ++++++++++++++++++++++
- .../issue_7998_pdf_retained_border_structure.rs    | 43 +++++++++++++++---
+ src/model/table_row_grid.rs                   | 19 +++++--
+ src/serializer/hwpx/table.rs                  | 51 +++++++++++++++++++
+ ...ssue_7998_pdf_retained_border_structure.rs | 43 ++++++++++++++--
  3 files changed, 104 insertions(+), 9 deletions(-)
 
 diff --git a/src/model/table_row_grid.rs b/src/model/table_row_grid.rs
-index ec0744499021f3941772b32170870f318bba8073..41e8d6c40fbaa293cea71e38925690ac0879bfbd 100644
+index ec0744499..41e8d6c40 100644
 --- a/src/model/table_row_grid.rs
 +++ b/src/model/table_row_grid.rs
 @@ -133,14 +133,20 @@ where
@@ -80,7 +87,7 @@ index ec0744499021f3941772b32170870f318bba8073..41e8d6c40fbaa293cea71e38925690ac
          projected
              .rebuild_row_sizes_with_storage(storage)
 diff --git a/src/serializer/hwpx/table.rs b/src/serializer/hwpx/table.rs
-index 55cad145e0fc09444ddffd0f2186d0fe903e1d5d..40caeeb451ac82d34881e0fee8ef39b36a86f9cf 100644
+index 55cad145e..40caeeb45 100644
 --- a/src/serializer/hwpx/table.rs
 +++ b/src/serializer/hwpx/table.rs
 @@ -2056,4 +2056,55 @@ mod tests {
@@ -140,7 +147,7 @@ index 55cad145e0fc09444ddffd0f2186d0fe903e1d5d..40caeeb451ac82d34881e0fee8ef39b3
 +    }
  }
 diff --git a/tests/cases/issue_7998_pdf_retained_border_structure.rs b/tests/cases/issue_7998_pdf_retained_border_structure.rs
-index afd5bd045e671fdff5a8813e333adee20cb6c745..99f6fce9f4522d54305606c4880cf4a001754fb9 100644
+index afd5bd045..99f6fce9f 100644
 --- a/tests/cases/issue_7998_pdf_retained_border_structure.rs
 +++ b/tests/cases/issue_7998_pdf_retained_border_structure.rs
 @@ -1796,6 +1796,12 @@ fn row_projection_rejects_ambiguous_ids_and_physical_holes() {
@@ -200,3 +207,6 @@ index afd5bd045e671fdff5a8813e333adee20cb6c745..99f6fce9f4522d54305606c4880cf4a0
  }
  
  fn topology_scope_load() -> (DocumentCore, usize) {
+-- 
+2.52.0.windows.1
+

@@ -1,7 +1,7 @@
 {
   "name": "@rhwp/core",
-  "version": "0.9.0-ieum.34",
-  "description": "rhwp v0.9.0 HWP/HWPX engine (WebAssembly) rebuilt with the patches in ./patches",
+  "version": "0.9.1-ieum.36",
+  "description": "rhwp v0.9.1 HWP/HWPX engine (WebAssembly) rebuilt with the patches in ./patches",
   "private": true,
   "type": "module",
   "main": "rhwp.js",
@@ -16,8 +16,8 @@
     "./snippets/*"
   ],
   "rhwp": {
-    "tag": "v0.9.0",
-    "commit": "c9095c5f67632e6721e800ccc7fb43ea49d26682",
+    "tag": "v0.9.1",
+    "commit": "981ce66b4183b13c1a3b5907e04a8969c8c42034",
     "patches": [
       "0001-host-inline-table-clears-paper-square-table.patch",
       "0003-footnote-area-below-body-flow.patch",
@@ -30,7 +30,6 @@
       "0020-topbottom-float-anchor-flow.patch",
       "0021-table-look-and-cell-first-lead.patch",
       "0022-selection-follows-drawn-lines.patch",
-      "0023-duplex-master-page-shift.patch",
       "0024-picture-effect-opacity.patch",
       "0025-page-number-pages.patch",
       "0026-hwpx-cellzone-on-dropped-rows.patch",
@@ -50,18 +49,17 @@
       "0041-edited-row-floor-follows-shrunk-cells.patch",
       "0042-structure-edit-moves-tac-host-row.patch",
       "0043-batch-lays-out-format-edits-once.patch",
-      "0044-cmap-range-entries-across-lines.patch",
       "0047-stale-table-width-rows-outvote.patch",
-      "0049-cmap-range-comments.patch",
       "0050-export-keeps-canvas-metrics.patch",
       "0051-column-separator-setter.patch",
       "0052-picture-crop-image-extent.patch",
       "0053-picture-z-order-with-shapes.patch",
       "0054-duplicate-floating-control.patch",
       "0055-nested-table-path-calls.patch",
-      "0056-atomic-table-save-verify.patch"
+      "0056-atomic-table-save-verify.patch",
+      "0057-textbox-hit-test-and-in-cell-edit.patch"
     ],
     "wasmPack": "0.15.0",
-    "wasmSha256": "9e47aaf112cffe116bdf8a05e053094eb53e501fb25955a04025496023680d3c"
+    "wasmSha256": "a71267eb05c848d0beb51623b6b764d64750cd9f51f4d870b4bdf6d160953ac2"
   }
 }

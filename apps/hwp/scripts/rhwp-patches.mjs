@@ -117,23 +117,6 @@
  *   so a selection can take a memo without going to the Insert menu. The menu keeps the
  *   selection, and the memo editor reads it when it opens.
  *
- * studio-memo-anchors, studio-memo-delete-undo
- *   The engine drops a memo when Backspace or Delete removes the last character of its
- *   anchor (vendor/rhwp-core patch 0018, decision 0072). The studio's undo of a typed
- *   deletion only puts the text back, so the memo stayed gone. The bridge gains a call
- *   for the memo anchors, and a deletion that touches one captures its paragraph first,
- *   as the studio already does for a link, so undo restores the paragraph with the memo.
- *
- * studio-font-memo-state, studio-font-memo-use
- *   The studio replaces the Canvas2D `font` setter so that every font string
- *   the engine sets passes its font substitution, which builds the family
- *   chain anew each time. Drawing a page sets the same few strings thousands
- *   of times, and that rebuilding was most of the cost of a keystroke. The
- *   setter keeps each string's answer until the next microtask checkpoint:
- *   one synchronous draw reuses it, and what the answer depends on (the fonts
- *   found on the PC, the open document's substitutions) changes only when an
- *   asynchronous step ends, so every later draw asks again.
- *
  * studio-pc-fonts
  *   The studio lists the PC's fonts only after the 찾기 button of its options dialog,
  *   so its font lists held the base fonts and the document's own until then. At start-up
@@ -143,6 +126,7 @@
 
 import { CLIPBOARD_HTML_MODULE } from '../studio-plugin/clipboard-html.mjs'
 import { HANCOM_KEYS_MODULE, studioCommandIds } from '../studio-plugin/hancom-keys.mjs'
+import { TEXTBOX_EDIT_MODULE } from '../studio-plugin/textbox-edit.mjs'
 import { PC_FONTS_MODULE } from '../studio-plugin/pc-fonts.mjs'
 
 /** Must equal RENDERER_SCHEME in packages/electron-utils/src/renderer-scheme.ts. */
@@ -165,6 +149,7 @@ export { CLIPBOARD_HTML_MODULE }
 
 /** Module specifier the studio-pc-fonts patch imports; build-studio.mjs aliases it. */
 export { PC_FONTS_MODULE }
+export { TEXTBOX_EDIT_MODULE }
 export const WHEEL_ZOOM_MODULE = '@ieum/wheel-zoom'
 
 const PATCHES = {
@@ -264,22 +249,27 @@ const PATCHES = {
   },
   'studio-nested-table-cut': {
     file: /[\\/]rhwp-studio[\\/]src[\\/]engine[\\/]input-handler\.ts$/,
-    find: [
-      '        // 중첩 표 잘라내기는 지원하지 않는다. keydown 경로도 같은 선택 상태를 유지한다.',
-      '        if (ref.cellPath && ref.cellPath.length > 1) return;',
-      '        this.performCopy();',
-      '        this.cursor.moveOutOfSelectedTable();',
-      "        this.eventBus.emit('table-object-selection-changed', false);",
-      "        this.executeOperation({ kind: 'snapshot', operationType: 'cutTable', operation: (wasm: WasmBridge) => {",
-      '          wasm.deleteTableControl(ref.sec, ref.ppi, ref.ci);',
-    ].join('\n'),
-    replace: [
-      '        this.performCopy();',
-      '        this.cursor.moveOutOfSelectedTable();',
-      "        this.eventBus.emit('table-object-selection-changed', false);",
-      "        this.executeOperation({ kind: 'snapshot', operationType: 'cutTable', operation: (wasm: WasmBridge) => {",
-      '          wasm.deleteTableAt(ref);',
-    ].join('\n'),
+    edits: [
+      // the copy already takes a table in a cell (tableObjectClipboardTarget); only the delete did not
+      {
+        find: [
+          '    // 중첩 표 잘라내기는 지원하지 않는다. keydown 경로도 같은 선택 상태를 유지한다.',
+          '    if (table?.cellPath && table.cellPath.length > 1) return;',
+          '',
+        ].join('\n'),
+        replace: '',
+      },
+      {
+        find: [
+          "        this.executeOperation({ kind: 'snapshot', operationType: 'cutTable', operation: (wasm: WasmBridge) => {",
+          '          wasm.deleteTableControl(ref.sec, ref.ppi, ref.ci);',
+        ].join('\n'),
+        replace: [
+          "        this.executeOperation({ kind: 'snapshot', operationType: 'cutTable', operation: (wasm: WasmBridge) => {",
+          '          wasm.deleteTableAt(table!);',
+        ].join('\n'),
+      },
+    ],
   },
   'studio-nested-table-command': {
     file: /[\\/]rhwp-studio[\\/]src[\\/]command[\\/]commands[\\/]table\.ts$/,
@@ -631,8 +621,9 @@ const PATCHES = {
       },
       // the typed character, before the editor decides what to do with it
       {
-        find: '  const text = this.textarea.value;',
-        replace: '  const text = quickCorrectTyped(this, this.textarea.value, e?.inputType);',
+        find: '  const text = normalizeTextNewlines(this.textarea.value);',
+        replace:
+          '  const text = normalizeTextNewlines(quickCorrectTyped(this, this.textarea.value, e?.inputType));',
       },
     ],
   },
@@ -1107,16 +1098,15 @@ const PATCHES = {
           " * ieum: the table's border and fill go to the engine only when the dialog changed them.",
           ' * The engine hands what it gets to the table and to every cell, so sending the values the',
           " * dialog merely showed would overwrite each cell's own lines and fill. The dialog shows a",
-          ' * fill it cannot edit (gradient, picture) as none, and has no "no pattern" choice: an',
-          ' * unpatterned fill reads as an empty choice, and a solid fill is written with pattern -1',
-          ' * (the engine writes 0 otherwise, which Hangul draws as horizontal lines).',
+          ' * fill it cannot edit (gradient, picture) as none; HWP patternType is -1 for none and',
+          ' * 0..5 for hatch patterns (rhwp v0.9.1 #8978).',
           ' */',
           'function ieumKeepUnchangedTableLook(next: Record<string, unknown>, now: TableProperties): void {',
           "  const sides = ['borderLeft', 'borderRight', 'borderTop', 'borderBottom'] as const;",
           "  const color = (value: unknown) => String(value ?? '').toLowerCase();",
           '  const pattern = (value: unknown) => {',
           '    const n = Number(value);',
-          '    return Number.isFinite(n) && n > 0 ? n : 0;',
+          '    return Number.isFinite(n) && n >= 0 ? n : -1;',
           '  };',
           '  const sameLine = (a: any, b: any) =>',
           '    !!a && !!b && a.type === b.type && a.width === b.width && color(a.color) === color(b.color);',
@@ -1130,10 +1120,10 @@ const PATCHES = {
           '    : wasSolid &&',
           '      color(next.fillColor) === color(now.fillColor) &&',
           '      pattern(next.patternType) === pattern(now.patternType) &&',
-          '      (pattern(next.patternType) === 0 || color(next.patternColor) === color(now.patternColor));',
+          '      (pattern(next.patternType) < 0 || color(next.patternColor) === color(now.patternColor));',
           '  if (unchanged) {',
           "    for (const key of ['fillType', 'fillColor', 'patternColor', 'patternType']) delete next[key];",
-          "  } else if (next.fillType === 'solid' && pattern(next.patternType) === 0) {",
+          "  } else if (next.fillType === 'solid' && pattern(next.patternType) < 0) {",
           '    next.patternType = -1;',
           '  }',
           '}',
@@ -1266,98 +1256,6 @@ const PATCHES = {
     find: "      { type: 'command', commandId: 'table:cell-props', label: '셀 속성...' },",
     replace: "      { type: 'command', commandId: 'table:cell-props', label: '표/셀 속성(P)...' },",
   },
-  'studio-memo-anchors': {
-    file: /[\\/]rhwp-studio[\\/]src[\\/]core[\\/]wasm-bridge\.ts$/,
-    // the memo list of vendor/rhwp-core patch 0018, ahead of a neighbour the bridge has once
-    find: '  getHyperlinkContext(target: HyperlinkTarget): HyperlinkContext {',
-    replace: [
-      '  /** The memo anchors of the document; none from an engine without memos. */',
-      '  getMemoAnchors(): {',
-      '    sectionIndex: number;',
-      '    paraIndex: number | null;',
-      '    startCharIdx: number | null;',
-      '    endCharIdx: number | null;',
-      '    path: { controlIndex: number; cellIndex?: number; paraIndex: number }[] | null;',
-      '  }[] {',
-      '    const doc = this.doc as any;',
-      "    if (!doc || typeof doc.getMemoList !== 'function') return [];",
-      '    return JSON.parse(doc.getMemoList());',
-      '  }',
-      '',
-      '  getHyperlinkContext(target: HyperlinkTarget): HyperlinkContext {',
-    ].join('\n'),
-  },
-  'studio-memo-delete-undo': {
-    file: /[\\/]rhwp-studio[\\/]src[\\/]engine[\\/]command\.ts$/,
-    edits: [
-      // whether a deletion touches a memo's anchor, next to the command that asks
-      {
-        find: 'export class DeleteTextCommand implements EditCommand {',
-        replace: [
-          "/** Whether deleting `count` characters at `offset` in `target` touches a memo's anchor. */",
-          'export function memoAnchorOverlaps(',
-          '  wasm: WasmBridge,',
-          '  target: ReturnType<typeof hyperlinkTarget>,',
-          '  offset: number,',
-          '  count: number,',
-          '): boolean {',
-          '  const path = JSON.stringify(target.cellPath);',
-          '  return wasm.getMemoAnchors().some(memo =>',
-          '    memo.sectionIndex === target.section',
-          '    && memo.paraIndex === target.para',
-          '    && JSON.stringify((memo.path ?? []).map(entry =>',
-          '      [entry.controlIndex, entry.cellIndex ?? 0, entry.paraIndex])) === path',
-          '    && memo.startCharIdx !== null && memo.endCharIdx !== null',
-          '    && memo.startCharIdx < memo.endCharIdx',
-          '    && offset < memo.endCharIdx && memo.startCharIdx < offset + count);',
-          '}',
-          '',
-          'export class DeleteTextCommand implements EditCommand {',
-        ].join('\n'),
-      },
-      // the engine drops a memo whose whole anchor goes; capture the paragraph as for a link
-      {
-        find: [
-          '      if (context.links.some(link => this.position.charOffset < link.end',
-          '        && link.start < this.position.charOffset + this.count)) {',
-        ].join('\n'),
-        replace: [
-          '      if (context.links.some(link => this.position.charOffset < link.end',
-          '        && link.start < this.position.charOffset + this.count)',
-          '        || memoAnchorOverlaps(wasm, target, this.position.charOffset, this.count)) {',
-        ].join('\n'),
-      },
-    ],
-  },
-  'studio-font-memo-state': {
-    file: /[\\/]rhwp-studio[\\/]src[\\/]core[\\/]wasm-bridge\.ts$/,
-    find: 'let canvasFontSubstitutionInstalled = false;',
-    replace: [
-      'let canvasFontSubstitutionInstalled = false;',
-      '',
-      '// one answer per font string until the next microtask checkpoint: a page draw sets the',
-      '// same strings thousands of times, and what the answer depends on changes between tasks',
-      'let canvasFontMemo: Map<string, string> | null = null;',
-      'function memoSubstituteCssFontFamily(cssFont: string): string {',
-      '  if (!canvasFontMemo) {',
-      '    canvasFontMemo = new Map();',
-      '    queueMicrotask(() => { canvasFontMemo = null; });',
-      '  }',
-      '  let out = canvasFontMemo.get(cssFont);',
-      '  if (out === undefined) {',
-      '    out = substituteCssFontFamily(cssFont);',
-      '    canvasFontMemo.set(cssFont, out);',
-      '  }',
-      '  return out;',
-      '}',
-    ].join('\n'),
-  },
-  'studio-font-memo-use': {
-    file: /[\\/]rhwp-studio[\\/]src[\\/]core[\\/]wasm-bridge\.ts$/,
-    find: 'descriptor.set!.call(this, scopedHostCanvasFont(String(value)) ?? substituteCssFontFamily(String(value)));',
-    replace:
-      'descriptor.set!.call(this, scopedHostCanvasFont(String(value)) ?? memoSubstituteCssFontFamily(String(value)));',
-  },
   // Explicit discovery retains its SFNT alias scan. Startup already has the OS
   // face list and localized family names from main; share the studio's normal
   // indexing, coverage probes and snapshot persistence without fetching blobs.
@@ -1472,27 +1370,25 @@ const PATCHES = {
   },
   'studio-hyperlink-open': {
     file: /[\\/]rhwp-studio[\\/]src[\\/]engine[\\/]input-handler-hyperlink\.ts$/,
-    edits: [
-      {
-        find: '      if (!/^https?:\\/\\//i.test(link.uri)) continue;',
-        replace:
-          '      if (!/^mailto:/i.test(link.uri) && !/^https?:\\/\\//i.test(link.uri)) continue;',
-      },
-      {
-        find: [
-          "    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return;",
-          '    // 실제 사용자 mouseup 안에서 열고 원본 탭의 opener 접근을 끊는다.',
-          "    const opened = window.open('about:blank', '_blank');",
-          "    if (!opened) { showToast({ message: '팝업이 차단되었습니다. 이 사이트의 팝업을 허용해 주세요.' }); return; }",
-          '    opened.opener = null;',
-          '    opened.location.replace(url.href);',
-        ].join('\n'),
-        replace: [
-          "    if (!['http:', 'https:', 'mailto:'].includes(url.protocol) || url.username || url.password) return;",
-          "    window.open(url.href, '_blank', 'noopener,noreferrer');",
-        ].join('\n'),
-      },
-    ],
+    find: [
+      '      web: uri => {',
+      '        const url = new URL(uri);',
+      "        if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return false;",
+      "        const opened = window.open('about:blank', '_blank');",
+      "        if (!opened) { showToast({ message: '팝업이 차단되었습니다. 이 사이트의 팝업을 허용해 주세요.' }); return false; }",
+      '        opened.opener = null; opened.location.replace(url.href); return true;',
+      '      },',
+      '      mail: uri => { window.location.assign(uri); return true; },',
+    ].join('\n'),
+    replace: [
+      '      web: uri => {',
+      '        const url = new URL(uri);',
+      "        if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return false;",
+      "        window.open(url.href, '_blank', 'noopener,noreferrer');",
+      '        return true;',
+      '      },',
+      "      mail: uri => { window.open(uri, '_blank', 'noopener,noreferrer'); return true; },",
+    ].join('\n'),
   },
   'studio-hyperlink-preview': {
     file: /[\\/]rhwp-studio[\\/]src[\\/]ui[\\/]hyperlink-dialog\.ts$/,
@@ -1511,6 +1407,358 @@ const PATCHES = {
       "        window.open(url, '_blank', 'noopener,noreferrer');",
       "        this.error.textContent = '';",
     ].join('\n'),
+  },
+  'studio-textbox-edit-mouse': {
+    file: /[\\/]rhwp-studio[\\/]src[\\/]engine[\\/]input-handler-mouse\.ts$/,
+    edits: [
+      {
+        find: "import { shouldStartPersistentTableResize } from './table-resize-updates';",
+        replace: [
+          "import { shouldStartPersistentTableResize } from './table-resize-updates';",
+          `import { enterTextBoxOnDblClick, isTableCellPosition, preparePendingTextBoxEnter, selectTextBoxOnBorderClick, shapeHasTextBox } from '${TEXTBOX_EDIT_MODULE}';`,
+        ].join('\n'),
+      },
+      // Record a pending text box entry on mousedown inside a selected floating shape/group;
+      // if mouseup happens without dragging, finishPictureMoveDrag enters editing at the click.
+      {
+        find: [
+          '                    totalDeltaH: 0, totalDeltaV: 0,',
+          '                    pageIndex: pi,',
+          '                  };',
+        ].join('\n'),
+        replace: [
+          '                    totalDeltaH: 0, totalDeltaV: 0,',
+          '                    pageIndex: pi,',
+          '                    pendingEnterTextBoxHit: preparePendingTextBoxEnter(this, ref, pi, px, py),',
+          '                  };',
+        ].join('\n'),
+      },
+      // Support border clicks for both body and in-cell text boxes, with tolerance scaled for thin boxes.
+      {
+        find: [
+          '    if (hit.isTextBox && hit.parentParaIndex !== undefined && hit.controlIndex !== undefined) {',
+          '      if (this.isShapeBorderClickByRef(pageX, pageY, hit.sectionIndex, hit.parentParaIndex, hit.controlIndex)) {',
+          '        this.cursor.clearSelection();',
+          '        this.exitPictureObjectSelectionIfNeeded();',
+          '        this.cursor.enterPictureObjectSelectionDirect(',
+          "          hit.sectionIndex, hit.parentParaIndex, hit.controlIndex, 'shape',",
+          '          undefined, undefined, undefined, undefined, undefined, undefined, undefined, pageIdx,',
+          '        );',
+          '        this.active = true;',
+          '        this.caret.hide();',
+          '        this.selectionRenderer.clear();',
+          '        this.renderPictureObjectSelection();',
+          "        this.eventBus.emit('picture-object-selection-changed', true);",
+          '        this.textarea.focus();',
+          '        return;',
+          '      }',
+          '    }',
+        ].join('\n'),
+        replace: [
+          '    if (selectTextBoxOnBorderClick(this, pageIdx, pageX, pageY, hit)) {',
+          '      return;',
+          '    }',
+        ].join('\n'),
+      },
+      // Keep interior clicks on shapes with a text box from falling into object selection.
+      {
+        find: [
+          '        // 이미지/방정식/OLE → 객체 선택 (z-order 미지원)',
+          '        this.cursor.clearSelection();',
+          '        this.exitPictureObjectSelectionIfNeeded();',
+          '        this.cursor.enterPictureObjectSelectionDirect(',
+          '          picHit.sec, picHit.ppi, picHit.ci, picHit.type,',
+          '          picHit.cellIdx, picHit.cellParaIdx, (picHit as any).headerFooter,',
+          '          (picHit as any).outerTableControlIdx,',
+          '          (picHit as any).cellPath,',
+          '          (picHit as any).noteRef,',
+          '          (picHit as any).missing,',
+          '          (picHit as any).pageIndex,',
+          '        );',
+          '        this.active = true;',
+          '        this.caret.hide();',
+          '        this.selectionRenderer.clear();',
+          '        this.renderPictureObjectSelection();',
+          "        this.eventBus.emit('picture-object-selection-changed', true);",
+          '        this.textarea.focus();',
+          '        return;',
+        ].join('\n'),
+        replace: [
+          "        if (picHit.type !== 'shape' || !shapeHasTextBox(this.wasm, picHit)) {",
+          '          // 이미지/방정식/OLE → 객체 선택 (z-order 미지원)',
+          '          this.cursor.clearSelection();',
+          '          this.exitPictureObjectSelectionIfNeeded();',
+          '          this.cursor.enterPictureObjectSelectionDirect(',
+          '            picHit.sec, picHit.ppi, picHit.ci, picHit.type,',
+          '            picHit.cellIdx, picHit.cellParaIdx, (picHit as any).headerFooter,',
+          '            (picHit as any).outerTableControlIdx,',
+          '            (picHit as any).cellPath,',
+          '            (picHit as any).noteRef,',
+          '            (picHit as any).missing,',
+          '            (picHit as any).pageIndex,',
+          '          );',
+          '          this.active = true;',
+          '          this.caret.hide();',
+          '          this.selectionRenderer.clear();',
+          '          this.renderPictureObjectSelection();',
+          "          this.eventBus.emit('picture-object-selection-changed', true);",
+          '          this.textarea.focus();',
+          '          return;',
+          '        }',
+        ].join('\n'),
+      },
+      // Double-click enters editing for shapes, groups, and in-cell text boxes.
+      {
+        find: [
+          '    // 글상자 객체 → 텍스트 편집 진입',
+          "    if (ref && ref.type === 'shape') {",
+        ].join('\n'),
+        replace: [
+          '    if (enterTextBoxOnDblClick(this, ref, e)) {',
+          '      return;',
+          '    }',
+          "    if (ref && ref.type === 'shape') {",
+        ].join('\n'),
+      },
+      // Distinguish [Shape, Table] (table menu) from [Table, Shape] (text box menu).
+      {
+        find: '  } catch { /* hitTest 실패 시 표 밖으로 처리 */ }',
+        replace: [
+          '    if (inTable && hit.isTextBox) inTable = isTableCellPosition(this.wasm, hit);',
+          '  } catch { /* hitTest 실패 시 표 밖으로 처리 */ }',
+        ].join('\n'),
+      },
+    ],
+  },
+  'studio-textbox-edit-picture': {
+    file: /[\\/]rhwp-studio[\\/]src[\\/]engine[\\/]input-handler-picture\.ts$/,
+    edits: [
+      {
+        find: "import { showToast } from '@/ui/toast';",
+        replace: [
+          "import { showToast } from '@/ui/toast';",
+          `import { finishPendingTextBoxEnter } from '${TEXTBOX_EDIT_MODULE}';`,
+        ].join('\n'),
+      },
+      {
+        find: [
+          'export function finishPictureMoveDrag(this: any): void {',
+          '  if (this.pictureMoveState) {',
+        ].join('\n'),
+        replace: [
+          'export function finishPictureMoveDrag(this: any): void {',
+          '  const moveState = this.pictureMoveState;',
+          '  if (this.pictureMoveState) {',
+        ].join('\n'),
+      },
+      {
+        find: [
+          '  this.isPictureMoveDragging = false;',
+          '  this.pictureMoveState = null;',
+          "  this.container.style.cursor = '';",
+          '  if (this.dragRafId) {',
+          '    cancelAnimationFrame(this.dragRafId);',
+          '    this.dragRafId = 0;',
+          '  }',
+          '}',
+        ].join('\n'),
+        replace: [
+          '  this.isPictureMoveDragging = false;',
+          '  this.pictureMoveState = null;',
+          "  this.container.style.cursor = '';",
+          '  if (this.dragRafId) {',
+          '    cancelAnimationFrame(this.dragRafId);',
+          '    this.dragRafId = 0;',
+          '  }',
+          '  finishPendingTextBoxEnter(this, moveState);',
+          '}',
+        ].join('\n'),
+      },
+    ],
+  },
+  'studio-textbox-edit-keyboard': {
+    file: /[\\/]rhwp-studio[\\/]src[\\/]engine[\\/]input-handler-keyboard\.ts$/,
+    edits: [
+      {
+        find: "import { matchShortcut, defaultShortcuts } from '@/command/shortcut-map';",
+        replace: [
+          "import { matchShortcut, defaultShortcuts } from '@/command/shortcut-map';",
+          `import { enterTextBoxOnEnterKey, isTableCellPosition } from '${TEXTBOX_EDIT_MODULE}';`,
+        ].join('\n'),
+      },
+      // Enter on a selected shape/group enters text editing only when a text box exists,
+      // and preserves cellPath for shapes inside table cells.
+      {
+        find: [
+          '    // Enter → 글상자 내부 텍스트 편집 진입',
+          "    if (e.key === 'Enter') {",
+          '      const ref = this.cursor.getSelectedPictureRef();',
+          "      if (ref && ref.type === 'shape') {",
+          '        e.preventDefault();',
+          '        this.cursor.exitPictureObjectSelection();',
+          '        this.pictureObjectRenderer?.clear();',
+          "        this.eventBus.emit('picture-object-selection-changed', false);",
+          '        this.enterTextboxEditing(ref.sec, ref.ppi, ref.ci);',
+          '        return;',
+          '      }',
+          '    }',
+        ].join('\n'),
+        replace: [
+          "    if (e.key === 'Enter') {",
+          '      const ref = this.cursor.getSelectedPictureRef();',
+          "      if (ref && (ref.type === 'shape' || ref.type === 'group')) {",
+          '        e.preventDefault();',
+          '        enterTextBoxOnEnterKey(this, ref);',
+          '        return;',
+          '      }',
+          '    }',
+        ].join('\n'),
+      },
+      // Tab inside a text box (including a text box inside a table cell) inserts a tab
+      // instead of navigating outer table cells; [Shape, Table] keeps table Tab navigation.
+      {
+        find: [
+          '      if (this.isFormMode?.()) {',
+          '        this.moveToAdjacentFormField?.(e.shiftKey ? -1 : 1);',
+          '        return;',
+          '      }',
+        ].join('\n'),
+        replace: [
+          '      if (this.isFormMode?.()) {',
+          '        this.moveToAdjacentFormField?.(e.shiftKey ? -1 : 1);',
+          '        return;',
+          '      }',
+          '      if (this.cursor.isInTextBox() && !isTableCellPosition(this.wasm, this.cursor.getPosition())) {',
+          '        if (e.shiftKey) {',
+          '          this.applyHangingIndentAtCursor();',
+          '        } else {',
+          "          this.executeOperation({ kind: 'command', command: new InsertTabCommand(this.cursor.getPosition()) });",
+          '        }',
+          '        break;',
+          '      }',
+        ].join('\n'),
+      },
+    ],
+  },
+  'studio-textbox-edit-handler': {
+    file: /[\\/]rhwp-studio[\\/]src[\\/]engine[\\/]input-handler\.ts$/,
+    edits: [
+      {
+        find: "import { selectCellIndicesInRange, paraFormatTargetsForCellBlock, withCellPathTarget } from './cell-block-format';",
+        replace: [
+          "import { selectCellIndicesInRange, paraFormatTargetsForCellBlock, withCellPathTarget } from './cell-block-format';",
+          `import { enterCreatedTextBox, isPointNearBoxBorder } from '${TEXTBOX_EDIT_MODULE}';`,
+        ].join('\n'),
+      },
+      // Enter text editing immediately after drawing a new text box (Hancom Hangul behavior).
+      {
+        find: [
+          '      if (result.ok) {',
+          "        this.eventBus.emit('document-changed');",
+          '        // 생성된 도형을 선택 상태로 진입',
+          "        const selType = (this.shapePlacementType === 'line' || this.shapePlacementType.startsWith('connector-')) ? 'line' : 'shape';",
+          '        this.cursor.enterPictureObjectSelectionDirect(sec, result.paraIdx, result.controlIdx, selType);',
+          '        this.caret.hide();',
+          '        this.selectionRenderer.clear();',
+          '        this.renderPictureObjectSelection();',
+          "        this.eventBus.emit('picture-object-selection-changed', true);",
+          '      }',
+        ].join('\n'),
+        replace: [
+          '      if (result.ok) {',
+          "        this.eventBus.emit('document-changed');",
+          '        if (!(isTextbox && enterCreatedTextBox(this, sec, result.paraIdx, result.controlIdx))) {',
+          "          const selType = (this.shapePlacementType === 'line' || this.shapePlacementType.startsWith('connector-')) ? 'line' : 'shape';",
+          '          this.cursor.enterPictureObjectSelectionDirect(sec, result.paraIdx, result.controlIdx, selType);',
+          '          this.caret.hide();',
+          '          this.selectionRenderer.clear();',
+          '          this.renderPictureObjectSelection();',
+          "          this.eventBus.emit('picture-object-selection-changed', true);",
+          '        }',
+          '      }',
+        ].join('\n'),
+      },
+      // Scale border tolerance down for thin single-line text boxes.
+      {
+        find: [
+          '      const bbox = this.wasm.getShapeBBox(sec, ppi, ci);',
+          '      const tolerance = 5;',
+          '      const nearLeft = Math.abs(pageX - bbox.x) <= tolerance;',
+          '      const nearRight = Math.abs(pageX - (bbox.x + bbox.width)) <= tolerance;',
+          '      const nearTop = Math.abs(pageY - bbox.y) <= tolerance;',
+          '      const nearBottom = Math.abs(pageY - (bbox.y + bbox.height)) <= tolerance;',
+          '      const inVertRange = pageY >= bbox.y - tolerance && pageY <= bbox.y + bbox.height + tolerance;',
+          '      const inHorzRange = pageX >= bbox.x - tolerance && pageX <= bbox.x + bbox.width + tolerance;',
+          '      return (nearLeft && inVertRange) || (nearRight && inVertRange) ||',
+          '             (nearTop && inHorzRange) || (nearBottom && inHorzRange);',
+        ].join('\n'),
+        replace: [
+          '      const bbox = this.wasm.getShapeBBox(sec, ppi, ci);',
+          '      return isPointNearBoxBorder(pageX, pageY, bbox);',
+        ].join('\n'),
+      },
+    ],
+  },
+  'studio-textbox-edit-cursor': {
+    file: /[\\/]rhwp-studio[\\/]src[\\/]engine[\\/]cursor\.ts$/,
+    edits: [
+      {
+        find: "import { excludedCellKey } from './cell-block-format';",
+        replace: [
+          "import { excludedCellKey } from './cell-block-format';",
+          `import { isTableCellPosition, moveHorizontalInTextBox } from '${TEXTBOX_EDIT_MODULE}';`,
+        ].join('\n'),
+      },
+      {
+        find: [
+          '    // 표 셀 내부는 기존 로직 유지 (Tab 셀 이동과 연동)',
+          '    if (this.isInCell() && !this.isInTextBox()) {',
+          '      this.moveHorizontalInCell(delta);',
+          '      return;',
+          '    }',
+        ].join('\n'),
+        replace: [
+          '    if (isTableCellPosition(this.wasm, this.position)) {',
+          '      this.moveHorizontalInCell(delta);',
+          '      return;',
+          '    }',
+          '    if (moveHorizontalInTextBox(this, delta)) {',
+          '      return;',
+          '    }',
+        ].join('\n'),
+      },
+      {
+        find: [
+          '    if (this.isInCell() && !this.isInTextBox()) {',
+          '      // [#2914] 본문 분기와 동일한 한컴 표준 — 문단 중간(Ctrl+↑)이면 먼저 현재 문단 시작에서 멈춘다.',
+        ].join('\n'),
+        replace: [
+          '    if (this.isInCell()) {',
+          '      // [#2914] 본문 분기와 동일한 한컴 표준 — 문단 중간(Ctrl+↑)이면 먼저 현재 문단 시작에서 멈춘다.',
+        ].join('\n'),
+      },
+      {
+        find: [
+          '    if (this.isInCell() && !this.isInTextBox()) {',
+          '      this.moveToWordBoundaryInCell(direction);',
+          '      return;',
+          '    }',
+        ].join('\n'),
+        replace: [
+          '    if (this.isInCell()) {',
+          '      this.moveToWordBoundaryInCell(direction);',
+          '      return;',
+          '    }',
+        ].join('\n'),
+      },
+      {
+        find: '    const { sectionIndex: sec, parentParaIndex: ppi, controlIndex: ci, cellIndex: cei, cellPath } = this.position;',
+        replace: [
+          '    if (!isTableCellPosition(this.wasm, this.position)) return false;',
+          '    const { sectionIndex: sec, parentParaIndex: ppi, controlIndex: ci, cellIndex: cei, cellPath } = this.position;',
+        ].join('\n'),
+      },
+    ],
   },
 }
 
@@ -1553,15 +1801,16 @@ export const STUDIO_PATCHES = /** @type {const} */ ([
   'studio-memo-context-menu',
   'studio-memo-label-ko',
   'studio-memo-label-en',
-  'studio-memo-anchors',
-  'studio-memo-delete-undo',
-  'studio-font-memo-state',
-  'studio-font-memo-use',
   'studio-cell-block-paste',
   'studio-pc-font-metadata',
   'studio-pc-fonts',
   'studio-hyperlink-open',
   'studio-hyperlink-preview',
+  'studio-textbox-edit-mouse',
+  'studio-textbox-edit-picture',
+  'studio-textbox-edit-keyboard',
+  'studio-textbox-edit-handler',
+  'studio-textbox-edit-cursor',
 ])
 
 /** Whether a patch is written against this file. */
@@ -1939,10 +2188,40 @@ export function missingHancomCommands(sources) {
   return studioCommandIds().filter((id) => !named(id))
 }
 
+/** What studio-plugin/textbox-edit.mjs uses of the studio, on the same terms as pluginHooks. */
+export const textboxEditHooks = [
+  {
+    file: 'src/engine/cursor.ts',
+    needles: [
+      'exitPictureObjectSelection(): void',
+      'moveToHit(pos: DocumentPosition): void',
+      'resetPreferredX(): void',
+    ],
+  },
+  {
+    file: 'src/core/wasm-bridge.ts',
+    needles: [
+      'hitTest(pageNum: number, x: number, y: number): HitTestResult',
+      'getShapeBBox(sec: number, parentPara: number, controlIdx: number)',
+      'getCursorRectByPathNear(',
+    ],
+  },
+  {
+    file: 'src/engine/input-handler.ts',
+    needles: [
+      'private pagePointFromClientPoint(',
+      'private hitTestFromEvent(',
+      'private pictureObjectRenderer',
+      'private selectionRenderer',
+      'private textarea',
+    ],
+  },
+]
+
 /** The hooks a studio source tree lacks; `read` gives the text of one of its files, or null. */
 export function missingPluginHooks(read) {
   const missing = []
-  for (const { file, needles } of [...pluginHooks, ...hancomHooks]) {
+  for (const { file, needles } of [...pluginHooks, ...hancomHooks, ...textboxEditHooks]) {
     const text = read(file)
     for (const needle of needles) {
       if (text === null || !text.includes(needle)) missing.push(`${file}: ${needle}`)

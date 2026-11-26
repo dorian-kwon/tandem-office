@@ -1,7 +1,14 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: pblsketch <239486537+pblsketch@users.noreply.github.com>
 Date: Sun, 8 Nov 2026 00:00:00 +0900
-Subject: [PATCH 22/29] fix(layout): 한/글이 재지 않은 TAC host 줄 뒤 사다리로 앞 줄간격을 다시 잇지 않는다
+Subject: [PATCH] =?UTF-8?q?fix(layout):=20=ED=95=9C/=EA=B8=80=EC=9D=B4=20?=
+ =?UTF-8?q?=EC=9E=AC=EC=A7=80=20=EC=95=8A=EC=9D=80=20TAC=20host=20?=
+ =?UTF-8?q?=EC=A4=84=20=EB=92=A4=20=EC=82=AC=EB=8B=A4=EB=A6=AC=EB=A1=9C=20?=
+ =?UTF-8?q?=EC=95=9E=20=EC=A4=84=EA=B0=84=EA=B2=A9=EC=9D=84=20=EB=8B=A4?=
+ =?UTF-8?q?=EC=8B=9C=20=EC=9E=87=EC=A7=80=20=EC=95=8A=EB=8A=94=EB=8B=A4?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 한/글이 하는 일
   문서 도구가 만든 HWPX 서식에서 글자처럼 취급 표(선언 200HU, 저장 host 줄 11064HU) 뒤
@@ -40,21 +47,21 @@ devel 이 하던 일
   있다는 증거가 있을 때로 좁혔다. "그린 상자보다 크면" 만으로는 issue1835 가 걸려(한/글
   PDF 와 3.4 → 17.8px) 글자 한 줄 몫을 허용한다.
 ---
- src/renderer/height_cursor.rs            | 12 +++++++++
- src/renderer/height_measurer.rs          | 43 ++++++++++++++++++++++++++++++++
- src/renderer/layout.rs                   | 27 ++++++++++++++++++++
- src/renderer/typeset.rs                  | 10 ++++++++
+ src/renderer/height_cursor.rs            | 12 +++++++
+ src/renderer/height_measurer.rs          | 43 ++++++++++++++++++++++++
+ src/renderer/layout.rs                   | 27 +++++++++++++++
+ src/renderer/typeset.rs                  | 10 ++++++
  src/renderer/typeset/section/vpos.rs     |  2 ++
- src/renderer/typeset/state/commands.rs   |  3 +++
- src/renderer/typeset/state/data.rs       |  3 +++
+ src/renderer/typeset/state/commands.rs   |  3 ++
+ src/renderer/typeset/state/data.rs       |  3 ++
  src/renderer/typeset/state/transition.rs |  1 +
  8 files changed, 101 insertions(+)
 
 diff --git a/src/renderer/height_cursor.rs b/src/renderer/height_cursor.rs
-index a90e6ea9ba1e5f646a66651b8a63b9cd7eae5d7a..7cfd9d44cba342d08fd15a44827988a108bc119b 100644
+index 0f28212af..a9f763ef0 100644
 --- a/src/renderer/height_cursor.rs
 +++ b/src/renderer/height_cursor.rs
-@@ -276,6 +276,10 @@ pub(crate) struct HeightCursor {
+@@ -280,6 +280,10 @@ pub(crate) struct HeightCursor {
      /// 이 문단이 저장 사다리가 종이·쪽 기준 자리차지 개체를 계상하지 않은 앵커 뒤에 있다
      /// (`first_stale_topbottom_float_anchor`). 그 뒤의 저장 되감김은 다른 조판의 쪽 경계다.
      pub stale_stored_page_boundaries: bool,
@@ -65,7 +72,7 @@ index a90e6ea9ba1e5f646a66651b8a63b9cd7eae5d7a..7cfd9d44cba342d08fd15a44827988a1
      /// [#7665] 미주 흐름에서 **미주의 첫 문단**(렌더가 번호 장식을 붙이는 문단, 조판 `ep_idx == 0`)
      /// 인 전역 문단 번호. 새 문항 제목 판정은 이 소유 경계로 한다 — 첫 문단이 「문」 으로
      /// 시작하는지(번호 장식 `문1)` 의 대리값)로 읽으면 같은 미주 안 `문서…` 본문도 제목이 된다.
-@@ -349,6 +353,7 @@ impl HeightCursor {
+@@ -357,6 +361,7 @@ impl HeightCursor {
              session_edited: false,
              curr_item_is_table_fragment: false,
              stale_stored_page_boundaries: false,
@@ -73,7 +80,7 @@ index a90e6ea9ba1e5f646a66651b8a63b9cd7eae5d7a..7cfd9d44cba342d08fd15a44827988a1
              endnote_note_first_paras: Default::default(),
              endnote_tail_leading_hu: Default::default(),
              seed_lazy_base_from_next_stored: false,
-@@ -1324,9 +1329,15 @@ impl HeightCursor {
+@@ -1377,9 +1382,15 @@ impl HeightCursor {
                      let stored_gap = hwpunit_to_px(seg.line_spacing.max(0), self.dpi);
                      stored_gap > 0.0 && (gap - stored_gap).abs() < 0.1
                  });
@@ -89,7 +96,7 @@ index a90e6ea9ba1e5f646a66651b8a63b9cd7eae5d7a..7cfd9d44cba342d08fd15a44827988a1
              {
                  0
              } else {
-@@ -1519,6 +1530,7 @@ impl HeightCursor {
+@@ -1572,6 +1583,7 @@ impl HeightCursor {
                  return y_offset;
              } else {
                  self.vpos_lazy_base = Some(lazy_base);
@@ -98,10 +105,10 @@ index a90e6ea9ba1e5f646a66651b8a63b9cd7eae5d7a..7cfd9d44cba342d08fd15a44827988a1
              }
          };
 diff --git a/src/renderer/height_measurer.rs b/src/renderer/height_measurer.rs
-index 021c719b726a060f30d0cde0132b1ee4839ba317..d5e6524fc8770811327d9d55669be658fcfc43a3 100644
+index fd889679d..4630d2679 100644
 --- a/src/renderer/height_measurer.rs
 +++ b/src/renderer/height_measurer.rs
-@@ -751,6 +751,49 @@ pub(crate) fn stored_tac_table_host_line_outgrown(
+@@ -750,6 +750,49 @@ pub(crate) fn stored_tac_table_host_line_outgrown(
      line + 0.5 < occupied_px
  }
  
@@ -152,10 +159,10 @@ index 021c719b726a060f30d0cde0132b1ee4839ba317..d5e6524fc8770811327d9d55669be658
  /// 않는다. 저장 줄 없는 host 는 [`no_ls_tac_table_host_trailing_spacing_px`], 낡은 저장
  /// 줄 host 는 [`stored_tac_table_host_line_outgrown`] 판정 뒤에 이 값을 쓴다.
 diff --git a/src/renderer/layout.rs b/src/renderer/layout.rs
-index 7127bd4192f4d3768ebb50aab68951fc2346bf4f..9eb14ac6de10e47bb46d2fce72be10d94fa5826e 100644
+index cc9e55b89..fa079a04f 100644
 --- a/src/renderer/layout.rs
 +++ b/src/renderer/layout.rs
-@@ -1870,6 +1870,19 @@ fn drawn_table_top(node: &RenderNode, para_index: usize, control_index: usize) -
+@@ -1901,6 +1901,19 @@ fn drawn_table_top(node: &RenderNode, para_index: usize, control_index: usize) -
          .find_map(|child| drawn_table_top(child, para_index, control_index))
  }
  
@@ -175,7 +182,7 @@ index 7127bd4192f4d3768ebb50aab68951fc2346bf4f..9eb14ac6de10e47bb46d2fce72be10d9
  fn painted_flow_text_bottom(node: &RenderNode) -> Option<f64> {
      fn walk(node: &RenderNode, out: &mut f64) {
          match &node.node_type {
-@@ -9209,6 +9222,20 @@ impl LayoutEngine {
+@@ -9393,6 +9406,20 @@ impl LayoutEngine {
                  }
              }
              hcursor.stored_boundary_spacing_before = 0.0;
@@ -194,13 +201,13 @@ index 7127bd4192f4d3768ebb50aab68951fc2346bf4f..9eb14ac6de10e47bb46d2fce72be10d9
 +                hcursor.after_unmeasured_tac_line = true;
 +            }
              if !shape_jumped
+                 && !stored_picture_keeps_text_origin
                  && !session_fresh_partial_table
-                 && !self.hidden_empty_paras.borrow().contains(&item_para)
 diff --git a/src/renderer/typeset.rs b/src/renderer/typeset.rs
-index e0d576072a0843f1894573848e54e43e74209e99..8c46139f59883449a8e2b0aa8b685679694035c8 100644
+index 9abe13e95..41017fc6e 100644
 --- a/src/renderer/typeset.rs
 +++ b/src/renderer/typeset.rs
-@@ -4625,6 +4625,16 @@ impl TypesetEngine {
+@@ -4723,6 +4723,16 @@ impl TypesetEngine {
                  })
              && table_height > ft.total_height + 0.5
          {
@@ -218,10 +225,10 @@ index e0d576072a0843f1894573848e54e43e74209e99..8c46139f59883449a8e2b0aa8b685679
          } else {
              table_height
 diff --git a/src/renderer/typeset/section/vpos.rs b/src/renderer/typeset/section/vpos.rs
-index cd34b2c4520fd1ffc041ec0e5daf85569b54c85c..92a04e9c484755da557f50fc19896ae3d46300ae 100644
+index 3c684d17b..0047c5c57 100644
 --- a/src/renderer/typeset/section/vpos.rs
 +++ b/src/renderer/typeset/section/vpos.rs
-@@ -58,6 +58,8 @@ impl TypesetEngine {
+@@ -59,6 +59,8 @@ impl TypesetEngine {
              session_edited: self.profile.get().session_edited(),
              curr_item_is_table_fragment: false,
              stale_stored_page_boundaries: st.stale_stored_page_boundaries,
@@ -231,10 +238,10 @@ index cd34b2c4520fd1ffc041ec0e5daf85569b54c85c..92a04e9c484755da557f50fc19896ae3
              endnote_note_first_paras: Default::default(),
              endnote_tail_leading_hu: Default::default(),
 diff --git a/src/renderer/typeset/state/commands.rs b/src/renderer/typeset/state/commands.rs
-index dd9bf30075209e1edabd5ce40c362e2bf3f45d40..b4220245f9d8bb9186a9d84e3a84f8eef1c52627 100644
+index 445c1a021..f58bcc292 100644
 --- a/src/renderer/typeset/state/commands.rs
 +++ b/src/renderer/typeset/state/commands.rs
-@@ -372,6 +372,9 @@ impl TypesetState {
+@@ -413,6 +413,9 @@ impl TypesetState {
      ) {
          self.data.last_table_host_start = Some((para_index, control_index, host_start));
      }
@@ -245,10 +252,10 @@ index dd9bf30075209e1edabd5ce40c362e2bf3f45d40..b4220245f9d8bb9186a9d84e3a84f8ee
          self.data.strict_plain_text_fit_after_empty_host_float_once = true;
      }
 diff --git a/src/renderer/typeset/state/data.rs b/src/renderer/typeset/state/data.rs
-index fd2599042e19e3491abbfc56e4fbeab4f1451b80..baa8231ddd5da9fefcf2f0c5278f30eb28bbbe31 100644
+index 973a69977..7cf02372b 100644
 --- a/src/renderer/typeset/state/data.rs
 +++ b/src/renderer/typeset/state/data.rs
-@@ -261,6 +261,9 @@ pub(in crate::renderer::typeset) struct StateView {
+@@ -282,6 +282,9 @@ pub(in crate::renderer::typeset) struct StateView {
      /// 마지막으로 배치한 표의 (host 문단, 컨트롤, host 문단 시작 높이). 바로 뒤 문단이
      /// 표가 없었을 때의 제자리를 재는 데 쓴다(`empty_host_float_natural_successor_top`).
      pub(in crate::renderer::typeset) last_table_host_start: Option<(usize, usize, f64)>,
@@ -259,10 +266,10 @@ index fd2599042e19e3491abbfc56e4fbeab4f1451b80..baa8231ddd5da9fefcf2f0c5278f30eb
      /// 시멘틱 승계: hwp3_layout()=HWP3→HWP5 변환본(widow 방지 등 variant 분기,
      /// Task #1007) / hwp3_native_layout()=원본 HWP3 (저장 LINE_SEG 계약) /
 diff --git a/src/renderer/typeset/state/transition.rs b/src/renderer/typeset/state/transition.rs
-index 87739700b18ebe87240269966b04b578a3cac2d0..d0c81752f30b91bafe93b4b4e7357b5c69ff65a6 100644
+index 5dc584daa..616882737 100644
 --- a/src/renderer/typeset/state/transition.rs
 +++ b/src/renderer/typeset/state/transition.rs
-@@ -98,6 +98,7 @@ impl TypesetState {
+@@ -105,6 +105,7 @@ impl TypesetState {
                  tail_saved_bounds_once: None,
                  strict_plain_text_fit_after_empty_host_float_once: false,
                  last_table_host_start: None,
@@ -270,3 +277,6 @@ index 87739700b18ebe87240269966b04b578a3cac2d0..d0c81752f30b91bafe93b4b4e7357b5c
                  profile: Default::default(),
                  has_stored_line_segs: false,
                  hide_empty_line: false,
+-- 
+2.52.0.windows.1
+

@@ -1,7 +1,14 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: pblsketch <239486537+pblsketch@users.noreply.github.com>
 Date: Sun, 8 Nov 2026 00:00:00 +0900
-Subject: [PATCH 14/29] fix(renderer): 쪽 번호를 그릴 쪽을 쪽 번호 위치와 감추기로만 정한다
+Subject: [PATCH] =?UTF-8?q?fix(renderer):=20=EC=AA=BD=20=EB=B2=88=ED=98=B8?=
+ =?UTF-8?q?=EB=A5=BC=20=EA=B7=B8=EB=A6=B4=20=EC=AA=BD=EC=9D=84=20=EC=AA=BD?=
+ =?UTF-8?q?=20=EB=B2=88=ED=98=B8=20=EC=9C=84=EC=B9=98=EC=99=80=20=EA=B0=90?=
+ =?UTF-8?q?=EC=B6=94=EA=B8=B0=EB=A1=9C=EB=A7=8C=20=EC=A0=95=ED=95=9C?=
+ =?UTF-8?q?=EB=8B=A4?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 쪽 번호 새로 시작(NewNumber)이 있는 구역에서 첫 발화 앞 쪽의 쪽 번호를 모두
 감추던 규칙(#634)을 없앤다. 225쪽 보고서는 쪽 번호 위치가 1쪽 첫 문단, 새 번호가
@@ -40,10 +47,10 @@ Ported onto devel 7d06d5c70: devel already applies a page number position from i
  2 files changed, 20 insertions(+), 10 deletions(-)
 
 diff --git a/src/document_core/queries/rendering.rs b/src/document_core/queries/rendering.rs
-index 75fcef0969a03682fd5f742e4caa32711b679c65..09af9f9da17ed72926c4d5a59a9112aaeab3dd4f 100644
+index 9328c58cb..1b879fbeb 100644
 --- a/src/document_core/queries/rendering.rs
 +++ b/src/document_core/queries/rendering.rs
-@@ -5982,13 +5982,14 @@ impl DocumentCore {
+@@ -5936,13 +5936,14 @@ impl DocumentCore {
                  storage,
              )?;
  
@@ -65,7 +72,7 @@ index 75fcef0969a03682fd5f742e4caa32711b679c65..09af9f9da17ed72926c4d5a59a9112aa
              }
  
 diff --git a/src/renderer/page_number.rs b/src/renderer/page_number.rs
-index e79d6505ec6e8e022ee57f2a4e44ed0fcc26e6e8..50618fa1b6992d37b304845c6236694126241655 100644
+index 52ff78880..09e56144e 100644
 --- a/src/renderer/page_number.rs
 +++ b/src/renderer/page_number.rs
 @@ -180,15 +180,19 @@ impl PageControlEvents {
@@ -104,3 +111,6 @@ index e79d6505ec6e8e022ee57f2a4e44ed0fcc26e6e8..50618fa1b6992d37b304845c62366941
              // #6206: 셀 안 metadata는 외부 표의 첫 배치 쪽에 적용하는 기존 계약 유지.
              Control::Table(table) => {
                  for cell in &table.cells {
+-- 
+2.52.0.windows.1
+

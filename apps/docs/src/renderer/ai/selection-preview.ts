@@ -1,6 +1,6 @@
 import type { Editor } from '@tiptap/core'
 import { countWords } from '../word-count'
-import { redactTextBetween, type RedactableNode } from './redact-view'
+import { redactDocRange } from './redact-view'
 
 interface SelectionPreview {
   text: string
@@ -29,9 +29,7 @@ export function createSelectionPreviewReader(editor: Editor): () => SelectionPre
       return previous.preview
     }
 
-    const text = redactTextBetween(editor.getJSON() as RedactableNode, from, to, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
+    const text = redactDocRange(doc, from, to, ' ').replace(/\s+/g, ' ').trim()
     const preview = text ? { text, words: countWords(text) } : undefined
     previous = { doc, from, to, preview }
     return preview

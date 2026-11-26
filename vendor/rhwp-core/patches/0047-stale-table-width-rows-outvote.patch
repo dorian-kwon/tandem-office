@@ -1,7 +1,14 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: pblsketch <239486537+pblsketch@users.noreply.github.com>
 Date: Sun, 8 Nov 2026 00:00:00 +0900
-Subject: [PATCH 33/33] fix(table): 닫는 행들이 같은 폭으로 개체 폭을 넘으면 칸 폭으로 그린다
+Subject: [PATCH] =?UTF-8?q?fix(table):=20=EB=8B=AB=EB=8A=94=20=ED=96=89?=
+ =?UTF-8?q?=EB=93=A4=EC=9D=B4=20=EA=B0=99=EC=9D=80=20=ED=8F=AD=EC=9C=BC?=
+ =?UTF-8?q?=EB=A1=9C=20=EA=B0=9C=EC=B2=B4=20=ED=8F=AD=EC=9D=84=20=EB=84=98?=
+ =?UTF-8?q?=EC=9C=BC=EB=A9=B4=20=EC=B9=B8=20=ED=8F=AD=EC=9C=BC=EB=A1=9C=20?=
+ =?UTF-8?q?=EA=B7=B8=EB=A6=B0=EB=8B=A4?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 한글은 표 개체의 크기와 칸 폭을 따로 저장한다. 칸 폭이 바뀐 뒤에도 개체 크기가 옛
 값으로 남은 문서에서는 표를 혼자 닫는 행(위 행에서 내려온 병합 칸 없이 제 칸만으로 모든
@@ -31,16 +38,16 @@ Subject: [PATCH 33/33] fix(table): 닫는 행들이 같은 폭으로 개체 폭�
 조판만 바뀌고 저장(HWP·HWPX) 결과는 같다. samples 의 1,513개 문서에는 이 판정에 걸리는
 표가 없다.
 ---
- src/model/table.rs                            |  17 +++-
- src/model/table/contradictory_grid.rs         |  15 ++-
- src/model/table/stale_width.rs                |  95 +++++++++++++++++++
- tests/cases/stale_table_width_rows_outvote.rs | 128 ++++++++++++++++++++++++++
+ src/model/table.rs                            |  17 ++-
+ src/model/table/contradictory_grid.rs         |  15 +-
+ src/model/table/stale_width.rs                |  95 +++++++++++++
+ tests/cases/stale_table_width_rows_outvote.rs | 128 ++++++++++++++++++
  4 files changed, 247 insertions(+), 8 deletions(-)
  create mode 100644 src/model/table/stale_width.rs
  create mode 100644 tests/cases/stale_table_width_rows_outvote.rs
 
 diff --git a/src/model/table.rs b/src/model/table.rs
-index 98ad0a84f18032c68f83f118aee6f6593020c0c0..64bb512baabd8af76f1dc6dbb6545540d8c5599d 100644
+index 9030dc277..1e89d284c 100644
 --- a/src/model/table.rs
 +++ b/src/model/table.rs
 @@ -10,6 +10,8 @@ mod contradictory_grid;
@@ -52,7 +59,7 @@ index 98ad0a84f18032c68f83f118aee6f6593020c0c0..64bb512baabd8af76f1dc6dbb6545540
  
  #[path = "table_equal_size.rs"]
  mod equal_size;
-@@ -934,9 +936,18 @@ impl Table {
+@@ -949,9 +951,18 @@ impl Table {
          &self,
          storage: &S,
      ) -> Result<std::collections::BTreeSet<u16>, S::Error> {
@@ -75,7 +82,7 @@ index 98ad0a84f18032c68f83f118aee6f6593020c0c0..64bb512baabd8af76f1dc6dbb6545540
  
      pub(crate) fn declared_width_rows_exceeding_with_storage<S: crate::storage::Storage>(
 diff --git a/src/model/table/contradictory_grid.rs b/src/model/table/contradictory_grid.rs
-index 45ee3dbb6b8b0c12a664102e37853a2e6ccc5f6c..b934976268b02e9ca25d94fdd9dacef594815983 100644
+index 45ee3dbb6..b93497626 100644
 --- a/src/model/table/contradictory_grid.rs
 +++ b/src/model/table/contradictory_grid.rs
 @@ -61,10 +61,15 @@ impl Table {
@@ -109,7 +116,7 @@ index 45ee3dbb6b8b0c12a664102e37853a2e6ccc5f6c..b934976268b02e9ca25d94fdd9dacef5
          lower[n] = lower[n].max(target_end);
 diff --git a/src/model/table/stale_width.rs b/src/model/table/stale_width.rs
 new file mode 100644
-index 0000000000000000000000000000000000000000..d4241c529daca43826b7f5a2ed2bf07af5470dcc
+index 000000000..d4241c529
 --- /dev/null
 +++ b/src/model/table/stale_width.rs
 @@ -0,0 +1,95 @@
@@ -210,7 +217,7 @@ index 0000000000000000000000000000000000000000..d4241c529daca43826b7f5a2ed2bf07a
 +}
 diff --git a/tests/cases/stale_table_width_rows_outvote.rs b/tests/cases/stale_table_width_rows_outvote.rs
 new file mode 100644
-index 0000000000000000000000000000000000000000..602792a3c7599eca7d207257f704199f814f2e15
+index 000000000..602792a3c
 --- /dev/null
 +++ b/tests/cases/stale_table_width_rows_outvote.rs
 @@ -0,0 +1,128 @@
@@ -342,3 +349,6 @@ index 0000000000000000000000000000000000000000..602792a3c7599eca7d207257f704199f
 +    table.common.treat_as_char = true;
 +    assert_eq!(table.invalid_declared_width_rows(), BTreeSet::from([0, 1]));
 +}
+-- 
+2.52.0.windows.1
+

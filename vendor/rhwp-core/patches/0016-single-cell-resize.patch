@@ -1,16 +1,16 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: pblsketch <239486537+pblsketch@users.noreply.github.com>
 Date: Sun, 8 Nov 2026 00:00:00 +0900
-Subject: [PATCH 8/29] Ported onto devel 7d06d5c70: applied without conflicts; no code changes needed.
-
+Subject: [PATCH] Ported onto devel 7d06d5c70: applied without conflicts; no
+ code changes needed.
 
 ---
- src/document_core/commands/table_ops.rs | 108 +++++++++++++++++---------------
- src/wasm_api.rs                         |  28 +++++++++
+ src/document_core/commands/table_ops.rs | 108 +++++++++++++-----------
+ src/wasm_api.rs                         |  28 ++++++
  2 files changed, 87 insertions(+), 49 deletions(-)
 
 diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/commands/table_ops.rs
-index 13005e1b43f514905828e752603e8303c5cb3932..687bb44e07ac6d3d7937430b264b0d5b210c4a27 100644
+index d56cfb841..e2f2a4218 100644
 --- a/src/document_core/commands/table_ops.rs
 +++ b/src/document_core/commands/table_ops.rs
 @@ -4018,8 +4018,9 @@ impl DocumentCore {
@@ -142,10 +142,10 @@ index 13005e1b43f514905828e752603e8303c5cb3932..687bb44e07ac6d3d7937430b264b0d5b
          // 격자 재유도 — 경계 집합의 합집합으로 열(행)을 다시 매긴다.
          if vertical {
 diff --git a/src/wasm_api.rs b/src/wasm_api.rs
-index 638b7deaca614b7be83a928b438d851ec407d722..6315aa8596e88685218f81d3a85952df31b213b7 100644
+index f8bd7be8e..179183fc8 100644
 --- a/src/wasm_api.rs
 +++ b/src/wasm_api.rs
-@@ -4021,6 +4021,34 @@ impl HwpDocument {
+@@ -4224,6 +4224,34 @@ impl HwpDocument {
          .map_err(|e| e.into())
      }
  
@@ -180,3 +180,6 @@ index 638b7deaca614b7be83a928b438d851ec407d722..6315aa8596e88685218f81d3a85952df
      /// 표의 위치 오프셋(vertical_offset, horizontal_offset)을 이동한다.
      ///
      /// delta_h, delta_v: HWPUNIT 단위 이동량 (양수=오른쪽/아래, 음수=왼쪽/위)
+-- 
+2.52.0.windows.1
+

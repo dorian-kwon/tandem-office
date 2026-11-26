@@ -1,7 +1,14 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: pblsketch <239486537+pblsketch@users.noreply.github.com>
 Date: Sun, 8 Nov 2026 00:00:00 +0900
-Subject: [PATCH 35/35] feat(column): 단 구분선을 정하는 호출과 머리 개체 아래에서 시작하는 구분선
+Subject: [PATCH] =?UTF-8?q?feat(column):=20=EB=8B=A8=20=EA=B5=AC=EB=B6=84?=
+ =?UTF-8?q?=EC=84=A0=EC=9D=84=20=EC=A0=95=ED=95=98=EB=8A=94=20=ED=98=B8?=
+ =?UTF-8?q?=EC=B6=9C=EA=B3=BC=20=EB=A8=B8=EB=A6=AC=20=EA=B0=9C=EC=B2=B4=20?=
+ =?UTF-8?q?=EC=95=84=EB=9E=98=EC=97=90=EC=84=9C=20=EC=8B=9C=EC=9E=91?=
+ =?UTF-8?q?=ED=95=98=EB=8A=94=20=EA=B5=AC=EB=B6=84=EC=84=A0?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 엔진은 단 정의의 구분선(종류·굵기·색)을 .hwp 와 HWPX 에서 읽고, 저장하고, 그렸지만
 정하는 호출이 없었고 getColumnDef 도 알리지 않았다.
@@ -35,23 +42,27 @@ samples 의 1,513개(14,805쪽, 구분선이 있는 쪽 662)에서 구분선이 
 시작하는 쪽은 고친 뒤에도 없다. 다단 쪽 875개의 구분선 위치는 고치기 전과 같다. 선 모양은
 colLine 이 DASH 인 한컴산 SO-SUEOP.hwpx 의 네 쪽(43~46)만 파선에서 점선으로 바뀌고, 한컴도
 그 선을 점선으로 그린다.
+
+# Conflicts:
+#	src/renderer/layout.rs
+#	src/renderer/layout/shape_layout.rs
 ---
- src/document_core/commands/text_editing.rs |  85 ++++++
+ src/document_core/commands/text_editing.rs |  85 +++++
  src/parser/hwpx/section.rs                 |  10 +-
  src/renderer/layout.rs                     |  19 +-
  src/renderer/layout/shape_layout.rs        |  15 +-
  src/serializer/hwpx/section.rs             |   4 +-
  src/serializer/hwpx/table.rs               |   4 +-
  src/wasm_api.rs                            |  24 +-
- tests/cases/column_separator_setter.rs     | 409 +++++++++++++++++++++++++++++
+ tests/cases/column_separator_setter.rs     | 409 +++++++++++++++++++++
  8 files changed, 552 insertions(+), 18 deletions(-)
  create mode 100644 tests/cases/column_separator_setter.rs
 
 diff --git a/src/document_core/commands/text_editing.rs b/src/document_core/commands/text_editing.rs
-index 38c0834943c63f51650f717fae1923c7b5b477cd..fd206372abb793297e37590fb5b9f55c6608c520 100644
+index a11a5300c..1c4150fdc 100644
 --- a/src/document_core/commands/text_editing.rs
 +++ b/src/document_core/commands/text_editing.rs
-@@ -4811,6 +4811,91 @@ impl DocumentCore {
+@@ -4830,6 +4830,91 @@ impl DocumentCore {
          Ok("{\"ok\":true}".to_string())
      }
  
@@ -144,7 +155,7 @@ index 38c0834943c63f51650f717fae1923c7b5b477cd..fd206372abb793297e37590fb5b9f55c
      pub fn merge_paragraph_native(
          &mut self,
 diff --git a/src/parser/hwpx/section.rs b/src/parser/hwpx/section.rs
-index 2b75c684edd9a66d60e53a46f065cbd77076a379..cfa0f9fa784bc5a78c7eec294ca4c6f90e95b15a 100644
+index 56359be66..710c51262 100644
 --- a/src/parser/hwpx/section.rs
 +++ b/src/parser/hwpx/section.rs
 @@ -2042,8 +2042,10 @@ fn parse_hwpx_line_type(value: &str) -> u8 {
@@ -160,7 +171,7 @@ index 2b75c684edd9a66d60e53a46f065cbd77076a379..cfa0f9fa784bc5a78c7eec294ca4c6f9
          "DASH_DOT" => 4,
          "DASH_DOT_DOT" => 5,
          "LONG_DASH" => 6,
-@@ -10815,8 +10817,8 @@ mod tests {
+@@ -10829,8 +10831,8 @@ mod tests {
      fn test_task1124_col_line_type_and_width_mapping() {
          assert_eq!(parse_hwpx_line_type("NONE"), 0);
          assert_eq!(parse_hwpx_line_type("SOLID"), 1);
@@ -172,31 +183,32 @@ index 2b75c684edd9a66d60e53a46f065cbd77076a379..cfa0f9fa784bc5a78c7eec294ca4c6f9
          assert_eq!(parse_hwpx_line_type("DASH_DOT_DOT"), 5);
          assert_eq!(parse_hwpx_line_type("LONG_DASH"), 6);
 diff --git a/src/renderer/layout.rs b/src/renderer/layout.rs
-index 6fd958f9ac2882e26dc479fd3c1708fd5da92e40..26cd5fd2207ed6893d144d603d45aec189f4583a 100644
+index 1caa2a3ab..3465daa88 100644
 --- a/src/renderer/layout.rs
 +++ b/src/renderer/layout.rs
-@@ -6982,12 +6982,14 @@ impl LayoutEngine {
- 
-         // 다단 레이아웃: body_area 전체에 걸치는 TopAndBottom 개체의 예약 높이
-         // (한 단에만 할당되더라도 모든 단에 적용)
--        let body_wide_reserved: Vec<(usize, f64)> = if page_content.column_contents.len() > 1 {
--            self.calculate_body_wide_shape_reserved(
--                paragraphs,
--                &page_content.column_contents,
--                &layout.body_area,
--            )
+@@ -7142,13 +7142,15 @@ impl LayoutEngine {
+             .column_contents
+             .iter()
+             .any(|column| column.column_index > 0);
+-        let body_wide_reserved: Vec<(usize, f64)> =
 +        // 머리 개체의 예약 끝은 글이 한 단에만 있어도 구분선의 시작이다.
 +        let (body_wide_reserved, page_head_bottom) = self.calculate_body_wide_shape_reserved(
 +            paragraphs,
 +            &page_content.column_contents,
 +            &layout.body_area,
 +        );
-+        let body_wide_reserved = if page_content.column_contents.len() > 1 {
-+            body_wide_reserved
-         } else {
-             Vec::new()
-         };
-@@ -7140,6 +7142,11 @@ impl LayoutEngine {
++        let body_wide_reserved =
+             if page_content.column_contents.len() > 1 && has_side_by_side_columns {
+-                self.calculate_body_wide_shape_reserved(
+-                    paragraphs,
+-                    &page_content.column_contents,
+-                    &layout.body_area,
+-                )
++                body_wide_reserved
+             } else {
+                 Vec::new()
+             };
+@@ -7304,6 +7306,11 @@ impl LayoutEngine {
                  if zone_layout.column_areas.len() >= 2 && zone_layout.separator_type > 0 {
                      prev_zone_layout_for_sep = Some(zone_layout.clone());
                      prev_zone_sep_y_start = current_zone_start_y.max(zone_layout.body_area.y);
@@ -209,14 +221,14 @@ index 6fd958f9ac2882e26dc479fd3c1708fd5da92e40..26cd5fd2207ed6893d144d603d45aec1
                      prev_zone_layout_for_sep = None;
                  }
 diff --git a/src/renderer/layout/shape_layout.rs b/src/renderer/layout/shape_layout.rs
-index 80288c319d352ad387b51711b8b2605384678368..165de216c55bb1ffde6e57d9012b85718bc2ef54 100644
+index 3dda7d38c..ba6fe87d9 100644
 --- a/src/renderer/layout/shape_layout.rs
 +++ b/src/renderer/layout/shape_layout.rs
-@@ -5242,15 +5242,20 @@ impl LayoutEngine {
+@@ -5710,15 +5710,20 @@ impl LayoutEngine {
+         frames
+     }
  
-     /// 다단 레이아웃에서 body_area 전체에 걸치는 TopAndBottom 개체의 예약 높이 계산
-     /// 모든 단의 items를 순회하여 body_area 너비와 동일하거나 큰 개체만 반환
-+    ///
++    /// 다단 레이아웃에서 body_area 전체에 걸치는 TopAndBottom 개체의 예약 높이 계산.
 +    /// 둘째 값은 그 가운데 쪽 기준으로 본문 맨 위에 매단 개체(세로 기준 쪽, 위 정렬,
 +    /// 오프셋 0)의 예약 끝이다. 한컴은 그런 개체 아래, 단의 글이 시작하는 곳부터 단
 +    /// 구분선을 긋는다.
@@ -234,7 +246,7 @@ index 80288c319d352ad387b51711b8b2605384678368..165de216c55bb1ffde6e57d9012b8571
  
          for col_content in column_contents {
              for item in &col_content.items {
-@@ -5324,6 +5329,12 @@ impl LayoutEngine {
+@@ -5792,6 +5797,12 @@ impl LayoutEngine {
                  if shape_y > threshold_y {
                      continue;
                  }
@@ -247,7 +259,7 @@ index 80288c319d352ad387b51711b8b2605384678368..165de216c55bb1ffde6e57d9012b8571
                  if let Some(existing) = result.iter_mut().find(|(pi, _)| *pi == *para_index) {
                      if bottom_y > existing.1 {
                          existing.1 = bottom_y;
-@@ -5334,7 +5345,7 @@ impl LayoutEngine {
+@@ -5802,7 +5813,7 @@ impl LayoutEngine {
              }
          }
  
@@ -257,10 +269,10 @@ index 80288c319d352ad387b51711b8b2605384678368..165de216c55bb1ffde6e57d9012b8571
  
      /// 개체가 단 영역과 수평으로 겹치는지 확인
 diff --git a/src/serializer/hwpx/section.rs b/src/serializer/hwpx/section.rs
-index 73b9c9ba37cd5fe740581e02cec902eec653e032..c39bd11e08afc03c1765ba09e64a550d3ba3dd32 100644
+index 99d5224cf..93fb4145e 100644
 --- a/src/serializer/hwpx/section.rs
 +++ b/src/serializer/hwpx/section.rs
-@@ -3826,8 +3826,8 @@ where
+@@ -3841,8 +3841,8 @@ where
  /// `parse_hwpx_line_type` 역매핑 (colLine type).
  fn col_line_type_str(t: u8) -> &'static str {
      match t {
@@ -272,7 +284,7 @@ index 73b9c9ba37cd5fe740581e02cec902eec653e032..c39bd11e08afc03c1765ba09e64a550d
          5 => "DASH_DOT_DOT",
          6 => "LONG_DASH",
 diff --git a/src/serializer/hwpx/table.rs b/src/serializer/hwpx/table.rs
-index 40caeeb451ac82d34881e0fee8ef39b36a86f9cf..aa8ea654365309f590fae02fa01258b8576dc146 100644
+index 40caeeb45..aa8ea6543 100644
 --- a/src/serializer/hwpx/table.rs
 +++ b/src/serializer/hwpx/table.rs
 @@ -2022,14 +2022,14 @@ mod tests {
@@ -293,10 +305,10 @@ index 40caeeb451ac82d34881e0fee8ef39b36a86f9cf..aa8ea654365309f590fae02fa01258b8
              xml
          );
 diff --git a/src/wasm_api.rs b/src/wasm_api.rs
-index f7881e83e5cec3e112eef3aeb5a987c4df02f61e..58df77229be2ca54c8a52996ffef99b73d40c9d5 100644
+index 175c88e5a..e76318756 100644
 --- a/src/wasm_api.rs
 +++ b/src/wasm_api.rs
-@@ -1663,8 +1663,17 @@ impl HwpDocument {
+@@ -1826,8 +1826,17 @@ impl HwpDocument {
              crate::model::page::ColumnType::Parallel => 2,
          };
          Ok(format!(
@@ -316,7 +328,7 @@ index f7881e83e5cec3e112eef3aeb5a987c4df02f61e..58df77229be2ca54c8a52996ffef99b7
          ))
      }
  
-@@ -2996,6 +3005,17 @@ impl HwpDocument {
+@@ -3203,6 +3212,17 @@ impl HwpDocument {
          .map_err(|e| e.into())
      }
  
@@ -336,7 +348,7 @@ index f7881e83e5cec3e112eef3aeb5a987c4df02f61e..58df77229be2ca54c8a52996ffef99b7
      /// para_idx의 텍스트가 para_idx-1에 결합되고 para_idx는 삭제된다.
 diff --git a/tests/cases/column_separator_setter.rs b/tests/cases/column_separator_setter.rs
 new file mode 100644
-index 0000000000000000000000000000000000000000..3bb2ff75158a26e698a458657b2f51eafacdeeb1
+index 000000000..3bb2ff751
 --- /dev/null
 +++ b/tests/cases/column_separator_setter.rs
 @@ -0,0 +1,409 @@
@@ -749,3 +761,6 @@ index 0000000000000000000000000000000000000000..3bb2ff75158a26e698a458657b2f51ea
 +        assert!(doc.set_column_separator_native(0, json).is_err(), "{json}");
 +    }
 +}
+-- 
+2.52.0.windows.1
+

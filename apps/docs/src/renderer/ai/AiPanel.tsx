@@ -59,7 +59,7 @@ import {
   type ProjectPanel,
   type ProjectMemoryLine,
 } from '@genoffice/ui'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type { Editor } from '@tiptap/core'
 import type { Block } from '@genoffice/docx-engine'
 import {
@@ -569,7 +569,9 @@ const MODEL_BRIDGE: AiModelPickerBridge = {
   openModelSettings: () => window.desktop.openAiModelSettings().catch(() => {}),
 }
 
-export function AiPanel({
+export const AiPanel = memo(AiPanelInner)
+
+function AiPanelInner({
   editor,
   blocks,
   settings,

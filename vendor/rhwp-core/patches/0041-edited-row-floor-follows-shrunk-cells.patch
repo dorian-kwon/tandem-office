@@ -1,7 +1,13 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: pblsketch <239486537+pblsketch@users.noreply.github.com>
 Date: Sun, 8 Nov 2026 00:00:00 +0900
-Subject: [PATCH 29/29] fix(layout): 편집 중 줄인 셀 높이만큼 행 하한도 내린다
+Subject: [PATCH] =?UTF-8?q?fix(layout):=20=ED=8E=B8=EC=A7=91=20=EC=A4=91?=
+ =?UTF-8?q?=20=EC=A4=84=EC=9D=B8=20=EC=85=80=20=EB=86=92=EC=9D=B4=EB=A7=8C?=
+ =?UTF-8?q?=ED=81=BC=20=ED=96=89=20=ED=95=98=ED=95=9C=EB=8F=84=20=EB=82=B4?=
+ =?UTF-8?q?=EB=A6=B0=EB=8B=A4?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 편집 세션의 재측정은 로드 때 잰 행 높이를 행마다 하한으로 둔다(한 칸이 자라도
 다른 행의 몫을 빼앗지 않게). 이 하한이 사용자가 셀 높이를 줄인 경우에도 걸려,
@@ -15,15 +21,15 @@ Subject: [PATCH 29/29] fix(layout): 편집 중 줄인 셀 높이만큼 행 하�
 
 Ported onto v0.9.0: applied without conflicts; no code changes needed.
 ---
- src/renderer/height_measurer.rs               | 69 +++++++++++++++++++++++++--
+ src/renderer/height_measurer.rs               | 69 +++++++++++++++++--
  tests/cases/issue_6714_signed_table_offset.rs |  1 +
  2 files changed, 66 insertions(+), 4 deletions(-)
 
 diff --git a/src/renderer/height_measurer.rs b/src/renderer/height_measurer.rs
-index d5e6524fc8770811327d9d55669be658fcfc43a3..f35210f1424adec748b2ef68f10d438b0b383ad5 100644
+index 4630d2679..9e2186444 100644
 --- a/src/renderer/height_measurer.rs
 +++ b/src/renderer/height_measurer.rs
-@@ -838,6 +838,27 @@ pub(crate) fn reflowed_tac_table_host_trailing_spacing_px(
+@@ -837,6 +837,27 @@ pub(crate) fn reflowed_tac_table_host_trailing_spacing_px(
      )
  }
  
@@ -51,7 +57,7 @@ index d5e6524fc8770811327d9d55669be658fcfc43a3..f35210f1424adec748b2ef68f10d438b
  /// 표의 측정된 높이 정보
  #[derive(Debug, Clone)]
  pub struct MeasuredTable {
-@@ -857,6 +878,10 @@ pub struct MeasuredTable {
+@@ -856,6 +877,10 @@ pub struct MeasuredTable {
      /// 직전 측정이 아니라 이 값을 하한으로 써야 undo/삭제로 내용이 줄었을 때
      /// 행이 로드 배분까지 되돌아온다. 비편집 측정은 None(자기 자신이 기준).
      pub baseline_row_heights: Option<Vec<f64>>,
@@ -62,7 +68,7 @@ index d5e6524fc8770811327d9d55669be658fcfc43a3..f35210f1424adec748b2ef68f10d438b
      /// 조각이 실제 수용한 물리 행 상자의 소유 범위. 원본 전체 측정은 비어 있다.
      pub fragment_block_frames: Vec<(usize, usize)>,
      /// 캡션 높이 (px)
-@@ -883,7 +908,7 @@ pub struct MeasuredTable {
+@@ -882,7 +907,7 @@ pub struct MeasuredTable {
      /// 단일 행 블록이면 row_block_end[r] == r + 1.
      pub row_block_end: Vec<usize>,
  }
@@ -71,7 +77,7 @@ index d5e6524fc8770811327d9d55669be658fcfc43a3..f35210f1424adec748b2ef68f10d438b
  
  /// 측정된 행 높이가 문서의 **행별 선언 높이**와 이미 일치하는가.
  ///
-@@ -3830,6 +3855,7 @@ let body_height=match nested_body_heights
+@@ -4076,6 +4101,7 @@ let body_height=match nested_body_heights
                  total_height: 0.0,
                  row_heights: storage.filled(rc, 0.0)?,
                  baseline_row_heights: None,
@@ -79,7 +85,7 @@ index d5e6524fc8770811327d9d55669be658fcfc43a3..f35210f1424adec748b2ef68f10d438b
                  row_frame_heights: None,
                  fragment_block_frames: Vec::new(),
                  unwrapped_table_depth: 0,
-@@ -6191,12 +6217,15 @@ let mut tables=p.controls.iter().filter_map(|c| match c{Control::Table(t)=>Some(
+@@ -6617,12 +6643,15 @@ let mut tables=p.controls.iter().filter_map(|c| match c{Control::Table(t)=>Some(
          }
          let (row_block_start, row_block_end) =
              compute_row_blocks_with_storage(table, row_heights.len(), storage)?;
@@ -95,7 +101,7 @@ index d5e6524fc8770811327d9d55669be658fcfc43a3..f35210f1424adec748b2ef68f10d438b
              row_frame_heights,
              fragment_block_frames: Vec::new(),
              unwrapped_table_depth: 0,
-@@ -6251,11 +6280,31 @@ let mut tables=p.controls.iter().filter_map(|c| match c{Control::Table(t)=>Some(
+@@ -6677,11 +6706,31 @@ let mut tables=p.controls.iter().filter_map(|c| match c{Control::Table(t)=>Some(
          if baseline.len() != mt.row_heights.len() {
              return Ok(());
          }
@@ -130,7 +136,7 @@ index d5e6524fc8770811327d9d55669be658fcfc43a3..f35210f1424adec748b2ef68f10d438b
                  changed = true;
              }
          }
-@@ -7338,6 +7387,7 @@ mod tests {
+@@ -7708,6 +7757,7 @@ mod tests {
              total_height: 100.0,
              row_heights: vec![20.0, 30.0, 25.0],
              baseline_row_heights: None,
@@ -138,7 +144,7 @@ index d5e6524fc8770811327d9d55669be658fcfc43a3..f35210f1424adec748b2ef68f10d438b
              row_frame_heights: None,
              fragment_block_frames: Vec::new(),
              unwrapped_table_depth: 0,
-@@ -7364,6 +7414,7 @@ mod tests {
+@@ -7734,6 +7784,7 @@ mod tests {
              total_height: 100.0,
              row_heights: vec![20.0, 30.0, 25.0, 40.0],
              baseline_row_heights: None,
@@ -146,7 +152,7 @@ index d5e6524fc8770811327d9d55669be658fcfc43a3..f35210f1424adec748b2ef68f10d438b
              row_frame_heights: None,
              fragment_block_frames: Vec::new(),
              unwrapped_table_depth: 0,
-@@ -7397,6 +7448,7 @@ mod tests {
+@@ -7767,6 +7818,7 @@ mod tests {
              total_height: 100.0,
              row_heights: vec![50.0, 30.0],
              baseline_row_heights: None,
@@ -154,7 +160,7 @@ index d5e6524fc8770811327d9d55669be658fcfc43a3..f35210f1424adec748b2ef68f10d438b
              row_frame_heights: None,
              fragment_block_frames: Vec::new(),
              unwrapped_table_depth: 0,
-@@ -7422,6 +7474,7 @@ mod tests {
+@@ -7792,6 +7844,7 @@ mod tests {
              total_height: 100.0,
              row_heights: vec![20.0, 30.0, 25.0],
              baseline_row_heights: None,
@@ -162,7 +168,7 @@ index d5e6524fc8770811327d9d55669be658fcfc43a3..f35210f1424adec748b2ef68f10d438b
              row_frame_heights: None,
              fragment_block_frames: Vec::new(),
              unwrapped_table_depth: 0,
-@@ -7458,6 +7511,7 @@ mod tests {
+@@ -7828,6 +7881,7 @@ mod tests {
              total_height: 100.0,
              row_heights: vec![50.0, 30.0, 25.0],
              baseline_row_heights: None,
@@ -170,7 +176,7 @@ index d5e6524fc8770811327d9d55669be658fcfc43a3..f35210f1424adec748b2ef68f10d438b
              row_frame_heights: None,
              fragment_block_frames: Vec::new(),
              unwrapped_table_depth: 0,
-@@ -7489,6 +7543,7 @@ mod tests {
+@@ -7859,6 +7913,7 @@ mod tests {
              total_height: 0.0,
              row_heights: vec![],
              baseline_row_heights: None,
@@ -178,7 +184,7 @@ index d5e6524fc8770811327d9d55669be658fcfc43a3..f35210f1424adec748b2ef68f10d438b
              row_frame_heights: None,
              fragment_block_frames: Vec::new(),
              unwrapped_table_depth: 0,
-@@ -7514,6 +7569,7 @@ mod tests {
+@@ -7884,6 +7939,7 @@ mod tests {
              total_height: 50.0,
              row_heights: vec![50.0],
              baseline_row_heights: None,
@@ -186,7 +192,7 @@ index d5e6524fc8770811327d9d55669be658fcfc43a3..f35210f1424adec748b2ef68f10d438b
              row_frame_heights: None,
              fragment_block_frames: Vec::new(),
              unwrapped_table_depth: 0,
-@@ -7641,6 +7697,7 @@ mod tests {
+@@ -8011,6 +8067,7 @@ mod tests {
              total_height: 100.0,
              row_heights: vec![20.0, 30.0, 25.0],
              baseline_row_heights: None,
@@ -194,7 +200,7 @@ index d5e6524fc8770811327d9d55669be658fcfc43a3..f35210f1424adec748b2ef68f10d438b
              row_frame_heights: None,
              fragment_block_frames: Vec::new(),
              unwrapped_table_depth: 0,
-@@ -7677,6 +7734,7 @@ mod tests {
+@@ -8047,6 +8104,7 @@ mod tests {
              total_height: 50.0,
              row_heights: vec![20.0, 30.0],
              baseline_row_heights: None,
@@ -202,7 +208,7 @@ index d5e6524fc8770811327d9d55669be658fcfc43a3..f35210f1424adec748b2ef68f10d438b
              row_frame_heights: None,
              fragment_block_frames: Vec::new(),
              unwrapped_table_depth: 0,
-@@ -7707,6 +7765,7 @@ mod tests {
+@@ -8077,6 +8135,7 @@ mod tests {
              total_height: 100.0,
              row_heights: vec![10.0, 10.0, 10.0, 10.0, 10.0],
              baseline_row_heights: None,
@@ -210,7 +216,7 @@ index d5e6524fc8770811327d9d55669be658fcfc43a3..f35210f1424adec748b2ef68f10d438b
              row_frame_heights: None,
              fragment_block_frames: Vec::new(),
              unwrapped_table_depth: 0,
-@@ -7743,6 +7802,7 @@ mod tests {
+@@ -8113,6 +8172,7 @@ mod tests {
              total_height: 100.0,
              row_heights: vec![10.0, 10.0, 10.0, 10.0, 10.0],
              baseline_row_heights: None,
@@ -218,7 +224,7 @@ index d5e6524fc8770811327d9d55669be658fcfc43a3..f35210f1424adec748b2ef68f10d438b
              row_frame_heights: None,
              fragment_block_frames: Vec::new(),
              unwrapped_table_depth: 0,
-@@ -7771,6 +7831,7 @@ mod tests {
+@@ -8141,6 +8201,7 @@ mod tests {
              total_height: 0.0,
              row_heights: vec![],
              baseline_row_heights: None,
@@ -227,7 +233,7 @@ index d5e6524fc8770811327d9d55669be658fcfc43a3..f35210f1424adec748b2ef68f10d438b
              fragment_block_frames: Vec::new(),
              unwrapped_table_depth: 0,
 diff --git a/tests/cases/issue_6714_signed_table_offset.rs b/tests/cases/issue_6714_signed_table_offset.rs
-index d1d1ec8dd3b1c6d871c76c17249cba1c041af872..8595af913ad6a51e86b8a532b8fcf4e996aa83b7 100644
+index d1d1ec8dd..8595af913 100644
 --- a/tests/cases/issue_6714_signed_table_offset.rs
 +++ b/tests/cases/issue_6714_signed_table_offset.rs
 @@ -67,6 +67,7 @@ fn paginate(offset: i32, prefix: f64, text: &str, row_heights: Vec<f64>) -> Pagi
@@ -238,3 +244,6 @@ index d1d1ec8dd3b1c6d871c76c17249cba1c041af872..8595af913ad6a51e86b8a532b8fcf4e9
              row_frame_heights: None,
              fragment_block_frames: Vec::new(),
              unwrapped_table_depth: 0,
+-- 
+2.52.0.windows.1
+

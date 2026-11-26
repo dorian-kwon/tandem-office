@@ -1,7 +1,16 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: pblsketch <239486537+pblsketch@users.noreply.github.com>
 Date: Sun, 8 Nov 2026 00:00:00 +0900
-Subject: [PATCH 9/29] fix(typeset): 종이·쪽 기준 자리차지 개체를 계상하지 않은 저장 조판을 한글 2024처럼 다시 나눈다
+Subject: [PATCH] =?UTF-8?q?fix(typeset):=20=EC=A2=85=EC=9D=B4=C2=B7?=
+ =?UTF-8?q?=EC=AA=BD=20=EA=B8=B0=EC=A4=80=20=EC=9E=90=EB=A6=AC=EC=B0=A8?=
+ =?UTF-8?q?=EC=A7=80=20=EA=B0=9C=EC=B2=B4=EB=A5=BC=20=EA=B3=84=EC=83=81?=
+ =?UTF-8?q?=ED=95=98=EC=A7=80=20=EC=95=8A=EC=9D=80=20=EC=A0=80=EC=9E=A5=20?=
+ =?UTF-8?q?=EC=A1=B0=ED=8C=90=EC=9D=84=20=ED=95=9C=EA=B8=80=202024?=
+ =?UTF-8?q?=EC=B2=98=EB=9F=BC=20=EB=8B=A4=EC=8B=9C=20=EB=82=98=EB=88=88?=
+ =?UTF-8?q?=EB=8B=A4?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 종이·쪽 기준 자리차지(TopAndBottom) 도형·그림을 앵커한 문단이 그 개체 밴드 안에서
 시작하면, 그리는 쪽(`calculate_shape_reserved_heights` + `shape_jumped`)은 앵커
@@ -28,25 +37,25 @@ IeumOffice patch onto v0.8.7 (not proposed upstream yet).
 
 Ported onto devel 7d06d5c70: devel's #7696 band (`register_page_anchored_topbottom_band`) already starts the paragraphs after the anchor below the box, but it leaves the anchor's own line inside the box and has no stale-boundary rules, so the app's Hancom-checked fixture split 33/17 lines instead of 32/18. Kept all three parts. The anchor alignment now also records its start in devel's `page_band_flow_starts`, because devel's paint no longer jumps the anchor itself (`shape_reserved`) and otherwise drew the title lines 15.6px above the typeset place. The stale-boundary override follows devel's `!saved_object_frame_reset` guard in whole_fit.rs. The HeightCursor exception joins devel's reworked `skip_prededuct` list. Same files otherwise.
 ---
- src/renderer/height_cursor.rs                 |  10 ++
+ src/renderer/height_cursor.rs                 |  10 +
  src/renderer/layout.rs                        |  14 ++
- src/renderer/typeset.rs                       | 218 ++++++++++++++++++++++++++
+ src/renderer/typeset.rs                       | 218 ++++++++++++++++++
  src/renderer/typeset/paragraph/split_entry.rs |   7 +-
  src/renderer/typeset/paragraph/whole_fit.rs   |   6 +-
- src/renderer/typeset/section/flow.rs          |  48 ++++++
+ src/renderer/typeset/section/flow.rs          |  48 ++++
  src/renderer/typeset/section/stored_reset.rs  |   7 +-
- src/renderer/typeset/section/vpos.rs          |  27 ++++
+ src/renderer/typeset/section/vpos.rs          |  27 +++
  src/renderer/typeset/state.rs                 |   2 +
- src/renderer/typeset/state/commands.rs        |  11 ++
+ src/renderer/typeset/state/commands.rs        |  11 +
  src/renderer/typeset/state/data.rs            |   5 +
  src/renderer/typeset/state/transition.rs      |   1 +
  12 files changed, 350 insertions(+), 6 deletions(-)
 
 diff --git a/src/renderer/height_cursor.rs b/src/renderer/height_cursor.rs
-index 43ecef264d9aa535c247905d4e39cbc73e1d24d9..a90e6ea9ba1e5f646a66651b8a63b9cd7eae5d7a 100644
+index c58870c91..0f28212af 100644
 --- a/src/renderer/height_cursor.rs
 +++ b/src/renderer/height_cursor.rs
-@@ -273,6 +273,9 @@ pub(crate) struct HeightCursor {
+@@ -277,6 +277,9 @@ pub(crate) struct HeightCursor {
      /// 간격을 그리는 문단 경로를 타지 않으므로 `vpos_corrected_end_y` 의 `sb_N` 사전 차감
      /// 대상이 아니다. layout 만 세운다.
      pub curr_item_is_table_fragment: bool,
@@ -56,7 +65,7 @@ index 43ecef264d9aa535c247905d4e39cbc73e1d24d9..a90e6ea9ba1e5f646a66651b8a63b9cd
      /// [#7665] 미주 흐름에서 **미주의 첫 문단**(렌더가 번호 장식을 붙이는 문단, 조판 `ep_idx == 0`)
      /// 인 전역 문단 번호. 새 문항 제목 판정은 이 소유 경계로 한다 — 첫 문단이 「문」 으로
      /// 시작하는지(번호 장식 `문1)` 의 대리값)로 읽으면 같은 미주 안 `문서…` 본문도 제목이 된다.
-@@ -345,6 +348,7 @@ impl HeightCursor {
+@@ -353,6 +356,7 @@ impl HeightCursor {
              trimmed_prev_spacing_before_px: 0.0,
              session_edited: false,
              curr_item_is_table_fragment: false,
@@ -64,7 +73,7 @@ index 43ecef264d9aa535c247905d4e39cbc73e1d24d9..a90e6ea9ba1e5f646a66651b8a63b9cd
              endnote_note_first_paras: Default::default(),
              endnote_tail_leading_hu: Default::default(),
              seed_lazy_base_from_next_stored: false,
-@@ -1779,8 +1783,14 @@ impl HeightCursor {
+@@ -1832,8 +1836,14 @@ impl HeightCursor {
              && paragraphs.get(item_para).is_some_and(|current| {
                  rebuilt_ladder_omits_spacing_before(prev_para, current, curr_sb, self.dpi)
              });
@@ -80,10 +89,10 @@ index 43ecef264d9aa535c247905d4e39cbc73e1d24d9..a90e6ea9ba1e5f646a66651b8a63b9cd
              || table_host_line_is_top_after_table_host;
          // This rebuilt axis omits paragraph-before bands already consumed by
 diff --git a/src/renderer/layout.rs b/src/renderer/layout.rs
-index e6cc1e7554bf0ec7167b8112459247a7a50576bf..26224780c1a8a31935f65e6dc4b434b803ad8e9a 100644
+index 40799e4fe..aab3bbc7e 100644
 --- a/src/renderer/layout.rs
 +++ b/src/renderer/layout.rs
-@@ -8406,6 +8406,18 @@ impl LayoutEngine {
+@@ -8646,6 +8646,18 @@ impl LayoutEngine {
          );
          hcursor.suppress_hwpx_stale_forward = self.profile.get().hwpx_stored_layout();
          hcursor.stored_equation_reflow = self.profile.get().hwp5_container();
@@ -102,7 +111,7 @@ index e6cc1e7554bf0ec7167b8112459247a7a50576bf..26224780c1a8a31935f65e6dc4b434b8
          // 쪽 첫 문단(제목 표 host 포함)이 제목 표 아래에서 시작하면 그 문단도 저장 위치
          // (쪽 원점 + 첫 vpos)에 둔다.
          if page_square_preserves_source_origin {
-@@ -9127,6 +9139,8 @@ impl LayoutEngine {
+@@ -9380,6 +9392,8 @@ impl LayoutEngine {
                  };
                  hcursor.curr_item_is_table_fragment =
                      matches!(item, PageItem::PartialTable { .. }) && !opening_host_owns_lead;
@@ -112,10 +121,10 @@ index e6cc1e7554bf0ec7167b8112459247a7a50576bf..26224780c1a8a31935f65e6dc4b434b8
                      y_offset,
                      item_para,
 diff --git a/src/renderer/typeset.rs b/src/renderer/typeset.rs
-index b06bc793e3329dc8b2bc1f9c4ee3d79f9882ff93..65967ced409b1b23552c431aa782836de275a4cd 100755
+index b25bad7f6..b6d1f1bb2 100755
 --- a/src/renderer/typeset.rs
 +++ b/src/renderer/typeset.rs
-@@ -6753,6 +6753,137 @@ impl TypesetEngine {
+@@ -7025,6 +7025,137 @@ impl TypesetEngine {
      }
  }
  
@@ -253,7 +262,7 @@ index b06bc793e3329dc8b2bc1f9c4ee3d79f9882ff93..65967ced409b1b23552c431aa782836d
  /// Task #321: 단일 문단의 컨트롤에서 body-wide TopAndBottom 표/도형이 차지하는 높이 계산.
  ///
  /// col 1+ advance 시 current_height 시작값으로 사용하여 layout의 `body_wide_reserved`
-@@ -6966,6 +7097,93 @@ mod issue_3780_line_advance_oob {
+@@ -7238,6 +7369,93 @@ mod issue_3780_line_advance_oob {
  mod tests {
      use crate::renderer::float_placement::native_empty_host_rowbreak_line_advance_hu;
  
@@ -348,7 +357,7 @@ index b06bc793e3329dc8b2bc1f9c4ee3d79f9882ff93..65967ced409b1b23552c431aa782836d
      fn fullpage_image_single_page_policy_requires_strict_majority() {
          assert!(!super::has_majority_fullpage_images(0, 0));
 diff --git a/src/renderer/typeset/paragraph/split_entry.rs b/src/renderer/typeset/paragraph/split_entry.rs
-index 44ca45bad59c02fcd41b1a06ffc12b33f155a391..a52818b65a4d0ff1b5eaf6333ddc59dfa53df4ee 100644
+index 44ca45bad..a52818b65 100644
 --- a/src/renderer/typeset/paragraph/split_entry.rs
 +++ b/src/renderer/typeset/paragraph/split_entry.rs
 @@ -17,6 +17,7 @@ pub(in crate::renderer::typeset) struct SplitEntryPage<'a> {
@@ -373,10 +382,10 @@ index 44ca45bad59c02fcd41b1a06ffc12b33f155a391..a52818b65a4d0ff1b5eaf6333ddc59df
          && page.current_height < available
          && {
 diff --git a/src/renderer/typeset/paragraph/whole_fit.rs b/src/renderer/typeset/paragraph/whole_fit.rs
-index 32729ae9cf3422e553134262f12f346a935d11ca..b6a71a7fdc9e828eb74c7f28c0c8b37af9aa8214 100644
+index 0aadf1d78..8548b1a60 100644
 --- a/src/renderer/typeset/paragraph/whole_fit.rs
 +++ b/src/renderer/typeset/paragraph/whole_fit.rs
-@@ -53,6 +53,7 @@ pub(in crate::renderer::typeset) struct WholeFitPage<'a> {
+@@ -54,6 +54,7 @@ pub(in crate::renderer::typeset) struct WholeFitPage<'a> {
      pub body_height: f64,
      pub visible_float_exclusions: &'a [VisibleFloatExclusion],
      pub hangul2024_reclaimed: f64,
@@ -384,7 +393,7 @@ index 32729ae9cf3422e553134262f12f346a935d11ca..b6a71a7fdc9e828eb74c7f28c0c8b37a
  }
  
  pub(super) struct WholeFitEvidence {
-@@ -291,10 +292,11 @@ pub(super) fn inspect(
+@@ -302,10 +303,11 @@ pub(super) fn inspect(
      // [compat 2024] 앵커 줄 회수분이 있거나 앞선 경계를 이미 덮은 상태에서
      // 이 문단의 첫 줄이 (회수 보너스 포함) 들어가면 저장 되감김(=2022 조판의
      // 쪽 경계)을 덮는다. 회수도 선행 덮음도 없으면 종전 동작 그대로.
@@ -399,10 +408,10 @@ index 32729ae9cf3422e553134262f12f346a935d11ca..b6a71a7fdc9e828eb74c7f28c0c8b37a
              // 빈 문단 need=0 / 실문단 첫 줄 (위 reset-trigger 와 같은 규칙).
              let need: f64 = if !para_has_visible_text(para) && para.controls.is_empty() {
 diff --git a/src/renderer/typeset/section/flow.rs b/src/renderer/typeset/section/flow.rs
-index b0d5e0418915be6c9d5a5d4abd2652225b284e7e..71ad6126cf9f6f4bbd88d66ccc4bbc67e5cde53e 100644
+index c911ee9d1..cafc7d9ce 100644
 --- a/src/renderer/typeset/section/flow.rs
 +++ b/src/renderer/typeset/section/flow.rs
-@@ -253,6 +253,54 @@ impl TypesetEngine {
+@@ -254,6 +254,54 @@ impl TypesetEngine {
                  st.record_stored_column_origin(Some((0, 0.0)));
                  st.record_vpos_origin_provenance(true);
              }
@@ -458,7 +467,7 @@ index b0d5e0418915be6c9d5a5d4abd2652225b284e7e..71ad6126cf9f6f4bbd88d66ccc4bbc67
                  st.current_items.last().and_then(|item| match item {
                      PageItem::Table {
 diff --git a/src/renderer/typeset/section/stored_reset.rs b/src/renderer/typeset/section/stored_reset.rs
-index f88d4053fbe723ff0e2a37361cb47a4e5a096231..fd085d63114918ea6a5564f38523cdb4a9e1ff52 100644
+index 927ebb39f..5ebd0bdbb 100644
 --- a/src/renderer/typeset/section/stored_reset.rs
 +++ b/src/renderer/typeset/section/stored_reset.rs
 @@ -427,8 +427,11 @@ impl TypesetEngine {
@@ -476,10 +485,10 @@ index f88d4053fbe723ff0e2a37361cb47a4e5a096231..fd085d63114918ea6a5564f38523cdb4
                          // 여백으로 흘려도 되는 존재라 need=0, 실문단은 첫 줄
                          // (통째로 못 들어가면 일반 분할이 첫 줄부터 채운다 —
 diff --git a/src/renderer/typeset/section/vpos.rs b/src/renderer/typeset/section/vpos.rs
-index 5ad3f47dda5fe9e930e95d1209c77ca564306116..cd34b2c4520fd1ffc041ec0e5daf85569b54c85c 100644
+index db04024fa..3c684d17b 100644
 --- a/src/renderer/typeset/section/vpos.rs
 +++ b/src/renderer/typeset/section/vpos.rs
-@@ -57,6 +57,7 @@ impl TypesetEngine {
+@@ -58,6 +58,7 @@ impl TypesetEngine {
              stored_boundary_spacing_before: 0.0,
              session_edited: self.profile.get().session_edited(),
              curr_item_is_table_fragment: false,
@@ -487,7 +496,7 @@ index 5ad3f47dda5fe9e930e95d1209c77ca564306116..cd34b2c4520fd1ffc041ec0e5daf8556
              // 본문 조판: 미주 제목 갈래는 `suppress_large_forward_jump` 아래에서만 발화한다.
              endnote_note_first_paras: Default::default(),
              endnote_tail_leading_hu: Default::default(),
-@@ -210,6 +211,32 @@ impl TypesetEngine {
+@@ -213,6 +214,32 @@ impl TypesetEngine {
          {
              y = y.max(st.current_height - hc.stored_boundary_spacing_before);
          }
@@ -521,10 +530,10 @@ index 5ad3f47dda5fe9e930e95d1209c77ca564306116..cd34b2c4520fd1ffc041ec0e5daf8556
          // fresh 재계산 성장분을 낡은 기계 v0 가 되돌리지 못하게 한다(전방만 허용).
          // [#2279 OMIT-sa] spacing-누락 문서군은 합성(비저장) base 사다리도 동일 —
 diff --git a/src/renderer/typeset/state.rs b/src/renderer/typeset/state.rs
-index a97ab163cb9a7023865c8b64cb17228503b68aea..8e1ccddbe87ab1549607430154b7642268dd55b1 100644
+index 0a7ae4acf..ec26fb949 100644
 --- a/src/renderer/typeset/state.rs
 +++ b/src/renderer/typeset/state.rs
-@@ -753,6 +753,7 @@ impl TypesetState {
+@@ -804,6 +804,7 @@ impl TypesetState {
              body_height: self.base_available_height(),
              visible_float_exclusions: &self.data.visible_float_exclusions,
              hangul2024_reclaimed: self.data.hangul2024_reclaimed,
@@ -532,7 +541,7 @@ index a97ab163cb9a7023865c8b64cb17228503b68aea..8e1ccddbe87ab1549607430154b76422
          }
      }
  
-@@ -898,6 +899,7 @@ impl TypesetState {
+@@ -949,6 +950,7 @@ impl TypesetState {
              body_height: self.base_available_height(),
              stored_ladder_spacing_omitted: self.data.stored_ladder_spacing_omitted,
              hangul2024_reclaimed: self.data.hangul2024_reclaimed,
@@ -541,10 +550,10 @@ index a97ab163cb9a7023865c8b64cb17228503b68aea..8e1ccddbe87ab1549607430154b76422
      }
  
 diff --git a/src/renderer/typeset/state/commands.rs b/src/renderer/typeset/state/commands.rs
-index d9b60365172bdeb3ad61fd47db25cb47d448da8e..9facfea3a774851848b86495c36128097e4485c2 100644
+index 68f209bc2..dd4608144 100644
 --- a/src/renderer/typeset/state/commands.rs
 +++ b/src/renderer/typeset/state/commands.rs
-@@ -1042,6 +1042,17 @@ impl TypesetState {
+@@ -1122,6 +1122,17 @@ impl TypesetState {
  }
  
  impl TypesetState {
@@ -563,10 +572,10 @@ index d9b60365172bdeb3ad61fd47db25cb47d448da8e..9facfea3a774851848b86495c3612809
          self.data.hangul2024_reclaimed += height;
      }
 diff --git a/src/renderer/typeset/state/data.rs b/src/renderer/typeset/state/data.rs
-index 2280c6d4a3287b73c25cf1a3bba54abfe9bd6fb5..a3adec1509f1695e2c5a57ccb2577ebb20175368 100644
+index fe5f1f9b0..0f55e6b55 100644
 --- a/src/renderer/typeset/state/data.rs
 +++ b/src/renderer/typeset/state/data.rs
-@@ -50,6 +50,11 @@ pub(in crate::renderer::typeset) struct StateView {
+@@ -52,6 +52,11 @@ pub(in crate::renderer::typeset) struct StateView {
      /// 되감김 쪽-경계 신호를 재적합으로 덮을 자격 판정에 쓴다 — 회수가 없던
      /// 쪽에서는 되감김 신호를 그대로 존중해 여타 문서 동작을 바꾸지 않는다.
      pub(in crate::renderer::typeset) hangul2024_reclaimed: f64,
@@ -579,7 +588,7 @@ index 2280c6d4a3287b73c25cf1a3bba54abfe9bd6fb5..a3adec1509f1695e2c5a57ccb2577ebb
      /// place 적합을 우회해 쪽 하단 여백으로 흘린다(이웃 빈 문단까지 흘리면
      /// 2024 보다 한 문단 과적재, idx22 실측).
 diff --git a/src/renderer/typeset/state/transition.rs b/src/renderer/typeset/state/transition.rs
-index 21a680ad81b56ea709cd7351ed667c62265fb539..6c682251001d576ee499a6f47f69eea99144562e 100644
+index 52f0ff59f..23fda9012 100644
 --- a/src/renderer/typeset/state/transition.rs
 +++ b/src/renderer/typeset/state/transition.rs
 @@ -28,6 +28,7 @@ impl TypesetState {
@@ -590,3 +599,6 @@ index 21a680ad81b56ea709cd7351ed667c62265fb539..6c682251001d576ee499a6f47f69eea9
                  hangul2024_spill_para: None,
                  stored_ladder_spacing_omitted: false,
                  omit_fresh_recalc_doc: false,
+-- 
+2.52.0.windows.1
+

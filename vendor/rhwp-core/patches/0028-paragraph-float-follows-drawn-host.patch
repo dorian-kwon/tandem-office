@@ -1,7 +1,15 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: pblsketch <239486537+pblsketch@users.noreply.github.com>
 Date: Sun, 8 Nov 2026 00:00:00 +0900
-Subject: [PATCH 17/29] fix(layout): 문단 기준 위아래 표를 그려진 글줄 원점에 두고 표 뒤 간격을 한글처럼 잰다
+Subject: [PATCH] =?UTF-8?q?fix(layout):=20=EB=AC=B8=EB=8B=A8=20=EA=B8=B0?=
+ =?UTF-8?q?=EC=A4=80=20=EC=9C=84=EC=95=84=EB=9E=98=20=ED=91=9C=EB=A5=BC=20?=
+ =?UTF-8?q?=EA=B7=B8=EB=A0=A4=EC=A7=84=20=EA=B8=80=EC=A4=84=20=EC=9B=90?=
+ =?UTF-8?q?=EC=A0=90=EC=97=90=20=EB=91=90=EA=B3=A0=20=ED=91=9C=20=EB=92=A4?=
+ =?UTF-8?q?=20=EA=B0=84=EA=B2=A9=EC=9D=84=20=ED=95=9C=EA=B8=80=EC=B2=98?=
+ =?UTF-8?q?=EB=9F=BC=20=EC=9E=B0=EB=8B=A4?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 조판이 저장 호스트 줄로 정한 문단 기준 위아래 표 자리를 그리기는 col_area.y만
 더해 썼다. 호스트 글줄은 그리기 흐름의 문단 원점에 그려지므로, 두 커서가 어긋나면
@@ -24,10 +32,10 @@ Ported onto devel 7d06d5c70: part of (2) only. (1) Dropped: devel already draws 
  2 files changed, 23 insertions(+), 4 deletions(-)
 
 diff --git a/src/renderer/layout.rs b/src/renderer/layout.rs
-index d353c734a108a25f49bf330e45371d1ee5d2088e..74d68ac41ff0f9d0079b9b3e1cb2e0bb1a169dc4 100644
+index ef16daf55..97d32c86d 100644
 --- a/src/renderer/layout.rs
 +++ b/src/renderer/layout.rs
-@@ -11018,6 +11018,18 @@ impl LayoutEngine {
+@@ -11197,6 +11197,18 @@ impl LayoutEngine {
                                  | super::float_placement::ParagraphFloatFlow::EmptyHost
                          )
                      {
@@ -47,10 +55,10 @@ index d353c734a108a25f49bf330e45371d1ee5d2088e..74d68ac41ff0f9d0079b9b3e1cb2e0bb
                              col_area.y + placement.paragraph_end(new_y - col_area.y, spacing_after);
                          hcursor.min_flow_floor = hcursor.min_flow_floor.max(new_y);
 diff --git a/src/renderer/typeset/section/controls.rs b/src/renderer/typeset/section/controls.rs
-index e8d7dfcde46d61a10fe00660926cd6b507fb3251..e90665609134217b5e5486ac3e8687a49d1e66da 100644
+index e49b114fb..597b0df69 100644
 --- a/src/renderer/typeset/section/controls.rs
 +++ b/src/renderer/typeset/section/controls.rs
-@@ -795,10 +795,17 @@ impl TypesetEngine {
+@@ -975,10 +975,17 @@ impl TypesetEngine {
          // #6950: text and its tail table may be emitted in paint order rather
          // than logical order. Finish the paragraph after ALL its controls;
          // post-text must not return flow to a position above its own table.
@@ -72,3 +80,6 @@ index e8d7dfcde46d61a10fe00660926cd6b507fb3251..e90665609134217b5e5486ac3e8687a4
          st.finish_paragraph_float_flow(para_idx, spacing_after);
  
          Ok(())
+-- 
+2.52.0.windows.1
+

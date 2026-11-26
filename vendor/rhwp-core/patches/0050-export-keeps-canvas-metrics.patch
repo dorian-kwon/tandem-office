@@ -1,8 +1,10 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: pblsketch <239486537+pblsketch@users.noreply.github.com>
 Date: Sat, 14 Nov 2026 00:00:00 +0900
-Subject: [PATCH 36/36] feat(render): 호스트가 고르면 Canvas2D 보충 폭으로 조판한
- 쪽을 export한다
+Subject: [PATCH] =?UTF-8?q?feat(render):=20=ED=98=B8=EC=8A=A4=ED=8A=B8?=
+ =?UTF-8?q?=EA=B0=80=20=EA=B3=A0=EB=A5=B4=EB=A9=B4=20Canvas2D=20=EB=B3=B4?=
+ =?UTF-8?q?=EC=B6=A9=20=ED=8F=AD=EC=9C=BC=EB=A1=9C=20=EC=A1=B0=ED=8C=90?=
+ =?UTF-8?q?=ED=95=9C=20=EC=AA=BD=EC=9D=84=20export=ED=95=9C=EB=8B=A4?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -48,22 +50,22 @@ index a4aea097c..7a85c88b6 100644
                  "Canvas2D supplemental metrics are active; select portable metrics before exporting"
                      .into(),
 diff --git a/src/document_core/commands/document.rs b/src/document_core/commands/document.rs
-index 2092e235e..68ce81c0d 100644
+index 0d9fdbbe7..b547de858 100644
 --- a/src/document_core/commands/document.rs
 +++ b/src/document_core/commands/document.rs
-@@ -475,6 +475,7 @@ impl DocumentCore {
+@@ -477,6 +477,7 @@ impl DocumentCore {
              paste_cascade_count: 0,
              show_paragraph_marks: false,
              annotate_metric_font: false,
 +            export_keeps_canvas_metrics: false,
              show_control_codes: false,
              show_transparent_borders: false,
-             clip_enabled: true,
+             dim_master_pages: false,
 diff --git a/src/document_core/mod.rs b/src/document_core/mod.rs
-index 47fccb2e1..914e07d19 100644
+index d47217e2d..fcf9d8de2 100644
 --- a/src/document_core/mod.rs
 +++ b/src/document_core/mod.rs
-@@ -243,6 +243,9 @@ pub struct DocumentCore {
+@@ -258,6 +258,9 @@ pub struct DocumentCore {
      pub(crate) show_paragraph_marks: bool,
      /// [#4709] SVG 출력에 배치 메트릭 face 주석(data-metric-font) 부착 여부 (옵트인)
      pub(crate) annotate_metric_font: bool,
@@ -73,19 +75,19 @@ index 47fccb2e1..914e07d19 100644
      /// 조판부호 표시 여부 (개체 마커 [표]/[그림] 등, 문단부호 포함)
      pub(crate) show_control_codes: bool,
      /// 투명선 표시 여부
-@@ -603,6 +606,7 @@ impl DocumentCore {
+@@ -624,6 +627,7 @@ impl DocumentCore {
              paste_cascade_count: 0,
              show_paragraph_marks: false,
              annotate_metric_font: false,
 +            export_keeps_canvas_metrics: false,
              show_control_codes: false,
              show_transparent_borders: false,
-             clip_enabled: true,
+             dim_master_pages: false,
 diff --git a/src/wasm_api.rs b/src/wasm_api.rs
-index f7881e83e..265091ce1 100644
+index 9acfa8a38..175c88e5a 100644
 --- a/src/wasm_api.rs
 +++ b/src/wasm_api.rs
-@@ -1086,6 +1086,16 @@ impl HwpDocument {
+@@ -1188,6 +1188,16 @@ impl HwpDocument {
          self.annotate_metric_font = enabled;
      }
  
@@ -102,3 +104,6 @@ index f7881e83e..265091ce1 100644
      /// [#4709] SVG 메트릭 face 주석 부착 여부를 반환한다.
      #[wasm_bindgen(js_name = getAnnotateMetricFont)]
      pub fn get_annotate_metric_font(&self) -> bool {
+-- 
+2.52.0.windows.1
+

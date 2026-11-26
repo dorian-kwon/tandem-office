@@ -5,14 +5,23 @@ import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import JSZip from 'jszip'
 import { z } from 'zod'
 
 import { blankXlsxBuffer } from '@genoffice/xlsx-gateway/gateway/csv-import'
 import { saveWorkbookViaSidecar } from '@genoffice/xlsx-gateway/gateway/xlsx-package-io'
 import { XlsxSidecarClient } from '../src/main/xlsx-sidecar-client'
-import { workbookRangeResultSchema } from '../src/shared/desktop-api'
+import {
+  extractExternalHtmlFormulas,
+  resolveExternalFormulaAt,
+} from '../src/renderer/formula-clipboard'
+import {
+  workbookFileSchema,
+  workbookFilterRequestSchema,
+  workbookFilterResultSchema,
+  workbookRangeResultSchema,
+} from '../src/shared/desktop-api'
 import { buildCompatibilityFixture } from './fixture-builder'
 
 const openResultSchema = z.object({
@@ -66,6 +75,122 @@ describe('XLSX Rust sidecar', () => {
       ])
     } finally {
       if (sessionId) await client.close(sessionId)
+      client.stop()
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('reads sparse filter matches and reopens a clipboard formula saved at a matching row', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'xlsx-filter-paste-'))
+    const path = join(directory, 'source.xlsx')
+    const output = join(directory, 'saved.xlsx')
+    const zip = await JSZip.loadAsync(await blankXlsxBuffer())
+    zip.file(
+      'xl/worksheets/sheet1.xml',
+      `
+      <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+        <dimension ref="A1:B920001"/>
+        <sheetData>
+          <row r="1"><c r="A1" t="inlineStr"><is><t>Group</t></is></c></row>
+          <row r="5"><c r="A5"><v>7</v></c></row>
+          <row r="920001"><c r="A920001"><v>7</v></c></row>
+        </sheetData>
+      </worksheet>`.trim(),
+    )
+    await writeFile(path, await zip.generateAsync({ type: 'nodebuffer' }))
+    const client = new XlsxSidecarClient(sidecarBinaryPath())
+    try {
+      const openSchema = workbookFileSchema.omit({ sha256: true, readOnly: true })
+      const opened = openSchema.parse(await client.open(path))
+      const sheet = opened.sheets[0]!
+      const session = { sessionId: opened.sessionId, sheetId: sheet.id }
+      const request = workbookFilterRequestSchema.parse({
+        ...session,
+        startRow: 1,
+        endRow: 920000,
+        spans: [{ startRow: 1, endRow: 920000, fileStartRow: 1 }],
+        criteria: [
+          {
+            fileColumn: 0,
+            overrides: [],
+            predicate: { kind: 'values', values: ['7'], blank: false },
+          },
+        ],
+      })
+      const mask = await vi.waitFor(
+        async () => {
+          const response = workbookFilterResultSchema.parse(await client.filterRows(request))
+          expect(response.ready).toBe(true)
+          return Buffer.from(response.hidden!, 'base64')
+        },
+        { timeout: 5000 },
+      )
+      const matches = []
+      for (let row = request.startRow; row <= request.endRow; row++) {
+        const offset = row - request.startRow
+        if (!(mask[offset >> 3]! & (1 << (offset % 8)))) matches.push(row)
+      }
+      expect(matches).toEqual([4, 920000])
+      const result = workbookRangeResultSchema.parse(
+        await client.readRange({
+          ...session,
+          mode: 'viewport',
+          rows: matches,
+          range: { startRow: 4, endRow: 920000, startColumn: 0, endColumn: 0 },
+        }),
+      )
+      expect(result.cells.map(({ row, value }) => [row, value])).toEqual([
+        [4, 7],
+        [920000, 7],
+      ])
+      await client.close(opened.sessionId)
+
+      const html = '<table><tr><td data-sheets-formula="=LET(x,RC[-1],x+1)">8</td></tr></table>'
+      const formula = resolveExternalFormulaAt(
+        extractExternalHtmlFormulas(html)!,
+        0,
+        0,
+        920000,
+        1,
+        920000,
+        1,
+      )
+      expect(formula).toBe('=LET(x,A920001,x+1)')
+      await saveWorkbookViaSidecar({
+        client,
+        sourcePath: path,
+        targetPath: output,
+        edits: [
+          {
+            sheetName: sheet.name,
+            row: 920000,
+            column: 1,
+            writeValue: true,
+            cell: { value: 8, formula: formula! },
+          },
+        ],
+      })
+      const saved = await JSZip.loadAsync(await readFile(output))
+      const xml = await saved.file('xl/worksheets/sheet1.xml')!.async('text')
+      expect(xml).toContain('_xlfn.LET(_xlpm.x,A920001,_xlpm.x+1)')
+      const reopened = openSchema.parse(await client.open(output))
+      const read = await vi.waitFor(
+        async () => {
+          const result = workbookRangeResultSchema.parse(
+            await client.readRange({
+              sessionId: reopened.sessionId,
+              sheetId: reopened.sheets[0]!.id,
+              range: { startRow: 920000, endRow: 920000, startColumn: 1, endColumn: 1 },
+            }),
+          )
+          expect(result.indexingComplete).toBe(true)
+          return result
+        },
+        { timeout: 5000 },
+      )
+      expect(read.cells[0]?.formula).toBe(formula)
+      await client.close(reopened.sessionId)
+    } finally {
       client.stop()
       await rm(directory, { recursive: true, force: true })
     }

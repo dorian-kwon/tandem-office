@@ -1,7 +1,15 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: pblsketch <239486537+pblsketch@users.noreply.github.com>
 Date: Sun, 8 Nov 2026 00:00:00 +0900
-Subject: [PATCH 18/29] fix(typeset,layout): 흐름이 따르지 않은 저장 쪽 경계 뒤의 표는 저장 좌표에 두지 않는다
+Subject: [PATCH] =?UTF-8?q?fix(typeset,layout):=20=ED=9D=90=EB=A6=84?=
+ =?UTF-8?q?=EC=9D=B4=20=EB=94=B0=EB=A5=B4=EC=A7=80=20=EC=95=8A=EC=9D=80=20?=
+ =?UTF-8?q?=EC=A0=80=EC=9E=A5=20=EC=AA=BD=20=EA=B2=BD=EA=B3=84=20=EB=92=A4?=
+ =?UTF-8?q?=EC=9D=98=20=ED=91=9C=EB=8A=94=20=EC=A0=80=EC=9E=A5=20=EC=A2=8C?=
+ =?UTF-8?q?=ED=91=9C=EC=97=90=20=EB=91=90=EC=A7=80=20=EC=95=8A=EB=8A=94?=
+ =?UTF-8?q?=EB=8B=A4?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 저장 줄의 vpos 는 한/글이 저장할 때의 쪽 원점에서 잰 값이다. 사다리가 되감기는
 자리(앞 줄 vpos > 5000, 뒤 줄이 그보다 작음)는 한/글이 거기서 쪽을 나눴다는
@@ -36,19 +44,22 @@ devel 은 이 경계를 쪽 나누기로 강제하지 않는다. 앞 내용의 �
 - 개인 문서 41개 중 렌더 트리가 바뀐 쪽은 draft 10쪽, wbk 2쪽뿐이다.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+# Conflicts:
+#	src/renderer/typeset/state.rs
 ---
- src/renderer/layout.rs                        | 52 ++++++++++++++++------
- src/renderer/typeset.rs                       | 64 +++++++++++++++++++++++++++
- src/renderer/typeset/state.rs                 | 15 +++++++
- src/renderer/typeset/table/block/prepare.rs   |  5 +++
- src/renderer/typeset/table/block/whole_fit.rs |  3 ++
+ src/renderer/layout.rs                        | 52 +++++++++++----
+ src/renderer/typeset.rs                       | 64 +++++++++++++++++++
+ src/renderer/typeset/state.rs                 | 15 +++++
+ src/renderer/typeset/table/block/prepare.rs   |  5 ++
+ src/renderer/typeset/table/block/whole_fit.rs |  3 +
  5 files changed, 126 insertions(+), 13 deletions(-)
 
 diff --git a/src/renderer/layout.rs b/src/renderer/layout.rs
-index 74d68ac41ff0f9d0079b9b3e1cb2e0bb1a169dc4..f916250874a3d61f9cc72fed1287273734ad9361 100644
+index 97d32c86d..bb2a09ded 100644
 --- a/src/renderer/layout.rs
 +++ b/src/renderer/layout.rs
-@@ -16768,26 +16768,52 @@ impl LayoutEngine {
+@@ -17355,26 +17355,52 @@ impl LayoutEngine {
          // (예: -1796 HU = 4294965500u32) 도 통과시킴. signed 비교로 정정.
          let pt_y_start = if let Some(para) = paragraphs.get(para_index) {
              if let Some(Control::Table(t)) = para.controls.get(control_index) {
@@ -115,10 +126,10 @@ index 74d68ac41ff0f9d0079b9b3e1cb2e0bb1a169dc4..f916250874a3d61f9cc72fed12872737
                          stored_top
                      } else if !t.common.treat_as_char
 diff --git a/src/renderer/typeset.rs b/src/renderer/typeset.rs
-index 65967ced409b1b23552c431aa782836de275a4cd..9ad66608ae4aeef75e9ce0460d0b5550ed390227 100755
+index b6d1f1bb2..e46e5222f 100755
 --- a/src/renderer/typeset.rs
 +++ b/src/renderer/typeset.rs
-@@ -2647,6 +2647,70 @@ pub(in crate::renderer::typeset) fn stored_vpos_overflow_defers_paragraph(
+@@ -2676,6 +2676,70 @@ pub(in crate::renderer::typeset) fn stored_vpos_overflow_defers_paragraph(
      hosts_table && overflows_body_narrowly && next < own
  }
  
@@ -190,15 +201,15 @@ index 65967ced409b1b23552c431aa782836de275a4cd..9ad66608ae4aeef75e9ce0460d0b5550
  ///
  /// 기존 [`paragraph_saved_vpos_reset_starts_new_page_after`] 는 단일 단에서 `nv == 0`
 diff --git a/src/renderer/typeset/state.rs b/src/renderer/typeset/state.rs
-index 8e1ccddbe87ab1549607430154b7642268dd55b1..718311f3c4e5aa36d45e121fc0d86a016602cebd 100644
+index ec26fb949..9fd4fc16d 100644
 --- a/src/renderer/typeset/state.rs
 +++ b/src/renderer/typeset/state.rs
-@@ -962,6 +962,21 @@ impl TypesetState {
-             })
+@@ -1123,6 +1123,21 @@ impl TypesetState {
+         })
      }
  
-+    /// 이 단을 연 흐름과 `host_idx` 의 저장 줄 사이에 흐름이 따르지 않은 저장 쪽
-+    /// 경계가 있는가. 판정은 paint 와 같은 [`super::column_crossed_unhonored_stored_reset`].
++    /// 이 단을 연 흐름과 host_idx 의 저장 줄 사이에 흐름이 따르지 않은 저장 쪽
++    /// 경계가 있는가. 판정은 paint 와 같은 [super::column_crossed_unhonored_stored_reset].
 +    pub(super) fn current_column_crossed_unhonored_stored_reset(
 +        &self,
 +        paragraphs: &[Paragraph],
@@ -216,10 +227,10 @@ index 8e1ccddbe87ab1549607430154b7642268dd55b1..718311f3c4e5aa36d45e121fc0d86a01
      pub(super) fn begin_atomic_overflow_paragraph(&mut self, para_idx: usize) {
          match self
 diff --git a/src/renderer/typeset/table/block/prepare.rs b/src/renderer/typeset/table/block/prepare.rs
-index 3340efac77344b8b22577cbdd45897464788a13f..e7b2e6390aedf2ca60b9f36830ce71e0427b5df2 100644
+index e8922577b..10ac5c380 100644
 --- a/src/renderer/typeset/table/block/prepare.rs
 +++ b/src/renderer/typeset/table/block/prepare.rs
-@@ -1703,6 +1703,11 @@ impl TypesetEngine {
+@@ -1879,6 +1879,11 @@ impl TypesetEngine {
                          (saved_top <= st.current_height && saved_top < table_available)
                              .then_some(saved_top)
                      })
@@ -232,7 +243,7 @@ index 3340efac77344b8b22577cbdd45897464788a13f..e7b2e6390aedf2ca60b9f36830ce71e0
              next_para_stored_top: paragraphs_all.get(para_idx + 1).and_then(|next| {
                  let seg = next
 diff --git a/src/renderer/typeset/table/block/whole_fit.rs b/src/renderer/typeset/table/block/whole_fit.rs
-index 6661af0331873a852866fb2912e98401240a7f61..1109db35a029d2d0d8fc1e78207778020c1b2480 100644
+index 5be05fe06..dede0fd52 100644
 --- a/src/renderer/typeset/table/block/whole_fit.rs
 +++ b/src/renderer/typeset/table/block/whole_fit.rs
 @@ -267,10 +267,13 @@ impl TypesetEngine {
@@ -249,3 +260,6 @@ index 6661af0331873a852866fb2912e98401240a7f61..1109db35a029d2d0d8fc1e7820777802
          {
              return None;
          }
+-- 
+2.52.0.windows.1
+

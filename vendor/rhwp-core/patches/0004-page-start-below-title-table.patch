@@ -1,7 +1,14 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: pblsketch <239486537+pblsketch@users.noreply.github.com>
 Date: Sun, 8 Nov 2026 00:00:00 +0900
-Subject: [PATCH 3/29] fix(typeset): 쪽 첫 줄이 제목 표 아래에서 시작한 쪽은 저장 위치를 그대로 쓴다
+Subject: [PATCH] =?UTF-8?q?fix(typeset):=20=EC=AA=BD=20=EC=B2=AB=20?=
+ =?UTF-8?q?=EC=A4=84=EC=9D=B4=20=EC=A0=9C=EB=AA=A9=20=ED=91=9C=20=EC=95=84?=
+ =?UTF-8?q?=EB=9E=98=EC=97=90=EC=84=9C=20=EC=8B=9C=EC=9E=91=ED=95=9C=20?=
+ =?UTF-8?q?=EC=AA=BD=EC=9D=80=20=EC=A0=80=EC=9E=A5=20=EC=9C=84=EC=B9=98?=
+ =?UTF-8?q?=EB=A5=BC=20=EA=B7=B8=EB=8C=80=EB=A1=9C=20=EC=93=B4=EB=8B=A4?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 쪽·종이 기준 어울림(Square) 제목 표가 쪽 위를 차지하면 한글은 그 쪽의 첫 줄을 표 바깥
 상자 아래에서 시작하고, 저장 첫 줄 vpos 가 그 상자 바닥과 같다. 조판과 렌더는 쪽 첫
@@ -29,10 +36,10 @@ Ported onto devel 7d06d5c70: devel already has the page-origin parts through #81
  1 file changed, 22 insertions(+)
 
 diff --git a/src/renderer/typeset.rs b/src/renderer/typeset.rs
-index 3f428f430c945ea924bc3e6ab94cf104be3e86d7..b06bc793e3329dc8b2bc1f9c4ee3d79f9882ff93 100755
+index 295b06829..b25bad7f6 100755
 --- a/src/renderer/typeset.rs
 +++ b/src/renderer/typeset.rs
-@@ -4701,6 +4701,28 @@ impl TypesetEngine {
+@@ -4799,6 +4799,28 @@ impl TypesetEngine {
                  if side_wrap_placement.is_none_or(|current| placement.y > current.y) {
                      side_wrap_placement = Some(placement);
                  }
@@ -61,3 +68,6 @@ index 3f428f430c945ea924bc3e6ab94cf104be3e86d7..b06bc793e3329dc8b2bc1f9c4ee3d79f
              }
          }
          let clearance = side_wrap_placement.map_or(0.0, |p| p.clearance);
+-- 
+2.52.0.windows.1
+

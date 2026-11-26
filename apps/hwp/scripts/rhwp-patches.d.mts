@@ -4,6 +4,11 @@ export type RhwpPatchName =
   | 'sdk-scheme'
   | 'sdk-edit-ack'
   | 'studio-replacement-history'
+  | 'studio-textbox-edit-mouse'
+  | 'studio-textbox-edit-picture'
+  | 'studio-textbox-edit-keyboard'
+  | 'studio-textbox-edit-handler'
+  | 'studio-textbox-edit-cursor'
   | 'studio-scheme'
   | 'studio-password-flag'
   | 'studio-plugin-allow'
@@ -30,6 +35,7 @@ export type RhwpPatchName =
 export declare const APP_SCHEME: string
 export declare const PASSWORD_FLAG: 'passwordProtected'
 export declare const AGENT_PLUGIN_MODULE: string
+export declare const TEXTBOX_EDIT_MODULE: string
 export declare const WHEEL_ZOOM_MODULE: string
 export declare const FORMAT_COPY_MODULE: string
 export declare const STUDIO_PATCHES: readonly RhwpPatchName[]

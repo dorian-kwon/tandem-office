@@ -1,7 +1,15 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: pblsketch <239486537+pblsketch@users.noreply.github.com>
 Date: Sun, 8 Nov 2026 00:00:00 +0900
-Subject: [PATCH 2/29] fix(layout): 본문 흐름이 각주 영역을 넘은 쪽에서 각주 영역을 본문 아래로 내린다
+Subject: [PATCH] =?UTF-8?q?fix(layout):=20=EB=B3=B8=EB=AC=B8=20=ED=9D=90?=
+ =?UTF-8?q?=EB=A6=84=EC=9D=B4=20=EA=B0=81=EC=A3=BC=20=EC=98=81=EC=97=AD?=
+ =?UTF-8?q?=EC=9D=84=20=EB=84=98=EC=9D=80=20=EC=AA=BD=EC=97=90=EC=84=9C=20?=
+ =?UTF-8?q?=EA=B0=81=EC=A3=BC=20=EC=98=81=EC=97=AD=EC=9D=84=20=EB=B3=B8?=
+ =?UTF-8?q?=EB=AC=B8=20=EC=95=84=EB=9E=98=EB=A1=9C=20=EB=82=B4=EB=A6=B0?=
+ =?UTF-8?q?=EB=8B=A4?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 각주 영역은 본문 아래끝에 맞춰 그리는데, 조판은 빈 꼬리말 띠 회수(#2559)나 저장 줄
 위치를 따라 본문을 그 위끝 아래까지 채울 수 있다. 그러면 마지막 본문 줄이 각주
@@ -19,14 +27,14 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 
 Ported onto devel 7d06d5c70: applied without conflicts; no code changes needed.
 ---
- src/renderer/layout.rs | 113 +++++++++++++++++++++++++++++++++++++++++++++++++
+ src/renderer/layout.rs | 113 +++++++++++++++++++++++++++++++++++++++++
  1 file changed, 113 insertions(+)
 
 diff --git a/src/renderer/layout.rs b/src/renderer/layout.rs
-index abb3f934703955acfe4d543372b5013fe47d4fae..e4a86d8b784e166781f9be2e1b2c2925bba30714 100644
+index aabadfc2f..aa0e0d37c 100644
 --- a/src/renderer/layout.rs
 +++ b/src/renderer/layout.rs
-@@ -5163,6 +5163,7 @@ impl LayoutEngine {
+@@ -5363,6 +5363,7 @@ impl LayoutEngine {
              page_border_fill,
          );
          tree.root.children.push(footer_node);
@@ -34,7 +42,7 @@ index abb3f934703955acfe4d543372b5013fe47d4fae..e4a86d8b784e166781f9be2e1b2c2925
  
          // composer를 거치지 않고 직접 만들어진 표 셀/머리말 TextRun까지 같은
          // 한컴 PDF 표시 계약을 적용한다. 원문 IR과 char offset은 변경하지 않는다.
-@@ -6531,6 +6532,118 @@ impl LayoutEngine {
+@@ -6742,6 +6743,118 @@ impl LayoutEngine {
          footer_node
      }
  
@@ -153,3 +161,6 @@ index abb3f934703955acfe4d543372b5013fe47d4fae..e4a86d8b784e166781f9be2e1b2c2925
      /// 쪽 번호를 렌더링한다.
      fn build_page_number(
          &self,
+-- 
+2.52.0.windows.1
+

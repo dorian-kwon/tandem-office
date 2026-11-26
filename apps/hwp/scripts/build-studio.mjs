@@ -34,6 +34,7 @@ import {
   HANCOM_KEYS_MODULE,
   PC_FONTS_MODULE,
   STUDIO_PATCHES,
+  TEXTBOX_EDIT_MODULE,
   WHEEL_ZOOM_MODULE,
   missingHancomCommands,
   missingPluginHooks,
@@ -49,7 +50,7 @@ const require = createRequire(join(APP, 'package.json'))
 const REPO = 'https://github.com/edwardkim/rhwp.git'
 /**
  * Pin the studio independently. Tandem plugins and shortcuts target this source;
- * its WASM package is the compatible, newer build in vendor/rhwp-core.
+ * its WASM package is the patched build in vendor/rhwp-core.
  */
 const CORE_DIR = dirname(require.resolve('@rhwp/core'))
 const core = JSON.parse(readFileSync(join(CORE_DIR, 'package.json'), 'utf8'))
@@ -57,7 +58,7 @@ const VERSION = core.version
 const TAG = STUDIO_TAG
 /** Commit each supported tag must resolve to; a moved tag stops the build. */
 const PINNED_COMMITS = {
-  'v0.8.7': '1a76570e833917d15817415a53c09ad61ab3203f',
+  'v0.9.1': '981ce66b4183b13c1a3b5907e04a8969c8c42034',
 }
 /**
  * Only what the build reads. The repository also carries gigabytes of sample
@@ -73,6 +74,12 @@ const SPARSE_PATTERNS = [
   '!/rhwp-studio/public/fonts',
   '!/rhwp-studio/public/samples',
   '/npm/hwpctrl-ocx/src/',
+  // modules the studio shares with the other rhwp front ends (forms, PDF import)
+  '/rhwp-shared/',
+  // the advance widths of the enclosed-character glyphs; the fonts beside it stay out
+  '/assets/fonts/enclosed-pua-metrics.json',
+  // the CanvasKit renderer's shader, which the engine's Skia renderer shares
+  '/src/renderer/square_gradient.sksl',
 ]
 
 const CACHE = join(APP, 'node_modules', '.cache', 'rhwp-studio', TAG)
@@ -87,6 +94,7 @@ const WHEEL_ZOOM = join(APP, '..', '..', 'packages', 'ui', 'src', 'wheel-zoom.ts
 const PC_FONTS = join(APP, 'studio-plugin', 'pc-fonts.mjs')
 const HANJA = join(APP, 'studio-plugin', 'hanja.mjs')
 const TABLE_AUTO_FILL = join(APP, 'studio-plugin', 'table-auto-fill.mjs')
+const TEXTBOX_EDIT = join(APP, 'studio-plugin', 'textbox-edit.mjs')
 const TABLE_SIZES = join(APP, 'studio-plugin', 'table-sizes.mjs')
 const HANJA_CACHE = join(APP, 'node_modules', '.cache', 'libhangul-hanja')
 const STAMP = join(OUT, '.stamp')
@@ -115,6 +123,7 @@ function stampValue() {
   hash.update(readFileSync(PC_FONTS))
   hash.update(readFileSync(HANJA))
   hash.update(readFileSync(TABLE_AUTO_FILL))
+  hash.update(readFileSync(TEXTBOX_EDIT))
   hash.update(readFileSync(TABLE_SIZES))
   hash.update(HANJA_COMMIT)
   // and so is the engine: a rebuilt WASM must reach the studio
@@ -184,6 +193,16 @@ function checkPluginHooks() {
 async function buildStudio() {
   const studio = join(CACHE, 'rhwp-studio')
   const wasmPkg = dirname(require.resolve('@rhwp/core'))
+  // rhwp-shared reaches the engine by its place in the rhwp repository (`../../pkg/rhwp.js`,
+  // from the PDF import worker too); that is the patched engine here as well
+  const sharedEngine = {
+    name: 'rhwp-shared-engine',
+    resolveId(source, importer) {
+      if (!importer || !/[\\/]rhwp-shared[\\/]/.test(importer)) return null
+      const file = /^(?:\.\.\/)+pkg\/(.+)$/.exec(source)?.[1]
+      return file ? join(wasmPkg, file) : null
+    },
+  }
   await build({
     configFile: false,
     root: studio,
@@ -194,6 +213,7 @@ async function buildStudio() {
       // no CDN web fonts: the app makes no request the user did not ask for
       __RHWP_DISABLE_EXTERNAL_WEBFONTS__: 'true',
       __RHWP_HWPCTRL__: 'true',
+      __RHWP_AI__: 'false',
     },
     resolve: {
       alias: {
@@ -209,6 +229,7 @@ async function buildStudio() {
         [AGENT_PLUGIN_MODULE]: AGENT_PLUGIN,
         [HANCOM_KEYS_MODULE]: HANCOM_KEYS,
         [FORMAT_COPY_MODULE]: FORMAT_COPY,
+        [TEXTBOX_EDIT_MODULE]: TEXTBOX_EDIT,
         [CLIPBOARD_HTML_MODULE]: CLIPBOARD_HTML,
         [WHEEL_ZOOM_MODULE]: WHEEL_ZOOM,
         [PC_FONTS_MODULE]: PC_FONTS,
@@ -216,7 +237,8 @@ async function buildStudio() {
     },
     // upstream registers a service worker for its website build; this build
     // leaves that plugin out, a custom scheme cannot register one
-    plugins: [rhwpPatches(...STUDIO_PATCHES)],
+    plugins: [rhwpPatches(...STUDIO_PATCHES), sharedEngine],
+    worker: { format: 'es', plugins: () => [sharedEngine] },
     build: { outDir: OUT, emptyOutDir: true, chunkSizeWarningLimit: 4096 },
   })
   // the licenses travel with the build: rhwp's own, and the list of what its WASM links in

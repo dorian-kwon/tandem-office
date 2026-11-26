@@ -167,7 +167,7 @@ describe('a range with a withheld span in it', () => {
     const masked = read()
     expect(masked?.text).toBe('{{client phone}}')
     expect(read()).toBe(masked)
-    expect(serialize).toHaveBeenCalledTimes(1)
+    expect(serialize).not.toHaveBeenCalled()
 
     editor.commands.unsetMark(REDACT_MARK)
     expect(read()?.text).toBe(SECRET)
@@ -175,11 +175,11 @@ describe('a range with a withheld span in it', () => {
     expect(read()?.text).toBe('{{new label}}')
     editor.commands.setTextSelection({ from: 1, to: 5 })
     expect(read()?.text).toBe('Call')
-    expect(serialize).toHaveBeenCalledTimes(4)
+    expect(serialize).not.toHaveBeenCalled()
 
     editor.commands.setTextSelection(1)
     expect(read()).toBeUndefined()
-    expect(serialize).toHaveBeenCalledTimes(4)
+    expect(serialize).not.toHaveBeenCalled()
   })
 
   it('never returns the words the reader hid', async () => {

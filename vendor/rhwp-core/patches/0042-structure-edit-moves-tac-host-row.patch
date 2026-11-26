@@ -1,7 +1,15 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: pblsketch <239486537+pblsketch@users.noreply.github.com>
 Date: Sun, 8 Nov 2026 00:00:00 +0900
-Subject: [PATCH 30/30] fix(edit): 줄·칸 넣기·지우기로 높이가 바뀐 글자처럼 취급 표의 저장 줄을 맞춘다
+Subject: [PATCH] =?UTF-8?q?fix(edit):=20=EC=A4=84=C2=B7=EC=B9=B8=20?=
+ =?UTF-8?q?=EB=84=A3=EA=B8=B0=C2=B7=EC=A7=80=EC=9A=B0=EA=B8=B0=EB=A1=9C=20?=
+ =?UTF-8?q?=EB=86=92=EC=9D=B4=EA=B0=80=20=EB=B0=94=EB=80=90=20=EA=B8=80?=
+ =?UTF-8?q?=EC=9E=90=EC=B2=98=EB=9F=BC=20=EC=B7=A8=EA=B8=89=20=ED=91=9C?=
+ =?UTF-8?q?=EC=9D=98=20=EC=A0=80=EC=9E=A5=20=EC=A4=84=EC=9D=84=20=EB=A7=9E?=
+ =?UTF-8?q?=EC=B6=98=EB=8B=A4?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 글자처럼 취급 표에 줄을 넣거나 지우면 표 높이(sz)는 새 행 합으로 바뀌는데, 표가
 놓인 저장 줄(lh·th)과 뒤 문단의 vpos는 옛 높이로 남았다. 쪽 나누기 뒤의 저장 줄
@@ -18,12 +26,12 @@ Subject: [PATCH 30/30] fix(edit): 줄·칸 넣기·지우기로 높이가 바뀐
 - 칸(열) 넣기는 표 높이를 바꾸지 않아 저장 줄도 그대로다.
 - 줄을 지우면 같은 만큼 되돌아간다.
 ---
- .../commands/border_paint_structure.rs             |  15 ++
- src/document_core/tac_host_rows.rs                 | 175 ++++++++++++++++++++-
+ .../commands/border_paint_structure.rs        |  15 ++
+ src/document_core/tac_host_rows.rs            | 175 +++++++++++++++++-
  2 files changed, 187 insertions(+), 3 deletions(-)
 
 diff --git a/src/document_core/commands/border_paint_structure.rs b/src/document_core/commands/border_paint_structure.rs
-index c019b42b9cd0e56978d5ae117a6f838938ecd0c8..8ebb9cbf57ffeb088b2e61dcf4d35ab6a779a0c2 100644
+index c019b42b9..8ebb9cbf5 100644
 --- a/src/document_core/commands/border_paint_structure.rs
 +++ b/src/document_core/commands/border_paint_structure.rs
 @@ -969,6 +969,21 @@ impl DocumentCore {
@@ -49,7 +57,7 @@ index c019b42b9cd0e56978d5ae117a6f838938ecd0c8..8ebb9cbf57ffeb088b2e61dcf4d35ab6
          if let Some(mut prepared) = prepare(&self.document, si, pi, ti)? {
              let Control::Table(table) = &mut prepared.parent.controls[ti] else {
 diff --git a/src/document_core/tac_host_rows.rs b/src/document_core/tac_host_rows.rs
-index b4e16cb21ad6a87b4f79b48dcf3f6f800d2504b1..e00dff230a9f05c1e69c535cdd125a53a1d393ae 100644
+index b4e16cb21..e00dff230 100644
 --- a/src/document_core/tac_host_rows.rs
 +++ b/src/document_core/tac_host_rows.rs
 @@ -131,12 +131,68 @@ impl DocumentCore {
@@ -265,3 +273,6 @@ index b4e16cb21ad6a87b4f79b48dcf3f6f800d2504b1..e00dff230a9f05c1e69c535cdd125a53
 +        assert_eq!(verified_pages(&doc), (1, 1));
 +    }
 +}
+-- 
+2.52.0.windows.1
+

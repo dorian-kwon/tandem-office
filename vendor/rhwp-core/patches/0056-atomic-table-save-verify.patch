@@ -1,8 +1,19 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: pblsketch <239486537+pblsketch@users.noreply.github.com>
+Date: Mon, 23 Nov 2026 08:35:10 +0900
+Subject: [PATCH] fix(hwp): preserve atomic table pagination on HWP save (0056)
+
+---
+ src/document_core/commands/document.rs | 22 ++++++++++++++++++++++
+ src/renderer/layout/table_layout.rs    | 11 +++++++++--
+ src/renderer/typeset.rs                |  8 +++++---
+ 3 files changed, 36 insertions(+), 5 deletions(-)
+
 diff --git a/src/document_core/commands/document.rs b/src/document_core/commands/document.rs
-index 68ce81c0d..dadfa4b18 100644
+index b547de858..be883bf85 100644
 --- a/src/document_core/commands/document.rs
 +++ b/src/document_core/commands/document.rs
-@@ -2840,6 +2840,28 @@ impl DocumentCore {
+@@ -3057,6 +3057,28 @@ impl DocumentCore {
                      if !self.table_text_reflowed_path_exists(section_idx, para_idx, control_idx) {
                          continue;
                      }
@@ -32,10 +43,10 @@ index 68ce81c0d..dadfa4b18 100644
                      let mut unmappable = false;
                      for page in &pagination.pages {
 diff --git a/src/renderer/layout/table_layout.rs b/src/renderer/layout/table_layout.rs
-index 3ef63adc9..7c1c265e2 100644
+index 37105da33..982d5745b 100644
 --- a/src/renderer/layout/table_layout.rs
 +++ b/src/renderer/layout/table_layout.rs
-@@ -25385,9 +25385,16 @@ impl LayoutEngine {
+@@ -26985,9 +26985,16 @@ impl LayoutEngine {
          end: usize,
      ) -> f64 {
          let profile = self.profile.get();
@@ -55,10 +66,10 @@ index 3ef63adc9..7c1c265e2 100644
              // progressing serialized lines do not authenticate that opening
              // frame's page tail. Once the row is a physical continuation,
 diff --git a/src/renderer/typeset.rs b/src/renderer/typeset.rs
-index 03a79eed3..9b379afd9 100644
+index 000ef8cb0..6d5b5f571 100644
 --- a/src/renderer/typeset.rs
 +++ b/src/renderer/typeset.rs
-@@ -2057,7 +2057,7 @@ fn cell_has_internal_saved_vpos_reset(cell: &crate::model::table::Cell) -> bool
+@@ -2073,7 +2073,7 @@ fn cell_has_internal_saved_vpos_reset(cell: &crate::model::table::Cell) -> bool
  /// y 는 저장 사다리에서 온다. 두 좌표계가 아직 화해되지 않아(#7198 축) 표만 옮기면 글 위에
  /// 표가 그려진다 — 1490000 149쪽 실측 겹침 134 -> 156. 오프셋 0 float 과 `treat_as_char`
  /// 표는 흐름이 밴드를 실제로 소비하므로 해당 없다.
@@ -67,7 +78,7 @@ index 03a79eed3..9b379afd9 100644
      matches!(
          table.layout_page_break(),
          crate::model::table::TablePageBreak::None
-@@ -2083,7 +2083,7 @@ pub(in crate::renderer) fn none_table_is_atomic_here(table: &crate::model::table
+@@ -2099,7 +2099,7 @@ pub(in crate::renderer) fn none_table_is_atomic_here(table: &crate::model::table
  ///
  /// 조회만 한다 — 상태를 쓰지 않는다. 소비자는 `table/block/prepare.rs` 의 이월 게이트와
  /// `table/scan/runner/row_step.rs` 의 행 내부 컷 게이트다.
@@ -76,7 +87,7 @@ index 03a79eed3..9b379afd9 100644
      table: &crate::model::table::Table,
  ) -> bool {
      matches!(
-@@ -2093,7 +2093,9 @@ pub(in crate::renderer) fn cell_unit_row_is_atomic_here(
+@@ -2109,7 +2109,9 @@ pub(in crate::renderer) fn cell_unit_row_is_atomic_here(
  }
  
  /// RowBreak 표 셀 안에 저장된 vpos reset이 있는지 판별한다.
@@ -87,3 +98,6 @@ index 03a79eed3..9b379afd9 100644
      // [#7639] 행마다 전체 셀을 다시 거르지 않고 셀을 한 번만 훑는다(행×셀 → 셀).
      let row_count = table.row_count as usize;
      table
+-- 
+2.52.0.windows.1
+

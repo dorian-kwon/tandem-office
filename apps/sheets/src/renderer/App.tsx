@@ -30,6 +30,7 @@ import {
   lazyWorkbookCellReader,
   loadSnapshotIntoUniver,
   loadVisibleRange,
+  getScrollAnchor,
   loadWorkbookSkeleton,
   matrixBounds,
   modelCellValue,
@@ -144,6 +145,7 @@ import {
   IUniverInstanceService,
   LocaleType,
   mergeLocales,
+  RANGE_TYPE,
   ThemeService,
   UniverInstanceType,
   type ICellData,
@@ -465,6 +467,8 @@ import { installCachedValueFallbackInterceptor } from './formula-cached-fallback
 import { readLiveFunctionInfos } from './function-catalog'
 import { installSupportedFunctionProbe } from './function-registry-probe'
 import { installCellFilenameFunction } from './cell-function'
+import { installCompatFunctions } from './compat-functions'
+import { installFormulaClipboard } from './formula-clipboard'
 import { installRightToLeftCommand, refreshSheetRender, sheetIsRightToLeft } from './sheet-rtl-view'
 import { installFormulaLexerFix } from './formula-lexer-fix'
 import { installErrorValueAlignment } from './error-value-align'
@@ -473,7 +477,11 @@ import { installCfDisplayKeyCompare } from './cf-duplicate-key'
 import { installCfFormulaFold } from './cf-formula-fold'
 import { installSheetRenameFix } from './sheet-rename-fix'
 import { installArrowCollapse } from './arrow-collapse-fix'
-import { effectiveSheetProtection, installSheetProtectionGuard } from './sheet-protection'
+import {
+  effectiveSheetProtection,
+  fileSheetProtection,
+  installSheetProtectionGuard,
+} from './sheet-protection'
 import type { SheetProtectionAllow } from '@genoffice/xlsx-gateway/gateway/xlsx-protection'
 import { installCtrlDragFill } from './ctrl-drag-fill'
 import { installContextSubmenuReopenFix } from './context-submenu-reopen-fix'
@@ -494,15 +502,18 @@ import { installCenterContinuousRender } from './center-continuous'
 import { installExcelFilterButton } from './filter-button-excel-style'
 import {
   extendLargeFilterRange,
-  installLargeFilterValues,
+  filterModelFor,
+  setLargeFilterCriteria,
   isLargeFilterSheet,
   largeFilterAction,
 } from './large-filter'
 import { resetLargeFilter } from './large-filter-state'
+import { prepareLargeFilterPanel, streamedFilterTarget } from './LargeFilterPanel'
 import { installForceStringMarkGate, installLongTextRender } from './long-text-render'
 import { installAutofitWrapBudget } from './autofit-wrap-budget'
 import { installAutofitLinePitch } from './autofit-line-pitch'
-import { installHeaderUnhideDebounce } from './load-perf-patches'
+import { installHeaderUnhideDebounce, installRangeThemeVisibilityGate } from './load-perf-patches'
+import { installSparseSheetRender } from './sparse-sheet-render'
 import { installCopyAnimationIdle } from './copy-animation-idle'
 import { installNumberAsTextAlertSeverity } from './number-as-text-alert'
 import { installFormulaStreamHold } from './formula-stream-hold'
@@ -527,6 +538,7 @@ import {
   type PasteSpecialSource,
 } from './paste-special'
 import { installStatusBarFileStats } from './statusbar-file-stats'
+import { installStreamedColumnWidth } from './streamed-column-width'
 import {
   installStatusBarStatsFilter,
   readStatusBarFuncs,
@@ -2404,6 +2416,7 @@ export function App({
     // Mixed-direction cell text (e.g. Arabic year suffixes) must follow
     // Excel's context reading order instead of always rendering ltr.
     installRtlTextDirectionFix()
+    installSparseSheetRender()
     // sheetView rightToLeft="1": mirror the grid geometry (column A on the
     // right, headers on the right) while keeping logical indices.
     installRtlGridMirror()
@@ -2426,6 +2439,7 @@ export function App({
     // canvas line box (Calibri 10: 12.75 pt per line, not ~10 pt).
     installAutofitLinePitch()
     installHeaderUnhideDebounce()
+    installRangeThemeVisibilityGate(runtime)
     // The dashed border on a copied range is a per-frame animation. It must
     // not keep repainting the scene while nobody is looking at it.
     installCopyAnimationIdle()
@@ -2503,6 +2517,8 @@ export function App({
     const rateFallbackDisposable = installRateFallback(runtime)
     // MINIFS/MAXIFS over zero matching cells return 0, not blank.
     const ifsEmptySetDisposable = installIfsEmptySetFix(runtime)
+    // Excel 2013-365 and Google Sheets compatibility functions omitted by Univer.
+    const compatFunctionsDisposable = installCompatFunctions(runtime)
     // Repeated *IF(S) '=' compares on text columns survive the inverted-
     // index cache when the criteria was number-coerced ("2026-06").
     const criteriaCompareCacheDisposable = installCriteriaCompareCacheFix()
@@ -2528,7 +2544,8 @@ export function App({
         showToast(message, 'error')
       },
     })
-    const ctrlDragFillDisposable = installCtrlDragFill(runtime)
+    const streamedColumnWidthDisposable = installStreamedColumnWidth(runtime, lazyWorkbookRef)
+    const ctrlDragFillDisposable = installCtrlDragFill(runtime, lazyWorkbookRef)
     // A context-menu submenu re-hovered within Univer's close delay stays
     // invisible; re-trigger its positioning (genoffice#337).
     const contextSubmenuReopenDisposable = installContextSubmenuReopenFix()
@@ -2582,6 +2599,9 @@ export function App({
     // Copy/cut load their selection into the lazy window first so streamed
     // workbooks don't serialize blanks for never-viewed rows.
     const copyMaterializeDisposable = installCopyMaterialize(runtime, lazyWorkbookRef, setMessage)
+    // Preserve formulas on external/cross-tab clipboard HTML and autofill/copy
+    // of cache-only / streamed formula cells.
+    const formulaClipboardDisposable = installFormulaClipboard(runtime, lazyWorkbookRef)
     // Range copies also carry a picture of the cells, as Excel's do, so chat
     // apps that paste images (KakaoTalk) get the table as a photo.
     const copyPictureDisposable = installCopyPicture(runtime)
@@ -3088,6 +3108,10 @@ export function App({
           }
           if (event.id === 'sheet.mutation.remove-filter') {
             resetLargeFilter(state, params.subUnitId)
+            const worksheet = runtime.univerAPI.getActiveWorkbook()?.getActiveSheet()
+            if (worksheet?.getSheetId() === params.subUnitId) {
+              void loadVisibleRange(runtime, lazyWorkbookRef, worksheet, setMessage)
+            }
           }
           setPendingEdits(journalSize(state.editJournal))
           return
@@ -3546,24 +3570,66 @@ export function App({
               cellCounts: workbookCellCounts(state.file.sheets),
             })
             if (verdict === 'workbookTooLarge' && subUnitId !== undefined) {
-              // Past the budget the filter runs on column projections read
-              // from the file (large-filter.ts); the panel opens as usual.
-              installLargeFilterValues(runtime, lazyWorkbookRef, isLargeFilterSheet, (loading) =>
-                setMessage(t(loading ? 'appLargeFilterLoading' : 'appReadyInitial')),
-              )
-              const worksheet = runtime.univerAPI.getActiveWorkbook()?.getSheetBySheetId(subUnitId)
+              const workbook = runtime.univerAPI.getActiveWorkbook()
+              const worksheet = workbook?.getSheetBySheetId(subUnitId)
+              const current = () => lazyWorkbookRef.current === state
+              const finish = async () => {
+                if (!current()) return
+                setPendingEdits(journalSize(state.editJournal))
+                if (
+                  workbook &&
+                  worksheet &&
+                  workbook.getActiveSheet()?.getSheetId() === subUnitId
+                ) {
+                  const range = filterModelFor(runtime, worksheet)?.getRange()
+                  const anchor = getScrollAnchor(workbook, worksheet)
+                  const column = anchor?.column ?? 0
+                  if (range && anchor?.row !== range.startRow) {
+                    worksheet.scrollToCell(range.startRow, column)
+                  }
+                  await loadVisibleRange(
+                    runtime,
+                    lazyWorkbookRef,
+                    worksheet,
+                    setMessage,
+                    range ? { row: range.startRow, column } : undefined,
+                  )
+                }
+                if (current()) setMessage(t('appReadyInitial'))
+              }
+              if (event.id === OPEN_FILTER_PANEL_OPERATION && worksheet) {
+                const column = (event.params as { col?: number } | undefined)?.col
+                if (typeof column === 'number') {
+                  const target = streamedFilterTarget(
+                    runtime,
+                    state,
+                    worksheet,
+                    column,
+                    async (criteria) => {
+                      await setLargeFilterCriteria(
+                        runtime,
+                        state,
+                        worksheet,
+                        column,
+                        criteria,
+                        current,
+                      )
+                      if (!current()) return
+                      await runtime.univerAPI.executeCommand('sheet.operation.close-filter-panel')
+                      await finish()
+                    },
+                  )
+                  if (target) prepareLargeFilterPanel(runtime, lazyWorkbookRef, target)
+                }
+              }
               const action = worksheet ? largeFilterAction(event.id, event.params, worksheet) : null
               if (!action) {
                 event.cancel = false
                 return
               }
-              event.cancel = true
               setMessage(t('appLargeFilterApplying'))
-              void action(runtime, state)
-                .then(() => {
-                  setPendingEdits(journalSize(state.editJournal))
-                  setMessage(t('appReadyInitial'))
-                })
+              void action(runtime, state, current)
+                .then(finish)
                 .catch((error: unknown) => setMessage(String(error)))
               return
             }
@@ -3594,10 +3660,20 @@ export function App({
             })
             if (verdict !== 'allow') {
               event.cancel = true
-              if (verdict === 'loading') setMessage(t('appFullLoadRunning'))
-              else if (verdict === 'offerFullLoad') setFullLoadPrompt('ask')
-              else if (verdict === 'workbookTooLarge') setFullLoadPrompt('tooLarge')
-              else if (verdict === 'valueModeFormulas') setMessage(t('appSortValueModeFormulas'))
+              if (verdict === 'loading') {
+                setMessage(t('appFullLoadRunning'))
+                showToast(t('appFullLoadRunning'), 'info')
+              } else if (verdict === 'offerFullLoad') setFullLoadPrompt('ask')
+              else if (verdict === 'workbookTooLarge') {
+                if (event.id === MOVE_RANGE_COMMAND && ranges[0]?.rangeType === RANGE_TYPE.COLUMN) {
+                  // A full-column selection border can start a drag-move
+                  // next to the header's resize handle. Keep a move blocked
+                  // without putting a full-load dialog over the grid.
+                  const message = t('appMoveRowsColsUnsaved')
+                  setMessage(message)
+                  showToast(message, 'info')
+                } else setFullLoadPrompt('tooLarge')
+              } else if (verdict === 'valueModeFormulas') setMessage(t('appSortValueModeFormulas'))
               else setMessage(t('appSortRangeTooLarge'))
               return
             }
@@ -3807,6 +3883,7 @@ export function App({
       cellFilenameDisposable.dispose()
       rateFallbackDisposable.dispose()
       ifsEmptySetDisposable.dispose()
+      compatFunctionsDisposable.dispose()
       criteriaCompareCacheDisposable.dispose()
       formulaLexerFixDisposable.dispose()
       sheetRenameFixDisposable.dispose()
@@ -3814,6 +3891,7 @@ export function App({
       arrowCollapseDisposable.dispose()
       altEnterWrapDisposable.dispose()
       sheetProtectionDisposable.dispose()
+      streamedColumnWidthDisposable.dispose()
       ctrlDragFillDisposable.dispose()
       contextSubmenuReopenDisposable.dispose()
       multiRowAutofitDisposable.dispose()
@@ -3823,6 +3901,7 @@ export function App({
       cfDisplayKeyDisposable.dispose()
       nullResultDisposable.dispose()
       copyMaterializeDisposable.dispose()
+      formulaClipboardDisposable.dispose()
       copyPictureDisposable.dispose()
       statusBarFileStatsDisposable.dispose()
       statusBarStatsFilterRef.current?.dispose()
@@ -4612,7 +4691,7 @@ export function App({
   ): Promise<string | null> {
     const runtime = univerRef.current
     if (!runtime) return t('dlgPasteSpecialNothing')
-    const result = await applyPasteSpecial(runtime, source, options)
+    const result = await applyPasteSpecial(runtime, source, options, lazyWorkbookRef)
     if (result.ok) return null
     return t(
       result.reason === 'out-of-bounds'
@@ -4929,10 +5008,18 @@ export function App({
       appliedRowKeys: new Map(),
       measuredWrapRows: new Map(),
       rowColStyleKeys: new Map(),
-      sheetProtections: new Map(),
+      sheetProtections: new Map(
+        selected.sheets.flatMap(({ id, protection }) =>
+          protection ? [[id, fileSheetProtection(protection.sheetProtection)] as const] : [],
+        ),
+      ),
       sheetPageBreaks: new Map(),
       sheetFilePageSetups: new Map(),
-      sheetProtectedRanges: new Map(),
+      sheetProtectedRanges: new Map(
+        selected.sheets.flatMap(({ id, protection }) =>
+          protection ? [[id, mapProtectedRanges(protection.protectedRanges, [])] as const] : [],
+        ),
+      ),
       uninstalledDefinedNames: new Set(),
       appliedCfSheets: new Set(),
       appliedFilterSheets: new Set(),
@@ -5124,6 +5211,9 @@ export function App({
         void Promise.allSettled(tableInstalls).then(() => {
           if (lazyWorkbookRef.current !== state) return
           consumePendingUndoCarry(runtime, workbook.getId())
+          if (tableInstalls.length > 0 && state.formulaMode) {
+            runtime.univerAPI.getFormula().executeCalculation()
+          }
         })
         const worksheet = workbook.getActiveSheet()
         if (!worksheet) {
