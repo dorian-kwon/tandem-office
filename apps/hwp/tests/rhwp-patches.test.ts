@@ -800,6 +800,7 @@ describe('the studio source the build fetched', () => {
     'src/core/local-fonts.ts',
     'src/engine/input-handler.ts',
     'src/engine/input-handler-keyboard.ts',
+    'src/engine/input-handler-hyperlink.ts',
     'src/engine/input-handler-text.ts',
     'src/engine/input-handler-table.ts',
     'src/engine/command.ts',
@@ -812,6 +813,7 @@ describe('the studio source the build fetched', () => {
     'src/command/dispatcher.ts',
     'src/engine/input-handler-mouse.ts',
     'src/engine/cursor.ts',
+    'src/ui/hyperlink-dialog.ts',
     'src/ui/table-cell-props-dialog.ts',
     'src/view/viewport-manager.ts',
     'src/command/registry.ts',
@@ -1203,5 +1205,62 @@ describe("Hangul's plain drag of a horizontal table border", () => {
     )
     expect(patched).toContain("  } else if (state.edge.type === 'col' && inCellSel && range) {")
     expect(STUDIO_PATCHES).toContain('studio-hancom-row-drag')
+  })
+})
+
+describe('rhwp hyperlink open patches', () => {
+  const clickSource = [
+    '      if (!/^https?:\\/\\//i.test(link.uri)) continue;',
+    "    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return;",
+    '    // 실제 사용자 mouseup 안에서 열고 원본 탭의 opener 접근을 끊는다.',
+    "    const opened = window.open('about:blank', '_blank');",
+    "    if (!opened) { showToast({ message: '팝업이 차단되었습니다. 이 사이트의 팝업을 허용해 주세요.' }); return; }",
+    '    opened.opener = null;',
+    '    opened.location.replace(url.href);',
+    '    // visited-link formatting',
+  ].join('\n')
+
+  const dialogSource = [
+    '        const url = webHyperlinkUrl(this.uriInput.value);',
+    "        if (!url) throw new Error('http:// 또는 https://로 시작하는 웹 주소를 입력해 주세요.');",
+    "        const opened = window.open('about:blank', '_blank');",
+    "        if (!opened) throw new Error('팝업이 차단되었습니다. 이 사이트의 팝업을 허용해 주세요.');",
+    '        opened.opener = null;',
+    '        opened.location.replace(url);',
+    "        this.error.textContent = '';",
+  ].join('\n')
+
+  it('opens web and mailto hyperlinks directly through window.open without about:blank popup checks', () => {
+    const patched = applyPatch('studio-hyperlink-open', clickSource)
+    expect(patched).not.toContain('about:blank')
+    expect(patched).not.toContain('window.location.assign')
+    expect(patched).toContain("window.open(url.href, '_blank', 'noopener,noreferrer');")
+    expect(patched).toContain('/^mailto:/i.test(link.uri)')
+    expect(patched).toContain('url.username || url.password')
+  })
+
+  it('opens hyperlink dialog previews directly through window.open without about:blank popup checks', () => {
+    const patched = applyPatch('studio-hyperlink-preview', dialogSource)
+    expect(patched).not.toContain('about:blank')
+    expect(patched).toContain("window.open(url, '_blank', 'noopener,noreferrer');")
+    expect(patched).toContain("this.error.textContent = '';")
+  })
+
+  it('keeps CRLF sources working, fails when the text is gone, and is in the studio build', () => {
+    const crlfClick = applyPatch('studio-hyperlink-open', clickSource.replaceAll('\n', '\r\n'))
+    expect(crlfClick).toContain("window.open(url.href, '_blank', 'noopener,noreferrer');\r\n")
+    expect(crlfClick).not.toMatch(/[^\r]\n/)
+    const crlfDialog = applyPatch('studio-hyperlink-preview', dialogSource.replaceAll('\n', '\r\n'))
+    expect(crlfDialog).toContain("window.open(url, '_blank', 'noopener,noreferrer');\r\n")
+    expect(crlfDialog).not.toMatch(/[^\r]\n/)
+
+    expect(() => applyPatch('studio-hyperlink-open', 'web: () => false')).toThrow(
+      /studio-hyperlink-open/,
+    )
+    expect(() => applyPatch('studio-hyperlink-preview', 'window.open()')).toThrow(
+      /studio-hyperlink-preview/,
+    )
+    expect(STUDIO_PATCHES).toContain('studio-hyperlink-open')
+    expect(STUDIO_PATCHES).toContain('studio-hyperlink-preview')
   })
 })

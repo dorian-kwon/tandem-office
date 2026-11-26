@@ -1903,7 +1903,7 @@ export function renderPagePixels(m: PdfiumModule, page: number, scale: number) {
   if (!bitmap) return null
   try {
     m._FPDFBitmap_FillRect(bitmap, 0, 0, width, height, 0xffffffff)
-    m._FPDF_RenderPageBitmap(bitmap, page, 0, 0, width, height, 0, 0)
+    m._FPDF_RenderPageBitmap(bitmap, page, 0, 0, width, height, 0, 1 /* FPDF_ANNOT */)
     return bitmapToRgba(m, bitmap)
   } finally {
     m._FPDFBitmap_Destroy(bitmap)

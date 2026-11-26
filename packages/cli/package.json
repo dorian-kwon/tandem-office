@@ -44,7 +44,8 @@
     "numfmt": "^3.2.6",
     "pngjs": "^7.0.0",
     "undici": "^6.29.0",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "@genoffice/zip-gate": "*"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

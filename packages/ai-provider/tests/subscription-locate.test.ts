@@ -13,7 +13,7 @@ import { locateSubscriptionProgram, resolveSubscriptionProgram } from '../src/su
 let root: string
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'subscription-locate-'))
+  root = await mkdtemp(join(await realpath(tmpdir()), 'subscription-locate-'))
 })
 
 afterEach(async () => {
@@ -187,9 +187,9 @@ describe('locateSubscriptionProgram on Windows', () => {
     const env = windowsEnv()
     const links = join(env.LOCALAPPDATA!, 'Microsoft', 'WinGet', 'Links')
     const exe = await touch(join(links, 'codex.exe'))
-    expect((await locateSubscriptionProgram('codex', { env, platform: 'win32' }))?.command).toBe(
-      exe,
-    )
+    expect(
+      (await locateSubscriptionProgram('codex', { env, platform: 'win32', arch: 'x64' }))?.command,
+    ).toBe(exe)
     await rm(links, { recursive: true })
     const packaged = await touch(
       join(
@@ -201,7 +201,11 @@ describe('locateSubscriptionProgram on Windows', () => {
         'codex-x86_64-pc-windows-msvc.exe',
       ),
     )
-    const program = await locateSubscriptionProgram('codex', { env, platform: 'win32' })
+    const program = await locateSubscriptionProgram('codex', {
+      env,
+      platform: 'win32',
+      arch: 'x64',
+    })
     expect(program).toMatchObject({ command: packaged, source: 'winget' })
   })
 

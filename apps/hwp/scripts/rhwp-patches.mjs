@@ -1470,6 +1470,48 @@ const PATCHES = {
       },
     ],
   },
+  'studio-hyperlink-open': {
+    file: /[\\/]rhwp-studio[\\/]src[\\/]engine[\\/]input-handler-hyperlink\.ts$/,
+    edits: [
+      {
+        find: '      if (!/^https?:\\/\\//i.test(link.uri)) continue;',
+        replace:
+          '      if (!/^mailto:/i.test(link.uri) && !/^https?:\\/\\//i.test(link.uri)) continue;',
+      },
+      {
+        find: [
+          "    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return;",
+          '    // 실제 사용자 mouseup 안에서 열고 원본 탭의 opener 접근을 끊는다.',
+          "    const opened = window.open('about:blank', '_blank');",
+          "    if (!opened) { showToast({ message: '팝업이 차단되었습니다. 이 사이트의 팝업을 허용해 주세요.' }); return; }",
+          '    opened.opener = null;',
+          '    opened.location.replace(url.href);',
+        ].join('\n'),
+        replace: [
+          "    if (!['http:', 'https:', 'mailto:'].includes(url.protocol) || url.username || url.password) return;",
+          "    window.open(url.href, '_blank', 'noopener,noreferrer');",
+        ].join('\n'),
+      },
+    ],
+  },
+  'studio-hyperlink-preview': {
+    file: /[\\/]rhwp-studio[\\/]src[\\/]ui[\\/]hyperlink-dialog\.ts$/,
+    find: [
+      '        const url = webHyperlinkUrl(this.uriInput.value);',
+      "        if (!url) throw new Error('http:// 또는 https://로 시작하는 웹 주소를 입력해 주세요.');",
+      "        const opened = window.open('about:blank', '_blank');",
+      "        if (!opened) throw new Error('팝업이 차단되었습니다. 이 사이트의 팝업을 허용해 주세요.');",
+      '        opened.opener = null;',
+      '        opened.location.replace(url);',
+      "        this.error.textContent = '';",
+    ].join('\n'),
+    replace: [
+      '        const url = webHyperlinkUrl(this.uriInput.value);',
+      "        if (!url) throw new Error('http:// 또는 https://로 시작하는 웹 주소를 입력해 주세요.');",
+      "        window.open(url, '_blank', 'noopener,noreferrer');",
+      "        this.error.textContent = '';",
+    ].join('\n'),
+  },
 }
 
 /** The patches the studio build applies, in order; the SDK's own is applied by the renderer builds. */
@@ -1518,6 +1560,8 @@ export const STUDIO_PATCHES = /** @type {const} */ ([
   'studio-cell-block-paste',
   'studio-pc-font-metadata',
   'studio-pc-fonts',
+  'studio-hyperlink-open',
+  'studio-hyperlink-preview',
 ])
 
 /** Whether a patch is written against this file. */

@@ -1,4 +1,5 @@
 import JSZip from 'jszip'
+import { loadUserZip } from './gated-zip'
 import * as numfmt from 'numfmt'
 import {
   blankXlsxBuffer,
@@ -619,7 +620,7 @@ export async function readSheet(path: string, opts: ReadOptions): Promise<SheetR
 }
 
 async function hasThemePart(source: Buffer): Promise<boolean> {
-  const zip = await JSZip.loadAsync(source)
+  const zip = await loadUserZip(source)
   return zip.file('xl/theme/theme1.xml') !== null
 }
 
@@ -670,7 +671,7 @@ function sameStyleColor(a: StyleColor | undefined, b: StyleColor | undefined): b
 
 async function storedFormats(path: string): Promise<StylesheetFormats | undefined> {
   try {
-    const zip = await JSZip.loadAsync(await readFile(path))
+    const zip = await loadUserZip(path)
     const xml = await zip.file('xl/styles.xml')?.async('string')
     return xml === undefined ? undefined : parseStylesheetFormats(xml)
   } catch {
